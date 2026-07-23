@@ -24,7 +24,7 @@ export const MODULE_BLURBS: Record<ProjectModuleKey, string> = {
   todo_lists: "Mix ideas and tasks in project To Do lists.",
   boards: "Kanban planning boards for tasks.",
   wiki: "Nested wiki TOC for Markdown pages.",
-  canvases: "Freeform diagrams and mood boards (tldraw).",
+  canvases: "Freeform diagrams and mood boards (Excalidraw).",
 };
 
 /** Modules that already have full UI in the project hub. */

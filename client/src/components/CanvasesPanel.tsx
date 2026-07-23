@@ -310,6 +310,7 @@ export function CanvasesPanel({ projectId }: Props) {
           <CanvasEditor
             key={detailQuery.data.id}
             canvasId={detailQuery.data.id}
+            title={detailQuery.data.title}
             document={detailQuery.data.document ?? {}}
             onSaveDocument={(document) => {
               setSaveState("saving");

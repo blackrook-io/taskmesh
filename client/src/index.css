@@ -1735,7 +1735,7 @@ a:focus-visible {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-  background: var(--canvas-bg);
+  background: #f8f9fa;
 }
 
 .canvas-editor-shell {
@@ -1779,13 +1779,18 @@ a:focus-visible {
   pointer-events: none;
 }
 
-/* tldraw UI (tool rail, style panel) needs a definite box — fill the host. */
-.canvas-editor .tl-container {
+/* Excalidraw fills its host; keep a definite box for tool UI. */
+.canvas-editor .excalidraw {
   position: absolute !important;
   inset: 0;
   width: 100% !important;
   height: 100% !important;
-  --color-background: var(--canvas-bg);
+  --color-primary: var(--accent);
+  --color-primary-darker: color-mix(in srgb, var(--accent) 80%, #000);
+  --color-primary-darkest: color-mix(in srgb, var(--accent) 65%, #000);
+  --color-primary-light: color-mix(in srgb, var(--accent) 35%, var(--surface));
+  --island-bg-color: color-mix(in srgb, var(--canvas-bg) 70%, var(--surface));
+  --color-surface-low: var(--canvas-bg);
 }
 
 .canvas-editor--readonly {

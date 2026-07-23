@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "node scripts/copy-excalidraw-assets.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@tanstack/react-query": "^5.101.0",
     "@tiptap/extension-image": "^3.28.0",
     "@tiptap/extension-link": "^3.28.0",
@@ -31,8 +33,7 @@
     "@tiptap/starter-kit": "^3.28.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.17.0",
-    "tldraw": "^5.2.5"
+    "react-router-dom": "^7.17.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

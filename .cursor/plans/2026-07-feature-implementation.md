@@ -69,7 +69,7 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 - **Markdown:** **TipTap** (decided) — replace `@uiw/react-md-editor` in Phase 1; UpNote-like toolbar, tables, checklists, clipboard image paste
 - **Kanban:** `@dnd-kit` (already in repo) — multi-container columns
-- **Canvas:** **tldraw** SDK for freeform mood boards + connectors; **Mermaid/D2** text→diagram for architecture/ERD; optional **xyflow** later for heavily structured graphs
+- **Canvas:** **Excalidraw** (`@excalidraw/excalidraw`, MIT) for freeform mood boards + connectors; **Mermaid/D2** text→diagram for architecture/ERD (place onto Excalidraw); optional **xyflow** later for heavily structured graphs
 - **Palette / popovers:** lightweight custom (dark grey / light green theme) rather than a heavy UI kit
 
 ---
@@ -254,20 +254,20 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 ### 8a — Freeform canvas MVP
 
-- Persist tldraw (or chosen) document JSON in `canvases(project_id, title, document jsonb, …)`
+- Persist Excalidraw scene JSON in `canvases(project_id, title, document jsonb, …)` (replaced tldraw)
 - Darker grey background token
 - Shape color via **same ColorPopover**
 - Pan/zoom, basic shapes, images, connectors
 
 ### 8b — Smart layout assists
 
-- Snap/spacing helpers; connector re-route on move (library features first; custom drop zones iteratively)
+- Grid toggle + ColorPopover fill in TaskMesh chrome (Excalidraw built-in align UI); PNG/SVG export on assist bar
 
 ### 8c — Structured diagramming
 
-- Templates: software architecture stencil set
+- Templates: software architecture stencil set (Excalidraw libraries)
 - ERD via **text markup** (Mermaid ER / D2) → preview + optional “place on canvas”
-- Export PNG/SVG
+- Export PNG/SVG (shipped with Excalidraw swap; refine as needed)
 
 ### Exit criteria
 

@@ -1,116 +1,124 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Tldraw,
-  createTLStore,
-  getSnapshot,
-  loadSnapshot,
-  type Editor,
-  type TLEditorSnapshot,
-  type TLStoreSnapshot,
-} from "tldraw";
-import "tldraw/tldraw.css";
+  Excalidraw,
+  CaptureUpdateAction,
+} from "@excalidraw/excalidraw";
+import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawElement, OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import "@excalidraw/excalidraw/index.css";
 import {
-  applyCanvasLayoutPrefs,
-  CanvasLayoutBar,
   loadCanvasLayoutPrefs,
   saveCanvasLayoutPrefs,
+  CanvasLayoutBar,
   type CanvasLayoutPrefs,
 } from "./CanvasLayoutBar";
+import { serializeScene, toInitialData } from "../lib/excalidrawScene";
 
 type Props = {
   canvasId: number;
-  /** Persisted tldraw document snapshot (or empty object). */
+  /** Persisted Excalidraw scene (or legacy/empty object). */
   document: Record<string, unknown>;
+  title?: string;
   readOnly?: boolean;
   onSaveDocument: (document: Record<string, unknown>) => void;
 };
 
-function isNonEmptySnapshot(doc: Record<string, unknown>): boolean {
-  return doc != null && typeof doc === "object" && Object.keys(doc).length > 0;
-}
-
-export function CanvasEditor({ canvasId, document, readOnly = false, onSaveDocument }: Props) {
-  const editorRef = useRef<Editor | null>(null);
+export function CanvasEditor({
+  canvasId,
+  document,
+  title,
+  readOnly = false,
+  onSaveDocument,
+}: Props) {
+  const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const saveRef = useRef(onSaveDocument);
   saveRef.current = onSaveDocument;
-  const [editor, setEditor] = useState<Editor | null>(null);
+  const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [selectionTick, setSelectionTick] = useState(0);
   const [prefs, setPrefs] = useState<CanvasLayoutPrefs>(() => loadCanvasLayoutPrefs());
+  const timerRef = useRef<number | undefined>(undefined);
 
-  const [store] = useState(() => {
-    const next = createTLStore();
-    if (isNonEmptySnapshot(document)) {
-      try {
-        loadSnapshot(next, document as unknown as TLEditorSnapshot | TLStoreSnapshot);
-      } catch (err) {
-        console.warn("Could not restore canvas snapshot", err);
-      }
-    }
-    return next;
-  });
+  const initialData = useMemo(
+    () => toInitialData(document, { gridModeEnabled: prefs.grid }),
+    // Mount once per canvasId (parent remounts via key).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: load snapshot at mount only
+    [canvasId],
+  );
 
   useEffect(() => {
-    editorRef.current?.updateInstanceState({ isReadonly: readOnly });
-  }, [readOnly]);
-
-  useEffect(() => {
-    if (!editor) return;
-    applyCanvasLayoutPrefs(editor, prefs);
-  }, [editor, prefs]);
-
-  useEffect(() => {
-    if (!editor) return;
-    const unsub = editor.store.listen(
-      () => setSelectionTick((n) => n + 1),
-      { scope: "session" },
-    );
-    return () => unsub();
-  }, [editor]);
-
-  useEffect(() => {
-    if (readOnly) return;
-    let timer: number | undefined;
-    const unsub = store.listen(
-      () => {
-        window.clearTimeout(timer);
-        timer = window.setTimeout(() => {
-          const { document: doc } = getSnapshot(store);
-          saveRef.current(doc as unknown as Record<string, unknown>);
-        }, 900);
-      },
-      { source: "user", scope: "document" },
-    );
     return () => {
-      window.clearTimeout(timer);
-      unsub();
+      window.clearTimeout(timerRef.current);
     };
-  }, [store, readOnly, canvasId]);
+  }, []);
+
+  const scheduleSave = useCallback(
+    (elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
+      if (readOnly) return;
+      window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
+        saveRef.current(
+          serializeScene(elements, appState as unknown as Record<string, unknown>, files),
+        );
+      }, 900);
+    },
+    [readOnly],
+  );
+
+  const onChange = useCallback(
+    (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
+      setSelectionTick((n) => n + 1);
+      scheduleSave(elements, appState, files);
+    },
+    [scheduleSave],
+  );
+
+  const onApi = useCallback((next: ExcalidrawImperativeAPI) => {
+    apiRef.current = next;
+    setApi(next);
+  }, []);
 
   const onPrefsChange = (next: CanvasLayoutPrefs) => {
     setPrefs(next);
     saveCanvasLayoutPrefs(next);
+    const current = apiRef.current;
+    if (!current) return;
+    current.updateScene({
+      appState: { gridModeEnabled: next.grid },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
   };
 
   return (
     <div className={`canvas-editor-shell${readOnly ? " canvas-editor-shell--readonly" : ""}`}>
       {!readOnly ? (
         <CanvasLayoutBar
-          editor={editor}
+          api={api}
           prefs={prefs}
           onPrefsChange={onPrefsChange}
-          disabled={!editor}
+          disabled={!api}
           selectionTick={selectionTick}
+          title={title}
         />
       ) : null}
       <div className={`canvas-editor${readOnly ? " canvas-editor--readonly" : ""}`}>
-        <Tldraw
-          store={store}
-          onMount={(ed) => {
-            editorRef.current = ed;
-            setEditor(ed);
-            ed.updateInstanceState({ isReadonly: readOnly });
-            applyCanvasLayoutPrefs(ed, loadCanvasLayoutPrefs());
+        <Excalidraw
+          excalidrawAPI={onApi}
+          initialData={initialData}
+          theme="dark"
+          viewModeEnabled={readOnly}
+          zenModeEnabled={false}
+          gridModeEnabled={prefs.grid}
+          UIOptions={{
+            canvasActions: {
+              changeViewBackgroundColor: true,
+              clearCanvas: !readOnly,
+              export: false,
+              loadScene: false,
+              saveToActiveFile: false,
+              toggleTheme: false,
+            },
           }}
+          onChange={onChange}
         />
       </div>
     </div>

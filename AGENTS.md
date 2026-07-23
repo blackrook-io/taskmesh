@@ -17,6 +17,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Markdown** — shared TipTap `MarkdownEditor` (`client/src/components/shared/MarkdownEditor.tsx`); clipboard image paste → `/api/v1/uploads`.
 - **Colors** — default 16-swatch palette in `client/src/lib/palette.ts`; store accents as CSS hex strings.
 - **Design tokens** — see `client/src/index.css` (`--canvas-bg`, `--radius-chip`, `--focus-ring`, etc.).
+- **Canvases** — Excalidraw (`@excalidraw/excalidraw`, MIT) in `CanvasEditor`; scene JSON in `canvases.document`. Fonts copied on client `postinstall` to `public/excalidraw-assets/`.
 - **Playground** — `/dev/playground` for manual QA of shared primitives.
 - **Phase delivery** — at the end of every implementation phase, give the user a step-by-step **QA checklist** (playground routes when applicable + features to examine for approval or tweaks).
 - **Phase git** — on phase start: branch `phase-N-short-slug` from updated `main`. On approval: commit remaining work, push the phase branch, merge into `main`, push `main`, delete local/remote phase branch.

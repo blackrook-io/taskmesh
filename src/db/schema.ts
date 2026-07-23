@@ -310,7 +310,7 @@ export const wikiNodes = pgTable(
   }),
 );
 
-/** Freeform tldraw documents scoped to a project. */
+/** Freeform Excalidraw documents scoped to a project. */
 export const canvases = pgTable("canvases", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id")
@@ -318,7 +318,7 @@ export const canvases = pgTable("canvases", {
     .references(() => projects.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
-  /** tldraw document snapshot (shapes/pages); session/camera kept client-side. */
+  /** Excalidraw scene JSON (elements / appState / files). */
   document: jsonb("document")
     .$type<Record<string, unknown>>()
     .notNull()

@@ -641,6 +641,7 @@ export function WikiPanel({ projectId }: Props) {
             <CanvasEditor
               key={detailQuery.data.canvas.id}
               canvasId={detailQuery.data.canvas.id}
+              title={displayTitle}
               document={detailQuery.data.canvas.document ?? {}}
               readOnly={!pageEdit}
               onSaveDocument={(document) => {

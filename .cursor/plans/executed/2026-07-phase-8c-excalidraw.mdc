@@ -1,0 +1,30 @@
+# Phase 8c — Excalidraw canvas swap
+
+**Branch:** `phase-8c-excalidraw`  
+**Depends on:** Phase 8a/8b canvases (tabs, wiki links, autosave shell)
+
+## Goal
+
+Replace **tldraw** entirely with **`@excalidraw/excalidraw`** (MIT) for project canvases and wiki embeds. Keep TaskMesh shell (tabs, wiki, PATCH jsonb). No dual-engine viewer; no tldraw→Excalidraw converter.
+
+## Scope
+
+1. Uninstall `tldraw`; install `@excalidraw/excalidraw`.
+2. Persist `{ elements, appState, files }` scenes; legacy tldraw snapshots load as empty.
+3. Slim assist bar: Grid, ColorPopover fill, PNG/SVG export.
+4. Dark theme; `viewModeEnabled` for wiki read-only.
+5. Self-host fonts via `postinstall` → `public/excalidraw-assets/` + `EXCALIDRAW_ASSET_PATH`.
+
+## Out of scope
+
+- Mermaid/D2 place-on-canvas / architecture stencil libraries (follow-up)
+- Converting old tldraw drawings
+- Lazy-loading editor chunk (Phase 9)
+
+## Exit criteria
+
+- `tldraw` gone from client deps
+- Autosave + reload restores Excalidraw scene
+- Wiki read-only / edit works
+- Grid, fill, PNG/SVG export work
+- Legacy tldraw docs open blank without crash

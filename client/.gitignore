@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Copied from @excalidraw/excalidraw on postinstall
+public/excalidraw-assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
