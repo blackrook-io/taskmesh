@@ -49,7 +49,7 @@ These shared packages should land early and be the **only** implementation of ea
 |-----------|---------|----------|
 | **ColorPopover** | Tags, task accent, canvas shapes | Anchored popover; default **16-color** palette + optional custom hex; right-click / long-press; store `color` as CSS hex |
 | **TagChip + TagInput** | All record types | Autocomplete after 3 chars; create-on-enter; hover ×; ColorPopover on context menu |
-| **MarkdownEditor** | Documents, idea body, project description, **task notes** | One editor component (upgrade from current `@uiw/react-md-editor` or TipTap+markdown); toolbar + edit/preview; clipboard image paste → existing `/api/v1/uploads` |
+| **MarkdownEditor** | Documents, idea body, project description, **task notes** | One **TipTap**-based editor (migrating off `@uiw/react-md-editor`); toolbar + edit/preview; clipboard image paste → existing `/api/v1/uploads` |
 | **ElementShell** | Task card / modal / fullscreen | Mode prop: `card` \| `modal` \| `page`; shared chrome (title, tags, delete confirm, dirty state) |
 | **Autosave + UndoStack** | Tasks first, then docs | Blur/debounce save; local undo ring (10 steps) keyed by record id; baseline = open state |
 | **Polymorphic links** | Tags, boards, wiki, todos | Prefer `(entityType, entityId)` join tables over per-type duplication |
@@ -67,7 +67,7 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 ### Recommended libraries
 
-- **Markdown:** TipTap (or keep MDEditor short-term; migrate when tables/checklists/clipboard paste need depth) — UpNote-like toolbar
+- **Markdown:** **TipTap** (decided) — replace `@uiw/react-md-editor` in Phase 1; UpNote-like toolbar, tables, checklists, clipboard image paste
 - **Kanban:** `@dnd-kit` (already in repo) — multi-container columns
 - **Canvas:** **tldraw** SDK for freeform mood boards + connectors; **Mermaid/D2** text→diagram for architecture/ERD; optional **xyflow** later for heavily structured graphs
 - **Palette / popovers:** lightweight custom (dark grey / light green theme) rather than a heavy UI kit
@@ -97,18 +97,18 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 ## Phase 1 — Markdown parity (UpNote-leaning)
 
 **Estimate:** 1–2 weeks  
-**Depends on:** uploads path (exists); ColorPopover optional
+**Depends on:** uploads path (exists); ColorPopover optional; **TipTap migration** (decided — not optional) for UpNote-leaning Markdown parity (tables, checklists, clipboard image paste, shared editor for docs/ideas/task notes)
 
 ### Work
 
-- Unify **MarkdownEditor**: headings, bold/italic/underline, links, lists, checklists, tables, alignment where feasible
+- Migrate shared **MarkdownEditor** to **TipTap** (replace `@uiw/react-md-editor`): headings, bold/italic/underline, links, lists, checklists, tables, alignment where feasible
 - **Clipboard paste image** → upload API → insert `![](url)`
 - Wire editor into: documents, ideas, project description, **task notes** (replace plain textarea)
 - Optional: Focus mode (hide chrome); slash commands for headings/lists
 
 ### Exit criteria
 
-- Task notes and Documents share one toolbar
+- Task notes and Documents share one TipTap toolbar
 - Paste image works end-to-end
 
 ---

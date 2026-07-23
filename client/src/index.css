@@ -8,6 +8,11 @@
   --accent-dim: #4a9d4f;
   --danger: #e57373;
   --radius: 10px;
+  --radius-chip: 999px;
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  /* Canvas surfaces are intentionally darker than the app chrome */
+  --canvas-bg: #14151a;
+  --canvas-grid: #1a1b22;
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
   line-height: 1.45;
   color: var(--text);
@@ -306,9 +311,226 @@ textarea.raw-md {
   width: 100%;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.chip--color {
+  border-color: transparent;
+  color: #0f140f;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+/* —— ColorPopover —— */
+.color-popover-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.color-popover-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+.color-popover-swatch {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--swatch);
+}
+
+.color-popover-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  padding: 0.65rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.color-popover-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.color-popover-cell {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0;
+}
+
+.color-popover-cell.selected {
+  box-shadow: var(--focus-ring);
+}
+
+.color-popover-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.color-popover-custom label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.color-popover-custom input {
+  flex: 1;
+  min-width: 6rem;
+  padding: 0.3rem 0.45rem;
+}
+
+/* —— ElementShell —— */
+.element-shell {
+  --element-accent: var(--accent);
+}
+
+.element-shell__accent {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 4px;
+  background: var(--element-accent);
+  flex-shrink: 0;
+}
+
+.element-shell--card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.element-shell__card-chrome {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.5rem 0.35rem;
+}
+
+.element-shell__card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.element-shell__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.element-shell__title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.element-shell__type {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.element-shell__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.element-shell__body {
+  margin-top: 0.35rem;
+}
+
+.element-shell__footer {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+.element-shell--modal,
+.element-shell--page {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem 1.15rem;
+}
+
+.element-shell--modal {
+  width: min(560px, 100%);
+  max-height: min(85vh, 720px);
+  overflow: auto;
+}
+
+.element-shell--page {
+  width: 100%;
+}
+
+.element-shell__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.element-shell-backdrop {
+  z-index: 60;
+}
+
+.playground-canvas-demo {
+  height: 120px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  background:
+    linear-gradient(var(--canvas-grid) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px) 0 0 / 16px 16px,
+    var(--canvas-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }

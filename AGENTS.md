@@ -1,6 +1,6 @@
 # Agent guidance (TaskMesh)
 
-This repo is a **Node.js + TypeScript** API (**Express**, **PostgreSQL**, **Drizzle ORM**). Authoritative setup, Ubuntu packages, and `DATABASE_URL` live in [README.md](README.md).
+This repo is a **Node.js + TypeScript** API (**Express**, **PostgreSQL**, **Drizzle ORM**) plus a **Vite + React** SPA in `client/`. Authoritative setup, Ubuntu packages, and `DATABASE_URL` live in [README.md](README.md).
 
 ## Cursor rules
 
@@ -9,6 +9,15 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **platform-rules.mdc** — product vision, stack, UI, security (always applied).
 - **coding-rules.mdc** — code quality expectations when editing `**/*.ts`.
 - **development-rules.mdc** — where to put and archive `.cursor/plans/*.mdc`.
+
+## Shared conventions (Phase 0+)
+
+- **Entity types** — polymorphic ids use `EntityType` in [`src/lib/entityType.ts`](src/lib/entityType.ts) and [`client/src/lib/entityType.ts`](client/src/lib/entityType.ts) (`idea` | `project` | `task` | `document` | `todo_list` | `board` | `canvas` | `wiki_node`). Prefer `(entityType, entityId)` joins for tags/boards/wiki later.
+- **Shared UI** — put reusable chrome under `client/src/components/shared/` (`ColorPopover`, `ElementShell`). Modes: `card` | `modal` | `page`.
+- **Markdown** — Phase 1 migrates the shared editor to TipTap (not `@uiw/react-md-editor`).
+- **Colors** — default 16-swatch palette in `client/src/lib/palette.ts`; store accents as CSS hex strings.
+- **Design tokens** — see `client/src/index.css` (`--canvas-bg`, `--radius-chip`, `--focus-ring`, etc.).
+- **Playground** — `/dev/playground` for manual QA of shared primitives.
 
 ## Common commands
 
