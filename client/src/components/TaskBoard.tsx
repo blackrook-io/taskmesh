@@ -74,7 +74,7 @@ function dueToLocal(dueAt: string | null): string {
   return dueAt ? new Date(dueAt).toISOString().slice(0, 16) : "";
 }
 
-function TaskFields({
+export function TaskEditorFields({
   task,
   phases,
   onSavePatch,
@@ -392,7 +392,7 @@ export function TaskBoard({ phases, tasks, onReorder, onPatchTask, onDeleteTask 
           open
           onClose={() => setModalTaskId(null)}
         >
-          <TaskFields
+          <TaskEditorFields
             key={modalTask.id}
             task={modalTask}
             phases={phases}

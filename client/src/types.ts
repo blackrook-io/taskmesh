@@ -97,6 +97,54 @@ export type ProjectModule = {
   updatedAt: string;
 };
 
+export type Board = {
+  id: number;
+  projectId: number;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BoardColumn = {
+  id: number;
+  boardId: number;
+  name: string;
+  sortOrder: number;
+  wipLimit: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BoardLane = {
+  id: number;
+  boardId: number;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BoardCard = {
+  id: number;
+  boardId: number;
+  columnId: number;
+  laneId: number | null;
+  entityType: string;
+  entityId: number;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  color: string | null;
+  dueAt: string | null;
+};
+
+export type BoardDetail = Board & {
+  columns: BoardColumn[];
+  lanes: BoardLane[];
+  cards: BoardCard[];
+};
+
 export type ApiErrorBody = { error: { code: string; message: string } };
 
 export type { EntityType } from "./lib/entityType";

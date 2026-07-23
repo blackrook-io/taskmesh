@@ -198,6 +198,83 @@ export const projectModules = pgTable(
   }),
 );
 
+/** Kanban planning boards (multiple per project). */
+export const boards = pgTable("boards", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const boardColumns = pgTable("board_columns", {
+  id: serial("id").primaryKey(),
+  boardId: integer("board_id")
+    .notNull()
+    .references(() => boards.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  wipLimit: integer("wip_limit"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const boardLanes = pgTable("board_lanes", {
+  id: serial("id").primaryKey(),
+  boardId: integer("board_id")
+    .notNull()
+    .references(() => boards.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Cards point at tasks (and later other entities). */
+export const boardCards = pgTable(
+  "board_cards",
+  {
+    id: serial("id").primaryKey(),
+    boardId: integer("board_id")
+      .notNull()
+      .references(() => boards.id, { onDelete: "cascade" }),
+    columnId: integer("column_id")
+      .notNull()
+      .references(() => boardColumns.id, { onDelete: "cascade" }),
+    laneId: integer("lane_id").references(() => boardLanes.id, { onDelete: "set null" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    boardEntityUniq: unique("board_cards_board_entity_uidx").on(
+      t.boardId,
+      t.entityType,
+      t.entityId,
+    ),
+  }),
+);
+
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
 }));
@@ -212,6 +289,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   documents: many(projectDocuments),
   todoLists: many(todoLists),
   modules: many(projectModules),
+  boards: many(boards),
 }));
 
 export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
@@ -270,5 +348,46 @@ export const projectModulesRelations = relations(projectModules, ({ one }) => ({
   project: one(projects, {
     fields: [projectModules.projectId],
     references: [projects.id],
+  }),
+}));
+
+export const boardsRelations = relations(boards, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [boards.projectId],
+    references: [projects.id],
+  }),
+  columns: many(boardColumns),
+  lanes: many(boardLanes),
+  cards: many(boardCards),
+}));
+
+export const boardColumnsRelations = relations(boardColumns, ({ one, many }) => ({
+  board: one(boards, {
+    fields: [boardColumns.boardId],
+    references: [boards.id],
+  }),
+  cards: many(boardCards),
+}));
+
+export const boardLanesRelations = relations(boardLanes, ({ one, many }) => ({
+  board: one(boards, {
+    fields: [boardLanes.boardId],
+    references: [boards.id],
+  }),
+  cards: many(boardCards),
+}));
+
+export const boardCardsRelations = relations(boardCards, ({ one }) => ({
+  board: one(boards, {
+    fields: [boardCards.boardId],
+    references: [boards.id],
+  }),
+  column: one(boardColumns, {
+    fields: [boardCards.columnId],
+    references: [boardColumns.id],
+  }),
+  lane: one(boardLanes, {
+    fields: [boardCards.laneId],
+    references: [boardLanes.id],
   }),
 }));

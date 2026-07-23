@@ -8,6 +8,7 @@ import { ensureDefaultPhase } from "../../services/phases.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
+import { boardsRouter } from "./boards.js";
 import { phasesRouter } from "./phases.js";
 import { tasksRouter } from "./tasks.js";
 
@@ -139,3 +140,4 @@ projectsRouter.use("/:projectId/phases", phasesRouter);
 projectsRouter.use("/:projectId/tasks", tasksRouter);
 projectsRouter.use("/:projectId/documents", documentsRouter);
 projectsRouter.use("/:projectId/modules", modulesRouter);
+projectsRouter.use("/:projectId/boards", boardsRouter);

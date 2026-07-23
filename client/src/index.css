@@ -1148,3 +1148,137 @@ a:focus-visible {
 .module-placeholder code {
   color: var(--accent);
 }
+
+.kanban-board {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.kanban-column {
+  flex: 0 0 min(280px, 85vw);
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 720px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas-bg, var(--bg-elevated, #2a2a2a));
+}
+
+.kanban-column.is-over {
+  border-color: var(--accent);
+}
+
+.kanban-column.is-wip-over {
+  border-color: #e57373;
+}
+
+.kanban-column__head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.kanban-column__title {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kanban-column__name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.kanban-column__count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.kanban-column__count.is-over {
+  color: #e57373;
+  font-weight: 600;
+}
+
+.kanban-column__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  min-height: 4rem;
+}
+
+.kanban-column__add {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.kanban-column__add input {
+  flex: 1;
+  min-width: 0;
+}
+
+.kanban-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0.3rem;
+  margin-bottom: 0.45rem;
+  padding: 0.4rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.kanban-card--overlay {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  width: 240px;
+}
+
+.kanban-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kanban-card__body:hover .kanban-card__title {
+  color: var(--accent);
+}
+
+.kanban-card__title {
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.kanban-card__meta {
+  font-size: 0.75rem;
+}
+
+.kanban-card__swatch {
+  width: 4px;
+  border-radius: 2px;
+  align-self: stretch;
+  flex-shrink: 0;
+}
