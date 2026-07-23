@@ -10,5 +10,7 @@ In-app backup status, manual run, and schedule/retention controls. Shared runner
 
 - List recent backups with health (fresh &lt; 36h)
 - Run backup now (Postgres + uploads)
+- **Restore** a listed backup after ConfirmDialog; safety backup first; refuses if safety dump fails
+- **Delete** a listed backup after ConfirmDialog (removes folder under BACKUP_DIR)
 - Edit schedule (hour/minute) + retainDays; in-process scheduler while API runs
-- INSTALL documents systemd timer alternative
+- INSTALL documents in-app restore/delete + systemd timer alternative

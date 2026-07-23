@@ -53,6 +53,7 @@ export function BackupsPage() {
   const qc = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<BackupItem | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<BackupItem | null>(null);
 
   const listQuery = useQuery({
     queryKey: ["backups"],
@@ -113,6 +114,24 @@ export function BackupsPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiJson<{ data: { id: string } }>(`/api/v1/backups/${id}`, {
+        method: "DELETE",
+      });
+      return res.data;
+    },
+    onSuccess: (r) => {
+      setPendingDelete(null);
+      setMessage(`Deleted backup ${r.id}.`);
+      void qc.invalidateQueries({ queryKey: ["backups"] });
+    },
+    onError: (e: Error) => {
+      setPendingDelete(null);
+      setMessage(e.message);
+    },
+  });
+
   const saveSchedule = useMutation({
     mutationFn: async (body: Schedule) => {
       const res = await apiJson<{ data: Schedule }>("/api/v1/backups/schedule", {
@@ -129,7 +148,8 @@ export function BackupsPage() {
     onError: (e: Error) => setMessage(e.message),
   });
 
-  const busy = runMutation.isPending || restoreMutation.isPending;
+  const busy =
+    runMutation.isPending || restoreMutation.isPending || deleteMutation.isPending;
 
   return (
     <div>
@@ -140,7 +160,8 @@ export function BackupsPage() {
         Database dumps and upload archives under the configured backup directory. A backup is{" "}
         <strong>healthy</strong> when the latest successful dump is less than{" "}
         {listQuery.data?.freshHours ?? 36} hours old. Restore replaces the current database (and
-        uploads when present) after confirmation; a safety backup is taken first.
+        uploads when present) after confirmation; a safety backup is taken first. Delete removes a
+        backup folder from disk (useful for discarding unwanted safety snapshots).
       </p>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
@@ -274,18 +295,32 @@ export function BackupsPage() {
                   <td>{formatBytes(b.bytes)}</td>
                   <td className="muted">{b.error ?? "—"}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn small danger"
-                      disabled={busy || !b.pgDumpOk}
-                      title={b.pgDumpOk ? "Restore this backup" : "No database dump to restore"}
-                      onClick={() => {
-                        setMessage(null);
-                        setPendingRestore(b);
-                      }}
-                    >
-                      Restore
-                    </button>
+                    <div className="btn-row" style={{ flexWrap: "nowrap", gap: "0.35rem" }}>
+                      <button
+                        type="button"
+                        className="btn small danger"
+                        disabled={busy || !b.pgDumpOk}
+                        title={b.pgDumpOk ? "Restore this backup" : "No database dump to restore"}
+                        onClick={() => {
+                          setMessage(null);
+                          setPendingRestore(b);
+                        }}
+                      >
+                        Restore
+                      </button>
+                      <button
+                        type="button"
+                        className="btn small ghost"
+                        disabled={busy}
+                        title="Delete this backup from disk"
+                        onClick={() => {
+                          setMessage(null);
+                          setPendingDelete(b);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -309,6 +344,25 @@ export function BackupsPage() {
         onConfirm={() => {
           if (pendingRestore && !restoreMutation.isPending) {
             restoreMutation.mutate(pendingRestore.id);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete != null}
+        title="Delete this backup?"
+        message={
+          pendingDelete
+            ? `Permanently delete backup ${pendingDelete.id} (${new Date(pendingDelete.createdAt).toLocaleString()}) from disk? This cannot be undone.`
+            : ""
+        }
+        confirmLabel={deleteMutation.isPending ? "Deleting…" : "Delete"}
+        onCancel={() => {
+          if (!deleteMutation.isPending) setPendingDelete(null);
+        }}
+        onConfirm={() => {
+          if (pendingDelete && !deleteMutation.isPending) {
+            deleteMutation.mutate(pendingDelete.id);
           }
         }}
       />

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
@@ -10,6 +11,26 @@ import {
 } from "../lib/paths.js";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * pg_dump may include ALTER DEFAULT PRIVILEGES FOR ROLE postgres (from INSTALL grants).
+ * The app role cannot apply those; strip them so ON_ERROR_STOP restores succeed.
+ */
+function writeFilteredRestoreSql(sqlPath: string, dbUser: string): string {
+  const raw = fs.readFileSync(sqlPath, "utf8");
+  const filtered = raw
+    .split("\n")
+    .filter((line) => {
+      const m = /^\s*ALTER DEFAULT PRIVILEGES FOR ROLE (\S+)/i.exec(line);
+      if (!m?.[1]) return true;
+      const role = m[1].replace(/^"|"$/g, "");
+      return role === dbUser;
+    })
+    .join("\n");
+  const tmp = path.join(os.tmpdir(), `taskmesh-restore-${process.pid}-${Date.now()}.sql`);
+  fs.writeFileSync(tmp, filtered, "utf8");
+  return tmp;
+}
 
 export type BackupManifest = {
   id: string;
@@ -213,6 +234,24 @@ function loadManifest(id: string): BackupManifest | null {
   }
 }
 
+/** Remove a backup directory (SQL + uploads tar + manifest) after validation. */
+export async function deleteBackup(id: string): Promise<{ id: string }> {
+  return withBackupLock(async () => {
+    const manifest = loadManifest(id);
+    if (!manifest) {
+      throw new Error("Backup not found");
+    }
+    const dir = path.join(getBackupDir(), id);
+    const root = path.resolve(getBackupDir());
+    const resolved = path.resolve(dir);
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+      throw new Error("Invalid backup id");
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { id };
+  });
+}
+
 export type RestoreResult = {
   backupId: string;
   safetyBackupId: string | null;
@@ -269,24 +308,42 @@ export async function restoreBackup(
       const env = { ...process.env, PGPASSWORD: cfg.password };
       const psqlArgs = ["-h", cfg.host, "-p", cfg.port, "-U", cfg.user, "-d", cfg.database];
 
-      await execFileAsync(
-        "psql",
-        [
-          ...psqlArgs,
-          "-v",
-          "ON_ERROR_STOP=1",
-          "-c",
-          `DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "${cfg.user}"; GRANT ALL ON SCHEMA public TO public; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${cfg.user}";`,
-        ],
-        { env, maxBuffer: 16 * 1024 * 1024 },
-      );
+      // Dump includes non-public schemas (e.g. drizzle); drop all user schemas first.
+      const wipeSql = `
+DO $$ DECLARE r RECORD;
+BEGIN
+  FOR r IN (
+    SELECT nspname FROM pg_namespace
+    WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+      AND nspname NOT LIKE 'pg_temp_%'
+      AND nspname NOT LIKE 'pg_toast_temp_%'
+  ) LOOP
+    EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', r.nspname);
+  END LOOP;
+END $$;
+CREATE SCHEMA public;
+GRANT ALL ON SCHEMA public TO "${cfg.user}";
+GRANT ALL ON SCHEMA public TO public;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${cfg.user}";
+`.replace(/\s+/g, " ").trim();
 
       await execFileAsync(
         "psql",
-        [...psqlArgs, "-v", "ON_ERROR_STOP=1", "-f", sqlPath],
-        { env, maxBuffer: 64 * 1024 * 1024 },
+        [...psqlArgs, "-v", "ON_ERROR_STOP=1", "-c", wipeSql],
+        { env, maxBuffer: 16 * 1024 * 1024 },
       );
-      databaseRestored = true;
+
+      const filteredSql = writeFilteredRestoreSql(sqlPath, cfg.user);
+      try {
+        await execFileAsync(
+          "psql",
+          [...psqlArgs, "-v", "ON_ERROR_STOP=1", "-f", filteredSql],
+          { env, maxBuffer: 64 * 1024 * 1024 },
+        );
+        databaseRestored = true;
+      } finally {
+        fs.rmSync(filteredSql, { force: true });
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : "Database restore failed";
       return {
@@ -380,6 +437,9 @@ async function runBackupUnlocked(): Promise<BackupManifest> {
           cfg.database,
           "-F",
           "p",
+          // Avoid superuser-only ACLs (e.g. DEFAULT PRIVILEGES FOR ROLE postgres).
+          "--no-acl",
+          "--no-owner",
           "-f",
           sqlPath,
         ],

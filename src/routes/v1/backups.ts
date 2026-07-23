@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import {
+  deleteBackup,
   listBackups,
   overallBackupHealth,
   readSchedule,
@@ -87,6 +88,23 @@ backupsRouter.post("/:id/restore", async (req, res) => {
       /not found|no successful|missing|already in progress|Could not take/i.test(err.message)
     ) {
       sendError(res, 400, "restore_error", err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+backupsRouter.delete("/:id", async (req, res) => {
+  try {
+    const id = z.string().min(1).max(64).parse(req.params.id);
+    const data = await deleteBackup(id);
+    res.json({ data });
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      /not found|Invalid backup|already in progress/i.test(err.message)
+    ) {
+      sendError(res, 400, "delete_error", err.message);
       return;
     }
     handleRouteError(res, err);
