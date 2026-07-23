@@ -110,7 +110,11 @@ export async function runAssistantWithTools(args: {
     args.handlers.onError("Too many tool rounds; try a simpler request.");
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
-      args.handlers.onDone();
+      try {
+        args.handlers.onError("Cancelled");
+      } catch {
+        args.handlers.onDone();
+      }
       return;
     }
     args.handlers.onError(err instanceof Error ? err.message : "Assistant failed");

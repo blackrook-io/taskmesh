@@ -129,6 +129,7 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
       const ac = new AbortController();
       abortRef.current = ac;
       let full = "";
+      let aborted = false;
       try {
         await streamAssistantChat({
           message,
@@ -146,15 +147,39 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
             setPendingProposal(proposal);
           },
         });
-        setTurns((t) => [...t, { role: "assistant", content: full || "(empty reply)" }]);
+        if (!ac.signal.aborted) {
+          setTurns((t) => [
+            ...t,
+            { role: "assistant", content: full.trim() || "(empty reply)" },
+          ]);
+        }
         setStreaming("");
         setToolNote(null);
+      } catch (e) {
+        aborted =
+          (e instanceof DOMException && e.name === "AbortError") ||
+          (e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message)));
+        if (aborted) {
+          if (full.trim()) {
+            setTurns((t) => [...t, { role: "assistant", content: full.trim() }]);
+          }
+          setStreaming("");
+          setToolNote(null);
+          return;
+        }
+        throw e;
       } finally {
         setBusy(false);
         abortRef.current = null;
       }
     },
     onError: (e: Error) => {
+      if (e.name === "AbortError" || /aborted/i.test(e.message)) {
+        setStreaming("");
+        setToolNote(null);
+        setBusy(false);
+        return;
+      }
       setError(e.message);
       setStreaming("");
       setToolNote(null);

@@ -68,6 +68,7 @@ assistantRouter.post("/chat", async (req, res) => {
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
     if (typeof res.flushHeaders === "function") {
       res.flushHeaders();
     }
@@ -76,7 +77,11 @@ assistantRouter.post("/chat", async (req, res) => {
     };
 
     const ac = new AbortController();
-    req.on("close", () => ac.abort());
+    // Do NOT use req.on("close") — it fires when the request body finishes, which
+    // aborts the tool loop immediately. Abort only if the client drops the SSE.
+    res.on("close", () => {
+      if (!res.writableEnded) ac.abort();
+    });
 
     writeEvent("meta", {
       provider: provider.id,
