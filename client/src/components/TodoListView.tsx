@@ -63,7 +63,7 @@ function SortableItem({
 
 type Props = {
   listId: number;
-  /** When set, convert-to-task uses this project */
+  /** When set, convert-to-task / create-task uses this project */
   defaultProjectId?: number | null;
 };
 
@@ -71,9 +71,12 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const qc = useQueryClient();
   const [openItem, setOpenItem] = useState<TodoListItem | null>(null);
   const [pendingRemove, setPendingRemove] = useState<TodoListItem | null>(null);
-  const [addType, setAddType] = useState<"idea" | "task">("idea");
+  const [createType, setCreateType] = useState<"idea" | "task">("idea");
+  const [createTitle, setCreateTitle] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [linkType, setLinkType] = useState<"idea" | "task">("idea");
   const [pickId, setPickId] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const detailQuery = useQuery({
     queryKey: ["todo-list", listId],
@@ -101,7 +104,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
 
   const tasksQuery = useQuery({
     queryKey: ["all-tasks-for-todos", defaultProjectId],
-    enabled: addType === "task",
+    enabled: linkType === "task",
     queryFn: async () => {
       const projects = projectsQuery.data ?? (await apiJson<{ data: Project[] }>("/api/v1/projects")).data;
       const scoped = defaultProjectId
@@ -116,23 +119,57 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     },
   });
 
-  const invalidate = () => void qc.invalidateQueries({ queryKey: ["todo-list", listId] });
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ["todo-list", listId] });
+    void qc.invalidateQueries({ queryKey: ["ideas"] });
+    void qc.invalidateQueries({ queryKey: ["tasks"] });
+  };
 
-  const addItem = useMutation({
+  const createItem = useMutation({
+    mutationFn: async () => {
+      const projectId =
+        createType === "task"
+          ? (defaultProjectId ?? detailQuery.data?.projectId ?? projectsQuery.data?.[0]?.id ?? null)
+          : null;
+      const body: { entityType: "idea" | "task"; title: string; projectId?: number } = {
+        entityType: createType,
+        title: createTitle.trim(),
+      };
+      if (createType === "task") {
+        if (projectId == null) {
+          throw new Error("Create a project before adding tasks to this list");
+        }
+        body.projectId = projectId;
+      }
+      const res = await apiJson<{ data: TodoListItem }>(`/api/v1/todo-lists/${listId}/items/create`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      setCreateTitle("");
+      setCreateError(null);
+      invalidate();
+    },
+    onError: (err: Error) => setCreateError(err.message),
+  });
+
+  const addExisting = useMutation({
     mutationFn: async () => {
       const entityId = Number(pickId);
       const res = await apiJson<{ data: TodoListItem }>(`/api/v1/todo-lists/${listId}/items`, {
         method: "POST",
-        body: JSON.stringify({ entityType: addType, entityId }),
+        body: JSON.stringify({ entityType: linkType, entityId }),
       });
       return res.data;
     },
     onSuccess: () => {
       setPickId("");
-      setError(null);
+      setLinkError(null);
       invalidate();
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setLinkError(err.message),
   });
 
   const patchItem = useMutation({
@@ -176,9 +213,8 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     onSuccess: (data) => {
       setOpenItem(data.item);
       invalidate();
-      void qc.invalidateQueries({ queryKey: ["tasks"] });
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setLinkError(err.message),
   });
 
   const list = detailQuery.data;
@@ -224,14 +260,49 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   if (!list) return <p className="muted">List not found.</p>;
 
   const pickOptions =
-    addType === "idea"
+    linkType === "idea"
       ? (ideasQuery.data ?? []).map((i) => ({ id: i.id, label: i.title }))
       : (tasksQuery.data ?? []).map((t) => ({ id: t.id, label: t.title }));
 
-  const convertProjectId = defaultProjectId ?? projectsQuery.data?.[0]?.id ?? null;
+  const convertProjectId = defaultProjectId ?? list.projectId ?? projectsQuery.data?.[0]?.id ?? null;
 
   return (
     <div className="todo-list-view">
+      <div className="todo-create-row">
+        <input
+          type="text"
+          placeholder="New item title"
+          value={createTitle}
+          onChange={(e) => setCreateTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && createTitle.trim()) createItem.mutate();
+          }}
+          aria-label="New item title"
+        />
+        <select
+          className="todo-type-select"
+          value={createType}
+          onChange={(e) => setCreateType(e.target.value as "idea" | "task")}
+          aria-label="New item type"
+        >
+          <option value="idea">Idea</option>
+          <option value="task">Task</option>
+        </select>
+        <button
+          type="button"
+          className="btn primary"
+          disabled={!createTitle.trim() || createItem.isPending}
+          onClick={() => createItem.mutate()}
+        >
+          Add
+        </button>
+      </div>
+      {createError ? (
+        <p className="tag-input__error" role="alert">
+          {createError}
+        </p>
+      ) : null}
+
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {items.map((item) => (
@@ -245,16 +316,24 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           ))}
         </SortableContext>
       </DndContext>
-      {items.length === 0 ? <p className="muted">No items yet — add an idea or task below.</p> : null}
+      {items.length === 0 ? <p className="muted">No items yet — create one above.</p> : null}
 
-      <div className="card" style={{ marginTop: "1rem" }}>
-        <h3>Add to list</h3>
+      <div className="todo-link-existing">
+        <h3>Add existing</h3>
         <div className="todo-add-row">
-          <select value={addType} onChange={(e) => { setAddType(e.target.value as "idea" | "task"); setPickId(""); }}>
+          <select
+            className="todo-type-select"
+            value={linkType}
+            onChange={(e) => {
+              setLinkType(e.target.value as "idea" | "task");
+              setPickId("");
+            }}
+            aria-label="Existing item type"
+          >
             <option value="idea">Idea</option>
             <option value="task">Task</option>
           </select>
-          <select value={pickId} onChange={(e) => setPickId(e.target.value)} style={{ flex: 1 }}>
+          <select value={pickId} onChange={(e) => setPickId(e.target.value)} style={{ flex: 1 }} aria-label="Select existing record">
             <option value="">Select…</option>
             {pickOptions.map((o) => (
               <option key={o.id} value={o.id}>
@@ -265,15 +344,15 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           <button
             type="button"
             className="btn primary"
-            disabled={!pickId || addItem.isPending}
-            onClick={() => addItem.mutate()}
+            disabled={!pickId || addExisting.isPending}
+            onClick={() => addExisting.mutate()}
           >
             Add
           </button>
         </div>
-        {error ? (
+        {linkError ? (
           <p className="tag-input__error" role="alert">
-            {error}
+            {linkError}
           </p>
         ) : null}
       </div>
@@ -297,9 +376,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
                   type="button"
                   className="btn"
                   disabled={convert.isPending}
-                  onClick={() =>
-                    convert.mutate({ itemId: openItem.id, projectId: convertProjectId })
-                  }
+                  onClick={() => convert.mutate({ itemId: openItem.id, projectId: convertProjectId })}
                 >
                   Convert to task
                 </button>

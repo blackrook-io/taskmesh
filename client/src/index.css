@@ -1062,6 +1062,37 @@ a:focus-visible {
   min-width: 8rem;
 }
 
+.todo-create-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+.todo-create-row input {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.todo-type-select {
+  width: auto;
+  min-width: 5.5rem;
+  flex: 0 0 auto;
+}
+
+.todo-link-existing {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.todo-link-existing h3 {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .todo-preview-body {
   margin: 0;
   padding: 0.75rem;

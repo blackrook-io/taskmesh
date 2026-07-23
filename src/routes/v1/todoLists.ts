@@ -34,6 +34,12 @@ const reorderBody = z.object({
   orderedItemIds: z.array(z.number().int().positive()).min(1),
 });
 
+const createItemBody = z.object({
+  entityType: itemEntity,
+  title: z.string().min(1).max(2000),
+  projectId: z.number().int().positive().optional(),
+});
+
 const convertBody = z.object({
   projectId: z.number().int().positive(),
   title: z.string().min(1).max(2000).optional(),
@@ -182,7 +188,7 @@ todoListsRouter.delete("/:id", async (req, res) => {
       return;
     }
     if (list.kind === "inbox") {
-      sendError(res, 400, "protected_list", "Cannot delete the Inbox list");
+      sendError(res, 400, "protected_list", "Cannot delete the Unsorted list");
       return;
     }
     await db.delete(schema.todoLists).where(eq(schema.todoLists.id, id));
@@ -258,6 +264,86 @@ todoListsRouter.post("/:id/items", async (req, res) => {
       }
       throw insertErr;
     }
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+/** Create a new idea or task and append it to this list. */
+todoListsRouter.post("/:id/items/create", async (req, res) => {
+  try {
+    const listId = idParam.parse(req.params.id);
+    const list = await loadList(listId);
+    if (!list) {
+      sendError(res, 404, "not_found", "List not found");
+      return;
+    }
+    const parsed = createItemBody.parse(req.body);
+    const title = parsed.title.trim();
+    let entityType = parsed.entityType;
+    let entityId: number;
+
+    if (entityType === "idea") {
+      const [idea] = await db.insert(schema.ideas).values({ title, body: null }).returning();
+      if (!idea) {
+        sendError(res, 500, "insert_failed", "Could not create idea");
+        return;
+      }
+      entityId = idea.id;
+    } else {
+      const projectId = parsed.projectId ?? list.projectId ?? null;
+      if (projectId == null) {
+        sendError(
+          res,
+          400,
+          "project_required",
+          "A project is required to create a task — pick a project-scoped list or pass projectId",
+        );
+        return;
+      }
+      const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
+      if (!proj) {
+        sendError(res, 404, "not_found", "Project not found");
+        return;
+      }
+      const phaseId = await ensureDefaultPhase(db, projectId);
+      const [task] = await db
+        .insert(schema.tasks)
+        .values({
+          projectId,
+          phaseId,
+          title,
+          sortOrder: 0,
+        })
+        .returning();
+      if (!task) {
+        sendError(res, 500, "insert_failed", "Could not create task");
+        return;
+      }
+      entityId = task.id;
+    }
+
+    const existing = await db
+      .select({ m: schema.todoListItems.sortOrder })
+      .from(schema.todoListItems)
+      .where(eq(schema.todoListItems.listId, listId));
+    const nextSort = existing.length ? Math.max(...existing.map((r) => r.m)) + 1 : 0;
+    const [row] = await db
+      .insert(schema.todoListItems)
+      .values({
+        listId,
+        entityType,
+        entityId,
+        checked: false,
+        sortOrder: nextSort,
+      })
+      .returning();
+    if (!row) {
+      sendError(res, 500, "insert_failed", "Could not add item");
+      return;
+    }
+    const match = (await hydrateItems(listId)).find((i) => i.id === row.id);
+    res.status(201).json({ data: match ?? row });
   } catch (err) {
     handleRouteError(res, err);
   }

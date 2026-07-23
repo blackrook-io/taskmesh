@@ -54,7 +54,7 @@ export function TodoListsPage() {
       <div className="page-head">
         <h1>To Do lists</h1>
       </div>
-      <p className="muted">Mix ideas and tasks. Inbox is always available.</p>
+      <p className="muted">Mix ideas and tasks. Unsorted is always available.</p>
 
       <div className="grid" style={{ gridTemplateColumns: "minmax(200px, 260px) 1fr", alignItems: "start", marginTop: "1rem" }}>
         <div className="card">
@@ -69,7 +69,6 @@ export function TodoListsPage() {
                   onClick={() => setSelectedId(l.id)}
                 >
                   {l.title}
-                  {l.kind === "inbox" ? " · Inbox" : ""}
                   {l.projectId != null ? ` · P${l.projectId}` : ""}
                 </button>
                 {l.kind !== "inbox" ? (
