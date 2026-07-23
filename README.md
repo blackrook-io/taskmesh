@@ -20,7 +20,8 @@ npm run build:all
 NODE_ENV=production npm start
 ```
 
-On the server: http://127.0.0.1:3000/ — on the LAN after nginx (§15): **http://&lt;server-ip&gt;/** (API under `/api/...`, health at `/api/health`).
+On the server: http://127.0.0.1:3000/ — on the LAN after nginx (§15): **http://\<server-ip\>/** (API under `/api/...`, health at `/api/health`).
+
 ## Development
 
 From the repo root (Postgres running, `.env` configured, migrations applied — see [INSTALL.md](INSTALL.md)):

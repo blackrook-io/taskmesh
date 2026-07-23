@@ -307,9 +307,11 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 - `/settings/backups`, `npm run backup`, in-process schedule, optional systemd timer under `deploy/`
 
-### 10c — Responsive phone/tablet (planned)
+### 10c — Responsive phone/tablet (branch `phase-10c-responsive`; QA deferred)
 
-### 10d — nginx :80 host (planned)
+### 10d — nginx :80 host (in progress on `phase-10d-host-port80`)
+
+- `HOST=127.0.0.1`, nginx → Express, UFW allow LAN :80; future multi-app landing documented only
 
 ---
 
