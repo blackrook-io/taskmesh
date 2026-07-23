@@ -140,6 +140,118 @@ code {
   font-weight: 600;
 }
 
+.command-palette-trigger {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 1rem 2rem;
+}
+
+.command-palette {
+  width: min(560px, 100%);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 520px);
+  overflow: hidden;
+}
+
+.command-palette__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.command-palette__input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.05rem;
+  padding: 0.9rem 1rem;
+}
+
+.command-palette__input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.command-palette__list {
+  overflow: auto;
+  flex: 1;
+  padding: 0.35rem 0;
+  min-height: 8rem;
+}
+
+.command-palette__group {
+  padding: 0.45rem 1rem 0.2rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.command-palette__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.command-palette__item.is-active,
+.command-palette__item:hover {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+}
+
+.command-palette__label {
+  font-weight: 550;
+}
+
+.command-palette__hint {
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.command-palette__status {
+  padding: 0.75rem 1rem;
+  margin: 0;
+}
+
+.command-palette__footer {
+  margin: 0;
+  padding: 0.45rem 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+
 .main {
   text-align: left;
 }

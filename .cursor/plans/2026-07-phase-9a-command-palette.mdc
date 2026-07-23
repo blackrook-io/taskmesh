@@ -1,0 +1,31 @@
+# Phase 9a — Command palette
+
+**Branch:** `phase-9-command-palette`  
+**Depends on:** Phase 2 global search API (`GET /api/v1/search`)
+
+## Goal
+
+Ship a **Ctrl/Cmd+K** command palette for quick navigation and search, plus a lightweight **Recent** list in `localStorage`. First Phase 9 polish slice.
+
+## Scope
+
+1. `CommandPalette` overlay mounted from `Layout` (open Ctrl/Cmd+K or nav button; Esc closes).
+2. Debounced live search via existing `/api/v1/search?q=`; jump to idea / project / project-for-task / project-for-document.
+3. Static commands: Home, Ideas, Projects, To Dos, Search, Playground, New idea, New project.
+4. Recent navigations (last ~8 paths) stored in `localStorage`.
+5. Focus trap, arrow keys, Enter; themed to dark grey / light green.
+
+## Out of scope
+
+- Global pin favorites (DB)
+- MD/PDF export, virtualization, lazy Excalidraw
+- Mermaid / Excalidraw libraries (remaining 8c)
+- Full mobile redesign
+
+## Exit criteria
+
+- Ctrl/Cmd+K opens palette; Esc closes
+- Typing searches and Enter navigates
+- Static commands work
+- Recent section updates after navigation
+- QA checklist delivered

@@ -284,12 +284,18 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 ### Work
 
-- Global search + command palette
-- Recent / pinned
+- Global search + **command palette** (Phase **9a**: Ctrl/Cmd+K + recent nav)
+- Recent / pinned (palette recent in 9a; app-wide pin later)
 - Mobile pass (touch DnD alternatives, bottom sheets for ElementShell)
 - Export MD/PDF; reinforce backup of `data/uploads`
 - Performance: virtualize long boards/lists; lazy-load canvas/editor chunks
 - Accessibility: focus traps in modals, keyboard tag remove
+
+### 9a — Command palette (in progress on `phase-9-command-palette`)
+
+- Ctrl/Cmd+K overlay; debounced `GET /api/v1/search`
+- Static go-to / create commands; `localStorage` recent paths
+- Focus trap + keyboard navigation
 
 ---
 
