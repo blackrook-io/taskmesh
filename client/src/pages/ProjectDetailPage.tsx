@@ -7,9 +7,10 @@ import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { TagInput } from "../components/shared/TagInput";
 import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
-import type { Project, ProjectDocument, ProjectPhase, Task } from "../types";
+import { TodoListView } from "../components/TodoListView";
+import type { Project, ProjectDocument, ProjectPhase, Task, TodoList } from "../types";
 
-type Tab = "overview" | "tasks" | "documents";
+type Tab = "overview" | "tasks" | "todos" | "documents";
 
 export function ProjectDetailPage() {
   const { id } = useParams();
@@ -24,6 +25,8 @@ export function ProjectDetailPage() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [newDocTitle, setNewDocTitle] = useState("");
+  const [projectListId, setProjectListId] = useState<number | null>(null);
+  const [newTodoListTitle, setNewTodoListTitle] = useState("");
 
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [pendingTaskDelete, setPendingTaskDelete] = useState<number | null>(null);
@@ -64,6 +67,32 @@ export function ProjectDetailPage() {
     queryFn: async () => {
       const res = await apiJson<{ data: ProjectDocument[] }>(`/api/v1/projects/${projectId}/documents`);
       return res.data;
+    },
+  });
+
+  const todoListsQuery = useQuery({
+    queryKey: ["todo-lists", projectId],
+    enabled: !invalidId,
+    queryFn: async () => {
+      const res = await apiJson<{ data: TodoList[] }>(
+        `/api/v1/todo-lists?projectId=${projectId}`,
+      );
+      return res.data;
+    },
+  });
+
+  const createTodoList = useMutation({
+    mutationFn: async () => {
+      const res = await apiJson<{ data: TodoList }>("/api/v1/todo-lists", {
+        method: "POST",
+        body: JSON.stringify({ title: newTodoListTitle.trim(), projectId }),
+      });
+      return res.data;
+    },
+    onSuccess: (list) => {
+      setNewTodoListTitle("");
+      setProjectListId(list.id);
+      void qc.invalidateQueries({ queryKey: ["todo-lists", projectId] });
     },
   });
 
@@ -222,6 +251,9 @@ export function ProjectDetailPage() {
         <button type="button" className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>
           Tasks
         </button>
+        <button type="button" className={tab === "todos" ? "active" : ""} onClick={() => setTab("todos")}>
+          To Dos
+        </button>
         <button type="button" className={tab === "documents" ? "active" : ""} onClick={() => setTab("documents")}>
           Documents
         </button>
@@ -303,6 +335,55 @@ export function ProjectDetailPage() {
             />
           </div>
           {reorderTasks.isError ? <p role="alert">{(reorderTasks.error as Error).message}</p> : null}
+        </div>
+      ) : null}
+
+      {tab === "todos" ? (
+        <div>
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <h3>Project To Do lists</h3>
+            <div className="btn-row" style={{ marginBottom: "0.75rem", flexWrap: "wrap" }}>
+              {(todoListsQuery.data ?? []).map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  className={`btn small${(projectListId ?? todoListsQuery.data?.[0]?.id) === l.id ? " primary" : " ghost"}`}
+                  onClick={() => setProjectListId(l.id)}
+                >
+                  {l.title}
+                </button>
+              ))}
+            </div>
+            <div className="todo-add-row">
+              <input
+                type="text"
+                placeholder="New list for this project"
+                value={newTodoListTitle}
+                onChange={(e) => setNewTodoListTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newTodoListTitle.trim()) createTodoList.mutate();
+                }}
+              />
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!newTodoListTitle.trim() || createTodoList.isPending}
+                onClick={() => createTodoList.mutate()}
+              >
+                Create list
+              </button>
+            </div>
+          </div>
+          {(projectListId ?? todoListsQuery.data?.[0]?.id) != null ? (
+            <div className="card">
+              <TodoListView
+                listId={(projectListId ?? todoListsQuery.data![0]!.id)!}
+                defaultProjectId={projectId}
+              />
+            </div>
+          ) : (
+            <p className="muted">Create a To Do list for this project to get started.</p>
+          )}
         </div>
       ) : null}
 

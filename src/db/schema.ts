@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   integer,
   pgTable,
   serial,
@@ -130,6 +131,50 @@ export const taggings = pgTable(
   }),
 );
 
+/** Standalone or project-scoped checklist containers. */
+export const todoLists = pgTable("todo_lists", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title").notNull(),
+  kind: text("kind").notNull().default("list"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Polymorphic list rows: idea or task. */
+export const todoListItems = pgTable(
+  "todo_list_items",
+  {
+    id: serial("id").primaryKey(),
+    listId: integer("list_id")
+      .notNull()
+      .references(() => todoLists.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    checked: boolean("checked").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    listEntityUniq: unique("todo_list_items_list_entity_uidx").on(
+      t.listId,
+      t.entityType,
+      t.entityId,
+    ),
+  }),
+);
+
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
 }));
@@ -142,6 +187,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   phases: many(projectPhases),
   tasks: many(tasks),
   documents: many(projectDocuments),
+  todoLists: many(todoLists),
 }));
 
 export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
@@ -178,5 +224,20 @@ export const taggingsRelations = relations(taggings, ({ one }) => ({
   tag: one(tags, {
     fields: [taggings.tagId],
     references: [tags.id],
+  }),
+}));
+
+export const todoListsRelations = relations(todoLists, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [todoLists.projectId],
+    references: [projects.id],
+  }),
+  items: many(todoListItems),
+}));
+
+export const todoListItemsRelations = relations(todoListItems, ({ one }) => ({
+  list: one(todoLists, {
+    fields: [todoListItems.listId],
+    references: [todoLists.id],
   }),
 }));

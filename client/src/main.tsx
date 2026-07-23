@@ -12,6 +12,7 @@ import { ProjectDetailPage } from "./pages/ProjectDetailPage.tsx";
 import { ProjectNewPage } from "./pages/ProjectNewPage.tsx";
 import { ProjectsListPage } from "./pages/ProjectsListPage.tsx";
 import { SearchPage } from "./pages/SearchPage.tsx";
+import { TodoListsPage } from "./pages/TodoListsPage.tsx";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="projects" element={<ProjectsListPage />} />
             <Route path="projects/new" element={<ProjectNewPage />} />
             <Route path="projects/:id" element={<ProjectDetailPage />} />
+            <Route path="todos" element={<TodoListsPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="dev/playground" element={<PlaygroundPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

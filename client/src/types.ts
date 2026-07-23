@@ -63,6 +63,30 @@ export type SearchResults = {
   tag: { id: number; name: string; color: string | null } | null;
 };
 
+export type TodoList = {
+  id: number;
+  projectId: number | null;
+  title: string;
+  kind: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TodoListItem = {
+  id: number;
+  listId: number;
+  entityType: "idea" | "task";
+  entityId: number;
+  sortOrder: number;
+  checked: boolean;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  href: string | null;
+};
+
+export type TodoListDetail = TodoList & { items: TodoListItem[] };
+
 export type ApiErrorBody = { error: { code: string; message: string } };
 
 export type { EntityType } from "./lib/entityType";
