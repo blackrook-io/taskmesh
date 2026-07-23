@@ -434,6 +434,7 @@ With the API running, open **Backups** (Home or ⌘K → Backups) at `/settings/
 
 - See health of recent backups (healthy if latest successful dump is &lt; 36 hours old)
 - **Run backup now**
+- **Restore** a backup (confirm dialog; takes a safety dump first, then replaces DB + uploads)
 - Edit schedule (local hour/minute + retain days) — applied by the API’s in-process scheduler while the process is up
 
 CLI (same runner):

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiJson } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 type BackupItem = {
   id: string;
@@ -28,6 +29,14 @@ type Schedule = {
   retainDays: number;
 };
 
+type RestoreResult = {
+  backupId: string;
+  safetyBackupId: string | null;
+  databaseRestored: boolean;
+  uploadsRestored: boolean;
+  error: string | null;
+};
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -43,6 +52,7 @@ function healthLabel(h: string): string {
 export function BackupsPage() {
   const qc = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<BackupItem | null>(null);
 
   const listQuery = useQuery({
     queryKey: ["backups"],
@@ -80,6 +90,29 @@ export function BackupsPage() {
     onError: (e: Error) => setMessage(e.message),
   });
 
+  const restoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiJson<{ data: RestoreResult }>(`/api/v1/backups/${id}/restore`, {
+        method: "POST",
+        body: JSON.stringify({ restoreUploads: true, takeSafetyBackup: true }),
+      });
+      return res.data;
+    },
+    onSuccess: (r) => {
+      setPendingRestore(null);
+      setMessage(
+        r.databaseRestored
+          ? `Restored backup ${r.backupId}${r.safetyBackupId ? ` (safety snapshot ${r.safetyBackupId} saved first)` : ""}.${r.uploadsRestored ? " Uploads restored." : ""}${r.error ? ` Note: ${r.error}` : ""}`
+          : `Restore failed: ${r.error ?? "unknown"}`,
+      );
+      void qc.invalidateQueries({ queryKey: ["backups"] });
+    },
+    onError: (e: Error) => {
+      setPendingRestore(null);
+      setMessage(e.message);
+    },
+  });
+
   const saveSchedule = useMutation({
     mutationFn: async (body: Schedule) => {
       const res = await apiJson<{ data: Schedule }>("/api/v1/backups/schedule", {
@@ -96,6 +129,8 @@ export function BackupsPage() {
     onError: (e: Error) => setMessage(e.message),
   });
 
+  const busy = runMutation.isPending || restoreMutation.isPending;
+
   return (
     <div>
       <div className="page-head">
@@ -104,7 +139,8 @@ export function BackupsPage() {
       <p className="muted">
         Database dumps and upload archives under the configured backup directory. A backup is{" "}
         <strong>healthy</strong> when the latest successful dump is less than{" "}
-        {listQuery.data?.freshHours ?? 36} hours old.
+        {listQuery.data?.freshHours ?? 36} hours old. Restore replaces the current database (and
+        uploads when present) after confirmation; a safety backup is taken first.
       </p>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
@@ -118,7 +154,7 @@ export function BackupsPage() {
           <button
             type="button"
             className="btn primary"
-            disabled={runMutation.isPending}
+            disabled={busy}
             onClick={() => {
               setMessage(null);
               runMutation.mutate();
@@ -127,7 +163,11 @@ export function BackupsPage() {
             {runMutation.isPending ? "Running…" : "Run backup now"}
           </button>
         </div>
-        {message ? <p className="muted" style={{ marginTop: "0.75rem" }}>{message}</p> : null}
+        {message ? (
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            {message}
+          </p>
+        ) : null}
       </section>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
@@ -142,9 +182,7 @@ export function BackupsPage() {
               <input
                 type="checkbox"
                 checked={schedule.enabled}
-                onChange={(e) =>
-                  setDraft({ ...schedule, enabled: e.target.checked })
-                }
+                onChange={(e) => setDraft({ ...schedule, enabled: e.target.checked })}
               />
               Enabled
             </label>
@@ -214,6 +252,7 @@ export function BackupsPage() {
                 <th>Uploads</th>
                 <th>Size</th>
                 <th>Notes</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -234,12 +273,45 @@ export function BackupsPage() {
                   <td>{b.uploadsOk ? "OK" : "Fail"}</td>
                   <td>{formatBytes(b.bytes)}</td>
                   <td className="muted">{b.error ?? "—"}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn small danger"
+                      disabled={busy || !b.pgDumpOk}
+                      title={b.pgDumpOk ? "Restore this backup" : "No database dump to restore"}
+                      onClick={() => {
+                        setMessage(null);
+                        setPendingRestore(b);
+                      }}
+                    >
+                      Restore
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : null}
       </section>
+
+      <ConfirmDialog
+        open={pendingRestore != null}
+        title="Restore this backup?"
+        message={
+          pendingRestore
+            ? `This permanently replaces the current database${pendingRestore.uploadsFile ? " and uploads" : ""} with backup ${pendingRestore.id} (${new Date(pendingRestore.createdAt).toLocaleString()}). A safety backup of the current state is taken first. Continue?`
+            : ""
+        }
+        confirmLabel={restoreMutation.isPending ? "Restoring…" : "Restore"}
+        onCancel={() => {
+          if (!restoreMutation.isPending) setPendingRestore(null);
+        }}
+        onConfirm={() => {
+          if (pendingRestore && !restoreMutation.isPending) {
+            restoreMutation.mutate(pendingRestore.id);
+          }
+        }}
+      />
     </div>
   );
 }

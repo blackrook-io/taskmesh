@@ -5,6 +5,7 @@ import {
   listBackups,
   overallBackupHealth,
   readSchedule,
+  restoreBackup,
   runBackup,
   writeSchedule,
 } from "../../services/backups.js";
@@ -56,6 +57,38 @@ backupsRouter.patch("/schedule", (req, res) => {
     const data = writeSchedule(parsed);
     res.json({ data });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const restoreBody = z
+  .object({
+    restoreUploads: z.boolean().optional(),
+    takeSafetyBackup: z.boolean().optional(),
+  })
+  .optional();
+
+backupsRouter.post("/:id/restore", async (req, res) => {
+  try {
+    const id = z.string().min(1).max(64).parse(req.params.id);
+    const body = restoreBody.parse(req.body ?? {});
+    const result = await restoreBackup(id, {
+      restoreUploads: body?.restoreUploads,
+      takeSafetyBackup: body?.takeSafetyBackup,
+    });
+    if (!result.databaseRestored) {
+      sendError(res, 500, "restore_failed", result.error ?? "Restore failed");
+      return;
+    }
+    res.json({ data: result });
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      /not found|no successful|missing|already in progress|Could not take/i.test(err.message)
+    ) {
+      sendError(res, 400, "restore_error", err.message);
+      return;
+    }
     handleRouteError(res, err);
   }
 });

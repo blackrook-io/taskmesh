@@ -45,9 +45,20 @@ const DEFAULT_SCHEDULE: BackupSchedule = {
 
 const FRESH_HOURS = 36;
 
-let runLock: Promise<BackupManifest> | null = null;
+let runLock: Promise<unknown> | null = null;
 let lastScheduledKey: string | null = null;
 let schedulerTimer: ReturnType<typeof setInterval> | null = null;
+
+function withBackupLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (runLock) {
+    return Promise.reject(new Error("A backup or restore is already in progress"));
+  }
+  const p = fn().finally(() => {
+    runLock = null;
+  });
+  runLock = p;
+  return p;
+}
 
 function stampNow(): string {
   const d = new Date();
@@ -190,98 +201,236 @@ async function dirSizeBytes(dir: string): Promise<number> {
   return total;
 }
 
-export async function runBackup(): Promise<BackupManifest> {
-  if (runLock) return runLock;
-  runLock = (async () => {
-    ensureBackupDir();
-    const id = stampNow();
+function loadManifest(id: string): BackupManifest | null {
+  const safe = id.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!safe || safe !== id) return null;
+  const mp = manifestPath(id);
+  if (!fs.existsSync(mp)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(mp, "utf8")) as BackupManifest;
+  } catch {
+    return null;
+  }
+}
+
+export type RestoreResult = {
+  backupId: string;
+  safetyBackupId: string | null;
+  databaseRestored: boolean;
+  uploadsRestored: boolean;
+  error: string | null;
+};
+
+export async function restoreBackup(
+  id: string,
+  opts?: { restoreUploads?: boolean; takeSafetyBackup?: boolean },
+): Promise<RestoreResult> {
+  return withBackupLock(async () => {
+    const restoreUploads = opts?.restoreUploads !== false;
+    const takeSafetyBackup = opts?.takeSafetyBackup !== false;
+
+    const manifest = loadManifest(id);
+    if (!manifest) {
+      throw new Error("Backup not found");
+    }
+    if (!manifest.pgDumpOk || !manifest.sqlFile) {
+      throw new Error("Backup has no successful database dump to restore");
+    }
+
     const dir = path.join(getBackupDir(), id);
-    fs.mkdirSync(dir, { recursive: true });
+    const sqlPath = path.join(dir, manifest.sqlFile);
+    if (!fs.existsSync(sqlPath)) {
+      throw new Error("SQL dump file is missing on disk");
+    }
 
-    const sqlName = `taskmesh-${id}.sql`;
-    const uploadsName = `uploads-${id}.tar.gz`;
-    const sqlPath = path.join(dir, sqlName);
-    const uploadsPath = path.join(dir, uploadsName);
-
-    let pgDumpOk = false;
-    let uploadsOk = false;
+    let safetyBackupId: string | null = null;
+    let databaseRestored = false;
+    let uploadsRestored = false;
     let error: string | null = null;
+
+    if (takeSafetyBackup) {
+      // Nested call would hit lock — run inner dump without lock
+      const safety = await runBackupUnlocked();
+      safetyBackupId = safety.pgDumpOk ? safety.id : null;
+      if (!safety.pgDumpOk) {
+        throw new Error(
+          `Could not take a safety backup before restore: ${safety.error ?? "unknown error"}`,
+        );
+      }
+    }
 
     const dbUrl = process.env.DATABASE_URL;
     if (!dbUrl) {
-      error = "DATABASE_URL is not set";
-    } else {
-      try {
-        const cfg = parseDatabaseUrl(dbUrl);
-        await execFileAsync(
-          "pg_dump",
-          [
-            "-h",
-            cfg.host,
-            "-p",
-            cfg.port,
-            "-U",
-            cfg.user,
-            "-d",
-            cfg.database,
-            "-F",
-            "p",
-            "-f",
-            sqlPath,
-          ],
-          {
-            env: { ...process.env, PGPASSWORD: cfg.password },
-            maxBuffer: 64 * 1024 * 1024,
-          },
-        );
-        pgDumpOk = fs.existsSync(sqlPath) && fs.statSync(sqlPath).size > 0;
-        if (!pgDumpOk) error = "pg_dump produced an empty file";
-      } catch (err) {
-        error = err instanceof Error ? err.message : "pg_dump failed";
-        pgDumpOk = false;
-      }
+      throw new Error("DATABASE_URL is not set");
     }
 
-    const uploadDir = getUploadDir();
     try {
-      if (fs.existsSync(uploadDir)) {
-        await execFileAsync(
-          "tar",
-          ["-czf", uploadsPath, "-C", path.dirname(uploadDir), path.basename(uploadDir)],
-          { maxBuffer: 64 * 1024 * 1024 },
-        );
-        uploadsOk = fs.existsSync(uploadsPath);
-      } else {
-        uploadsOk = true; // nothing to back up
-      }
+      const cfg = parseDatabaseUrl(dbUrl);
+      const env = { ...process.env, PGPASSWORD: cfg.password };
+      const psqlArgs = ["-h", cfg.host, "-p", cfg.port, "-U", cfg.user, "-d", cfg.database];
+
+      await execFileAsync(
+        "psql",
+        [
+          ...psqlArgs,
+          "-v",
+          "ON_ERROR_STOP=1",
+          "-c",
+          `DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "${cfg.user}"; GRANT ALL ON SCHEMA public TO public; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${cfg.user}";`,
+        ],
+        { env, maxBuffer: 16 * 1024 * 1024 },
+      );
+
+      await execFileAsync(
+        "psql",
+        [...psqlArgs, "-v", "ON_ERROR_STOP=1", "-f", sqlPath],
+        { env, maxBuffer: 64 * 1024 * 1024 },
+      );
+      databaseRestored = true;
     } catch (err) {
-      uploadsOk = false;
-      const msg = err instanceof Error ? err.message : "tar failed";
-      error = error ? `${error}; ${msg}` : msg;
+      error = err instanceof Error ? err.message : "Database restore failed";
+      return {
+        backupId: id,
+        safetyBackupId,
+        databaseRestored: false,
+        uploadsRestored: false,
+        error,
+      };
     }
 
-    const bytes = await dirSizeBytes(dir);
-    const manifest: BackupManifest = {
-      id,
-      createdAt: new Date().toISOString(),
-      pgDumpOk,
-      uploadsOk,
-      sqlFile: pgDumpOk ? sqlName : null,
-      uploadsFile: uploadsOk && fs.existsSync(uploadsPath) ? uploadsName : null,
-      bytes,
+    if (restoreUploads && manifest.uploadsFile) {
+      const uploadsArchive = path.join(dir, manifest.uploadsFile);
+      if (fs.existsSync(uploadsArchive)) {
+        try {
+          const uploadDir = getUploadDir();
+          const parent = path.dirname(uploadDir);
+          const base = path.basename(uploadDir);
+          if (fs.existsSync(uploadDir)) {
+            fs.rmSync(uploadDir, { recursive: true, force: true });
+          }
+          fs.mkdirSync(parent, { recursive: true });
+          await execFileAsync("tar", ["-xzf", uploadsArchive, "-C", parent], {
+            maxBuffer: 64 * 1024 * 1024,
+          });
+          // tar stores basename; ensure path exists
+          if (!fs.existsSync(uploadDir) && fs.existsSync(path.join(parent, base))) {
+            /* ok */
+          }
+          uploadsRestored = fs.existsSync(uploadDir);
+          if (!uploadsRestored) {
+            error = "Uploads archive extracted but upload directory is missing";
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Uploads restore failed";
+          error = error ? `${error}; ${msg}` : msg;
+          uploadsRestored = false;
+        }
+      }
+    } else if (!restoreUploads) {
+      uploadsRestored = false;
+    } else {
+      uploadsRestored = true; // nothing to restore
+    }
+
+    return {
+      backupId: id,
+      safetyBackupId,
+      databaseRestored,
+      uploadsRestored,
       error,
     };
-    fs.writeFileSync(manifestPath(id), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-
-    const schedule = readSchedule();
-    pruneOldBackups(schedule.retainDays);
-
-    return manifest;
-  })().finally(() => {
-    runLock = null;
   });
+}
 
-  return runLock;
+export async function runBackup(): Promise<BackupManifest> {
+  return withBackupLock(() => runBackupUnlocked());
+}
+
+async function runBackupUnlocked(): Promise<BackupManifest> {
+  ensureBackupDir();
+  const id = stampNow();
+  const dir = path.join(getBackupDir(), id);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const sqlName = `taskmesh-${id}.sql`;
+  const uploadsName = `uploads-${id}.tar.gz`;
+  const sqlPath = path.join(dir, sqlName);
+  const uploadsPath = path.join(dir, uploadsName);
+
+  let pgDumpOk = false;
+  let uploadsOk = false;
+  let error: string | null = null;
+
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    error = "DATABASE_URL is not set";
+  } else {
+    try {
+      const cfg = parseDatabaseUrl(dbUrl);
+      await execFileAsync(
+        "pg_dump",
+        [
+          "-h",
+          cfg.host,
+          "-p",
+          cfg.port,
+          "-U",
+          cfg.user,
+          "-d",
+          cfg.database,
+          "-F",
+          "p",
+          "-f",
+          sqlPath,
+        ],
+        {
+          env: { ...process.env, PGPASSWORD: cfg.password },
+          maxBuffer: 64 * 1024 * 1024,
+        },
+      );
+      pgDumpOk = fs.existsSync(sqlPath) && fs.statSync(sqlPath).size > 0;
+      if (!pgDumpOk) error = "pg_dump produced an empty file";
+    } catch (err) {
+      error = err instanceof Error ? err.message : "pg_dump failed";
+      pgDumpOk = false;
+    }
+  }
+
+  const uploadDir = getUploadDir();
+  try {
+    if (fs.existsSync(uploadDir)) {
+      await execFileAsync(
+        "tar",
+        ["-czf", uploadsPath, "-C", path.dirname(uploadDir), path.basename(uploadDir)],
+        { maxBuffer: 64 * 1024 * 1024 },
+      );
+      uploadsOk = fs.existsSync(uploadsPath);
+    } else {
+      uploadsOk = true;
+    }
+  } catch (err) {
+    uploadsOk = false;
+    const msg = err instanceof Error ? err.message : "tar failed";
+    error = error ? `${error}; ${msg}` : msg;
+  }
+
+  const bytes = await dirSizeBytes(dir);
+  const manifest: BackupManifest = {
+    id,
+    createdAt: new Date().toISOString(),
+    pgDumpOk,
+    uploadsOk,
+    sqlFile: pgDumpOk ? sqlName : null,
+    uploadsFile: uploadsOk && fs.existsSync(uploadsPath) ? uploadsName : null,
+    bytes,
+    error,
+  };
+  fs.writeFileSync(manifestPath(id), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+  const schedule = readSchedule();
+  pruneOldBackups(schedule.retainDays);
+
+  return manifest;
 }
 
 export function startBackupScheduler(): void {
