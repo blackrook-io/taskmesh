@@ -30,7 +30,9 @@ createRoot(document.getElementById("root")!).render(
             <Route path="projects/:id" element={<ProjectDetailPage />} />
             <Route path="todos" element={<TodoListsPage />} />
             <Route path="search" element={<SearchPage />} />
-            <Route path="dev/playground" element={<PlaygroundPage />} />
+            {import.meta.env.DEV ? (
+              <Route path="dev/playground" element={<PlaygroundPage />} />
+            ) : null}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
