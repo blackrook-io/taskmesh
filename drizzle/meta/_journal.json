@@ -43,6 +43,13 @@
       "when": 1784770517090,
       "tag": "0005_opposite_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784771029542,
+      "tag": "0006_sharp_randall",
+      "breakpoints": true
     }
   ]
 }

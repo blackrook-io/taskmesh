@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -14,6 +14,11 @@ const boardBody = z.object({
 
 const boardPatch = z.object({
   name: z.string().min(1).max(500).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+const boardsReorderBody = z.object({
+  orderedBoardIds: z.array(z.number().int().positive()).min(1),
 });
 
 const columnBody = z.object({
@@ -68,10 +73,20 @@ boardsRouter.get("/", async (req, res) => {
       return;
     }
     const rows = await db
-      .select()
+      .select({
+        id: schema.boards.id,
+        projectId: schema.boards.projectId,
+        name: schema.boards.name,
+        sortOrder: schema.boards.sortOrder,
+        createdAt: schema.boards.createdAt,
+        updatedAt: schema.boards.updatedAt,
+        cardCount: sql<number>`coalesce(count(${schema.boardCards.id}), 0)::int`,
+      })
       .from(schema.boards)
+      .leftJoin(schema.boardCards, eq(schema.boardCards.boardId, schema.boards.id))
       .where(eq(schema.boards.projectId, projectId))
-      .orderBy(asc(schema.boards.id));
+      .groupBy(schema.boards.id)
+      .orderBy(asc(schema.boards.sortOrder), asc(schema.boards.id));
     res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
@@ -86,9 +101,14 @@ boardsRouter.post("/", async (req, res) => {
       return;
     }
     const parsed = boardBody.parse(req.body);
+    const existing = await db
+      .select({ m: schema.boards.sortOrder })
+      .from(schema.boards)
+      .where(eq(schema.boards.projectId, projectId));
+    const nextSort = existing.length ? Math.max(...existing.map((r) => r.m)) + 1 : 0;
     const [row] = await db
       .insert(schema.boards)
-      .values({ projectId, name: parsed.name })
+      .values({ projectId, name: parsed.name, sortOrder: nextSort })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create board");
@@ -97,6 +117,45 @@ boardsRouter.post("/", async (req, res) => {
     await seedDefaultColumns(db, row.id);
     const detail = await loadBoardDetail(db, row.id);
     res.status(201).json({ data: detail });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+boardsRouter.patch("/reorder", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    if (!(await requireProject(projectId))) {
+      sendError(res, 404, "not_found", "Project not found");
+      return;
+    }
+    const { orderedBoardIds } = boardsReorderBody.parse(req.body);
+    const existing = await db
+      .select({ id: schema.boards.id })
+      .from(schema.boards)
+      .where(eq(schema.boards.projectId, projectId));
+    const allowed = new Set(existing.map((e) => e.id));
+    if (
+      orderedBoardIds.length !== allowed.size ||
+      orderedBoardIds.some((id) => !allowed.has(id))
+    ) {
+      sendError(res, 400, "invalid_reorder", "orderedBoardIds must list every board exactly once");
+      return;
+    }
+    for (let i = 0; i < orderedBoardIds.length; i++) {
+      const id = orderedBoardIds[i];
+      if (id === undefined) continue;
+      await db
+        .update(schema.boards)
+        .set({ sortOrder: i, updatedAt: new Date() })
+        .where(eq(schema.boards.id, id));
+    }
+    const rows = await db
+      .select()
+      .from(schema.boards)
+      .where(eq(schema.boards.projectId, projectId))
+      .orderBy(asc(schema.boards.sortOrder), asc(schema.boards.id));
+    res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -143,6 +202,19 @@ boardsRouter.delete("/:boardId", async (req, res) => {
     const boardId = parseRouteId(req, "boardId");
     if (!(await requireBoard(projectId, boardId))) {
       sendError(res, 404, "not_found", "Board not found");
+      return;
+    }
+    const [agg] = await db
+      .select({ value: count() })
+      .from(schema.boardCards)
+      .where(eq(schema.boardCards.boardId, boardId));
+    if ((agg?.value ?? 0) > 0) {
+      sendError(
+        res,
+        400,
+        "board_not_empty",
+        "Only empty boards can be deleted — remove all cards first",
+      );
       return;
     }
     await db.delete(schema.boards).where(eq(schema.boards.id, boardId));

@@ -101,8 +101,11 @@ export type Board = {
   id: number;
   projectId: number;
   name: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  /** Present on list endpoint */
+  cardCount?: number;
 };
 
 export type BoardColumn = {

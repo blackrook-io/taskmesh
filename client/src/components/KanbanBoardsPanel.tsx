@@ -14,6 +14,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  horizontalListSortingStrategy,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -34,6 +35,102 @@ function cardIdsByColumn(columns: BoardColumn[], cards: BoardCard[]): Record<num
     map[card.columnId]!.push(card.id);
   }
   return map;
+}
+
+function SortableBoardTab({
+  board,
+  active,
+  onSelect,
+  onRename,
+  onRequestDelete,
+}: {
+  board: Board;
+  active: boolean;
+  onSelect: () => void;
+  onRename: (name: string) => void;
+  onRequestDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: board.id,
+  });
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(board.name);
+  const empty = (board.cardCount ?? 0) === 0;
+
+  useEffect(() => {
+    if (!editing) setDraft(board.name);
+  }, [board.name, editing]);
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.55 : 1,
+  };
+
+  const commitRename = () => {
+    setEditing(false);
+    const next = draft.trim();
+    if (next && next !== board.name) onRename(next);
+    else setDraft(board.name);
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`board-tab${active ? " active" : ""}${isDragging ? " is-dragging" : ""}`}
+      {...attributes}
+      {...listeners}
+    >
+      {editing ? (
+        <input
+          className="board-tab__rename"
+          value={draft}
+          autoFocus
+          aria-label="Rename board"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitRename();
+            if (e.key === "Escape") {
+              setDraft(board.name);
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className="board-tab__label"
+          onClick={onSelect}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setEditing(true);
+          }}
+        >
+          {board.name}
+        </button>
+      )}
+      {empty ? (
+        <button
+          type="button"
+          className="board-tab__close"
+          aria-label={`Delete ${board.name}`}
+          title="Delete empty board"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRequestDelete();
+          }}
+        >
+          ×
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function SortableCard({
@@ -212,12 +309,14 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newBoardName, setNewBoardName] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [newColName, setNewColName] = useState("");
   const [pendingDeleteBoard, setPendingDeleteBoard] = useState<Board | null>(null);
   const [pendingRemoveCard, setPendingRemoveCard] = useState<BoardCard | null>(null);
   const [openCard, setOpenCard] = useState<BoardCard | null>(null);
   const [activeCardId, setActiveCardId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [boardOrder, setBoardOrder] = useState<number[]>([]);
   const [columnsState, setColumnsState] = useState<Record<number, number[]>>({});
   const columnsRef = useRef(columnsState);
   columnsRef.current = columnsState;
@@ -231,7 +330,19 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   });
 
   const boards = boardsQuery.data ?? [];
-  const activeBoardId = selectedId ?? boards[0]?.id ?? null;
+  const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
+  const orderedBoards = useMemo(
+    () =>
+      (boardOrder.length ? boardOrder : boards.map((b) => b.id))
+        .map((id) => boardsById.get(id))
+        .filter((b): b is Board => b != null),
+    [boardOrder, boards, boardsById],
+  );
+  const activeBoardId = selectedId ?? orderedBoards[0]?.id ?? null;
+
+  useEffect(() => {
+    setBoardOrder(boards.map((b) => b.id));
+  }, [boards]);
 
   const detailQuery = useQuery({
     queryKey: ["board", projectId, activeBoardId],
@@ -272,10 +383,36 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
     },
     onSuccess: (board) => {
       setNewBoardName("");
+      setCreateOpen(false);
       setSelectedId(board.id);
       invalidate();
     },
     onError: (err: Error) => setError(err.message),
+  });
+
+  const renameBoard = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      await apiJson(`/api/v1/projects/${projectId}/boards/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+    },
+    onSuccess: () => invalidate(),
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const reorderBoards = useMutation({
+    mutationFn: async (orderedBoardIds: number[]) => {
+      await apiJson(`/api/v1/projects/${projectId}/boards/reorder`, {
+        method: "PATCH",
+        body: JSON.stringify({ orderedBoardIds }),
+      });
+    },
+    onSuccess: () => invalidate(),
+    onError: (err: Error) => {
+      setError(err.message);
+      invalidate();
+    },
   });
 
   const deleteBoard = useMutation({
@@ -286,6 +423,10 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
       if (pendingDeleteBoard && selectedId === pendingDeleteBoard.id) setSelectedId(null);
       setPendingDeleteBoard(null);
       invalidate();
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+      setPendingDeleteBoard(null);
     },
   });
 
@@ -399,6 +540,18 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const tabSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  const handleBoardTabDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = boardOrder.indexOf(Number(active.id));
+    const newIndex = boardOrder.indexOf(Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(boardOrder, oldIndex, newIndex);
+    setBoardOrder(next);
+    void reorderBoards.mutateAsync(next);
+  };
 
   const findColumnOfCard = (cardId: number): number | null => {
     for (const [colId, ids] of Object.entries(columnsState)) {
@@ -504,51 +657,37 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
 
   return (
     <div className="kanban-panel">
-      <div className="card" style={{ marginBottom: "1rem" }}>
-        <h3 style={{ marginTop: 0 }}>Boards</h3>
-        <div className="btn-row" style={{ marginBottom: "0.75rem", flexWrap: "wrap" }}>
-          {boards.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              className={`btn small${activeBoardId === b.id ? " primary" : " ghost"}`}
-              onClick={() => setSelectedId(b.id)}
-            >
-              {b.name}
-            </button>
-          ))}
-          {activeBoardId != null ? (
-            <button
-              type="button"
-              className="btn small ghost"
-              onClick={() => {
-                const b = boards.find((x) => x.id === activeBoardId);
-                if (b) setPendingDeleteBoard(b);
-              }}
-            >
-              Delete board
-            </button>
-          ) : null}
-        </div>
-        <div className="todo-add-row">
-          <input
-            type="text"
-            placeholder="New board name"
-            value={newBoardName}
-            onChange={(e) => setNewBoardName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && newBoardName.trim()) createBoard.mutate();
-            }}
-          />
-          <button
-            type="button"
-            className="btn primary"
-            disabled={!newBoardName.trim() || createBoard.isPending}
-            onClick={() => createBoard.mutate()}
-          >
-            Create board
-          </button>
-        </div>
+      <div className="board-tabs" role="tablist" aria-label="Project boards">
+        <DndContext sensors={tabSensors} collisionDetection={closestCorners} onDragEnd={handleBoardTabDragEnd}>
+          <SortableContext items={boardOrder} strategy={horizontalListSortingStrategy}>
+            {orderedBoards.map((b) => {
+              const cardCount =
+                b.id === activeBoardId && detail ? detail.cards.length : (b.cardCount ?? 0);
+              return (
+                <SortableBoardTab
+                  key={b.id}
+                  board={{ ...b, cardCount }}
+                  active={activeBoardId === b.id}
+                  onSelect={() => setSelectedId(b.id)}
+                  onRename={(name) => renameBoard.mutate({ id: b.id, name })}
+                  onRequestDelete={() => setPendingDeleteBoard(b)}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+        <button
+          type="button"
+          className="board-tab board-tab--add"
+          aria-label="Create board"
+          title="New board"
+          onClick={() => {
+            setNewBoardName("");
+            setCreateOpen(true);
+          }}
+        >
+          +
+        </button>
       </div>
 
       {error ? (
@@ -558,7 +697,7 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
       ) : null}
 
       {activeBoardId == null ? (
-        <p className="muted">Create a board to start planning.</p>
+        <p className="muted">Create a board with + to start planning.</p>
       ) : detailQuery.isLoading ? (
         <p className="muted">Loading board…</p>
       ) : detail ? (
@@ -644,10 +783,69 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
         </ElementShell>
       ) : null}
 
+      {createOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => {
+            setCreateOpen(false);
+            setNewBoardName("");
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-board-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="new-board-title">New board</h2>
+            <div className="field">
+              <label htmlFor="new-board-name">Name</label>
+              <input
+                id="new-board-name"
+                type="text"
+                value={newBoardName}
+                autoFocus
+                placeholder="e.g. Sprint A"
+                onChange={(e) => setNewBoardName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newBoardName.trim()) createBoard.mutate();
+                  if (e.key === "Escape") {
+                    setCreateOpen(false);
+                    setNewBoardName("");
+                  }
+                }}
+              />
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  setCreateOpen(false);
+                  setNewBoardName("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!newBoardName.trim() || createBoard.isPending}
+                onClick={() => createBoard.mutate()}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <ConfirmDialog
         open={pendingDeleteBoard != null}
         title="Delete board?"
-        message="Columns and cards on this board are removed. Tasks themselves are kept."
+        message={`Delete “${pendingDeleteBoard?.name ?? "this board"}”? Only empty boards can be removed.`}
         onCancel={() => setPendingDeleteBoard(null)}
         onConfirm={() => {
           if (pendingDeleteBoard) deleteBoard.mutate(pendingDeleteBoard.id);
