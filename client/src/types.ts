@@ -48,8 +48,22 @@ export type ProjectDocument = {
   updatedAt: string;
 };
 
+export type Tag = {
+  id: number;
+  name: string;
+  color: string | null;
+  createdAt: string;
+};
+
+export type SearchResults = {
+  ideas: Idea[];
+  projects: Project[];
+  tasks: Task[];
+  documents: ProjectDocument[];
+  tag: { id: number; name: string; color: string | null } | null;
+};
+
 export type ApiErrorBody = { error: { code: string; message: string } };
 
 export type { EntityType } from "./lib/entityType";
 export { ENTITY_TYPES, isEntityType } from "./lib/entityType";
-

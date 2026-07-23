@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
+import { TagInput } from "../components/shared/TagInput";
 import type { Idea, Project } from "../types";
 
 export function IdeaEditPage() {
@@ -113,6 +114,15 @@ export function IdeaEditPage() {
         <label htmlFor="idea-title">Title</label>
         <input id="idea-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
       </div>
+
+      {!isNew && ideaId != null ? (
+        <div className="field">
+          <label>Tags</label>
+          <TagInput entityType="idea" entityId={ideaId} />
+        </div>
+      ) : (
+        <p className="muted">Save the idea to add tags.</p>
+      )}
 
       <div className="field">
         <label>Body (Markdown)</label>

@@ -1,0 +1,195 @@
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { Router } from "express";
+import { z } from "zod";
+import { db } from "../../db/client.js";
+import * as schema from "../../db/schema.js";
+import { handleRouteError, sendError } from "../../lib/httpError.js";
+
+export const searchRouter = Router();
+
+/**
+ * Global search across ideas, projects, tasks, and documents.
+ * Query params: `q` (text), `tag` (tag name) and/or `tagId` (number).
+ * At least one of q / tag / tagId is required.
+ */
+searchRouter.get("/", async (req, res) => {
+  try {
+    const qRaw = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const tagName =
+      typeof req.query.tag === "string" ? req.query.tag.trim() : "";
+    const tagIdParsed =
+      req.query.tagId !== undefined && req.query.tagId !== ""
+        ? z.coerce.number().int().positive().safeParse(req.query.tagId)
+        : null;
+
+    if (tagIdParsed && !tagIdParsed.success) {
+      sendError(res, 400, "validation_error", "Invalid tagId");
+      return;
+    }
+
+    const tagId = tagIdParsed?.success ? tagIdParsed.data : undefined;
+
+    if (!qRaw && !tagName && tagId == null) {
+      sendError(
+        res,
+        400,
+        "validation_error",
+        "Provide q, tag, and/or tagId",
+      );
+      return;
+    }
+
+    let filterTagId = tagId;
+    if (tagName && filterTagId == null) {
+      const [tagRow] = await db
+        .select()
+        .from(schema.tags)
+        .where(eq(schema.tags.name, tagName));
+      if (!tagRow) {
+        res.json({
+          data: { ideas: [], projects: [], tasks: [], documents: [], tag: null },
+        });
+        return;
+      }
+      filterTagId = tagRow.id;
+    }
+
+    let tagMeta: { id: number; name: string; color: string | null } | null = null;
+    if (filterTagId != null) {
+      const [t] = await db
+        .select({
+          id: schema.tags.id,
+          name: schema.tags.name,
+          color: schema.tags.color,
+        })
+        .from(schema.tags)
+        .where(eq(schema.tags.id, filterTagId));
+      tagMeta = t ?? null;
+      if (!tagMeta) {
+        res.json({
+          data: { ideas: [], projects: [], tasks: [], documents: [], tag: null },
+        });
+        return;
+      }
+    }
+
+    const pattern = qRaw ? `%${qRaw}%` : null;
+
+    async function idsForType(entityType: string): Promise<number[] | null> {
+      if (filterTagId == null) return null;
+      const rows = await db
+        .select({ entityId: schema.taggings.entityId })
+        .from(schema.taggings)
+        .where(
+          and(
+            eq(schema.taggings.tagId, filterTagId),
+            eq(schema.taggings.entityType, entityType),
+          ),
+        );
+      return rows.map((r) => r.entityId);
+    }
+
+    const [ideaIds, projectIds, taskIds, documentIds] = await Promise.all([
+      idsForType("idea"),
+      idsForType("project"),
+      idsForType("task"),
+      idsForType("document"),
+    ]);
+
+    const ideas =
+      ideaIds != null && ideaIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.ideas)
+            .where(
+              and(
+                ideaIds != null ? inArray(schema.ideas.id, ideaIds) : sql`true`,
+                pattern
+                  ? or(
+                      ilike(schema.ideas.title, pattern),
+                      ilike(schema.ideas.body, pattern),
+                    )
+                  : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.ideas.updatedAt))
+            .limit(50);
+
+    const projects =
+      projectIds != null && projectIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.projects)
+            .where(
+              and(
+                projectIds != null
+                  ? inArray(schema.projects.id, projectIds)
+                  : sql`true`,
+                pattern
+                  ? or(
+                      ilike(schema.projects.name, pattern),
+                      ilike(schema.projects.description, pattern),
+                    )
+                  : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.projects.updatedAt))
+            .limit(50);
+
+    const tasks =
+      taskIds != null && taskIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.tasks)
+            .where(
+              and(
+                taskIds != null ? inArray(schema.tasks.id, taskIds) : sql`true`,
+                pattern
+                  ? or(
+                      ilike(schema.tasks.title, pattern),
+                      ilike(schema.tasks.notes, pattern),
+                    )
+                  : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.tasks.updatedAt))
+            .limit(50);
+
+    const documents =
+      documentIds != null && documentIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.projectDocuments)
+            .where(
+              and(
+                documentIds != null
+                  ? inArray(schema.projectDocuments.id, documentIds)
+                  : sql`true`,
+                pattern
+                  ? or(
+                      ilike(schema.projectDocuments.title, pattern),
+                      ilike(schema.projectDocuments.body, pattern),
+                    )
+                  : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.projectDocuments.updatedAt))
+            .limit(50);
+
+    res.json({
+      data: {
+        ideas,
+        projects,
+        tasks,
+        documents,
+        tag: tagMeta,
+      },
+    });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});

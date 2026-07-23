@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
+import { TagInput } from "../components/shared/TagInput";
 import { TaskBoard } from "../components/TaskBoard";
 import type { Project, ProjectDocument, ProjectPhase, Task } from "../types";
 
@@ -242,6 +243,10 @@ export function ProjectDetailPage() {
             </select>
           </div>
           <div className="field">
+            <label>Tags</label>
+            <TagInput entityType="project" entityId={projectId} />
+          </div>
+          <div className="field">
             <label>Description (Markdown)</label>
             <MarkdownEditor value={description} onChange={setDescription} height={320} />
           </div>
@@ -406,6 +411,10 @@ function DocumentEditor({
       <div className="field">
         <label htmlFor="doc-title">Title</label>
         <input id="doc-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </div>
+      <div className="field">
+        <label>Tags</label>
+        <TagInput entityType="document" entityId={doc.id} />
       </div>
       <div className="field">
         <label>Body</label>

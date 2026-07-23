@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
@@ -17,6 +18,8 @@ type Props = {
   allowClear?: boolean;
   className?: string;
   label?: string;
+  /** How the popover opens. Tags use contextmenu (right-click) only. */
+  openOn?: "click" | "contextmenu" | "both";
 };
 
 export function ColorPopover({
@@ -26,11 +29,13 @@ export function ColorPopover({
   allowClear = true,
   className,
   label = "Color",
+  openOn = "both",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(color ?? "");
   const rootRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
+  const hasChildren = children != null;
 
   useEffect(() => {
     setCustom(color ?? "");
@@ -59,25 +64,65 @@ export function ColorPopover({
     setOpen(true);
   };
 
+  const clickOpens = openOn === "click" || openOn === "both";
+  const contextOpens = openOn === "contextmenu" || openOn === "both";
+  const titleHint =
+    openOn === "contextmenu"
+      ? `${label} (right-click)`
+      : openOn === "click"
+        ? label
+        : `${label} (right-click also opens)`;
+
+  const triggerStyle = {
+    "--swatch": color?.trim() || "var(--border)",
+  } as CSSProperties;
+
+  const onTriggerClick = () => {
+    if (clickOpens) setOpen((v) => !v);
+  };
+
+  const onTriggerKeyDown = (e: ReactKeyboardEvent) => {
+    if (!clickOpens) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setOpen((v) => !v);
+    }
+  };
+
   return (
     <div className={`color-popover-root${className ? ` ${className}` : ""}`} ref={rootRef}>
-      <button
-        type="button"
-        className="color-popover-trigger"
-        aria-label={label}
-        aria-expanded={open}
-        aria-controls={panelId}
-        title={`${label} (right-click also opens)`}
-        onClick={() => setOpen((v) => !v)}
-        onContextMenu={openAt}
-        style={
-          {
-            "--swatch": color?.trim() || "var(--border)",
-          } as CSSProperties
-        }
-      >
-        {children ?? <span className="color-popover-swatch" />}
-      </button>
+      {/* Div trigger when wrapping custom children (avoids nested <button>). */}
+      {hasChildren ? (
+        <div
+          className="color-popover-trigger"
+          role="button"
+          tabIndex={0}
+          aria-label={label}
+          aria-expanded={open}
+          aria-controls={panelId}
+          title={titleHint}
+          onClick={onTriggerClick}
+          onKeyDown={onTriggerKeyDown}
+          onContextMenu={contextOpens ? openAt : undefined}
+          style={triggerStyle}
+        >
+          {children}
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="color-popover-trigger"
+          aria-label={label}
+          aria-expanded={open}
+          aria-controls={panelId}
+          title={titleHint}
+          onClick={onTriggerClick}
+          onContextMenu={contextOpens ? openAt : undefined}
+          style={triggerStyle}
+        >
+          <span className="color-popover-swatch" />
+        </button>
+      )}
       {open ? (
         <div className="color-popover-panel" id={panelId} role="dialog" aria-label={label}>
           <div className="color-popover-grid">

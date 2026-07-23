@@ -5,6 +5,7 @@ import {
   serial,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export const ideas = pgTable("ideas", {
@@ -100,6 +101,35 @@ export const uploads = pgTable("uploads", {
     .defaultNow(),
 });
 
+export const tags = pgTable("tags", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  color: text("color"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Polymorphic join: tag ↔ (entity_type, entity_id). */
+export const taggings = pgTable(
+  "taggings",
+  {
+    id: serial("id").primaryKey(),
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+  },
+  (t) => ({
+    tagEntityUniq: unique("taggings_tag_entity_uidx").on(
+      t.tagId,
+      t.entityType,
+      t.entityId,
+    ),
+  }),
+);
+
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
 }));
@@ -137,5 +167,16 @@ export const projectDocumentsRelations = relations(projectDocuments, ({ one }) =
   project: one(projects, {
     fields: [projectDocuments.projectId],
     references: [projects.id],
+  }),
+}));
+
+export const tagsRelations = relations(tags, ({ many }) => ({
+  taggings: many(taggings),
+}));
+
+export const taggingsRelations = relations(taggings, ({ one }) => ({
+  tag: one(tags, {
+    fields: [taggings.tagId],
+    references: [tags.id],
   }),
 }));

@@ -13,6 +13,7 @@ import type { ProjectPhase, Task } from "../types";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
+import { TagInput } from "./shared/TagInput";
 
 function flattenTasks(phases: ProjectPhase[], tasks: Task[]): Task[] {
   const orderedPhases = [...phases].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -78,6 +79,10 @@ function TaskFields({
             if (e.target.value !== task.title) onSavePatch({ title: e.target.value });
           }}
         />
+      </div>
+      <div className="field">
+        <label>Tags</label>
+        <TagInput entityType="task" entityId={task.id} />
       </div>
       <div className="field">
         <label>Notes</label>
