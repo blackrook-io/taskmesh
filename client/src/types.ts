@@ -49,3 +49,7 @@ export type ProjectDocument = {
 };
 
 export type ApiErrorBody = { error: { code: string; message: string } };
+
+export type { EntityType } from "./lib/entityType";
+export { ENTITY_TYPES, isEntityType } from "./lib/entityType";
+

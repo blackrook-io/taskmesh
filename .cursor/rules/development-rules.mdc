@@ -1,9 +1,18 @@
 ---
-description: Cursor plan files — naming and archiving to executed/
-alwaysApply: false
+description: Cursor plan files, archiving, phase git workflow, and phase-end QA checklists
+alwaysApply: true
 ---
 
 # Plans workflow
 
 * **Active plans:** keep under `.cursor/plans/` as `.mdc` files. Prefer descriptive names with a date prefix when useful, e.g. `2026-06-feature-name.mdc`.
 * **When a plan is fully executed or superseded:** move the file to `.cursor/plans/executed/` (keep the same filename so history stays traceable).
+
+# Phase git workflow
+
+* **On phase start:** create branch `phase-N-short-slug` from updated `main`, switch to it (SetActiveBranch), then implement.
+* **On phase approval:** commit any remaining phase work on the phase branch, push the branch, then **close** it by merging into `main`, pushing `main`, and deleting the local (and remote if exists) phase branch after merge.
+
+# Phase delivery
+
+* **End of every implementation phase:** provide a clear **QA checklist** for the user — step-by-step tests (include `/dev/playground` and other playground routes when applicable) plus a short list of specific features to examine for approval or requested tweaks.

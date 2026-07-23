@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { MarkdownField } from "../components/MarkdownField";
+import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { TaskBoard } from "../components/TaskBoard";
 import type { Project, ProjectDocument, ProjectPhase, Task } from "../types";
 
@@ -243,7 +243,7 @@ export function ProjectDetailPage() {
           </div>
           <div className="field">
             <label>Description (Markdown)</label>
-            <MarkdownField value={description} onChange={setDescription} height={320} />
+            <MarkdownEditor value={description} onChange={setDescription} height={320} />
           </div>
           <button type="button" className="btn primary" onClick={() => saveMeta.mutate()} disabled={saveMeta.isPending}>
             Save overview
@@ -409,7 +409,7 @@ function DocumentEditor({
       </div>
       <div className="field">
         <label>Body</label>
-        <MarkdownField value={body} onChange={setBody} height={420} />
+        <MarkdownEditor value={body} onChange={setBody} height={420} />
       </div>
       <button type="button" className="btn primary" disabled={busy} onClick={() => onSave(title, body)}>
         Save document

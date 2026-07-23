@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -10,6 +10,9 @@ import {
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { ProjectPhase, Task } from "../types";
+import { ColorPopover } from "./shared/ColorPopover";
+import { ElementShell } from "./shared/ElementShell";
+import { MarkdownEditor } from "./shared/MarkdownEditor";
 
 function flattenTasks(phases: ProjectPhase[], tasks: Task[]): Task[] {
   const orderedPhases = [...phases].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -47,60 +50,7 @@ type TaskPatch = {
   phaseId?: number | null;
 };
 
-function SortableRow({
-  task,
-  phases,
-  expanded,
-  onToggle,
-  onSavePatch,
-  onDelete,
-}: {
-  task: Task;
-  phases: ProjectPhase[];
-  expanded: boolean;
-  onToggle: () => void;
-  onSavePatch: (patch: TaskPatch) => void;
-  onDelete: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: task.id,
-  });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-  const barColor = task.color?.trim() || "var(--accent)";
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`task-row${isDragging ? " dragging" : ""}`}
-    >
-      <span className="task-drag-handle" {...attributes} {...listeners} title="Drag to reorder">
-        ::
-      </span>
-      <div className="task-color-bar" style={{ background: barColor }} aria-hidden />
-      <div className="task-body">
-        <div className="task-title-line">
-          <strong style={{ flex: 1 }}>{task.title}</strong>
-          <span className="muted">{phaseNameFor(phases, task.phaseId)}</span>
-          <button type="button" className="btn small ghost" onClick={onToggle}>
-            {expanded ? "Collapse" : "Expand"}
-          </button>
-          <button type="button" className="btn small danger" onClick={onDelete}>
-            Delete
-          </button>
-        </div>
-        {expanded ? (
-          <TaskExpanded task={task} phases={phases} onSavePatch={onSavePatch} />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function TaskExpanded({
+function TaskFields({
   task,
   phases,
   onSavePatch,
@@ -109,9 +59,12 @@ function TaskExpanded({
   phases: ProjectPhase[];
   onSavePatch: (patch: TaskPatch) => void;
 }) {
-  const dueLocal = task.dueAt
-    ? new Date(task.dueAt).toISOString().slice(0, 16)
-    : "";
+  const dueLocal = task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : "";
+  const [notes, setNotes] = useState(task.notes ?? "");
+
+  useEffect(() => {
+    setNotes(task.notes ?? "");
+  }, [task.notes]);
 
   return (
     <div className="task-expand">
@@ -127,14 +80,15 @@ function TaskExpanded({
         />
       </div>
       <div className="field">
-        <label htmlFor={`t-notes-${task.id}`}>Notes</label>
-        <textarea
-          id={`t-notes-${task.id}`}
-          className="raw-md"
-          defaultValue={task.notes ?? ""}
-          onBlur={(e) => {
-            const v = e.target.value || null;
-            if (v !== (task.notes ?? "")) onSavePatch({ notes: v });
+        <label>Notes</label>
+        <MarkdownEditor
+          value={notes}
+          onChange={setNotes}
+          height={220}
+          placeholder="Task notes…"
+          onBlur={(v) => {
+            const next = v.trim() ? v : null;
+            if (next !== (task.notes ?? "")) onSavePatch({ notes: next });
           }}
         />
       </div>
@@ -156,17 +110,19 @@ function TaskExpanded({
         />
       </div>
       <div className="field">
-        <label htmlFor={`t-color-${task.id}`}>Color (CSS)</label>
-        <input
-          id={`t-color-${task.id}`}
-          type="text"
-          placeholder="#7dd87d"
-          defaultValue={task.color ?? ""}
-          onBlur={(e) => {
-            const v = e.target.value.trim() || null;
-            if (v !== (task.color ?? "")) onSavePatch({ color: v });
-          }}
-        />
+        <span className="muted" style={{ fontSize: "0.85rem" }}>
+          Color
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <ColorPopover
+            color={task.color}
+            label="Task color"
+            onChange={(c) => onSavePatch({ color: c })}
+          />
+          <span className="muted" style={{ fontSize: "0.85rem" }}>
+            {task.color ?? "default"}
+          </span>
+        </div>
       </div>
       <div className="field">
         <label htmlFor={`t-phase-${task.id}`}>Phase</label>
@@ -185,6 +141,69 @@ function TaskExpanded({
             </option>
           ))}
         </select>
+      </div>
+    </div>
+  );
+}
+
+function SortableRow({
+  task,
+  phases,
+  expanded,
+  onToggle,
+  onOpenModal,
+  onSavePatch,
+  onDelete,
+}: {
+  task: Task;
+  phases: ProjectPhase[];
+  expanded: boolean;
+  onToggle: () => void;
+  onOpenModal: () => void;
+  onSavePatch: (patch: TaskPatch) => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    marginBottom: "0.5rem",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={isDragging ? "dragging" : undefined}>
+      <div style={{ display: "flex", alignItems: "stretch", gap: "0.25rem" }}>
+        <span className="task-drag-handle" {...attributes} {...listeners} title="Drag to reorder">
+          ::
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <ElementShell
+            mode="card"
+            entityType="task"
+            title={task.title}
+            accentColor={task.color}
+            actions={
+              <>
+                <span className="muted" style={{ fontSize: "0.85rem" }}>
+                  {phaseNameFor(phases, task.phaseId)}
+                </span>
+                <button type="button" className="btn small ghost" onClick={onToggle}>
+                  {expanded ? "Collapse" : "Expand"}
+                </button>
+                <button type="button" className="btn small ghost" onClick={onOpenModal}>
+                  Modal
+                </button>
+                <button type="button" className="btn small danger" onClick={onDelete}>
+                  Delete
+                </button>
+              </>
+            }
+          >
+            {expanded ? <TaskFields task={task} phases={phases} onSavePatch={onSavePatch} /> : null}
+          </ElementShell>
+        </div>
       </div>
     </div>
   );
@@ -209,8 +228,10 @@ export function TaskBoard({
   onPatchTask,
   onDeleteTask,
 }: Props) {
+  const [modalTaskId, setModalTaskId] = useState<number | null>(null);
   const ordered = useMemo(() => flattenTasks(phases, tasks), [phases, tasks]);
   const ids = useMemo(() => ordered.map((t) => t.id), [ordered]);
+  const modalTask = modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -224,25 +245,39 @@ export function TaskBoard({
     await onReorder(next.map((t) => t.id));
   };
 
+  const patch = (taskId: number, body: TaskPatch) => void onPatchTask(taskId, { ...body });
+
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        {ordered.map((task) => (
-          <SortableRow
-            key={task.id}
-            task={task}
-            phases={phases}
-            expanded={expandedId === task.id}
-            onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
-            onSavePatch={(patch) =>
-              void onPatchTask(task.id, {
-                ...patch,
-              })
-            }
-            onDelete={() => void onDeleteTask(task.id)}
-          />
-        ))}
-      </SortableContext>
-    </DndContext>
+    <>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {ordered.map((task) => (
+            <SortableRow
+              key={task.id}
+              task={task}
+              phases={phases}
+              expanded={expandedId === task.id}
+              onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
+              onOpenModal={() => setModalTaskId(task.id)}
+              onSavePatch={(p) => patch(task.id, p)}
+              onDelete={() => void onDeleteTask(task.id)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+
+      {modalTask ? (
+        <ElementShell
+          mode="modal"
+          entityType="task"
+          title={modalTask.title}
+          accentColor={modalTask.color}
+          open
+          onClose={() => setModalTaskId(null)}
+        >
+          <TaskFields task={modalTask} phases={phases} onSavePatch={(p) => patch(modalTask.id, p)} />
+        </ElementShell>
+      ) : null}
+    </>
   );
 }

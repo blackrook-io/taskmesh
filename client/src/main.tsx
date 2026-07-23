@@ -7,6 +7,7 @@ import { Layout } from "./components/Layout.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { IdeaEditPage } from "./pages/IdeaEditPage.tsx";
 import { IdeasListPage } from "./pages/IdeasListPage.tsx";
+import { PlaygroundPage } from "./pages/PlaygroundPage.tsx";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage.tsx";
 import { ProjectNewPage } from "./pages/ProjectNewPage.tsx";
 import { ProjectsListPage } from "./pages/ProjectsListPage.tsx";
@@ -25,6 +26,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="projects" element={<ProjectsListPage />} />
             <Route path="projects/new" element={<ProjectNewPage />} />
             <Route path="projects/:id" element={<ProjectDetailPage />} />
+            <Route path="dev/playground" element={<PlaygroundPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
