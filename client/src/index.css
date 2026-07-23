@@ -10,6 +10,7 @@
   --radius: 10px;
   --radius-chip: 999px;
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --content-max: 960px;
   /* Canvas surfaces are intentionally darker than the app chrome */
   --canvas-bg: #14151a;
   --canvas-grid: #1a1b22;
@@ -72,7 +73,7 @@ code {
 }
 
 .layout {
-  max-width: 960px;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 0 1rem 2rem;
 }
@@ -706,9 +707,42 @@ a:focus-visible {
 }
 
 .element-shell--modal {
-  width: min(560px, 100%);
+  width: 100%;
+  max-width: none;
   max-height: min(85vh, 720px);
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-dim) var(--bg);
+}
+
+.element-shell-backdrop > [role="dialog"] {
+  width: min(var(--content-max), calc(100vw - 2rem));
+  max-width: 100%;
+}
+
+.element-shell--modal::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.element-shell--modal::-webkit-scrollbar-track {
+  background: var(--bg);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin-block: 4px;
+}
+
+.element-shell--modal::-webkit-scrollbar-thumb {
+  background: var(--accent-dim);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+.element-shell--modal::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+.element-shell--modal::-webkit-scrollbar-corner {
+  background: var(--bg);
 }
 
 .element-shell--page {
