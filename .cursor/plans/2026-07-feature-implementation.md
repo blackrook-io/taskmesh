@@ -307,7 +307,7 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 - `/settings/backups`, `npm run backup`, restore + delete, in-process schedule, optional systemd timer under `deploy/`
 
-### 10c — Responsive phone/tablet (in progress on `phase-10c-responsive`)
+### 10c — Responsive phone/tablet (shipped)
 
 - Pixel ~412 / Tab S4 ~800–1030: scrollable tabs, stacked split panes, full-viewport sheets, touch targets, table scroll
 
