@@ -20,7 +20,6 @@ export function ProjectDetailPage() {
   const [name, setName] = useState("");
   const [status, setStatus] = useState("idea");
   const [description, setDescription] = useState("");
-  const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [newDocTitle, setNewDocTitle] = useState("");
@@ -243,12 +242,11 @@ export function ProjectDetailPage() {
             </select>
           </div>
           <div className="field">
-            <label>Tags</label>
-            <TagInput entityType="project" entityId={projectId} />
-          </div>
-          <div className="field">
-            <label>Description (Markdown)</label>
+            <label>Description</label>
             <MarkdownEditor value={description} onChange={setDescription} height={320} />
+          </div>
+          <div className="field field--tags-below">
+            <TagInput entityType="project" entityId={projectId} />
           </div>
           <button type="button" className="btn primary" onClick={() => saveMeta.mutate()} disabled={saveMeta.isPending}>
             Save overview
@@ -284,8 +282,6 @@ export function ProjectDetailPage() {
           <TaskBoard
             phases={phases}
             tasks={tasks}
-            expandedId={expandedTaskId}
-            setExpandedId={setExpandedTaskId}
             onReorder={async (orderedTaskIds) => {
               await reorderTasks.mutateAsync(orderedTaskIds);
             }}

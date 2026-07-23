@@ -115,19 +115,18 @@ export function IdeaEditPage() {
         <input id="idea-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
       </div>
 
+      <div className="field">
+        <label>Body</label>
+        <MarkdownEditor value={body} onChange={setBody} height={360} />
+      </div>
+
       {!isNew && ideaId != null ? (
-        <div className="field">
-          <label>Tags</label>
+        <div className="field field--tags-below">
           <TagInput entityType="idea" entityId={ideaId} />
         </div>
       ) : (
-        <p className="muted">Save the idea to add tags.</p>
+        <p className="muted field--tags-below">Save the idea to add tags.</p>
       )}
-
-      <div className="field">
-        <label>Body (Markdown)</label>
-        <MarkdownEditor value={body} onChange={setBody} height={360} />
-      </div>
 
       <div className="btn-row">
         <button type="button" className="btn primary" onClick={() => save.mutate()} disabled={save.isPending}>

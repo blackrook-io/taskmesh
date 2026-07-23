@@ -162,6 +162,7 @@ export function TagInput({ entityType, entityId, disabled, className }: Props) {
             type="text"
             className="tag-input__field"
             placeholder="Add tag…"
+            size={20}
             value={query}
             disabled={disabled || attach.isPending}
             autoComplete="off"

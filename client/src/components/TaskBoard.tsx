@@ -81,10 +81,6 @@ function TaskFields({
         />
       </div>
       <div className="field">
-        <label>Tags</label>
-        <TagInput entityType="task" entityId={task.id} />
-      </div>
-      <div className="field">
         <label>Notes</label>
         <MarkdownEditor
           value={notes}
@@ -96,6 +92,9 @@ function TaskFields({
             if (next !== (task.notes ?? "")) onSavePatch({ notes: next });
           }}
         />
+      </div>
+      <div className="field field--tags-below">
+        <TagInput entityType="task" entityId={task.id} />
       </div>
       <div className="field">
         <label htmlFor={`t-due-${task.id}`}>Due</label>
@@ -154,18 +153,12 @@ function TaskFields({
 function SortableRow({
   task,
   phases,
-  expanded,
-  onToggle,
   onOpenModal,
-  onSavePatch,
   onDelete,
 }: {
   task: Task;
   phases: ProjectPhase[];
-  expanded: boolean;
-  onToggle: () => void;
   onOpenModal: () => void;
-  onSavePatch: (patch: TaskPatch) => void;
   onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -189,25 +182,27 @@ function SortableRow({
             entityType="task"
             title={task.title}
             accentColor={task.color}
-            actions={
-              <>
-                <span className="muted" style={{ fontSize: "0.85rem" }}>
-                  {phaseNameFor(phases, task.phaseId)}
-                </span>
-                <button type="button" className="btn small ghost" onClick={onToggle}>
-                  {expanded ? "Collapse" : "Expand"}
-                </button>
-                <button type="button" className="btn small ghost" onClick={onOpenModal}>
-                  Modal
-                </button>
-                <button type="button" className="btn small danger" onClick={onDelete}>
-                  Delete
-                </button>
-              </>
+            onTitleClick={onOpenModal}
+            cornerAction={
+              <button
+                type="button"
+                className="task-card-dismiss"
+                aria-label={`Delete ${task.title}`}
+                title="Delete task"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                ×
+              </button>
             }
-          >
-            {expanded ? <TaskFields task={task} phases={phases} onSavePatch={onSavePatch} /> : null}
-          </ElementShell>
+            actions={
+              <span className="muted" style={{ fontSize: "0.85rem" }}>
+                {phaseNameFor(phases, task.phaseId)}
+              </span>
+            }
+          />
         </div>
       </div>
     </div>
@@ -217,22 +212,12 @@ function SortableRow({
 type Props = {
   phases: ProjectPhase[];
   tasks: Task[];
-  expandedId: number | null;
-  setExpandedId: (id: number | null) => void;
   onReorder: (orderedTaskIds: number[]) => Promise<void>;
   onPatchTask: (taskId: number, patch: Record<string, unknown>) => Promise<void>;
   onDeleteTask: (taskId: number) => Promise<void>;
 };
 
-export function TaskBoard({
-  phases,
-  tasks,
-  expandedId,
-  setExpandedId,
-  onReorder,
-  onPatchTask,
-  onDeleteTask,
-}: Props) {
+export function TaskBoard({ phases, tasks, onReorder, onPatchTask, onDeleteTask }: Props) {
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
   const ordered = useMemo(() => flattenTasks(phases, tasks), [phases, tasks]);
   const ids = useMemo(() => ordered.map((t) => t.id), [ordered]);
@@ -261,10 +246,7 @@ export function TaskBoard({
               key={task.id}
               task={task}
               phases={phases}
-              expanded={expandedId === task.id}
-              onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
               onOpenModal={() => setModalTaskId(task.id)}
-              onSavePatch={(p) => patch(task.id, p)}
               onDelete={() => void onDeleteTask(task.id)}
             />
           ))}
