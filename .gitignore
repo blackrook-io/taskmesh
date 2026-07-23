@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 .DS_Store
+data/backups/
+!data/backups/.gitkeep
+data/backup-schedule.json

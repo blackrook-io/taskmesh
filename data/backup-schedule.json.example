@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "hour": 3,
+  "minute": 0,
+  "retainDays": 14
+}

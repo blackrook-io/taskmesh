@@ -426,9 +426,42 @@ Reference: [ssh(1)](https://manpages.ubuntu.com/manpages/noble/en/man1/ssh.1.htm
 
 ## 17. Backups
 
-### PostgreSQL
+TaskMesh can dump **PostgreSQL** and tar **uploads** into `BACKUP_DIR` (default `data/backups/`).
 
-Interactive password via env (or use [`.pgpass`](https://www.postgresql.org/docs/current/libpq-pgpass.html)):
+### In-app controls
+
+With the API running, open **Backups** (Home or ⌘K → Backups) at `/settings/backups` to:
+
+- See health of recent backups (healthy if latest successful dump is &lt; 36 hours old)
+- **Run backup now**
+- Edit schedule (local hour/minute + retain days) — applied by the API’s in-process scheduler while the process is up
+
+CLI (same runner):
+
+```bash
+cd /srv/taskmesh
+npm run backup
+```
+
+Schedule file (created/updated by the UI): `data/backup-schedule.json` (see `data/backup-schedule.json.example`). Optional env: `BACKUP_DIR`, `BACKUP_SCHEDULE_PATH` (see [`.env.example`](.env.example)).
+
+### Optional: systemd timer (when the app may be stopped)
+
+Unit templates live in [`deploy/`](deploy/):
+
+```bash
+sudo cp /srv/taskmesh/deploy/taskmesh-backup.service /etc/systemd/system/
+sudo cp /srv/taskmesh/deploy/taskmesh-backup.timer /etc/systemd/system/
+sudo sed -i "s/YOUR_USER/$USER/" /etc/systemd/system/taskmesh-backup.service
+# Edit OnCalendar in the timer if needed
+sudo systemctl daemon-reload
+sudo systemctl enable --now taskmesh-backup.timer
+sudo systemctl list-timers | grep taskmesh
+```
+
+References: [systemd.timer](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html), [`pg_dump`](https://www.postgresql.org/docs/current/app-pgdump.html).
+
+### Manual PostgreSQL dump / restore
 
 ```bash
 export PGPASSWORD='your-secure-password'
@@ -436,7 +469,7 @@ pg_dump -h 127.0.0.1 -U taskmesh -d taskmesh -F p -f "taskmesh-$(date +%F).sql"
 unset PGPASSWORD
 ```
 
-Restore (**destructive** to existing data — use with care):
+Restore (**destructive**):
 
 ```bash
 export PGPASSWORD='your-secure-password'
@@ -444,19 +477,7 @@ psql -h 127.0.0.1 -U taskmesh -d taskmesh -f taskmesh-YYYY-MM-DD.sql
 unset PGPASSWORD
 ```
 
-Reference: [`pg_dump`](https://www.postgresql.org/docs/current/app-pgdump.html).
-
-### Uploads
-
-Default directory: `data/uploads/` (or `UPLOAD_DIR`). Back it up with the database:
-
-```bash
-tar -czf "taskmesh-uploads-$(date +%F).tar.gz" -C /srv/taskmesh data/uploads
-# if using /var/lib/taskmesh/uploads:
-# tar -czf "taskmesh-uploads-$(date +%F).tar.gz" -C /var/lib/taskmesh uploads
-```
-
-Schedule dumps (cron / systemd timer) to durable storage for anything you care about keeping.
+Or restore from a TaskMesh backup folder’s `.sql` file under `BACKUP_DIR/<id>/`.
 
 ---
 

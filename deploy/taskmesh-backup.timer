@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily TaskMesh backup timer
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=taskmesh-backup.service
+
+[Install]
+WantedBy=timers.target

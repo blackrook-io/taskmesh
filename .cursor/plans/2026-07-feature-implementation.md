@@ -299,11 +299,13 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 ## Phase 10 — Ops & reachability
 
-### 10a — Import / export (in progress on `phase-10a-import-export`)
+### 10a — Import / export (shipped)
 
-- Projects & Tasks CSV/XLSX export; insert-only import; discard report for collisions + invalid rows
+- Projects & Tasks CSV export; insert-only import; discard report for collisions + invalid rows
 
-### 10b — Backup health UI (planned)
+### 10b — Backup health UI (in progress on `phase-10b-backup-ui`)
+
+- `/settings/backups`, `npm run backup`, in-process schedule, optional systemd timer under `deploy/`
 
 ### 10c — Responsive phone/tablet (planned)
 

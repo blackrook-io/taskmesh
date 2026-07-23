@@ -29,6 +29,12 @@ const STATIC_COMMANDS: PaletteItem[] = [
     label: "Import / Export",
     path: "/settings/import-export",
   },
+  {
+    id: "nav-backups",
+    group: "Go to",
+    label: "Backups",
+    path: "/settings/backups",
+  },
   ...(import.meta.env.DEV
     ? [
         {

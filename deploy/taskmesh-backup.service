@@ -1,0 +1,13 @@
+[Unit]
+Description=TaskMesh database + uploads backup
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/taskmesh
+EnvironmentFile=-/srv/taskmesh/.env
+# Use the same Node that runs the app (adjust path if needed)
+ExecStart=/usr/bin/npm run backup --prefix /srv/taskmesh
+User=YOUR_USER
+Group=YOUR_USER

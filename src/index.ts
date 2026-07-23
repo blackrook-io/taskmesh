@@ -5,11 +5,13 @@ import express from "express";
 import multer from "multer";
 import { sql } from "drizzle-orm";
 import { db, pool } from "./db/client.js";
-import { getClientDistDir, ensureUploadDir } from "./lib/paths.js";
+import { getClientDistDir, ensureUploadDir, ensureBackupDir } from "./lib/paths.js";
 import { sendError } from "./lib/httpError.js";
 import { v1Router } from "./routes/v1/index.js";
+import { startBackupScheduler, stopBackupScheduler } from "./services/backups.js";
 
 ensureUploadDir();
+ensureBackupDir();
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -57,10 +59,12 @@ app.use(
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => {
   console.log(`TaskMesh API listening on http://localhost:${port}`);
+  startBackupScheduler();
 });
 
 async function shutdown(signal: string) {
   console.log(`Received ${signal}, closing…`);
+  stopBackupScheduler();
   server.close();
   await pool.end();
   process.exit(0);

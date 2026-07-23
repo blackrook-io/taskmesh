@@ -14,6 +14,7 @@ import { ProjectsListPage } from "./pages/ProjectsListPage.tsx";
 import { SearchPage } from "./pages/SearchPage.tsx";
 import { TodoListsPage } from "./pages/TodoListsPage.tsx";
 import { ImportExportPage } from "./pages/ImportExportPage.tsx";
+import { BackupsPage } from "./pages/BackupsPage.tsx";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="todos" element={<TodoListsPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="settings/import-export" element={<ImportExportPage />} />
+            <Route path="settings/backups" element={<BackupsPage />} />
             {import.meta.env.DEV ? (
               <Route path="dev/playground" element={<PlaygroundPage />} />
             ) : null}

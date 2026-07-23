@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { backupsRouter } from "./backups.js";
 import { ideasRouter } from "./ideas.js";
 import { importExportRouter } from "./importExport.js";
 import { projectsRouter } from "./projects.js";
@@ -17,6 +18,7 @@ v1Router.use("/tags", tagsRouter);
 v1Router.use("/taggings", taggingsRouter);
 v1Router.use("/search", searchRouter);
 v1Router.use("/todo-lists", todoListsRouter);
+v1Router.use("/backups", backupsRouter);
 v1Router.use(importExportRouter);
 v1Router.use(uploadsRouter);
 

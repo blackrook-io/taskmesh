@@ -15,6 +15,9 @@ export function HomePage() {
         <Link to="/settings/import-export" className="btn ghost">
           Import / Export
         </Link>
+        <Link to="/settings/backups" className="btn ghost">
+          Backups
+        </Link>
       </div>
     </div>
   );

@@ -294,6 +294,36 @@ code {
   padding: 0.5rem;
 }
 
+.backup-health {
+  font-weight: 650;
+}
+
+.backup-health--ok {
+  color: var(--accent);
+}
+
+.backup-health--warn {
+  color: #fbbf24;
+}
+
+.backup-health--missing {
+  color: var(--danger);
+}
+
+.backup-schedule-form {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 20rem;
+}
+
+.backup-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
 .grid {
   display: grid;
   gap: 0.75rem;
@@ -376,6 +406,7 @@ code {
 }
 
 input[type="text"],
+input[type="number"],
 input[type="datetime-local"],
 select,
 textarea {

@@ -1,0 +1,14 @@
+# Phase 10b — Backup health & controls
+
+**Branch:** `phase-10b-backup-ui`
+
+## Goal
+
+In-app backup status, manual run, and schedule/retention controls. Shared runner for API and optional systemd timer.
+
+## Exit criteria
+
+- List recent backups with health (fresh &lt; 36h)
+- Run backup now (Postgres + uploads)
+- Edit schedule (hour/minute) + retainDays; in-process scheduler while API runs
+- INSTALL documents systemd timer alternative
