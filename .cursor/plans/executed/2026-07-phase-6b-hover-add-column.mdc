@@ -4,16 +4,16 @@ overview: "Replace the top “Add column” row with a 500ms hover affordance in
 todos:
   - id: api-insertAt
     content: Add insertAt to column create + reindex sortOrder
-    status: in_progress
+    status: completed
   - id: hover-ghost-ui
     content: 500ms blank-hover ghost + inline name; remove top Add column row
-    status: pending
+    status: completed
   - id: carousel-slot
     content: Render ghost in track at insertAt; suppress during card DnD
-    status: pending
+    status: completed
   - id: qa-ship
     content: Write plan file, commit on phase-6-kanban, QA checklist
-    status: pending
+    status: completed
 isProject: false
 ---
 

@@ -1,6 +1,6 @@
 # Agent guidance (TaskMesh)
 
-This repo is a **Node.js + TypeScript** API (**Express**, **PostgreSQL**, **Drizzle ORM**) plus a **Vite + React** SPA in `client/`. Authoritative setup, Ubuntu packages, and `DATABASE_URL` live in [README.md](README.md).
+This repo is a **Node.js + TypeScript** API (**Express**, **PostgreSQL**, **Drizzle ORM**) plus a **Vite + React** SPA in `client/`. Authoritative Ubuntu install and `DATABASE_URL` setup live in [INSTALL.md](INSTALL.md); product overview and scripts in [README.md](README.md).
 
 ## Cursor rules
 
