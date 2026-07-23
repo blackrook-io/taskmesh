@@ -1,3 +1,9 @@
+---
+description: Code quality and architecture habits for TaskMesh TypeScript
+globs: "**/*.ts"
+alwaysApply: false
+---
+
 # Role Definition
 Programming language expert.
 Software Architect.

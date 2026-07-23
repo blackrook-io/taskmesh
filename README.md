@@ -1,6 +1,6 @@
 # TaskMesh
 
-Server-based app for personal **projects** and **ideas** (API skeleton). Stack: **Node.js**, **TypeScript**, **Express**, **PostgreSQL**, **Drizzle ORM**.
+Personal **projects** and **ideas** with a **React** web UI and **Express** API. Stack: **Node.js**, **TypeScript**, **Vite**, **React**, **Express**, **PostgreSQL**, **Drizzle ORM**.
 
 ## Prerequisites
 
@@ -80,23 +80,47 @@ PORT=3000
 
 4. Check health: [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
+5. (Optional) Run the **web UI** in a second terminal — Vite proxies `/api` to the API:
+
+   ```bash
+   cd taskmesh
+   npm install
+   cd client && npm install && cd ..
+   npm run dev:web
+   ```
+
+   Then open [http://localhost:5173](http://localhost:5173) for the SPA (API remains on port **3000**).
+
 ### Optional: remote access and long-lived sessions
 
 - **SSH tunnel** from your laptop so the API stays bound on the server:  
   `ssh -L 3000:127.0.0.1:3000 your-user@your-server`  
   Then open `http://localhost:3000/api/health` on the laptop.
-- **tmux**, **screen**, or a **systemd** / **pm2** service if you need the process to keep running after you disconnect SSH (use `npm run build` and `npm start` for a non-watch production-style run).
+- **tmux**, **screen**, or a **systemd** / **pm2** service if you need the process to keep running after you disconnect SSH (use `npm run build:all` and `npm start` for a non-watch production-style run).
 
 ## Scripts
 
 | Script                | Description                                      |
 |-----------------------|--------------------------------------------------|
 | `npm run dev`         | Express API with reload (`tsx watch`)            |
-| `npm run build`       | Compile TypeScript to `dist/`                     |
-| `npm start`           | Run compiled app (`node dist/index.js`)           |
+| `npm run dev:client`  | Vite dev server for `client/` (proxies `/api`)   |
+| `npm run dev:web`     | API + Vite together (`concurrently`)             |
+| `npm run build`       | Compile API TypeScript to `dist/`                 |
+| `npm run build:client`| Production build of the SPA to `client/dist/`     |
+| `npm run build:all`   | `build` + `build:client`                          |
+| `npm start`           | Run compiled API (`node dist/index.js`)           |
 | `npm run db:generate` | Create SQL migrations from `src/db/schema.ts`   |
 | `npm run db:migrate`  | Apply migrations in `./drizzle` to the database |
 | `npm run db:studio`   | Drizzle Studio (inspect DB)                      |
+
+For production on one host, build both artifacts and run Node with `NODE_ENV=production` so Express serves `client/dist` and the SPA fallback for client-side routes:
+
+```bash
+npm run build:all
+NODE_ENV=production npm start
+```
+
+Open `http://localhost:3000/` for the UI; API routes remain under `/api/...`.
 
 After changing `src/db/schema.ts`, run `npm run db:generate`, review the new SQL under `drizzle/`, then `npm run db:migrate`.
 
@@ -120,16 +144,22 @@ unset PGPASSWORD
 
 For production, automate `pg_dump` (or vendor snapshots) to durable storage on a schedule.
 
+Uploaded images are stored on disk under `data/uploads/` by default (override with `UPLOAD_DIR` in `.env`). Include that directory in backups alongside the database.
+
 ## Project layout
 
 ```
+client/          # Vite + React SPA
+  dist/          # Production static assets (after npm run build:client)
 src/
   index.ts       # Express entry
+  routes/v1/     # REST API
   db/
     schema.ts    # Drizzle schema
     client.ts    # Pool + db instance
     migrate.ts   # Migration runner (used by npm run db:migrate)
 drizzle/         # Generated SQL migrations + meta
+data/uploads/    # Image uploads (created at runtime; tracked with .gitkeep)
 ```
 
 ## License
