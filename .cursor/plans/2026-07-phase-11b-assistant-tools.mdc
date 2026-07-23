@@ -1,0 +1,18 @@
+# Phase 11b — Assistant record tools
+
+**Branch:** `phase-11b-assistant-tools`
+
+## Goal
+
+OpenAI tool loop can search/read TaskMesh records and propose document/idea/task updates; UI confirms before PATCH.
+
+## Exit criteria
+
+- Tools: `search_records`, `get_entity`, `list_project_context`, `propose_document_update`, `propose_idea_update`, `propose_task_update`
+- SSE events: `tool`, `proposal`, `delta`, `done`, `error`
+- ConfirmDialog apply via existing REST; invalidate React Query keys
+- Client-side transcript persistence (localStorage) for refresh on same browser
+
+## Non-goals
+
+fetch_url (11c), Anthropic, server-side thread DB (can follow later).

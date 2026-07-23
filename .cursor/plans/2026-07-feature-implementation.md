@@ -317,11 +317,13 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 ## Phase 11 — Embedded assistant
 
-### 11a — Shell + OpenAI chat (in progress on `phase-11a-assistant-shell`)
+### 11a — Shell + OpenAI chat (shipped)
 
-- BYO `OPENAI_API_KEY`; SSE chat; AI panel + `/settings/assistant`; no record write tools yet
+- BYO `OPENAI_API_KEY`; SSE chat; AI panel + `/settings/assistant`
 
-### 11b — Record tools + confirm apply (planned)
+### 11b — Record tools + confirm apply (in progress on `phase-11b-assistant-tools`)
+
+- Search/get/list tools; propose idea/document/task updates; ConfirmDialog apply
 
 ### 11c — Research / fetch_url (planned)
 

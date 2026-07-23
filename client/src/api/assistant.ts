@@ -3,11 +3,22 @@ export type AssistantStatus = {
   provider: string;
   model: string;
   configuredProviders: { openai: boolean };
+  toolsEnabled?: boolean;
 };
 
 export type ChatTurn = {
   role: "user" | "assistant";
   content: string;
+};
+
+export type AssistantProposal = {
+  id: string;
+  entityType: "idea" | "document" | "task";
+  entityId: number;
+  projectId?: number;
+  summary: string;
+  fields: Record<string, unknown>;
+  patchPath: string;
 };
 
 export async function fetchAssistantStatus(): Promise<AssistantStatus> {
@@ -30,6 +41,8 @@ export async function streamAssistantChat(args: {
   signal?: AbortSignal;
   onDelta: (text: string) => void;
   onMeta?: (meta: { provider: string; model: string }) => void;
+  onTool?: (info: { name: string; args: unknown }) => void;
+  onProposal?: (proposal: AssistantProposal) => void;
 }): Promise<void> {
   const res = await fetch("/api/v1/assistant/chat", {
     method: "POST",
@@ -86,6 +99,10 @@ export async function streamAssistantChat(args: {
           if (text) args.onDelta(text);
         } else if (eventName === "meta") {
           args.onMeta?.(data as { provider: string; model: string });
+        } else if (eventName === "tool") {
+          args.onTool?.(data as { name: string; args: unknown });
+        } else if (eventName === "proposal") {
+          args.onProposal?.(data as AssistantProposal);
         } else if (eventName === "error") {
           throw new Error((data as { message?: string }).message ?? "Assistant error");
         } else if (eventName === "done") {

@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
-import { buildMessages, getAssistantConfig, resolveProvider } from "../../services/assistant/index.js";
+import {
+  buildMessages,
+  getAssistantConfig,
+  resolveProvider,
+  runAssistantWithTools,
+} from "../../services/assistant/index.js";
 
 export const assistantRouter = Router();
 
@@ -17,6 +22,7 @@ assistantRouter.get("/status", (_req, res) => {
         configuredProviders: {
           openai: Boolean(cfg.openaiKey),
         },
+        toolsEnabled: true,
       },
     });
   } catch (err) {
@@ -72,20 +78,28 @@ assistantRouter.post("/chat", async (req, res) => {
     const ac = new AbortController();
     req.on("close", () => ac.abort());
 
-    writeEvent("meta", { provider: provider.id, model: parsed.model ?? provider.defaultModel });
+    writeEvent("meta", {
+      provider: provider.id,
+      model: parsed.model ?? provider.defaultModel,
+      toolsEnabled: true,
+    });
 
-    await provider.streamChat({
-      model: parsed.model,
+    await runAssistantWithTools({
       messages,
+      model: parsed.model,
       signal: ac.signal,
-      onDelta: (text) => writeEvent("delta", { text }),
-      onDone: () => {
-        writeEvent("done", {});
-        res.end();
-      },
-      onError: (message) => {
-        writeEvent("error", { message });
-        res.end();
+      handlers: {
+        onTool: (info) => writeEvent("tool", info),
+        onProposal: (proposal) => writeEvent("proposal", proposal),
+        onDelta: (text) => writeEvent("delta", { text }),
+        onDone: () => {
+          writeEvent("done", {});
+          res.end();
+        },
+        onError: (message) => {
+          writeEvent("error", { message });
+          res.end();
+        },
       },
     });
   } catch (err) {

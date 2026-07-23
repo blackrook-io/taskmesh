@@ -2279,6 +2279,11 @@ a:focus-visible {
   padding: 0.55rem 0.65rem;
 }
 
+.assistant-tool-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
 .assistant-status-list {
   margin: 0.75rem 0 0;
   padding-left: 1.2rem;

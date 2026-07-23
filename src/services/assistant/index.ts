@@ -1,15 +1,21 @@
 import { createOpenAiProvider } from "./openaiProvider.js";
+import { runAssistantWithTools } from "./runWithTools.js";
 import type { LlmProvider } from "./types.js";
 import { getAssistantConfig } from "./types.js";
 
 export { getAssistantConfig } from "./types.js";
 export type { ChatMessage, LlmProvider } from "./types.js";
+export { runAssistantWithTools } from "./runWithTools.js";
+export type { AssistantProposal } from "./tools.js";
 
 const SYSTEM_PROMPT = `You are the TaskMesh assistant embedded in a personal project / ideas / tasks app.
 Help the user research, summarize, draft Markdown, and plan work.
-You can see optional page context the UI attaches (current idea, project, document, or task).
-In this version you cannot directly edit records; suggest Markdown or wording the user can paste or apply later.
-Be concise. Prefer clear structure. Do not claim you saved changes unless the user confirms they did.`;
+
+You have tools to search and read TaskMesh records, and to propose updates to ideas, documents, and tasks.
+Proposed updates are NOT saved until the user confirms in the UI. Never claim you saved or applied a change.
+When the user asks to edit something, use the propose_* tools with a clear summary and the fields to change.
+Prefer get_entity / search_records before proposing edits so you work from current content.
+Be concise. Prefer clear Markdown structure.`;
 
 export function resolveProvider(): LlmProvider | null {
   const cfg = getAssistantConfig();
@@ -17,7 +23,6 @@ export function resolveProvider(): LlmProvider | null {
     const p = createOpenAiProvider();
     return p.configured ? p : null;
   }
-  // Future: anthropic
   const openai = createOpenAiProvider();
   return openai.configured ? openai : null;
 }
