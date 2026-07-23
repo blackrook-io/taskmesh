@@ -521,7 +521,7 @@ async function toolProposeIdeaCreate(args: unknown, handlers: ToolHandlers): Pro
 async function toolProposeDocumentCreate(args: unknown, handlers: ToolHandlers): Promise<string> {
   const parsed = z
     .object({
-      projectId: z.number().int().positive(),
+      projectId: z.coerce.number().int().positive(),
       title: z.string().min(1).max(500),
       body: z.string().max(500_000).optional().nullable(),
       summary: z.string().min(1).max(500),
@@ -555,7 +555,7 @@ async function toolProposeDocumentCreate(args: unknown, handlers: ToolHandlers):
 async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Promise<string> {
   const parsed = z
     .object({
-      projectId: z.number().int().positive(),
+      projectId: z.coerce.number().int().positive(),
       title: z.string().min(1).max(2000),
       notes: z.string().max(50_000).optional().nullable(),
       dueAt: z.string().optional().nullable(),
