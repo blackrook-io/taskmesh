@@ -249,6 +249,18 @@ sudo chown "$USER":"$USER" /var/lib/taskmesh/uploads
 
 Do **not** commit `.env` (it is gitignored). Keep the password aligned with the Postgres role from §6.
 
+### Assistant (OpenAI)
+
+Optional embedded chat (UI: **AI** in the top bar, ⌘J / Ctrl+J, or ⌘K → Open assistant). Requires outbound HTTPS from this host to OpenAI.
+
+```env
+OPENAI_API_KEY=sk-...
+ASSISTANT_DEFAULT_PROVIDER=openai
+ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini
+```
+
+If `OPENAI_API_KEY` is unset, the assistant panel shows as not configured. Restart the API after changing keys (`sudo systemctl restart taskmesh`). Status page: `/settings/assistant`.
+
 ---
 
 ## 10. Install npm dependencies
@@ -545,6 +557,7 @@ Always run migrations after pulling schema changes; review `drizzle/` if you mai
 | nginx 502 Bad Gateway | TaskMesh not running (`systemctl status taskmesh`); wrong `HOST`/`PORT`; `ss -tlnp \| grep 3000` should show `127.0.0.1:3000` |
 | Blank Excalidraw / missing fonts | Re-run `cd client && npm install`; confirm `client/public/excalidraw-assets/fonts` exists; `index.html` sets `EXCALIDRAW_ASSET_PATH` |
 | SPA 404 on refresh in production | Ensure `NODE_ENV=production` and `client/dist/index.html` exists (`npm run build:all`) |
+| Assistant “not configured” / 503 | Set `OPENAI_API_KEY` in `.env`; restart TaskMesh; confirm host can reach `https://api.openai.com` |
 | Client `postinstall` skipped | Run `node client/scripts/copy-excalidraw-assets.mjs` manually from `client/` |
 
 ---

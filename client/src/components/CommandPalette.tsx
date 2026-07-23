@@ -15,6 +15,8 @@ type PaletteItem = {
   label: string;
   hint?: string;
   path: string;
+  /** Special client action instead of navigation */
+  action?: "open-assistant";
 };
 
 const STATIC_COMMANDS: PaletteItem[] = [
@@ -23,6 +25,20 @@ const STATIC_COMMANDS: PaletteItem[] = [
   { id: "nav-projects", group: "Go to", label: "Projects", path: "/projects" },
   { id: "nav-todos", group: "Go to", label: "To Dos", path: "/todos" },
   { id: "nav-search", group: "Go to", label: "Search page", path: "/search" },
+  {
+    id: "open-assistant",
+    group: "Assistant",
+    label: "Open assistant",
+    hint: "Chat",
+    path: "/settings/assistant",
+    action: "open-assistant",
+  },
+  {
+    id: "nav-assistant-settings",
+    group: "Go to",
+    label: "Assistant settings",
+    path: "/settings/assistant",
+  },
   {
     id: "nav-import-export",
     group: "Go to",
@@ -171,6 +187,11 @@ export function CommandPalette({ open, onClose }: Props) {
 
   const go = useCallback(
     (item: PaletteItem) => {
+      if (item.action === "open-assistant") {
+        onClose();
+        window.dispatchEvent(new CustomEvent("taskmesh:open-assistant"));
+        return;
+      }
       pushRecentNav(item.path, item.label);
       onClose();
       navigate(item.path);

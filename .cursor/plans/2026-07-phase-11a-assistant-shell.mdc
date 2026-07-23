@@ -1,0 +1,19 @@
+# Phase 11a — Assistant shell (OpenAI)
+
+**Branch:** `phase-11a-assistant-shell`
+
+## Goal
+
+Embedded assistant chat with OpenAI streaming; settings status; no write tools yet.
+
+## Exit criteria
+
+- `OPENAI_API_KEY` in env; assistant disabled cleanly if missing
+- `GET /api/v1/assistant/status`, `POST /api/v1/assistant/chat` (SSE)
+- Assistant slide-over panel + `/settings/assistant` + ⌘K entry
+- Optional page context string attached to the request (no tool loop yet)
+- INSTALL notes for outbound HTTPS + key
+
+## Non-goals
+
+Record write tools, fetch_url, Anthropic, thread persistence (11b/11c).

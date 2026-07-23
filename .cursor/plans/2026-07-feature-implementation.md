@@ -315,6 +315,16 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 - `HOST=127.0.0.1`, nginx → Express on :80, UFW LAN :80; future multi-app landing documented only
 
+## Phase 11 — Embedded assistant
+
+### 11a — Shell + OpenAI chat (in progress on `phase-11a-assistant-shell`)
+
+- BYO `OPENAI_API_KEY`; SSE chat; AI panel + `/settings/assistant`; no record write tools yet
+
+### 11b — Record tools + confirm apply (planned)
+
+### 11c — Research / fetch_url (planned)
+
 ---
 
 ## Sequencing rationale

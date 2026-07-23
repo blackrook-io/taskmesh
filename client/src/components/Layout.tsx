@@ -1,20 +1,33 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
+import { AssistantPanel } from "./AssistantPanel";
 import { CommandPalette } from "./CommandPalette";
 
 const isDev = import.meta.env.DEV;
 
 export function Layout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
-      e.preventDefault();
-      setPaletteOpen((open) => !open);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setAssistantOpen((open) => !open);
+      }
     };
+    const onOpenAssistant = () => setAssistantOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("taskmesh:open-assistant", onOpenAssistant);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("taskmesh:open-assistant", onOpenAssistant);
+    };
   }, []);
 
   return (
@@ -24,6 +37,15 @@ export function Layout() {
           TaskMesh
         </Link>
         <nav className="nav" aria-label="App">
+          <button
+            type="button"
+            className="btn ghost small"
+            onClick={() => setAssistantOpen(true)}
+            title="Assistant (Ctrl/⌘J)"
+            aria-keyshortcuts="Control+J Meta+J"
+          >
+            AI
+          </button>
           <button
             type="button"
             className="btn ghost small command-palette-trigger"
@@ -44,6 +66,7 @@ export function Layout() {
         <Outlet />
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   );
 }

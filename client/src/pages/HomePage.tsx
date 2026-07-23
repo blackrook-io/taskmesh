@@ -18,6 +18,9 @@ export function HomePage() {
         <Link to="/settings/backups" className="btn ghost">
           Backups
         </Link>
+        <Link to="/settings/assistant" className="btn ghost">
+          Assistant
+        </Link>
       </div>
     </div>
   );

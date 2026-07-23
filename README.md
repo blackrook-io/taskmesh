@@ -68,8 +68,11 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | `PORT` | API listen port (default `3000`) |
 | `UPLOAD_DIR` | Image upload directory (default `data/uploads/`) |
 | `UPLOAD_MAX_BYTES` | Max upload size (default 5 MiB) |
+| `OPENAI_API_KEY` | Enables embedded assistant (optional) |
+| `ASSISTANT_DEFAULT_MODEL` | OpenAI model id (default `gpt-4.1-mini`) |
 
 Back up **Postgres** and the uploads directory together. Commands and scheduling notes are in [INSTALL.md § Backups](INSTALL.md#18-backups).
+
 ## Project layout
 
 ```
