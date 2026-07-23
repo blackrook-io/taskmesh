@@ -23,6 +23,12 @@ const STATIC_COMMANDS: PaletteItem[] = [
   { id: "nav-projects", group: "Go to", label: "Projects", path: "/projects" },
   { id: "nav-todos", group: "Go to", label: "To Dos", path: "/todos" },
   { id: "nav-search", group: "Go to", label: "Search page", path: "/search" },
+  {
+    id: "nav-import-export",
+    group: "Go to",
+    label: "Import / Export",
+    path: "/settings/import-export",
+  },
   ...(import.meta.env.DEV
     ? [
         {

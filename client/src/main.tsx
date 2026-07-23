@@ -13,6 +13,7 @@ import { ProjectNewPage } from "./pages/ProjectNewPage.tsx";
 import { ProjectsListPage } from "./pages/ProjectsListPage.tsx";
 import { SearchPage } from "./pages/SearchPage.tsx";
 import { TodoListsPage } from "./pages/TodoListsPage.tsx";
+import { ImportExportPage } from "./pages/ImportExportPage.tsx";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="projects/:id" element={<ProjectDetailPage />} />
             <Route path="todos" element={<TodoListsPage />} />
             <Route path="search" element={<SearchPage />} />
+            <Route path="settings/import-export" element={<ImportExportPage />} />
             {import.meta.env.DEV ? (
               <Route path="dev/playground" element={<PlaygroundPage />} />
             ) : null}

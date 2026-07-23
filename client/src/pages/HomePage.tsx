@@ -12,6 +12,9 @@ export function HomePage() {
         <Link to="/projects" className="btn">
           Projects
         </Link>
+        <Link to="/settings/import-export" className="btn ghost">
+          Import / Export
+        </Link>
       </div>
     </div>
   );

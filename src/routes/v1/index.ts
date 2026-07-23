@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { ideasRouter } from "./ideas.js";
+import { importExportRouter } from "./importExport.js";
 import { projectsRouter } from "./projects.js";
 import { searchRouter } from "./search.js";
 import { taggingsRouter } from "./taggings.js";
@@ -16,6 +17,7 @@ v1Router.use("/tags", tagsRouter);
 v1Router.use("/taggings", taggingsRouter);
 v1Router.use("/search", searchRouter);
 v1Router.use("/todo-lists", todoListsRouter);
+v1Router.use(importExportRouter);
 v1Router.use(uploadsRouter);
 
 v1Router.use((_req, res) => {

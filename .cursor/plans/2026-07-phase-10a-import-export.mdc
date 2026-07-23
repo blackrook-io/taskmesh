@@ -1,0 +1,13 @@
+# Phase 10a — Project & Task CSV/XLSX export + import
+
+**Branch:** `phase-10a-import-export`
+
+## Goal
+
+Export and import **Projects** and **Tasks** as `.csv` or `.xlsx`. Insert-only: never update existing rows; skip ID collisions; discard invalid rows with row + reason.
+
+## Exit criteria
+
+- Export projects/tasks as csv and xlsx
+- Import creates new rows; collisions and schema violations appear in a discard report
+- Settings UI + command palette entries

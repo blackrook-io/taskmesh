@@ -291,11 +291,23 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 - Performance: virtualize long boards/lists; lazy-load canvas/editor chunks
 - Accessibility: focus traps in modals, keyboard tag remove
 
-### 9a — Command palette (in progress on `phase-9-command-palette`)
+### 9a — Command palette (shipped)
 
 - Ctrl/Cmd+K overlay; debounced `GET /api/v1/search`
 - Static go-to / create commands; `localStorage` recent paths
-- Focus trap + keyboard navigation
+- Focus trap + keyboard navigation; slim top nav (Playground DEV-only)
+
+## Phase 10 — Ops & reachability
+
+### 10a — Import / export (in progress on `phase-10a-import-export`)
+
+- Projects & Tasks CSV/XLSX export; insert-only import; discard report for collisions + invalid rows
+
+### 10b — Backup health UI (planned)
+
+### 10c — Responsive phone/tablet (planned)
+
+### 10d — nginx :80 host (planned)
 
 ---
 
