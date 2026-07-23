@@ -5,13 +5,15 @@ import * as schema from "../../db/schema.js";
 
 export type AssistantProposal = {
   id: string;
+  action: "create" | "update";
   entityType: "idea" | "document" | "task";
-  entityId: number;
+  /** Present for updates */
+  entityId?: number;
   projectId?: number;
   summary: string;
   fields: Record<string, unknown>;
-  /** Path for client PATCH */
-  patchPath: string;
+  method: "POST" | "PATCH";
+  path: string;
 };
 
 export type ToolHandlers = {
@@ -106,7 +108,7 @@ export const OPENAI_TOOLS = [
     function: {
       name: "propose_task_update",
       description:
-        "Propose updating a task. Does not save; the user must confirm in the UI.",
+        "Propose updating an existing task. Does not save; the user must confirm in the UI.",
       parameters: {
         type: "object",
         properties: {
@@ -119,6 +121,61 @@ export const OPENAI_TOOLS = [
           summary: { type: "string" },
         },
         required: ["projectId", "taskId", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_idea_create",
+      description:
+        "Propose creating a new idea. Does not save; the user must confirm in the UI.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          body: { type: "string", description: "Markdown body" },
+          summary: { type: "string" },
+        },
+        required: ["title", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_document_create",
+      description:
+        "Propose creating a new project document. Does not save; the user must confirm in the UI.",
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: { type: "integer" },
+          title: { type: "string" },
+          body: { type: "string", description: "Markdown body" },
+          summary: { type: "string" },
+        },
+        required: ["projectId", "title", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_task_create",
+      description:
+        "Propose creating a new task in a project (title required). Does not save; the user must confirm in the UI. Prefer this when the user asks to add/create tasks.",
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: { type: "integer" },
+          title: { type: "string" },
+          notes: { type: "string" },
+          dueAt: { type: "string", description: "ISO datetime" },
+          color: { type: "string" },
+          summary: { type: "string" },
+        },
+        required: ["projectId", "title", "summary"],
       },
     },
   },
@@ -154,11 +211,17 @@ export async function executeAssistantTool(
       case "list_project_context":
         return await toolListProject(args);
       case "propose_idea_update":
-        return await toolProposeIdea(args, handlers);
+        return await toolProposeIdeaUpdate(args, handlers);
       case "propose_document_update":
-        return await toolProposeDocument(args, handlers);
+        return await toolProposeDocumentUpdate(args, handlers);
       case "propose_task_update":
-        return await toolProposeTask(args, handlers);
+        return await toolProposeTaskUpdate(args, handlers);
+      case "propose_idea_create":
+        return await toolProposeIdeaCreate(args, handlers);
+      case "propose_document_create":
+        return await toolProposeDocumentCreate(args, handlers);
+      case "propose_task_create":
+        return await toolProposeTaskCreate(args, handlers);
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -301,7 +364,7 @@ async function toolListProject(args: unknown): Promise<string> {
   });
 }
 
-async function toolProposeIdea(args: unknown, handlers: ToolHandlers): Promise<string> {
+async function toolProposeIdeaUpdate(args: unknown, handlers: ToolHandlers): Promise<string> {
   const parsed = z
     .object({
       ideaId: z.number().int().positive(),
@@ -323,11 +386,13 @@ async function toolProposeIdea(args: unknown, handlers: ToolHandlers): Promise<s
   }
   const proposal: AssistantProposal = {
     id: proposalId(),
+    action: "update",
     entityType: "idea",
     entityId: parsed.ideaId,
     summary: parsed.summary,
     fields,
-    patchPath: `/api/v1/ideas/${parsed.ideaId}`,
+    method: "PATCH",
+    path: `/api/v1/ideas/${parsed.ideaId}`,
   };
   handlers.onProposal?.(proposal);
   return JSON.stringify({
@@ -337,7 +402,7 @@ async function toolProposeIdea(args: unknown, handlers: ToolHandlers): Promise<s
   });
 }
 
-async function toolProposeDocument(args: unknown, handlers: ToolHandlers): Promise<string> {
+async function toolProposeDocumentUpdate(args: unknown, handlers: ToolHandlers): Promise<string> {
   const parsed = z
     .object({
       projectId: z.number().int().positive(),
@@ -365,12 +430,14 @@ async function toolProposeDocument(args: unknown, handlers: ToolHandlers): Promi
   }
   const proposal: AssistantProposal = {
     id: proposalId(),
+    action: "update",
     entityType: "document",
     entityId: parsed.documentId,
     projectId: parsed.projectId,
     summary: parsed.summary,
     fields,
-    patchPath: `/api/v1/projects/${parsed.projectId}/documents/${parsed.documentId}`,
+    method: "PATCH",
+    path: `/api/v1/projects/${parsed.projectId}/documents/${parsed.documentId}`,
   };
   handlers.onProposal?.(proposal);
   return JSON.stringify({
@@ -380,7 +447,7 @@ async function toolProposeDocument(args: unknown, handlers: ToolHandlers): Promi
   });
 }
 
-async function toolProposeTask(args: unknown, handlers: ToolHandlers): Promise<string> {
+async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Promise<string> {
   const parsed = z
     .object({
       projectId: z.number().int().positive(),
@@ -407,17 +474,118 @@ async function toolProposeTask(args: unknown, handlers: ToolHandlers): Promise<s
   }
   const proposal: AssistantProposal = {
     id: proposalId(),
+    action: "update",
     entityType: "task",
     entityId: parsed.taskId,
     projectId: parsed.projectId,
     summary: parsed.summary,
     fields,
-    patchPath: `/api/v1/projects/${parsed.projectId}/tasks/${parsed.taskId}`,
+    method: "PATCH",
+    path: `/api/v1/projects/${parsed.projectId}/tasks/${parsed.taskId}`,
   };
   handlers.onProposal?.(proposal);
   return JSON.stringify({
     ok: true,
     proposalId: proposal.id,
     message: "Proposal sent to the user for confirmation. Do not claim it was saved.",
+  });
+}
+
+async function toolProposeIdeaCreate(args: unknown, handlers: ToolHandlers): Promise<string> {
+  const parsed = z
+    .object({
+      title: z.string().min(1).max(500),
+      body: z.string().max(500_000).optional().nullable(),
+      summary: z.string().min(1).max(500),
+    })
+    .parse(args);
+  const fields: Record<string, unknown> = { title: parsed.title };
+  if (parsed.body !== undefined) fields.body = parsed.body;
+  const proposal: AssistantProposal = {
+    id: proposalId(),
+    action: "create",
+    entityType: "idea",
+    summary: parsed.summary,
+    fields,
+    method: "POST",
+    path: `/api/v1/ideas`,
+  };
+  handlers.onProposal?.(proposal);
+  return JSON.stringify({
+    ok: true,
+    proposalId: proposal.id,
+    message: "Create proposal sent to the user for confirmation. Do not claim it was saved.",
+  });
+}
+
+async function toolProposeDocumentCreate(args: unknown, handlers: ToolHandlers): Promise<string> {
+  const parsed = z
+    .object({
+      projectId: z.number().int().positive(),
+      title: z.string().min(1).max(500),
+      body: z.string().max(500_000).optional().nullable(),
+      summary: z.string().min(1).max(500),
+    })
+    .parse(args);
+  const [proj] = await db
+    .select()
+    .from(schema.projects)
+    .where(eq(schema.projects.id, parsed.projectId));
+  if (!proj) return JSON.stringify({ error: "Project not found" });
+  const fields: Record<string, unknown> = { title: parsed.title };
+  if (parsed.body !== undefined) fields.body = parsed.body;
+  const proposal: AssistantProposal = {
+    id: proposalId(),
+    action: "create",
+    entityType: "document",
+    projectId: parsed.projectId,
+    summary: parsed.summary,
+    fields,
+    method: "POST",
+    path: `/api/v1/projects/${parsed.projectId}/documents`,
+  };
+  handlers.onProposal?.(proposal);
+  return JSON.stringify({
+    ok: true,
+    proposalId: proposal.id,
+    message: "Create proposal sent to the user for confirmation. Do not claim it was saved.",
+  });
+}
+
+async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Promise<string> {
+  const parsed = z
+    .object({
+      projectId: z.number().int().positive(),
+      title: z.string().min(1).max(2000),
+      notes: z.string().max(50_000).optional().nullable(),
+      dueAt: z.string().optional().nullable(),
+      color: z.string().max(64).optional().nullable(),
+      summary: z.string().min(1).max(500),
+    })
+    .parse(args);
+  const [proj] = await db
+    .select()
+    .from(schema.projects)
+    .where(eq(schema.projects.id, parsed.projectId));
+  if (!proj) return JSON.stringify({ error: "Project not found" });
+  const fields: Record<string, unknown> = { title: parsed.title };
+  if (parsed.notes !== undefined) fields.notes = parsed.notes;
+  if (parsed.dueAt !== undefined && parsed.dueAt !== null) fields.dueAt = parsed.dueAt;
+  if (parsed.color !== undefined) fields.color = parsed.color;
+  const proposal: AssistantProposal = {
+    id: proposalId(),
+    action: "create",
+    entityType: "task",
+    projectId: parsed.projectId,
+    summary: parsed.summary,
+    fields,
+    method: "POST",
+    path: `/api/v1/projects/${parsed.projectId}/tasks`,
+  };
+  handlers.onProposal?.(proposal);
+  return JSON.stringify({
+    ok: true,
+    proposalId: proposal.id,
+    message: "Create proposal sent to the user for confirmation. Do not claim it was saved.",
   });
 }

@@ -86,8 +86,8 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
 
   const applyMutation = useMutation({
     mutationFn: async (p: AssistantProposal) => {
-      await apiJson(p.patchPath, {
-        method: "PATCH",
+      await apiJson(p.path, {
+        method: p.method,
         body: JSON.stringify(p.fields),
       });
       return p;
@@ -104,11 +104,16 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
           void qc.invalidateQueries({ queryKey: ["tasks", p.projectId] });
         }
       }
+      const verb = p.action === "create" ? "Created" : "Updated";
+      const target =
+        p.action === "create"
+          ? `${p.entityType}${p.projectId != null ? ` in project #${p.projectId}` : ""}`
+          : `${p.entityType} #${p.entityId}`;
       setTurns((t) => [
         ...t,
         {
           role: "assistant",
-          content: `Applied update to ${p.entityType} #${p.entityId}: ${p.summary}`,
+          content: `${verb} ${target}: ${p.summary}`,
         },
       ]);
     },
@@ -318,15 +323,31 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
 
       <ConfirmDialog
         open={pendingProposal != null}
-        title="Apply assistant change?"
+        title={
+          pendingProposal?.action === "create"
+            ? "Create with assistant?"
+            : "Apply assistant change?"
+        }
         message={
           pendingProposal
-            ? `${pendingProposal.summary}\n\n${pendingProposal.entityType} #${pendingProposal.entityId}${
-                pendingProposal.projectId != null ? ` (project #${pendingProposal.projectId})` : ""
+            ? `${pendingProposal.summary}\n\n${
+                pendingProposal.action === "create" ? "Create" : "Update"
+              } ${pendingProposal.entityType}${
+                pendingProposal.entityId != null ? ` #${pendingProposal.entityId}` : ""
+              }${
+                pendingProposal.projectId != null
+                  ? ` (project #${pendingProposal.projectId})`
+                  : ""
               }\nFields: ${Object.keys(pendingProposal.fields).join(", ") || "(none)"}`
             : ""
         }
-        confirmLabel={applyMutation.isPending ? "Applying…" : "Apply"}
+        confirmLabel={
+          applyMutation.isPending
+            ? "Working…"
+            : pendingProposal?.action === "create"
+              ? "Create"
+              : "Apply"
+        }
         onCancel={() => {
           if (!applyMutation.isPending) setPendingProposal(null);
         }}

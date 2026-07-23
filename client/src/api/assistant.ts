@@ -13,12 +13,14 @@ export type ChatTurn = {
 
 export type AssistantProposal = {
   id: string;
+  action: "create" | "update";
   entityType: "idea" | "document" | "task";
-  entityId: number;
+  entityId?: number;
   projectId?: number;
   summary: string;
   fields: Record<string, unknown>;
-  patchPath: string;
+  method: "POST" | "PATCH";
+  path: string;
 };
 
 export async function fetchAssistantStatus(): Promise<AssistantStatus> {
