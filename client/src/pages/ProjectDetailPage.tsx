@@ -5,6 +5,7 @@ import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { TagInput } from "../components/shared/TagInput";
+import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
 import type { Project, ProjectDocument, ProjectPhase, Task } from "../types";
 
@@ -266,6 +267,12 @@ export function ProjectDetailPage() {
                   placeholder="Task title"
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newTaskTitle.trim() && !createTask.isPending) {
+                      e.preventDefault();
+                      createTask.mutate();
+                    }
+                  }}
                   style={{ flex: 1, minWidth: "200px" }}
                 />
                 <button
@@ -279,19 +286,22 @@ export function ProjectDetailPage() {
               </div>
             </div>
           </div>
-          <TaskBoard
-            phases={phases}
-            tasks={tasks}
-            onReorder={async (orderedTaskIds) => {
-              await reorderTasks.mutateAsync(orderedTaskIds);
-            }}
-            onPatchTask={async (taskId, patch) => {
-              await patchTask.mutateAsync({ taskId, body: patch });
-            }}
-            onDeleteTask={async (taskId) => {
-              setPendingTaskDelete(taskId);
-            }}
-          />
+          <PhaseManager projectId={projectId} phases={phases} />
+          <div style={{ marginTop: "1rem" }}>
+            <TaskBoard
+              phases={phases}
+              tasks={tasks}
+              onReorder={async (orderedTaskIds) => {
+                await reorderTasks.mutateAsync(orderedTaskIds);
+              }}
+              onPatchTask={async (taskId, patch) => {
+                await patchTask.mutateAsync({ taskId, body: patch });
+              }}
+              onDeleteTask={async (taskId) => {
+                setPendingTaskDelete(taskId);
+              }}
+            />
+          </div>
           {reorderTasks.isError ? <p role="alert">{(reorderTasks.error as Error).message}</p> : null}
         </div>
       ) : null}

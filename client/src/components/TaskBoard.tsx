@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -9,6 +9,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useUndoStack } from "../hooks/useUndoStack";
 import type { ProjectPhase, Task } from "../types";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
@@ -51,45 +52,166 @@ type TaskPatch = {
   phaseId?: number | null;
 };
 
+type TaskSnapshot = {
+  title: string;
+  notes: string;
+  dueAt: string | null;
+  color: string | null;
+  phaseId: number | null;
+};
+
+function snapshotFromTask(task: Task): TaskSnapshot {
+  return {
+    title: task.title,
+    notes: task.notes ?? "",
+    dueAt: task.dueAt,
+    color: task.color,
+    phaseId: task.phaseId,
+  };
+}
+
+function dueToLocal(dueAt: string | null): string {
+  return dueAt ? new Date(dueAt).toISOString().slice(0, 16) : "";
+}
+
 function TaskFields({
   task,
   phases,
   onSavePatch,
+  onRequestClose,
 }: {
   task: Task;
   phases: ProjectPhase[];
-  onSavePatch: (patch: TaskPatch) => void;
+  onSavePatch: (patch: TaskPatch) => Promise<void> | void;
+  onRequestClose?: () => void;
 }) {
-  const dueLocal = task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : "";
-  const [notes, setNotes] = useState(task.notes ?? "");
+  const initial = snapshotFromTask(task);
+  const { push, undo, reset, canUndo, revision } = useUndoStack(initial);
+  const [title, setTitle] = useState(initial.title);
+  const [notes, setNotes] = useState(initial.notes);
+  const [dueLocal, setDueLocal] = useState(dueToLocal(initial.dueAt));
+  const [color, setColor] = useState(initial.color);
+  const [phaseId, setPhaseId] = useState(initial.phaseId);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    setNotes(task.notes ?? "");
-  }, [task.notes]);
+    const snap = snapshotFromTask(task);
+    reset(snap);
+    setTitle(snap.title);
+    setNotes(snap.notes);
+    setDueLocal(dueToLocal(snap.dueAt));
+    setColor(snap.color);
+    setPhaseId(snap.phaseId);
+    setSaveError(null);
+  }, [task.id, reset]);
+
+  const currentSnap = (): TaskSnapshot => ({
+    title,
+    notes,
+    dueAt: dueLocal ? new Date(dueLocal).toISOString() : null,
+    color,
+    phaseId,
+  });
+
+  const applySnap = (snap: TaskSnapshot) => {
+    setTitle(snap.title);
+    setNotes(snap.notes);
+    setDueLocal(dueToLocal(snap.dueAt));
+    setColor(snap.color);
+    setPhaseId(snap.phaseId);
+  };
+
+  const commit = async (previous: TaskSnapshot, patch: TaskPatch) => {
+    push(previous);
+    try {
+      await onSavePatch(patch);
+      setSaveError(null);
+    } catch (err) {
+      setSaveError((err as Error).message);
+    }
+  };
+
+  const handleUndo = async () => {
+    const restored = undo();
+    applySnap(restored);
+    try {
+      await onSavePatch({
+        title: restored.title,
+        notes: restored.notes.trim() ? restored.notes : null,
+        dueAt: restored.dueAt,
+        color: restored.color,
+        phaseId: restored.phaseId,
+      });
+      setSaveError(null);
+    } catch (err) {
+      setSaveError((err as Error).message);
+    }
+  };
+
+  const handleUndoRef = useRef(handleUndo);
+  handleUndoRef.current = handleUndo;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onRequestClose?.();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest?.(".ProseMirror")) return;
+        e.preventDefault();
+        void handleUndoRef.current();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onRequestClose]);
 
   return (
     <div className="task-expand">
+      <div className="btn-row" style={{ marginBottom: "0.75rem" }}>
+        <button
+          type="button"
+          className="btn small ghost"
+          disabled={!canUndo}
+          onClick={() => void handleUndo()}
+          title="Undo last change (Ctrl+Z)"
+        >
+          Undo
+        </button>
+        <span className="muted" style={{ fontSize: "0.85rem" }}>
+          Autosaves on blur · Esc closes · Ctrl+Z undoes (outside notes editor)
+        </span>
+      </div>
       <div className="field">
         <label htmlFor={`t-title-${task.id}`}>Title</label>
         <input
           id={`t-title-${task.id}`}
           type="text"
-          defaultValue={task.title}
-          onBlur={(e) => {
-            if (e.target.value !== task.title) onSavePatch({ title: e.target.value });
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => {
+            if (title !== task.title) {
+              void commit({ ...currentSnap(), title: task.title }, { title });
+            }
           }}
         />
       </div>
       <div className="field">
         <label>Notes</label>
         <MarkdownEditor
+          key={`${task.id}-${revision}-notes`}
           value={notes}
           onChange={setNotes}
           height={220}
           placeholder="Task notes…"
           onBlur={(v) => {
-            const next = v.trim() ? v : null;
-            if (next !== (task.notes ?? "")) onSavePatch({ notes: next });
+            setNotes(v);
+            const normalized = v.trim() ? v : null;
+            if (normalized !== (task.notes ?? "")) {
+              void commit({ ...currentSnap(), notes: task.notes ?? "" }, { notes: normalized });
+            }
           }}
         />
       </div>
@@ -101,15 +223,13 @@ function TaskFields({
         <input
           id={`t-due-${task.id}`}
           type="datetime-local"
-          defaultValue={dueLocal}
-          onBlur={(e) => {
-            const v = e.target.value;
-            if (!v) {
-              if (task.dueAt) onSavePatch({ dueAt: null });
-              return;
+          value={dueLocal}
+          onChange={(e) => setDueLocal(e.target.value)}
+          onBlur={() => {
+            const iso = dueLocal ? new Date(dueLocal).toISOString() : null;
+            if (iso !== task.dueAt) {
+              void commit({ ...currentSnap(), dueAt: task.dueAt }, { dueAt: iso });
             }
-            const iso = new Date(v).toISOString();
-            if (iso !== task.dueAt) onSavePatch({ dueAt: iso });
           }}
         />
       </div>
@@ -119,12 +239,16 @@ function TaskFields({
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <ColorPopover
-            color={task.color}
+            color={color}
             label="Task color"
-            onChange={(c) => onSavePatch({ color: c })}
+            onChange={(c) => {
+              const prev = { ...currentSnap(), color };
+              setColor(c);
+              void commit(prev, { color: c });
+            }}
           />
           <span className="muted" style={{ fontSize: "0.85rem" }}>
-            {task.color ?? "default"}
+            {color ?? "default"}
           </span>
         </div>
       </div>
@@ -132,10 +256,13 @@ function TaskFields({
         <label htmlFor={`t-phase-${task.id}`}>Phase</label>
         <select
           id={`t-phase-${task.id}`}
-          defaultValue={String(task.phaseId ?? "")}
+          value={phaseId ?? ""}
           onChange={(e) => {
             const v = e.target.value;
-            onSavePatch({ phaseId: v ? Number(v) : null });
+            const nextPhase = v ? Number(v) : null;
+            const prev = { ...currentSnap(), phaseId };
+            setPhaseId(nextPhase);
+            void commit(prev, { phaseId: nextPhase });
           }}
         >
           <option value="">Unassigned</option>
@@ -146,6 +273,11 @@ function TaskFields({
           ))}
         </select>
       </div>
+      {saveError ? (
+        <p role="alert" className="tag-input__error">
+          {saveError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -235,8 +367,6 @@ export function TaskBoard({ phases, tasks, onReorder, onPatchTask, onDeleteTask 
     await onReorder(next.map((t) => t.id));
   };
 
-  const patch = (taskId: number, body: TaskPatch) => void onPatchTask(taskId, { ...body });
-
   return (
     <>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
@@ -262,7 +392,13 @@ export function TaskBoard({ phases, tasks, onReorder, onPatchTask, onDeleteTask 
           open
           onClose={() => setModalTaskId(null)}
         >
-          <TaskFields task={modalTask} phases={phases} onSavePatch={(p) => patch(modalTask.id, p)} />
+          <TaskFields
+            key={modalTask.id}
+            task={modalTask}
+            phases={phases}
+            onRequestClose={() => setModalTaskId(null)}
+            onSavePatch={(p) => onPatchTask(modalTask.id, { ...p })}
+          />
         </ElementShell>
       ) : null}
     </>

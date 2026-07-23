@@ -6,6 +6,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ensureDefaultPhase } from "../../services/phases.js";
 import { documentsRouter } from "./documents.js";
+import { phasesRouter } from "./phases.js";
 import { tasksRouter } from "./tasks.js";
 
 const projectStatus = z.enum(["idea", "active", "paused", "done"]);
@@ -131,5 +132,6 @@ projectsRouter.get("/:id/phases", async (req, res) => {
   }
 });
 
+projectsRouter.use("/:projectId/phases", phasesRouter);
 projectsRouter.use("/:projectId/tasks", tasksRouter);
 projectsRouter.use("/:projectId/documents", documentsRouter);
