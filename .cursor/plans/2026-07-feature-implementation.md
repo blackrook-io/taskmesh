@@ -321,9 +321,9 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 - BYO `OPENAI_API_KEY`; SSE chat; AI panel + `/settings/assistant`
 
-### 11b — Record tools + confirm apply (in progress on `phase-11b-assistant-tools`)
+### 11b — Record tools + confirm apply (shipped)
 
-- Search/get/list tools; propose idea/document/task updates; ConfirmDialog apply
+- Search/get/list tools; propose create/update; in-panel Apply/Dismiss review cards
 
 ### 11c — Research / fetch_url (planned)
 
