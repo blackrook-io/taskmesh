@@ -1,4 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 
 const FALLBACK_COL = 280;
 const FALLBACK_GAP = 12;
@@ -6,18 +15,46 @@ const PEEK = 28;
 
 type Props = {
   columnCount: number;
-  /** Reset paging when board identity changes */
   boardKey: number | string;
+  /** When true, blank-hover reporting is disabled (e.g. card drag). */
+  suppressBlankHover?: boolean;
+  /** Keep ghost visible while naming even if pointer leaves briefly. */
+  lockGhost?: boolean;
+  /** Index 0..columnCount where the ghost should appear; null = no ghost. */
+  ghostInsertAt: number | null;
+  ghost: ReactNode;
+  /** Fired when blank-area hover maps to an insert index; null when left blank zone. */
+  onBlankHover: (insertAt: number | null) => void;
   children: ReactNode;
 };
 
-export function KanbanBoardCarousel({ columnCount, boardKey, children }: Props) {
+function isInteractiveColumnTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest(".kanban-column-ghost")) return false;
+  if (target.closest(".kanban-carousel__nav, .kanban-carousel__dots")) return true;
+  return Boolean(target.closest(".kanban-column"));
+}
+
+export function KanbanBoardCarousel({
+  columnCount,
+  boardKey,
+  suppressBlankHover = false,
+  lockGhost = false,
+  ghostInsertAt,
+  ghost,
+  onBlankHover,
+  children,
+}: Props) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [colWidth, setColWidth] = useState(FALLBACK_COL);
   const [gap, setGap] = useState(FALLBACK_GAP);
   const [page, setPage] = useState(0);
+
+  const showGhost = ghostInsertAt != null && ghost != null;
+  const visualCount = columnCount + (showGhost ? 1 : 0);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -40,7 +77,7 @@ export function KanbanBoardCarousel({ columnCount, boardKey, children }: Props) 
     ro.observe(viewport);
     if (track) ro.observe(track);
     return () => ro.disconnect();
-  }, [columnCount, boardKey]);
+  }, [visualCount, boardKey]);
 
   useEffect(() => {
     setPage(0);
@@ -53,14 +90,14 @@ export function KanbanBoardCarousel({ columnCount, boardKey, children }: Props) 
     return Math.max(1, Math.floor((usable + gap) / step));
   }, [viewportWidth, step, colWidth, gap]);
 
-  const pageCount = Math.max(1, Math.ceil(columnCount / colsPerPage));
-  const overflows = columnCount > colsPerPage;
+  const pageCount = Math.max(1, Math.ceil(visualCount / colsPerPage));
+  const overflows = visualCount > colsPerPage;
 
   useEffect(() => {
     setPage((p) => Math.min(p, pageCount - 1));
   }, [pageCount]);
 
-  const maxOffset = Math.max(0, columnCount * step - gap - viewportWidth);
+  const maxOffset = Math.max(0, visualCount * step - gap - viewportWidth);
   const idealOffset = page * colsPerPage * step;
   const offset = overflows ? Math.min(idealOffset, maxOffset) : 0;
 
@@ -68,8 +105,50 @@ export function KanbanBoardCarousel({ columnCount, boardKey, children }: Props) 
   const hasPrev = overflows && page > 0;
   const hasNext = overflows && page < pageCount - 1;
 
+  const computeInsertAt = (clientX: number): number => {
+    const track = trackRef.current;
+    if (!track || columnCount === 0) return 0;
+    const cols = [
+      ...track.querySelectorAll<HTMLElement>(".kanban-column:not(.kanban-column-ghost)"),
+    ];
+    if (cols.length === 0) return 0;
+    for (let i = 0; i < cols.length; i++) {
+      const rect = cols[i]!.getBoundingClientRect();
+      const mid = rect.left + rect.width / 2;
+      if (clientX < mid) return i;
+    }
+    return cols.length;
+  };
+
+  const handlePointerMove = (e: ReactPointerEvent) => {
+    if (suppressBlankHover || lockGhost) return;
+    if (isInteractiveColumnTarget(e.target)) {
+      onBlankHover(null);
+      return;
+    }
+    onBlankHover(computeInsertAt(e.clientX));
+  };
+
+  const handlePointerLeave = (e: ReactPointerEvent) => {
+    if (lockGhost) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const related = e.relatedTarget;
+    if (related instanceof Node && root.contains(related)) return;
+    onBlankHover(null);
+  };
+
+  const columnNodes = Children.toArray(children);
+  const trackChildren: ReactNode[] = [];
+  if (showGhost && ghostInsertAt === 0) trackChildren.push(ghost);
+  columnNodes.forEach((node, i) => {
+    trackChildren.push(node);
+    if (showGhost && ghostInsertAt === i + 1) trackChildren.push(ghost);
+  });
+
   return (
     <div
+      ref={rootRef}
       className={[
         "kanban-carousel",
         overflows ? "is-overflow" : "is-centered",
@@ -78,6 +157,8 @@ export function KanbanBoardCarousel({ columnCount, boardKey, children }: Props) 
       ]
         .filter(Boolean)
         .join(" ")}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
     >
       {overflows ? (
         <button
@@ -97,7 +178,13 @@ export function KanbanBoardCarousel({ columnCount, boardKey, children }: Props) 
           className="kanban-carousel__track"
           style={overflows ? { transform: `translateX(${-offset}px)` } : undefined}
         >
-          {children}
+          {trackChildren.length > 0 ? (
+            trackChildren
+          ) : showGhost ? (
+            ghost
+          ) : (
+            <div className="kanban-carousel__empty-hit" aria-hidden />
+          )}
         </div>
       </div>
 

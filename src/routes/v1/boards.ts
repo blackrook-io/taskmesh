@@ -25,6 +25,8 @@ const columnBody = z.object({
   name: z.string().min(1).max(200),
   wipLimit: z.number().int().positive().nullable().optional(),
   sortOrder: z.number().int().optional(),
+  /** Insert at this index (0-based) and reindex siblings; overrides append/sortOrder. */
+  insertAt: z.number().int().min(0).optional(),
 });
 
 const columnPatch = z.object({
@@ -234,21 +236,53 @@ boardsRouter.post("/:boardId/columns", async (req, res) => {
     }
     const parsed = columnBody.parse(req.body);
     const existing = await db
-      .select({ m: schema.boardColumns.sortOrder })
+      .select()
       .from(schema.boardColumns)
-      .where(eq(schema.boardColumns.boardId, boardId));
-    const nextSort =
-      parsed.sortOrder ?? (existing.length ? Math.max(...existing.map((r) => r.m)) + 1 : 0);
+      .where(eq(schema.boardColumns.boardId, boardId))
+      .orderBy(asc(schema.boardColumns.sortOrder), asc(schema.boardColumns.id));
+
+    let insertIndex: number;
+    if (parsed.insertAt !== undefined) {
+      insertIndex = Math.min(parsed.insertAt, existing.length);
+    } else if (parsed.sortOrder !== undefined) {
+      insertIndex = Math.min(Math.max(0, parsed.sortOrder), existing.length);
+    } else {
+      insertIndex = existing.length;
+    }
+
     const [row] = await db
       .insert(schema.boardColumns)
       .values({
         boardId,
         name: parsed.name,
-        sortOrder: nextSort,
+        sortOrder: insertIndex,
         wipLimit: parsed.wipLimit ?? null,
       })
       .returning();
-    res.status(201).json({ data: row });
+    if (!row) {
+      sendError(res, 500, "insert_failed", "Could not create column");
+      return;
+    }
+
+    const orderedIds = [
+      ...existing.slice(0, insertIndex).map((c) => c.id),
+      row.id,
+      ...existing.slice(insertIndex).map((c) => c.id),
+    ];
+    for (let i = 0; i < orderedIds.length; i++) {
+      const id = orderedIds[i];
+      if (id === undefined) continue;
+      await db
+        .update(schema.boardColumns)
+        .set({ sortOrder: i, updatedAt: new Date() })
+        .where(eq(schema.boardColumns.id, id));
+    }
+
+    const [updated] = await db
+      .select()
+      .from(schema.boardColumns)
+      .where(eq(schema.boardColumns.id, row.id));
+    res.status(201).json({ data: updated ?? row });
   } catch (err) {
     handleRouteError(res, err);
   }

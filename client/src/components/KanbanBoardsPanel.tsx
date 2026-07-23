@@ -26,6 +26,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { ElementShell } from "./shared/ElementShell";
 import { TaskEditorFields } from "./TaskBoard";
 import { KanbanBoardCarousel } from "./KanbanBoardCarousel";
+import { KanbanColumnGhost, useColumnGhostHover } from "./KanbanColumnGhost";
 
 function cardIdsByColumn(columns: BoardColumn[], cards: BoardCard[]): Record<number, number[]> {
   const map: Record<number, number[]> = {};
@@ -311,7 +312,6 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newBoardName, setNewBoardName] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [newColName, setNewColName] = useState("");
   const [pendingDeleteBoard, setPendingDeleteBoard] = useState<Board | null>(null);
   const [pendingRemoveCard, setPendingRemoveCard] = useState<BoardCard | null>(null);
   const [openCard, setOpenCard] = useState<BoardCard | null>(null);
@@ -432,17 +432,23 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   });
 
   const addColumn = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ name, insertAt }: { name: string; insertAt: number }) => {
       await apiJson(`/api/v1/projects/${projectId}/boards/${activeBoardId}/columns`, {
         method: "POST",
-        body: JSON.stringify({ name: newColName.trim() }),
+        body: JSON.stringify({ name, insertAt }),
       });
     },
     onSuccess: () => {
-      setNewColName("");
       invalidate();
     },
     onError: (err: Error) => setError(err.message),
+  });
+
+  const columnGhost = useColumnGhostHover({
+    suppress: activeCardId != null,
+    onCreate: async (insertAt, name) => {
+      await addColumn.mutateAsync({ name, insertAt });
+    },
   });
 
   const patchColumn = useMutation({
@@ -702,63 +708,61 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
       ) : detailQuery.isLoading ? (
         <p className="muted">Loading board…</p>
       ) : detail ? (
-        <>
-          <div className="todo-add-row" style={{ marginBottom: "0.75rem" }}>
-            <input
-              type="text"
-              placeholder="New column"
-              value={newColName}
-              onChange={(e) => setNewColName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newColName.trim()) addColumn.mutate();
-              }}
-            />
-            <button
-              type="button"
-              className="btn"
-              disabled={!newColName.trim() || addColumn.isPending}
-              onClick={() => addColumn.mutate()}
-            >
-              Add column
-            </button>
-          </div>
-
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={(e) => void handleDragEnd(e)}
-          >
-            <KanbanBoardCarousel boardKey={activeBoardId ?? 0} columnCount={detail.columns.length}>
-              {detail.columns.map((col) => (
-                <ColumnDroppable
-                  key={col.id}
-                  column={col}
-                  cardIds={columnsState[col.id] ?? []}
-                  cardsById={cardsById}
-                  onOpenCard={setOpenCard}
-                  onRemoveCard={setPendingRemoveCard}
-                  onAddTask={(title) => addCard.mutate({ columnId: col.id, title })}
-                  onRename={(name) => patchColumn.mutate({ columnId: col.id, body: { name } })}
-                  onSetWip={(wipLimit) => patchColumn.mutate({ columnId: col.id, body: { wipLimit } })}
-                  onDeleteColumn={() => {
-                    if (window.confirm(`Delete column “${col.name}”? Cards move to another column.`)) {
-                      deleteColumn.mutate(col.id);
-                    }
-                  }}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={(e) => void handleDragEnd(e)}
+        >
+          <KanbanBoardCarousel
+            boardKey={activeBoardId ?? 0}
+            columnCount={detail.columns.length}
+            suppressBlankHover={activeCardId != null}
+            lockGhost={columnGhost.lockGhost}
+            ghostInsertAt={columnGhost.ghostInsertAt}
+            onBlankHover={columnGhost.onBlankHover}
+            ghost={
+              columnGhost.phase === "prompt" || columnGhost.phase === "naming" ? (
+                <KanbanColumnGhost
+                  phase={columnGhost.phase}
+                  name={columnGhost.name}
+                  onNameChange={columnGhost.setName}
+                  onStartNaming={columnGhost.startNaming}
+                  onSubmit={() => void columnGhost.submit()}
+                  onCancel={columnGhost.cancel}
+                  busy={addColumn.isPending}
                 />
-              ))}
-            </KanbanBoardCarousel>
-            <DragOverlay>
-              {activeCard ? (
-                <div className="kanban-card kanban-card--overlay">
-                  <span className="kanban-card__title">{activeCard.title}</span>
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </>
+              ) : null
+            }
+          >
+            {detail.columns.map((col) => (
+              <ColumnDroppable
+                key={col.id}
+                column={col}
+                cardIds={columnsState[col.id] ?? []}
+                cardsById={cardsById}
+                onOpenCard={setOpenCard}
+                onRemoveCard={setPendingRemoveCard}
+                onAddTask={(title) => addCard.mutate({ columnId: col.id, title })}
+                onRename={(name) => patchColumn.mutate({ columnId: col.id, body: { name } })}
+                onSetWip={(wipLimit) => patchColumn.mutate({ columnId: col.id, body: { wipLimit } })}
+                onDeleteColumn={() => {
+                  if (window.confirm(`Delete column “${col.name}”? Cards move to another column.`)) {
+                    deleteColumn.mutate(col.id);
+                  }
+                }}
+              />
+            ))}
+          </KanbanBoardCarousel>
+          <DragOverlay>
+            {activeCard ? (
+              <div className="kanban-card kanban-card--overlay">
+                <span className="kanban-card__title">{activeCard.title}</span>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       ) : (
         <p className="muted">Board not found.</p>
       )}
