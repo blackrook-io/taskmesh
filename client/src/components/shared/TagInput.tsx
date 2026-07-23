@@ -9,10 +9,12 @@ type Props = {
   entityType: EntityType;
   entityId: number;
   disabled?: boolean;
+  /** Show chips only — no add field or remove. */
+  readOnly?: boolean;
   className?: string;
 };
 
-export function TagInput({ entityType, entityId, disabled, className }: Props) {
+export function TagInput({ entityType, entityId, disabled, readOnly, className }: Props) {
   const qc = useQueryClient();
   const inputId = useId();
   const [query, setQuery] = useState("");
@@ -130,22 +132,27 @@ export function TagInput({ entityType, entityId, disabled, className }: Props) {
     attach.mutate({ name });
   };
 
+  const locked = Boolean(disabled || readOnly);
+
   return (
-    <div className={`tag-input${className ? ` ${className}` : ""}`} ref={rootRef}>
+    <div
+      className={`tag-input${readOnly ? " tag-input--readonly" : ""}${className ? ` ${className}` : ""}`}
+      ref={rootRef}
+    >
       <div className="tag-input__chips">
         {attached.map((tag) => (
           <TagChip
             key={tag.id}
             tag={tag}
             onRemove={
-              disabled
+              locked
                 ? undefined
                 : () => {
                     detach.mutate(tag.id);
                   }
             }
             onColorChange={
-              disabled
+              locked
                 ? undefined
                 : (color) => {
                     recolor.mutate({ tagId: tag.id, color });
@@ -153,62 +160,64 @@ export function TagInput({ entityType, entityId, disabled, className }: Props) {
             }
           />
         ))}
-        <div className="tag-input__field-wrap">
-          <label className="sr-only" htmlFor={inputId}>
-            Add tag
-          </label>
-          <input
-            id={inputId}
-            type="text"
-            className="tag-input__field"
-            placeholder="Add tag…"
-            size={20}
-            value={query}
-            disabled={disabled || attach.isPending}
-            autoComplete="off"
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit();
-              } else if (e.key === "Escape") {
-                setOpen(false);
-              } else if (e.key === "ArrowDown" && suggestions.length > 0) {
-                e.preventDefault();
-                listRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-              }
-            }}
-          />
-          {open && suggestQ.length >= 3 ? (
-            <ul className="tag-input__suggest" ref={listRef} role="listbox">
-              {suggestQuery.isFetching ? (
-                <li className="tag-input__suggest-empty muted">Searching…</li>
-              ) : suggestions.length === 0 ? (
-                <li className="tag-input__suggest-empty muted">
-                  No matches — press Enter to create “{suggestQ}”
-                </li>
-              ) : (
-                suggestions.map((t) => (
-                  <li key={t.id} role="option">
-                    <button
-                      type="button"
-                      className="tag-input__suggest-item"
-                      onClick={() => attach.mutate({ tagId: t.id })}
-                    >
-                      <TagChip tag={t} removable={false} />
-                    </button>
+        {!readOnly ? (
+          <div className="tag-input__field-wrap">
+            <label className="sr-only" htmlFor={inputId}>
+              Add tag
+            </label>
+            <input
+              id={inputId}
+              type="text"
+              className="tag-input__field"
+              placeholder="Add tag…"
+              size={20}
+              value={query}
+              disabled={disabled || attach.isPending}
+              autoComplete="off"
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Escape") {
+                  setOpen(false);
+                } else if (e.key === "ArrowDown" && suggestions.length > 0) {
+                  e.preventDefault();
+                  listRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+                }
+              }}
+            />
+            {open && suggestQ.length >= 3 ? (
+              <ul className="tag-input__suggest" ref={listRef} role="listbox">
+                {suggestQuery.isFetching ? (
+                  <li className="tag-input__suggest-empty muted">Searching…</li>
+                ) : suggestions.length === 0 ? (
+                  <li className="tag-input__suggest-empty muted">
+                    No matches — press Enter to create “{suggestQ}”
                   </li>
-                ))
-              )}
-            </ul>
-          ) : null}
-        </div>
+                ) : (
+                  suggestions.map((t) => (
+                    <li key={t.id} role="option">
+                      <button
+                        type="button"
+                        className="tag-input__suggest-item"
+                        onClick={() => attach.mutate({ tagId: t.id })}
+                      >
+                        <TagChip tag={t} removable={false} />
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-      {suggestQ.length > 0 && suggestQ.length < 3 ? (
+      {!readOnly && suggestQ.length > 0 && suggestQ.length < 3 ? (
         <p className="tag-input__hint muted">Type at least 3 characters to search existing tags</p>
       ) : null}
       {tagsQuery.isError ? (

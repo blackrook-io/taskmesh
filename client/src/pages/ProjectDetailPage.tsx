@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
+import { PencilIcon } from "../components/shared/PencilIcon";
 import { TagInput } from "../components/shared/TagInput";
 import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
@@ -65,6 +66,7 @@ export function ProjectDetailPage() {
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [pendingTaskDelete, setPendingTaskDelete] = useState<number | null>(null);
   const [pendingDocDelete, setPendingDocDelete] = useState<number | null>(null);
+  const [overviewEdit, setOverviewEdit] = useState(false);
 
   const invalidId = Number.isNaN(projectId);
 
@@ -181,7 +183,7 @@ export function ProjectDetailPage() {
       setStatus(project.status);
       setDescription(project.description ?? "");
     }
-  }, [project]);
+  }, [project, overviewEdit]);
 
   useEffect(() => {
     if (!modulesQuery.isSuccess) return;
@@ -189,6 +191,15 @@ export function ProjectDetailPage() {
     const mod = modules.find((m) => m.moduleKey === tab);
     if (!mod?.enabled) setTab("overview");
   }, [modules, modulesQuery.isSuccess, tab]);
+
+  const cancelOverviewEdit = () => {
+    if (project) {
+      setName(project.name);
+      setStatus(project.status);
+      setDescription(project.description ?? "");
+    }
+    setOverviewEdit(false);
+  };
 
   const saveMeta = useMutation({
     mutationFn: async () => {
@@ -199,6 +210,7 @@ export function ProjectDetailPage() {
       return res.data;
     },
     onSuccess: () => {
+      setOverviewEdit(false);
       void qc.invalidateQueries({ queryKey: ["project", projectId] });
       void qc.invalidateQueries({ queryKey: ["projects"] });
     },
@@ -342,29 +354,72 @@ export function ProjectDetailPage() {
       {tab === "overview" ? (
         <div className="grid" style={{ gap: "1rem" }}>
           <div className="card">
-            <div className="field">
-              <label htmlFor="proj-name">Name</label>
-              <input id="proj-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+            <div className="wiki-panel__main-head">
+              <span className="sr-only">Project details</span>
+              <div className="wiki-panel__main-actions" style={{ marginLeft: "auto" }}>
+                {overviewEdit ? (
+                  <>
+                    <button type="button" className="btn small ghost" onClick={cancelOverviewEdit}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn small primary"
+                      onClick={() => saveMeta.mutate()}
+                      disabled={saveMeta.isPending}
+                    >
+                      Save overview
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn small btn-icon"
+                    aria-label="Edit overview"
+                    title="Edit"
+                    onClick={() => setOverviewEdit(true)}
+                  >
+                    <PencilIcon />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="field">
-              <label htmlFor="proj-status">Status</label>
-              <select id="proj-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="idea">idea</option>
-                <option value="active">active</option>
-                <option value="paused">paused</option>
-                <option value="done">done</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Description</label>
-              <MarkdownEditor value={description} onChange={setDescription} height={280} />
-            </div>
-            <div className="field field--tags-below">
-              <TagInput entityType="project" entityId={projectId} />
-            </div>
-            <button type="button" className="btn primary" onClick={() => saveMeta.mutate()} disabled={saveMeta.isPending}>
-              Save overview
-            </button>
+
+            {overviewEdit ? (
+              <>
+                <div className="field">
+                  <label htmlFor="proj-name">Name</label>
+                  <input id="proj-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label htmlFor="proj-status">Status</label>
+                  <select id="proj-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+                    <option value="idea">idea</option>
+                    <option value="active">active</option>
+                    <option value="paused">paused</option>
+                    <option value="done">done</option>
+                  </select>
+                </div>
+                <div className="field field--tags-below">
+                  <TagInput entityType="project" entityId={projectId} />
+                </div>
+                <div className="field">
+                  <label>Description</label>
+                  <MarkdownEditor value={description} onChange={setDescription} height={280} />
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="wiki-page-title">{project.name}</h1>
+                <p className="muted" style={{ marginTop: "-0.35rem", marginBottom: "0.75rem" }}>
+                  {project.status}
+                </p>
+                <div className="field field--tags-below">
+                  <TagInput entityType="project" entityId={projectId} readOnly />
+                </div>
+                <MarkdownEditor value={description} onChange={() => undefined} height={280} readOnly />
+              </>
+            )}
             {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
           </div>
 

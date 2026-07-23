@@ -1568,6 +1568,65 @@ a:focus-visible {
   gap: 0.5rem;
 }
 
+.wiki-panel__toc-actions,
+.wiki-panel__main-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.wiki-panel__main-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.wiki-panel__main-head .wiki-breadcrumb {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.wiki-page-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.55rem;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.btn-add {
+  min-width: 2rem;
+  padding-inline: 0.45rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.btn-icon {
+  min-width: 2rem;
+  padding-inline: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.btn-icon svg {
+  display: block;
+}
+
+.md-editor--readonly .md-editor__surface {
+  border-color: transparent;
+  background: transparent;
+}
+
+.tag-input--readonly .tag-input__chips:empty::after {
+  content: none;
+}
+
 .wiki-toc__row {
   display: flex;
   align-items: center;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
@@ -14,6 +14,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Placeholder from "@tiptap/extension-placeholder";
 import { uploadFile } from "../../api/client";
+import { PencilIcon } from "./PencilIcon";
 
 type Props = {
   value: string;
@@ -22,6 +23,8 @@ type Props = {
   height?: number;
   enableImageUpload?: boolean;
   placeholder?: string;
+  /** Preview-only: no toolbar, not editable. */
+  readOnly?: boolean;
 };
 
 type Mode = "edit" | "preview";
@@ -37,8 +40,8 @@ function ToolbarButton({
   disabled,
   onClick,
 }: {
-  label: string;
-  title?: string;
+  label: ReactNode;
+  title: string;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -47,8 +50,8 @@ function ToolbarButton({
     <button
       type="button"
       className={`btn small md-toolbar__btn${active ? " is-active" : ""}`}
-      title={title ?? label}
-      aria-label={title ?? label}
+      title={title}
+      aria-label={title}
       aria-pressed={active}
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
@@ -66,8 +69,9 @@ export function MarkdownEditor({
   height = 280,
   enableImageUpload = true,
   placeholder = "Write Markdown…",
+  readOnly = false,
 }: Props) {
-  const [mode, setMode] = useState<Mode>("edit");
+  const [mode, setMode] = useState<Mode>(readOnly ? "preview" : "edit");
   const [focusMode, setFocusMode] = useState(false);
   const [uploading, setUploading] = useState(false);
   const lastEmitted = useRef(value);
@@ -78,6 +82,13 @@ export function MarkdownEditor({
   modeRef.current = mode;
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
+
+  useEffect(() => {
+    if (readOnly) {
+      setMode("preview");
+      setFocusMode(false);
+    }
+  }, [readOnly]);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -105,7 +116,7 @@ export function MarkdownEditor({
     ],
     content: value || "",
     contentType: "markdown",
-    editable: mode === "edit",
+    editable: !readOnly && mode === "edit",
     editorProps: {
       attributes: {
         class: "md-prose",
@@ -148,8 +159,8 @@ export function MarkdownEditor({
 
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(mode === "edit");
-  }, [editor, mode]);
+    editor.setEditable(!readOnly && mode === "edit");
+  }, [editor, mode, readOnly]);
 
   useEffect(() => {
     if (!editor) return;
@@ -159,7 +170,7 @@ export function MarkdownEditor({
   }, [editor, value]);
 
   async function pickAndUploadImage() {
-    if (!editor || !enableImageUpload) return;
+    if (!editor || !enableImageUpload || readOnly) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/gif,image/webp";
@@ -196,24 +207,30 @@ export function MarkdownEditor({
     editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   }
 
-  const disabled = !editor || mode !== "edit";
+  const disabled = readOnly || !editor || mode !== "edit";
 
   return (
-    <div className={`md-editor${focusMode ? " md-editor--focus" : ""}`}>
+    <div
+      className={`md-editor${focusMode ? " md-editor--focus" : ""}${readOnly ? " md-editor--readonly" : ""}`}
+    >
+      {!readOnly ? (
       <div className="md-toolbar" role="toolbar" aria-label="Markdown formatting">
         <div className="md-toolbar__group">
           <ToolbarButton
-            label="Edit"
+            label={<PencilIcon />}
+            title="Edit"
             active={mode === "edit"}
             onClick={() => setMode("edit")}
           />
           <ToolbarButton
             label="Preview"
+            title="Preview"
             active={mode === "preview"}
             onClick={() => setMode("preview")}
           />
           <ToolbarButton
             label={focusMode ? "Exit focus" : "Focus"}
+            title={focusMode ? "Exit focus" : "Focus"}
             active={focusMode}
             onClick={() => setFocusMode((v) => !v)}
           />
@@ -263,7 +280,7 @@ export function MarkdownEditor({
             active={editor?.isActive("underline")}
             onClick={() => editor?.chain().focus().toggleUnderline().run()}
           />
-          <ToolbarButton label="Link" disabled={disabled} active={editor?.isActive("link")} onClick={setLink} />
+          <ToolbarButton label="Link" title="Link" disabled={disabled} active={editor?.isActive("link")} onClick={setLink} />
         </div>
         <div className="md-toolbar__group">
           <ToolbarButton
@@ -287,7 +304,7 @@ export function MarkdownEditor({
             active={editor?.isActive("taskList")}
             onClick={() => editor?.chain().focus().toggleTaskList().run()}
           />
-          <ToolbarButton label="Table" disabled={disabled} onClick={insertTable} />
+          <ToolbarButton label="Table" title="Insert table" disabled={disabled} onClick={insertTable} />
         </div>
         <div className="md-toolbar__group">
           <ToolbarButton
@@ -324,6 +341,7 @@ export function MarkdownEditor({
           </div>
         ) : null}
       </div>
+      ) : null}
       <div className="md-editor__surface" style={{ minHeight: height }}>
         <EditorContent editor={editor} />
       </div>

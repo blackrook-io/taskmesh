@@ -14,6 +14,7 @@ import { apiJson } from "../api/client";
 import type { ProjectDocument, WikiNode, WikiTreeNode, WikiTreeResponse } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
+import { PencilIcon } from "./shared/PencilIcon";
 import { TagInput } from "./shared/TagInput";
 
 type FlatRow = { node: WikiTreeNode; depth: number; parentId: number | null };
@@ -50,6 +51,7 @@ function SortableTocRow({
   row,
   selected,
   collapsed,
+  structureEdit,
   onSelect,
   onToggle,
   onMoveSibling,
@@ -58,6 +60,7 @@ function SortableTocRow({
   row: FlatRow;
   selected: boolean;
   collapsed: boolean;
+  structureEdit: boolean;
   onSelect: () => void;
   onToggle: () => void;
   onMoveSibling: (dir: -1 | 1) => void;
@@ -65,6 +68,7 @@ function SortableTocRow({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: row.node.id,
+    disabled: !structureEdit,
     data: { parentId: row.parentId, depth: row.depth },
   });
   const style = {
@@ -90,27 +94,33 @@ function SortableTocRow({
       >
         {hasKids ? (collapsed ? "▸" : "▾") : "·"}
       </button>
-      <span className="task-drag-handle" title="Drag onto another page to nest" {...attributes} {...listeners}>
-        ::
-      </span>
+      {structureEdit ? (
+        <span className="task-drag-handle" title="Drag onto another page to nest" {...attributes} {...listeners}>
+          ::
+        </span>
+      ) : null}
       <button type="button" className="wiki-toc__title" onClick={onSelect}>
         {row.node.pinned ? "📌 " : ""}
         {row.node.title}
       </button>
-      <button type="button" className="btn small ghost" title="Move up" onClick={() => onMoveSibling(-1)}>
-        ↑
-      </button>
-      <button type="button" className="btn small ghost" title="Move down" onClick={() => onMoveSibling(1)}>
-        ↓
-      </button>
-      <button
-        type="button"
-        className="task-card-dismiss"
-        aria-label="Remove from wiki"
-        onClick={onRequestDelete}
-      >
-        ×
-      </button>
+      {structureEdit ? (
+        <>
+          <button type="button" className="btn small ghost" title="Move up" onClick={() => onMoveSibling(-1)}>
+            ↑
+          </button>
+          <button type="button" className="btn small ghost" title="Move down" onClick={() => onMoveSibling(1)}>
+            ↓
+          </button>
+          <button
+            type="button"
+            className="task-card-dismiss"
+            aria-label="Remove from wiki"
+            onClick={onRequestDelete}
+          >
+            ×
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -122,6 +132,8 @@ export function WikiPanel({ projectId }: Props) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [pendingDelete, setPendingDelete] = useState<WikiNode | null>(null);
+  const [structureEdit, setStructureEdit] = useState(false);
+  const [pageEdit, setPageEdit] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +180,12 @@ export function WikiPanel({ projectId }: Props) {
     if (node) setTitleDraft(node.title);
     if (doc) setBodyDraft(doc.body ?? "");
     else if (node) setBodyDraft("");
-  }, [detailQuery.data?.node?.id, detailQuery.data?.document?.id]);
+  }, [detailQuery.data?.node?.id, detailQuery.data?.document?.id, pageEdit]);
+
+  const selectPage = (id: number) => {
+    setSelectedId(id);
+    setPageEdit(false);
+  };
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["wiki", projectId] });
@@ -189,6 +206,7 @@ export function WikiPanel({ projectId }: Props) {
     },
     onSuccess: (data) => {
       setSelectedId(data.node.id);
+      setPageEdit(true);
       invalidate();
     },
     onError: (err: Error) => setError(err.message),
@@ -238,7 +256,10 @@ export function WikiPanel({ projectId }: Props) {
         await patchNode.mutateAsync({ nodeId: activeId, title: titleDraft.trim() });
       }
     },
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      setPageEdit(false);
+      invalidate();
+    },
     onError: (err: Error) => setError(err.message),
   });
 
@@ -266,6 +287,7 @@ export function WikiPanel({ projectId }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!structureEdit) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const activeNodeId = Number(active.id);
@@ -308,27 +330,52 @@ export function WikiPanel({ projectId }: Props) {
 
   const breadcrumb = detailQuery.data?.breadcrumb ?? [];
   const ids = flat.map((f) => f.node.id);
+  const displayTitle = detailQuery.data?.node.title ?? titleDraft;
+
+  const cancelPageEdit = () => {
+    const doc = detailQuery.data?.document;
+    const node = detailQuery.data?.node;
+    if (node) setTitleDraft(node.title);
+    if (doc) setBodyDraft(doc.body ?? "");
+    else setBodyDraft("");
+    setPageEdit(false);
+  };
 
   return (
     <div className="wiki-panel">
       <div className="wiki-panel__toc card">
         <div className="wiki-panel__toc-head">
           <h3 style={{ margin: 0 }}>Wiki</h3>
-          <button
-            type="button"
-            className="btn small primary"
-            disabled={createPage.isPending}
-            onClick={() => createPage.mutate(null)}
-          >
-            New page
-          </button>
+          <div className="wiki-panel__toc-actions">
+            <button
+              type="button"
+              className={`btn small btn-icon${structureEdit ? " primary" : " ghost"}`}
+              aria-label={structureEdit ? "Done editing wiki structure" : "Edit wiki structure"}
+              title={structureEdit ? "Done" : "Edit"}
+              onClick={() => setStructureEdit((v) => !v)}
+            >
+              {structureEdit ? "✓" : <PencilIcon />}
+            </button>
+            <button
+              type="button"
+              className="btn small btn-add"
+              aria-label="New page"
+              title="New page"
+              disabled={createPage.isPending}
+              onClick={() => createPage.mutate(null)}
+            >
+              +
+            </button>
+          </div>
         </div>
-        <p className="muted" style={{ fontSize: "0.8rem", margin: "0.35rem 0 0.65rem" }}>
-          Drag a page onto another to nest it. Use ↑↓ to reorder siblings.
-        </p>
+        {structureEdit ? (
+          <p className="muted" style={{ fontSize: "0.8rem", margin: "0.35rem 0 0.65rem" }}>
+            Drag a page onto another to nest it. Use ↑↓ to reorder siblings.
+          </p>
+        ) : null}
         {treeQuery.isLoading ? <p className="muted">Loading…</p> : null}
         {flat.length === 0 && !treeQuery.isLoading ? (
-          <p className="muted">No pages yet — create one to start the TOC.</p>
+          <p className="muted">No pages yet — use + to start the TOC.</p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -338,7 +385,8 @@ export function WikiPanel({ projectId }: Props) {
                   row={row}
                   selected={activeId === row.node.id}
                   collapsed={collapsed.has(row.node.id)}
-                  onSelect={() => setSelectedId(row.node.id)}
+                  structureEdit={structureEdit}
+                  onSelect={() => selectPage(row.node.id)}
                   onToggle={() => {
                     setCollapsed((prev) => {
                       const next = new Set(prev);
@@ -354,15 +402,17 @@ export function WikiPanel({ projectId }: Props) {
             </SortableContext>
           </DndContext>
         )}
-        {activeId != null ? (
+        {structureEdit && activeId != null ? (
           <button
             type="button"
-            className="btn small"
+            className="btn small btn-add"
             style={{ marginTop: "0.75rem", width: "100%" }}
+            aria-label="New child page"
+            title="New child page"
             disabled={createPage.isPending}
             onClick={() => createPage.mutate(activeId)}
           >
-            New child page
+            +
           </button>
         ) : null}
       </div>
@@ -379,59 +429,86 @@ export function WikiPanel({ projectId }: Props) {
           <p className="muted">Loading page…</p>
         ) : detailQuery.data?.document ? (
           <>
-            <nav className="wiki-breadcrumb" aria-label="Breadcrumb">
-              {breadcrumb.map((b, i) => (
-                <span key={b.id}>
-                  {i > 0 ? <span className="muted"> / </span> : null}
-                  <button type="button" className="wiki-breadcrumb__link" onClick={() => setSelectedId(b.id)}>
-                    {b.title}
+            <div className="wiki-panel__main-head">
+              <nav className="wiki-breadcrumb" aria-label="Breadcrumb">
+                {breadcrumb.map((b, i) => (
+                  <span key={b.id}>
+                    {i > 0 ? <span className="muted"> / </span> : null}
+                    <button type="button" className="wiki-breadcrumb__link" onClick={() => selectPage(b.id)}>
+                      {b.title}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+              <div className="wiki-panel__main-actions">
+                {pageEdit ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn small ghost"
+                      onClick={() =>
+                        togglePin.mutate({
+                          nodeId: activeId,
+                          pinned: !detailQuery.data?.node.pinned,
+                        })
+                      }
+                    >
+                      {detailQuery.data?.node.pinned ? "Unpin" : "Pin"}
+                    </button>
+                    <button type="button" className="btn small ghost" onClick={cancelPageEdit}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn small primary"
+                      disabled={saveDocument.isPending}
+                      onClick={() => saveDocument.mutate()}
+                    >
+                      Save page
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn small btn-icon"
+                    aria-label="Edit page"
+                    title="Edit"
+                    onClick={() => setPageEdit(true)}
+                  >
+                    <PencilIcon />
                   </button>
-                </span>
-              ))}
-            </nav>
-            <div className="field">
-              <label htmlFor="wiki-title">Title</label>
-              <input
-                id="wiki-title"
-                type="text"
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onBlur={() => {
-                  if (activeId != null && titleDraft.trim() && titleDraft !== detailQuery.data?.node.title) {
-                    void patchNode.mutateAsync({ nodeId: activeId, title: titleDraft.trim() });
-                  }
-                }}
-              />
+                )}
+              </div>
             </div>
-            <div className="btn-row" style={{ marginBottom: "0.75rem" }}>
-              <button
-                type="button"
-                className="btn small ghost"
-                onClick={() =>
-                  togglePin.mutate({
-                    nodeId: activeId,
-                    pinned: !detailQuery.data?.node.pinned,
-                  })
-                }
-              >
-                {detailQuery.data?.node.pinned ? "Unpin" : "Pin"}
-              </button>
-              <button
-                type="button"
-                className="btn small primary"
-                disabled={saveDocument.isPending}
-                onClick={() => saveDocument.mutate()}
-              >
-                Save page
-              </button>
-            </div>
-            <div className="field field--tags-below">
-              <TagInput entityType="document" entityId={detailQuery.data.document.id} />
-            </div>
-            <div className="field">
-              <label>Body</label>
-              <MarkdownEditor value={bodyDraft} onChange={setBodyDraft} height={420} />
-            </div>
+
+            {pageEdit ? (
+              <>
+                <div className="field">
+                  <label htmlFor="wiki-title">Title</label>
+                  <input
+                    id="wiki-title"
+                    type="text"
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                  />
+                </div>
+                <div className="field field--tags-below">
+                  <TagInput entityType="document" entityId={detailQuery.data.document.id} />
+                </div>
+                <div className="field">
+                  <label>Body</label>
+                  <MarkdownEditor value={bodyDraft} onChange={setBodyDraft} height={420} />
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="wiki-page-title">{displayTitle}</h1>
+                <div className="field field--tags-below">
+                  <TagInput entityType="document" entityId={detailQuery.data.document.id} readOnly />
+                </div>
+                <MarkdownEditor value={bodyDraft} onChange={() => undefined} height={420} readOnly />
+              </>
+            )}
           </>
         ) : (
           <p className="muted">This wiki entry has no document body yet.</p>
