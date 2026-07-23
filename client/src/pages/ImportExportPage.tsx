@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
 
 type DiscardRow = {
@@ -14,12 +13,11 @@ type ImportResult = {
 };
 
 type Entity = "projects" | "tasks";
-type Format = "csv" | "xlsx";
 
 export function ImportExportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [entity, setEntity] = useState<Entity>("projects");
-  const [format, setFormat] = useState<Format>("xlsx");
+  const [fileName, setFileName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -46,6 +44,7 @@ export function ImportExportPage() {
       });
       setResult(res.data);
       if (fileRef.current) fileRef.current.value = "";
+      setFileName(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
     } finally {
@@ -57,52 +56,30 @@ export function ImportExportPage() {
     <div>
       <div className="page-head">
         <h1>Import / Export</h1>
-        <Link to="/" className="btn ghost">
-          Home
-        </Link>
       </div>
       <p className="muted">
-        Export Projects or Tasks as CSV or XLSX. Import is <strong>insert-only</strong>: existing
-        ids are never overwritten; invalid rows are discarded with reasons below.
+        Export Projects or Tasks as <strong>CSV</strong> (portable). Import accepts CSV or XLSX and
+        is <strong>insert-only</strong>: existing ids are never overwritten; invalid rows are
+        discarded with reasons below.
       </p>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
         <h2>Export</h2>
-        <div className="field" style={{ marginTop: "0.75rem" }}>
-          <label htmlFor="export-format">Format</label>
-          <select
-            id="export-format"
-            value={format}
-            onChange={(e) => setFormat(e.target.value as Format)}
-          >
-            <option value="xlsx">Excel (.xlsx)</option>
-            <option value="csv">CSV (.csv)</option>
-          </select>
-        </div>
         <div className="btn-row" style={{ marginTop: "0.75rem" }}>
           <button
             type="button"
             className="btn primary"
-            onClick={() => download(`/api/v1/export/projects?format=${format}`)}
+            onClick={() => download("/api/v1/export/projects?format=csv")}
           >
             Export projects
           </button>
           <button
             type="button"
             className="btn"
-            onClick={() => download(`/api/v1/export/tasks?format=${format}`)}
+            onClick={() => download("/api/v1/export/tasks?format=csv")}
           >
             Export tasks
           </button>
-          {format === "xlsx" ? (
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => download("/api/v1/export/bundle?format=xlsx")}
-            >
-              Export bundle (both sheets)
-            </button>
-          ) : null}
         </div>
       </section>
 
@@ -124,8 +101,30 @@ export function ImportExportPage() {
           </select>
         </div>
         <div className="field">
-          <label htmlFor="import-file">File</label>
-          <input id="import-file" ref={fileRef} type="file" accept=".csv,.xlsx,.xls" />
+          <span className="field-label" id="import-file-label">
+            File
+          </span>
+          <div className="file-picker">
+            <input
+              id="import-file"
+              ref={fileRef}
+              className="file-picker__input"
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              aria-labelledby="import-file-label"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                setFileName(f?.name ?? null);
+                setError(null);
+              }}
+            />
+            <label htmlFor="import-file" className="btn file-picker__btn">
+              Choose file
+            </label>
+            <span className="file-picker__name muted">
+              {fileName ?? "No file selected"}
+            </span>
+          </div>
         </div>
         <div className="btn-row">
           <button type="button" className="btn primary" disabled={busy} onClick={() => void onImport()}>
