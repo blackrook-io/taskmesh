@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { TagInput } from "../components/shared/TagInput";
+import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import type { Idea, Project } from "../types";
 
 export function IdeaEditPage() {
@@ -33,6 +34,20 @@ export function IdeaEditPage() {
       setBody(idea.body ?? "");
     }
   }, [idea]);
+
+  useRegisterAssistantAttach(
+    useMemo(
+      () => ({
+        key: isNew ? "idea-new" : `idea-${ideaId}`,
+        label: title.trim() || (isNew ? "New idea draft" : `Idea #${ideaId}`),
+        getContext: () => {
+          const idLine = isNew ? "New idea (unsaved)" : `Idea #${ideaId}`;
+          return `${idLine}\nTitle: ${title}\n\n${body}`;
+        },
+      }),
+      [isNew, ideaId, title, body],
+    ),
+  );
 
   const save = useMutation({
     mutationFn: async () => {

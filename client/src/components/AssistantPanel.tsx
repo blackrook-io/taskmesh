@@ -8,13 +8,13 @@ import {
   type ChatTurn,
 } from "../api/assistant";
 import { apiJson } from "../api/client";
+import { useAssistantAttachTarget } from "../lib/assistantAttach";
 
 const TRANSCRIPT_KEY = "taskmesh.assistant.transcript";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  pageContext?: string | null;
 };
 
 function loadTranscript(): ChatTurn[] {
@@ -54,8 +54,10 @@ function previewFields(fields: Record<string, unknown>): string {
   return lines.join("\n") || "(no fields)";
 }
 
-export function AssistantPanel({ open, onClose, pageContext }: Props) {
+export function AssistantPanel({ open, onClose }: Props) {
   const qc = useQueryClient();
+  const attachTarget = useAssistantAttachTarget();
+  const [attachEnabled, setAttachEnabled] = useState(true);
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>(() => loadTranscript());
   const [streaming, setStreaming] = useState("");
@@ -66,6 +68,10 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (attachTarget) setAttachEnabled(true);
+  }, [attachTarget?.key]);
 
   const statusQuery = useQuery({
     queryKey: ["assistant-status"],
@@ -152,6 +158,8 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
       abortRef.current = ac;
       let full = "";
       try {
+        const pageContext =
+          attachEnabled && attachTarget ? attachTarget.getContext().slice(0, 16_000) : null;
         await streamAssistantChat({
           message,
           history,
@@ -267,11 +275,28 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
           </p>
         ) : null}
 
+        {attachTarget ? (
+          <div className="assistant-attach">
+            <button
+              type="button"
+              className={`assistant-attach__chip${attachEnabled ? " is-on" : ""}`}
+              onClick={() => setAttachEnabled((v) => !v)}
+              title={
+                attachEnabled
+                  ? "Attached — click to detach for the next message"
+                  : "Detached — click to include this page in the next message"
+              }
+            >
+              {attachEnabled ? "Attached" : "Attach"}: {attachTarget.label}
+            </button>
+          </div>
+        ) : null}
+
         <div className="assistant-panel__messages" ref={listRef}>
           {turns.length === 0 && !streaming && proposals.length === 0 ? (
             <p className="muted">
-              Ask to search, summarize, or draft changes. Suggested creates/edits appear below as
-              review cards — nothing is saved until you click Apply.
+              Ask to search, summarize, research a URL, or draft changes. Suggested creates/edits
+              appear below as review cards — nothing is saved until you click Apply.
             </p>
           ) : null}
           {turns.map((t, i) => (

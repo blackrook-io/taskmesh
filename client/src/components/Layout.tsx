@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
+import { AssistantAttachProvider } from "../lib/assistantAttach";
 import { AssistantPanel } from "./AssistantPanel";
 import { CommandPalette } from "./CommandPalette";
 
@@ -31,42 +32,44 @@ export function Layout() {
   }, []);
 
   return (
-    <div className="layout">
-      <header className="topbar">
-        <Link to="/" className="brand">
-          TaskMesh
-        </Link>
-        <nav className="nav" aria-label="App">
-          <button
-            type="button"
-            className="btn ghost small"
-            onClick={() => setAssistantOpen(true)}
-            title="Assistant (Ctrl/⌘J)"
-            aria-keyshortcuts="Control+J Meta+J"
-          >
-            AI
-          </button>
-          <button
-            type="button"
-            className="btn ghost small command-palette-trigger"
-            onClick={() => setPaletteOpen(true)}
-            title="Command palette (Ctrl/⌘K)"
-            aria-keyshortcuts="Control+K Meta+K"
-          >
-            ⌘K
-          </button>
-          {isDev ? (
-            <NavLink to="/dev/playground" className={({ isActive }) => (isActive ? "active" : "")}>
-              Playground
-            </NavLink>
-          ) : null}
-        </nav>
-      </header>
-      <main className="main">
-        <Outlet />
-      </main>
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-      <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
-    </div>
+    <AssistantAttachProvider>
+      <div className="layout">
+        <header className="topbar">
+          <Link to="/" className="brand">
+            TaskMesh
+          </Link>
+          <nav className="nav" aria-label="App">
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setAssistantOpen(true)}
+              title="Assistant (Ctrl/⌘J)"
+              aria-keyshortcuts="Control+J Meta+J"
+            >
+              AI
+            </button>
+            <button
+              type="button"
+              className="btn ghost small command-palette-trigger"
+              onClick={() => setPaletteOpen(true)}
+              title="Command palette (Ctrl/⌘K)"
+              aria-keyshortcuts="Control+K Meta+K"
+            >
+              ⌘K
+            </button>
+            {isDev ? (
+              <NavLink to="/dev/playground" className={({ isActive }) => (isActive ? "active" : "")}>
+                Playground
+              </NavLink>
+            ) : null}
+          </nav>
+        </header>
+        <main className="main">
+          <Outlet />
+        </main>
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+      </div>
+    </AssistantAttachProvider>
   );
 }

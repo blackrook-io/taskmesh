@@ -86,6 +86,7 @@ export async function runAssistantWithTools(args: {
             {
               onTool: args.handlers.onTool,
               onProposal: args.handlers.onProposal,
+              signal: args.signal,
             },
           );
           messages.push({

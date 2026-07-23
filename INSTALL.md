@@ -261,6 +261,8 @@ ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini
 
 If `OPENAI_API_KEY` is unset, the assistant panel shows as not configured. Restart the API after changing keys (`sudo systemctl restart taskmesh`). Status page: `/settings/assistant`.
 
+The assistant can also **fetch public http(s) URLs** for research (`fetch_url`). That requires outbound access from this host to the target sites (not only OpenAI). Private/LAN addresses are blocked.
+
 ---
 
 ## 10. Install npm dependencies

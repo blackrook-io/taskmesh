@@ -2,6 +2,7 @@ import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { fetchUrlForAssistant } from "./fetchUrl.js";
 
 export type AssistantProposal = {
   id: string;
@@ -19,6 +20,7 @@ export type AssistantProposal = {
 export type ToolHandlers = {
   onTool?: (info: { name: string; args: unknown }) => void;
   onProposal?: (proposal: AssistantProposal) => void;
+  signal?: AbortSignal;
 };
 
 /** OpenAI Chat Completions tool definitions */
@@ -63,6 +65,21 @@ export const OPENAI_TOOLS = [
           projectId: { type: "integer" },
         },
         required: ["projectId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "fetch_url",
+      description:
+        "Fetch a public http(s) URL and return plain text for research. Cite the URL when using the content. Do not use for private/local addresses.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Full http or https URL" },
+        },
+        required: ["url"],
       },
     },
   },
@@ -210,6 +227,8 @@ export async function executeAssistantTool(
         return await toolGetEntity(args);
       case "list_project_context":
         return await toolListProject(args);
+      case "fetch_url":
+        return await toolFetchUrl(args, handlers.signal);
       case "propose_idea_update":
         return await toolProposeIdeaUpdate(args, handlers);
       case "propose_document_update":
@@ -230,6 +249,18 @@ export async function executeAssistantTool(
       error: err instanceof Error ? err.message : "Tool failed",
     });
   }
+}
+
+async function toolFetchUrl(args: unknown, signal?: AbortSignal): Promise<string> {
+  const { url } = z.object({ url: z.string().url().max(2000) }).parse(args);
+  const result = await fetchUrlForAssistant(url, signal);
+  return JSON.stringify({
+    url: result.url,
+    title: result.title,
+    truncated: result.truncated,
+    text: result.text,
+    note: "Cite this URL when quoting or summarizing. Content is plain text only.",
+  });
 }
 
 async function toolSearch(args: unknown): Promise<string> {

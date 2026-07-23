@@ -325,7 +325,9 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 - Search/get/list tools; propose create/update; in-panel Apply/Dismiss review cards
 
-### 11c — Research / fetch_url (planned)
+### 11c — Research / fetch_url (in progress on `phase-11c-assistant-research`)
+
+- Hardened `fetch_url`; cite sources; attach current idea/document/project chip
 
 ---
 

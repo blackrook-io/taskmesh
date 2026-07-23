@@ -1,0 +1,18 @@
+# Phase 11c — Assistant research
+
+**Branch:** `phase-11c-assistant-research`
+
+## Goal
+
+`fetch_url` tool for research + attach current page context chip in the assistant panel.
+
+## Exit criteria
+
+- `fetch_url` tool: http/https only, size/time limits, strip scripts/tags to text
+- Assistant can cite fetched URLs in replies
+- Panel chip to attach/detach current route entity context (idea/project)
+- INSTALL note: outbound fetch for research URLs
+
+## Non-goals
+
+Web search API, Anthropic, auto-apply writes.

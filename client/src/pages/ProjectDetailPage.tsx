@@ -18,6 +18,7 @@ import {
   MODULE_LABELS,
   type ProjectModuleKey,
 } from "../lib/projectModules";
+import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TodoList } from "../types";
 
 type Tab = "overview" | ProjectModuleKey;
@@ -69,6 +70,18 @@ export function ProjectDetailPage() {
   const [overviewEdit, setOverviewEdit] = useState(false);
 
   const invalidId = Number.isNaN(projectId);
+
+  useRegisterAssistantAttach(
+    useMemo(() => {
+      if (invalidId || tab !== "overview") return null;
+      return {
+        key: `project-${projectId}-overview`,
+        label: name.trim() || `Project #${projectId}`,
+        getContext: () =>
+          `Project #${projectId}\nName: ${name}\nStatus: ${status}\n\n${description}`,
+      };
+    }, [invalidId, tab, projectId, name, status, description]),
+  );
 
   const projectQuery = useQuery({
     queryKey: ["project", projectId],
@@ -682,6 +695,18 @@ function DocumentEditor({
 }) {
   const [title, setTitle] = useState(doc.title);
   const [body, setBody] = useState(doc.body ?? "");
+
+  useRegisterAssistantAttach(
+    useMemo(
+      () => ({
+        key: `document-${doc.id}`,
+        label: title.trim() || `Document #${doc.id}`,
+        getContext: () =>
+          `Document #${doc.id} (project #${doc.projectId})\nTitle: ${title}\n\n${body}`,
+      }),
+      [doc.id, doc.projectId, title, body],
+    ),
+  );
 
   return (
     <div>
