@@ -29,6 +29,36 @@
   box-sizing: border-box;
 }
 
+/* Themed scrollbars app-wide (Firefox + WebKit) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-dim) var(--bg);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--bg);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--accent-dim);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--bg);
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -711,38 +741,11 @@ a:focus-visible {
   max-width: none;
   max-height: min(85vh, 720px);
   overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent-dim) var(--bg);
 }
 
 .element-shell-backdrop > [role="dialog"] {
   width: min(var(--content-max), calc(100vw - 2rem));
   max-width: 100%;
-}
-
-.element-shell--modal::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.element-shell--modal::-webkit-scrollbar-track {
-  background: var(--bg);
-  border-radius: 0 var(--radius) var(--radius) 0;
-  margin-block: 4px;
-}
-
-.element-shell--modal::-webkit-scrollbar-thumb {
-  background: var(--accent-dim);
-  border-radius: 999px;
-  border: 2px solid var(--bg);
-}
-
-.element-shell--modal::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
-}
-
-.element-shell--modal::-webkit-scrollbar-corner {
-  background: var(--bg);
 }
 
 .element-shell--page {
