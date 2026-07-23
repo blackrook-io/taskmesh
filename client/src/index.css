@@ -213,6 +213,152 @@ textarea.raw-md {
   gap: 0.5rem;
 }
 
+.md-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.md-editor--focus {
+  position: fixed;
+  inset: 0.75rem;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  border-color: var(--accent-dim);
+}
+
+.md-editor--focus .md-editor__surface {
+  flex: 1;
+  min-height: 0 !important;
+  overflow: auto;
+}
+
+.md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.md-toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.md-toolbar__btn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #243024;
+}
+
+.md-toolbar__hint {
+  font-size: 0.8rem;
+  margin-left: 0.25rem;
+}
+
+.md-editor__surface {
+  background: var(--bg);
+}
+
+.md-editor .tiptap,
+.md-editor .ProseMirror {
+  min-height: inherit;
+  padding: 0.75rem 0.85rem;
+  outline: none;
+  color: var(--text);
+}
+
+.md-editor .tiptap p.is-editor-empty:first-child::before,
+.md-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: var(--text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.md-prose h1,
+.md-prose h2,
+.md-prose h3 {
+  margin: 0.75rem 0 0.4rem;
+}
+
+.md-prose p,
+.md-prose ul,
+.md-prose ol {
+  margin: 0.4rem 0;
+}
+
+.md-prose img {
+  max-width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.md-prose a {
+  color: var(--accent);
+}
+
+.md-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+  font-size: 0.92rem;
+}
+
+.md-prose th,
+.md-prose td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  vertical-align: top;
+}
+
+.md-prose th {
+  background: var(--surface);
+}
+
+.md-prose ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+
+.md-prose ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+
+.md-prose ul[data-type="taskList"] li label {
+  margin-top: 0.2rem;
+}
+
+.md-prose blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent-dim);
+  color: var(--text-muted);
+}
+
+.md-prose code {
+  font-size: 0.9em;
+}
+
+.md-prose pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  overflow-x: auto;
+}
+
 .md-field .w-md-editor {
   box-shadow: none;
 }

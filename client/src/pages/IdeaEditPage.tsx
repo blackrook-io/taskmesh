@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { MarkdownField } from "../components/MarkdownField";
+import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import type { Idea, Project } from "../types";
 
 export function IdeaEditPage() {
@@ -116,7 +116,7 @@ export function IdeaEditPage() {
 
       <div className="field">
         <label>Body (Markdown)</label>
-        <MarkdownField value={body} onChange={setBody} height={360} />
+        <MarkdownEditor value={body} onChange={setBody} height={360} />
       </div>
 
       <div className="btn-row">

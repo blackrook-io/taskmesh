@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -12,6 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { ProjectPhase, Task } from "../types";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
+import { MarkdownEditor } from "./shared/MarkdownEditor";
 
 function flattenTasks(phases: ProjectPhase[], tasks: Task[]): Task[] {
   const orderedPhases = [...phases].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -59,6 +60,11 @@ function TaskFields({
   onSavePatch: (patch: TaskPatch) => void;
 }) {
   const dueLocal = task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : "";
+  const [notes, setNotes] = useState(task.notes ?? "");
+
+  useEffect(() => {
+    setNotes(task.notes ?? "");
+  }, [task.notes]);
 
   return (
     <div className="task-expand">
@@ -74,14 +80,15 @@ function TaskFields({
         />
       </div>
       <div className="field">
-        <label htmlFor={`t-notes-${task.id}`}>Notes</label>
-        <textarea
-          id={`t-notes-${task.id}`}
-          className="raw-md"
-          defaultValue={task.notes ?? ""}
-          onBlur={(e) => {
-            const v = e.target.value || null;
-            if (v !== (task.notes ?? "")) onSavePatch({ notes: v });
+        <label>Notes</label>
+        <MarkdownEditor
+          value={notes}
+          onChange={setNotes}
+          height={220}
+          placeholder="Task notes…"
+          onBlur={(v) => {
+            const next = v.trim() ? v : null;
+            if (next !== (task.notes ?? "")) onSavePatch({ notes: next });
           }}
         />
       </div>

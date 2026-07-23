@@ -308,6 +308,7 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 - Keep API under `/api/v1` with Zod + `{ error: { code, message } }`
 - Extract `client/src/components/shared/*` (ColorPopover, TagInput, MarkdownEditor, ElementShell, UndoStack)
 - Archive executed phase checklists to `.cursor/plans/executed/` per development rules
+- At phase end: ship a user-facing QA checklist (step-by-step tests, `/dev/playground` when relevant, features to approve or tweak)
 
 ## Out of scope until later (platform rules)
 

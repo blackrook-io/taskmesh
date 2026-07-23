@@ -3,6 +3,7 @@ import { ENTITY_TYPES } from "../lib/entityType";
 import { DEFAULT_COLOR_PALETTE } from "../lib/palette";
 import { ColorPopover } from "../components/shared/ColorPopover";
 import { ElementShell } from "../components/shared/ElementShell";
+import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 
 const SAMPLE_TASK = {
   id: 0,
@@ -16,15 +17,24 @@ export function PlaygroundPage() {
   const [taskColor, setTaskColor] = useState<string | null>(SAMPLE_TASK.color);
   const [modalOpen, setModalOpen] = useState(false);
   const [pageDemo, setPageDemo] = useState(false);
+  const [md, setMd] = useState(
+    "## TipTap notes\n\nPaste an **image** from the clipboard, or use the Image button.\n\n- [ ] Checklist item\n",
+  );
 
   return (
     <div>
       <div className="page-head">
-        <h1>Phase 0 playground</h1>
+        <h1>Shared primitives playground</h1>
       </div>
       <p className="muted">
-        Manual QA for shared primitives: entity types, ColorPopover, ElementShell modes, and design tokens.
+        Manual QA for ColorPopover, ElementShell, TipTap MarkdownEditor (paste image → /api/v1/uploads).
       </p>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>MarkdownEditor (TipTap)</h2>
+        <p className="muted">Same toolbar used by documents, ideas, project description, and task notes.</p>
+        <MarkdownEditor value={md} onChange={setMd} height={280} />
+      </section>
 
       <section className="card" style={{ marginTop: "1rem" }}>
         <h2>Entity types</h2>
