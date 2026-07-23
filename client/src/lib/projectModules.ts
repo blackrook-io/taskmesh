@@ -24,7 +24,7 @@ export const MODULE_BLURBS: Record<ProjectModuleKey, string> = {
   todo_lists: "Mix ideas and tasks in project To Do lists.",
   boards: "Kanban planning boards for tasks.",
   wiki: "Nested wiki TOC for Markdown pages.",
-  canvases: "Diagrams and mood boards (coming soon).",
+  canvases: "Freeform diagrams and mood boards (tldraw).",
 };
 
 /** Modules that already have full UI in the project hub. */
@@ -34,6 +34,7 @@ export const IMPLEMENTED_MODULES = new Set<ProjectModuleKey>([
   "todo_lists",
   "boards",
   "wiki",
+  "canvases",
 ]);
 
 export function isProjectModuleKey(value: string): value is ProjectModuleKey {

@@ -1691,3 +1691,79 @@ a:focus-visible {
 .wiki-breadcrumb__link:hover {
   text-decoration: underline;
 }
+
+.wiki-panel__toc-child-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.wiki-panel__toc-child-actions .btn {
+  flex: 1;
+}
+
+.canvases-panel {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) 1fr;
+  gap: 1rem;
+  align-items: start;
+  min-height: 70vh;
+}
+
+@media (max-width: 800px) {
+  .canvases-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+.canvases-panel__items {
+  list-style: none;
+  padding: 0;
+  margin: 0.65rem 0 0;
+}
+
+.canvases-panel__item {
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.25rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvases-panel__item:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.canvases-panel__item.is-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.canvases-panel__title-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.canvas-editor {
+  height: min(70vh, 720px);
+  min-height: 420px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  background: var(--canvas-bg);
+}
+
+.canvas-editor .tl-container {
+  --color-background: var(--canvas-bg);
+}
+
+.canvas-editor--readonly {
+  border-style: dashed;
+}

@@ -11,8 +11,9 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "../api/client";
-import type { ProjectDocument, WikiNode, WikiTreeNode, WikiTreeResponse } from "../types";
+import type { Canvas, ProjectDocument, WikiNode, WikiTreeNode, WikiTreeResponse } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { CanvasEditor } from "./CanvasEditor";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { PencilIcon } from "./shared/PencilIcon";
 import { TagInput } from "./shared/TagInput";
@@ -101,6 +102,7 @@ function SortableTocRow({
       ) : null}
       <button type="button" className="wiki-toc__title" onClick={onSelect}>
         {row.node.pinned ? "📌 " : ""}
+        {row.node.entityType === "canvas" ? "◫ " : ""}
         {row.node.title}
       </button>
       {structureEdit ? (
@@ -168,7 +170,12 @@ export function WikiPanel({ projectId }: Props) {
     enabled: activeId != null,
     queryFn: async () => {
       const res = await apiJson<{
-        data: { node: WikiNode; document: ProjectDocument | null; breadcrumb: WikiNode[] };
+        data: {
+          node: WikiNode;
+          document: ProjectDocument | null;
+          canvas: Canvas | null;
+          breadcrumb: WikiNode[];
+        };
       }>(`/api/v1/projects/${projectId}/wiki/nodes/${activeId}`);
       return res.data;
     },
@@ -191,6 +198,8 @@ export function WikiPanel({ projectId }: Props) {
     void qc.invalidateQueries({ queryKey: ["wiki", projectId] });
     void qc.invalidateQueries({ queryKey: ["wiki-node", projectId] });
     void qc.invalidateQueries({ queryKey: ["documents", projectId] });
+    void qc.invalidateQueries({ queryKey: ["canvases", projectId] });
+    void qc.invalidateQueries({ queryKey: ["canvas", projectId] });
   };
 
   const createPage = useMutation({
@@ -200,6 +209,25 @@ export function WikiPanel({ projectId }: Props) {
         {
           method: "POST",
           body: JSON.stringify({ title: "Untitled page", parentId, body: "" }),
+        },
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setSelectedId(data.node.id);
+      setPageEdit(true);
+      invalidate();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const createCanvasPage = useMutation({
+    mutationFn: async (parentId: number | null) => {
+      const res = await apiJson<{ data: { node: WikiNode; canvas: Canvas } }>(
+        `/api/v1/projects/${projectId}/wiki/canvases`,
+        {
+          method: "POST",
+          body: JSON.stringify({ title: "Untitled canvas", parentId }),
         },
       );
       return res.data;
@@ -359,18 +387,28 @@ export function WikiPanel({ projectId }: Props) {
             <button
               type="button"
               className="btn small btn-add"
-              aria-label="New page"
-              title="New page"
+              aria-label="New Markdown page"
+              title="New Markdown page"
               disabled={createPage.isPending}
               onClick={() => createPage.mutate(null)}
             >
               +
             </button>
+            <button
+              type="button"
+              className="btn small btn-add"
+              aria-label="New canvas page"
+              title="New canvas page"
+              disabled={createCanvasPage.isPending}
+              onClick={() => createCanvasPage.mutate(null)}
+            >
+              ◫
+            </button>
           </div>
         </div>
         {structureEdit ? (
           <p className="muted" style={{ fontSize: "0.8rem", margin: "0.35rem 0 0.65rem" }}>
-            Drag a page onto another to nest it. Use ↑↓ to reorder siblings.
+            Drag a page onto another to nest it. Use ↑↓ to reorder siblings. + adds Markdown; ◫ adds a canvas.
           </p>
         ) : null}
         {treeQuery.isLoading ? <p className="muted">Loading…</p> : null}
@@ -403,17 +441,28 @@ export function WikiPanel({ projectId }: Props) {
           </DndContext>
         )}
         {structureEdit && activeId != null ? (
-          <button
-            type="button"
-            className="btn small btn-add"
-            style={{ marginTop: "0.75rem", width: "100%" }}
-            aria-label="New child page"
-            title="New child page"
-            disabled={createPage.isPending}
-            onClick={() => createPage.mutate(activeId)}
-          >
-            +
-          </button>
+          <div className="wiki-panel__toc-child-actions">
+            <button
+              type="button"
+              className="btn small btn-add"
+              aria-label="New child Markdown page"
+              title="New child Markdown page"
+              disabled={createPage.isPending}
+              onClick={() => createPage.mutate(activeId)}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="btn small btn-add"
+              aria-label="New child canvas"
+              title="New child canvas"
+              disabled={createCanvasPage.isPending}
+              onClick={() => createCanvasPage.mutate(activeId)}
+            >
+              ◫
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -510,8 +559,103 @@ export function WikiPanel({ projectId }: Props) {
               </>
             )}
           </>
+        ) : detailQuery.data?.canvas ? (
+          <>
+            <div className="wiki-panel__main-head">
+              <nav className="wiki-breadcrumb" aria-label="Breadcrumb">
+                {breadcrumb.map((b, i) => (
+                  <span key={b.id}>
+                    {i > 0 ? <span className="muted"> / </span> : null}
+                    <button type="button" className="wiki-breadcrumb__link" onClick={() => selectPage(b.id)}>
+                      {b.title}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+              <div className="wiki-panel__main-actions">
+                {pageEdit ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn small ghost"
+                      onClick={() =>
+                        togglePin.mutate({
+                          nodeId: activeId,
+                          pinned: !detailQuery.data?.node.pinned,
+                        })
+                      }
+                    >
+                      {detailQuery.data?.node.pinned ? "Unpin" : "Pin"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn small ghost"
+                      onClick={() => {
+                        setTitleDraft(detailQuery.data?.node.title ?? "");
+                        setPageEdit(false);
+                      }}
+                    >
+                      Done
+                    </button>
+                    <button
+                      type="button"
+                      className="btn small primary"
+                      disabled={!titleDraft.trim() || patchNode.isPending}
+                      onClick={() => {
+                        if (activeId != null && titleDraft.trim()) {
+                          void patchNode.mutateAsync({ nodeId: activeId, title: titleDraft.trim() }).then(() => {
+                            setPageEdit(false);
+                          });
+                        }
+                      }}
+                    >
+                      Save title
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn small btn-icon"
+                    aria-label="Edit canvas title"
+                    title="Edit"
+                    onClick={() => setPageEdit(true)}
+                  >
+                    <PencilIcon />
+                  </button>
+                )}
+              </div>
+            </div>
+            {pageEdit ? (
+              <div className="field">
+                <label htmlFor="wiki-canvas-title">Title</label>
+                <input
+                  id="wiki-canvas-title"
+                  type="text"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                />
+              </div>
+            ) : (
+              <h1 className="wiki-page-title">{displayTitle}</h1>
+            )}
+            <CanvasEditor
+              key={detailQuery.data.canvas.id}
+              canvasId={detailQuery.data.canvas.id}
+              document={detailQuery.data.canvas.document ?? {}}
+              readOnly={!pageEdit}
+              onSaveDocument={(document) => {
+                void apiJson(`/api/v1/projects/${projectId}/canvases/${detailQuery.data!.canvas!.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ document }),
+                }).then(() => {
+                  void qc.invalidateQueries({ queryKey: ["canvas", projectId] });
+                  void qc.invalidateQueries({ queryKey: ["canvases", projectId] });
+                });
+              }}
+            />
+          </>
         ) : (
-          <p className="muted">This wiki entry has no document body yet.</p>
+          <p className="muted">This wiki entry has no document or canvas body yet.</p>
         )}
       </div>
 

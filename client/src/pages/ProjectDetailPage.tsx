@@ -11,8 +11,8 @@ import { TaskBoard } from "../components/TaskBoard";
 import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
+import { CanvasesPanel } from "../components/CanvasesPanel";
 import {
-  IMPLEMENTED_MODULES,
   isProjectModuleKey,
   MODULE_BLURBS,
   MODULE_LABELS,
@@ -629,21 +629,7 @@ export function ProjectDetailPage() {
 
       {tab === "wiki" ? <WikiPanel projectId={projectId} /> : null}
 
-      {tab === "canvases" ? (
-        <div className="card module-placeholder">
-          <h2 style={{ marginTop: 0 }}>{MODULE_LABELS[tab]}</h2>
-          <p>{MODULE_BLURBS[tab]}</p>
-          <p className="muted">
-            This module is enabled for the project hub. Full UI lands in a later phase — deep link{" "}
-            <code>?tab={tab}</code> already works.
-          </p>
-          {!IMPLEMENTED_MODULES.has(tab) ? (
-            <button type="button" className="btn ghost" onClick={() => setTab("overview")}>
-              Back to overview
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {tab === "canvases" ? <CanvasesPanel projectId={projectId} /> : null}
 
       <ConfirmDialog
         open={deleteProjectOpen}

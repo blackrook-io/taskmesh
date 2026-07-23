@@ -65,6 +65,11 @@ wikiRouter.get("/", async (req, res) => {
   }
 });
 
+const createCanvasPageBody = z.object({
+  title: z.string().min(1).max(500),
+  parentId: z.number().int().positive().nullable().optional(),
+});
+
 /** Create a Markdown document and attach it as a wiki node. */
 wikiRouter.post("/pages", async (req, res) => {
   try {
@@ -123,7 +128,59 @@ wikiRouter.post("/pages", async (req, res) => {
   }
 });
 
-/** Link an existing document (or later canvas) into the wiki. */
+/** Create a canvas and attach it as a wiki node. */
+wikiRouter.post("/canvases", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    if (!(await requireProject(projectId))) {
+      sendError(res, 404, "not_found", "Project not found");
+      return;
+    }
+    const parsed = createCanvasPageBody.parse(req.body);
+    const parentId = parsed.parentId ?? null;
+    if (parentId != null) {
+      if (!(await requireNode(projectId, parentId))) {
+        sendError(res, 404, "not_found", "Parent node not found");
+        return;
+      }
+    }
+
+    const [canvas] = await db
+      .insert(schema.canvases)
+      .values({
+        projectId,
+        title: parsed.title,
+        document: {},
+      })
+      .returning();
+    if (!canvas) {
+      sendError(res, 500, "insert_failed", "Could not create canvas");
+      return;
+    }
+
+    const sortOrder = await nextWikiSort(db, projectId, parentId);
+    const [node] = await db
+      .insert(schema.wikiNodes)
+      .values({
+        projectId,
+        parentId,
+        entityType: "canvas",
+        entityId: canvas.id,
+        title: parsed.title,
+        sortOrder,
+      })
+      .returning();
+    if (!node) {
+      sendError(res, 500, "insert_failed", "Could not create wiki node");
+      return;
+    }
+    res.status(201).json({ data: { node, canvas } });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+/** Link an existing document or canvas into the wiki. */
 wikiRouter.post("/nodes", async (req, res) => {
   try {
     const projectId = parseRouteId(req, "projectId");
@@ -149,8 +206,18 @@ wikiRouter.post("/nodes", async (req, res) => {
         return;
       }
       if (!title) title = doc.title;
+    } else if (parsed.entityType === "canvas") {
+      const [canvas] = await db
+        .select()
+        .from(schema.canvases)
+        .where(eq(schema.canvases.id, parsed.entityId));
+      if (!canvas || canvas.projectId !== projectId) {
+        sendError(res, 404, "not_found", "Canvas not found");
+        return;
+      }
+      if (!title) title = canvas.title;
     } else {
-      sendError(res, 400, "unsupported_entity", "Canvas wiki nodes land in a later phase");
+      sendError(res, 400, "unsupported_entity", "Unsupported wiki entity type");
       return;
     }
 
@@ -192,17 +259,22 @@ wikiRouter.get("/nodes/:nodeId", async (req, res) => {
     }
     const rows = await listWikiNodes(db, projectId);
     let document = null;
+    let canvas = null;
     if (node.entityType === "document") {
       const [doc] = await db
         .select()
         .from(schema.projectDocuments)
         .where(eq(schema.projectDocuments.id, node.entityId));
       document = doc ?? null;
+    } else if (node.entityType === "canvas") {
+      const [c] = await db.select().from(schema.canvases).where(eq(schema.canvases.id, node.entityId));
+      canvas = c ?? null;
     }
     res.json({
       data: {
         node,
         document,
+        canvas,
         breadcrumb: breadcrumbFor(rows, nodeId),
       },
     });
@@ -236,6 +308,12 @@ wikiRouter.patch("/nodes/:nodeId", async (req, res) => {
         .update(schema.projectDocuments)
         .set({ title: parsed.title, updatedAt: new Date() })
         .where(eq(schema.projectDocuments.id, node.entityId));
+    }
+    if (parsed.title !== undefined && node.entityType === "canvas") {
+      await db
+        .update(schema.canvases)
+        .set({ title: parsed.title, updatedAt: new Date() })
+        .where(eq(schema.canvases.id, node.entityId));
     }
     res.json({ data: row });
   } catch (err) {

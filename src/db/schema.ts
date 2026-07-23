@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   serial,
   text,
@@ -277,7 +278,7 @@ export const boardCards = pgTable(
   }),
 );
 
-/** Nested wiki TOC nodes pointing at documents (and later canvases). */
+/** Nested wiki TOC nodes pointing at documents or canvases. */
 export const wikiNodes = pgTable(
   "wiki_nodes",
   {
@@ -309,6 +310,26 @@ export const wikiNodes = pgTable(
   }),
 );
 
+/** Freeform tldraw documents scoped to a project. */
+export const canvases = pgTable("canvases", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  /** tldraw document snapshot (shapes/pages); session/camera kept client-side. */
+  document: jsonb("document")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
 }));
@@ -325,6 +346,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   modules: many(projectModules),
   boards: many(boards),
   wikiNodes: many(wikiNodes),
+  canvases: many(canvases),
 }));
 
 export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
@@ -438,4 +460,11 @@ export const wikiNodesRelations = relations(wikiNodes, ({ one, many }) => ({
     relationName: "wiki_tree",
   }),
   children: many(wikiNodes, { relationName: "wiki_tree" }),
+}));
+
+export const canvasesRelations = relations(canvases, ({ one }) => ({
+  project: one(projects, {
+    fields: [canvases.projectId],
+    references: [projects.id],
+  }),
 }));

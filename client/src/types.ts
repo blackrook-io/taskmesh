@@ -168,6 +168,18 @@ export type WikiTreeResponse = {
   tree: WikiTreeNode[];
 };
 
+export type CanvasSummary = {
+  id: number;
+  projectId: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Canvas = CanvasSummary & {
+  document: Record<string, unknown>;
+};
+
 export type ApiErrorBody = { error: { code: string; message: string } };
 
 export type { EntityType } from "./lib/entityType";
