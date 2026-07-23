@@ -146,26 +146,28 @@ export function ImportExportPage() {
             {result.discarded.length > 0 ? (
               <div className="import-discard-report">
                 <h3>Discard report</h3>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Row</th>
-                      <th>Code</th>
-                      <th>Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.discarded.map((d, i) => (
-                      <tr key={`${d.row}-${i}`}>
-                        <td>{d.row}</td>
-                        <td>
-                          <code>{d.code}</code>
-                        </td>
-                        <td>{d.reason}</td>
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Row</th>
+                        <th>Code</th>
+                        <th>Reason</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {result.discarded.map((d, i) => (
+                        <tr key={`${d.row}-${i}`}>
+                          <td>{d.row}</td>
+                          <td>
+                            <code>{d.code}</code>
+                          </td>
+                          <td>{d.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : null}
           </div>

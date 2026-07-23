@@ -1,0 +1,22 @@
+# Phase 10c — Responsive phone/tablet
+
+**Branch:** `phase-10c-responsive`
+
+## Goal
+
+Usable TaskMesh chrome and primary workflows on Pixel 8 Pro (~412×892) and Galaxy Tab S4 / SM-T830 (~800–1030 wide).
+
+## Exit criteria
+
+- Tabs / board tabs scroll horizontally on narrow screens
+- Documents / To Do split panes stack ≤800px
+- Tables scroll horizontally; backup actions wrap
+- ElementShell / ConfirmDialog near full-viewport on phone
+- Touch targets ≥~44px for small controls; hover-only dismiss visible on touch
+- Command palette / canvas height use `dvh` and tighter phone layout
+- Content max fluid (~1100px) for tablets
+- QA checklist for Chrome device mode (412 + ~800)
+
+## Non-goals
+
+Nav drawer rewrite, Excalidraw redesign, auth, Phase 10d nginx.

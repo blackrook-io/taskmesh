@@ -56,7 +56,7 @@ export function TodoListsPage() {
       </div>
       <p className="muted">Mix ideas and tasks. Unsorted is always available.</p>
 
-      <div className="grid" style={{ gridTemplateColumns: "minmax(200px, 260px) 1fr", alignItems: "start", marginTop: "1rem" }}>
+      <div className="split-panel" style={{ marginTop: "1rem" }}>
         <div className="card">
           <h3>Lists</h3>
           <ul style={{ listStyle: "none", padding: 0, margin: "0 0 0.75rem" }}>

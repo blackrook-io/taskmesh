@@ -303,11 +303,13 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 - Projects & Tasks CSV export; insert-only import; discard report for collisions + invalid rows
 
-### 10b — Backup health UI (in progress on `phase-10b-backup-ui`)
+### 10b — Backup health UI (shipped)
 
-- `/settings/backups`, `npm run backup`, in-process schedule, optional systemd timer under `deploy/`
+- `/settings/backups`, `npm run backup`, restore + delete, in-process schedule, optional systemd timer under `deploy/`
 
-### 10c — Responsive phone/tablet (planned)
+### 10c — Responsive phone/tablet (in progress on `phase-10c-responsive`)
+
+- Pixel ~412 / Tab S4 ~800–1030: scrollable tabs, stacked split panes, full-viewport sheets, touch targets, table scroll
 
 ### 10d — nginx :80 host (planned)
 
