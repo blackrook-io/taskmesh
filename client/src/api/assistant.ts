@@ -60,10 +60,16 @@ export async function streamAssistantChat(args: {
   if (!res.ok) {
     let message = res.statusText;
     try {
-      const j = (await res.json()) as { error?: { message?: string } };
-      if (j.error?.message) message = j.error.message;
+      const text = await res.text();
+      const trimmed = text.trimStart();
+      if (trimmed.startsWith("<")) {
+        message = `Assistant HTTP ${res.status}: server returned HTML (is the API up?)`;
+      } else {
+        const j = JSON.parse(text) as { error?: { message?: string } };
+        if (j.error?.message) message = j.error.message;
+      }
     } catch {
-      /* ignore */
+      /* keep statusText */
     }
     throw new Error(message);
   }

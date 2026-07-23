@@ -86,6 +86,9 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
 
   const applyMutation = useMutation({
     mutationFn: async (p: AssistantProposal) => {
+      if (!p.path || !p.method) {
+        throw new Error("Invalid proposal (missing path/method). Restart TaskMesh and try again.");
+      }
       await apiJson(p.path, {
         method: p.method,
         body: JSON.stringify(p.fields),

@@ -27,16 +27,20 @@ app.get("/api/health", async (_req, res) => {
 
 app.use("/api/v1", v1Router);
 
+app.use("/api", (_req, res) => {
+  sendError(res, 404, "not_found", "No such API route");
+});
+
 const clientDist = getClientDistDir();
 if (process.env.NODE_ENV === "production" && fs.existsSync(path.join(clientDist, "index.html"))) {
   app.use(express.static(clientDist));
   app.use((req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
-      next();
+      sendError(res, 404, "not_found", "No such route");
       return;
     }
     if (req.path.startsWith("/api")) {
-      next();
+      sendError(res, 404, "not_found", "No such API route");
       return;
     }
     res.sendFile(path.join(clientDist, "index.html"));
