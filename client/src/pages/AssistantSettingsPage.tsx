@@ -51,31 +51,33 @@ export function AssistantSettingsPage() {
         ) : null}
       </section>
 
-      <section className="card" style={{ marginTop: "1.25rem" }}>
-        <h2>Configure</h2>
-        <ol className="muted" style={{ paddingLeft: "1.25rem" }}>
-          <li>
-            Create a key at{" "}
-            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
-              platform.openai.com/api-keys
-            </a>
-            .
-          </li>
-          <li>
-            On the server, edit <code>/srv/taskmesh/.env</code>:
-            <pre className="assistant-env-sample">{`OPENAI_API_KEY=sk-...
+      {data && !data.enabled ? (
+        <section className="card" style={{ marginTop: "1.25rem" }}>
+          <h2>Configure</h2>
+          <ol className="muted" style={{ paddingLeft: "1.25rem" }}>
+            <li>
+              Create a key at{" "}
+              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">
+                platform.openai.com/api-keys
+              </a>
+              .
+            </li>
+            <li>
+              On the server, edit <code>/srv/taskmesh/.env</code>:
+              <pre className="assistant-env-sample">{`OPENAI_API_KEY=sk-...
 ASSISTANT_DEFAULT_PROVIDER=openai
 ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini`}</pre>
-          </li>
-          <li>
-            Restart: <code>sudo systemctl restart taskmesh</code> (or restart <code>npm run
-            dev:web</code>).
-          </li>
-        </ol>
-        <p className="muted" style={{ marginTop: "0.75rem" }}>
-          Details: INSTALL.md § Assistant.
-        </p>
-      </section>
+            </li>
+            <li>
+              Restart: <code>sudo systemctl restart taskmesh</code> (or restart <code>npm run
+              dev:web</code>).
+            </li>
+          </ol>
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            Details: INSTALL.md § Assistant.
+          </p>
+        </section>
+      ) : null}
     </div>
   );
 }
