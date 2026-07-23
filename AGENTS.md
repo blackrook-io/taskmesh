@@ -8,7 +8,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 
 - **platform-rules.mdc** — product vision, stack, UI, security (always applied).
 - **coding-rules.mdc** — code quality expectations when editing `**/*.ts`.
-- **development-rules.mdc** — where to put and archive `.cursor/plans/*.mdc`.
+- **development-rules.mdc** — plan files under `.cursor/plans/`, archive to `executed/`, phase git workflow (start/approve/merge), and phase-end QA checklists.
 
 ## Shared conventions (Phase 0+)
 
@@ -18,6 +18,8 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Colors** — default 16-swatch palette in `client/src/lib/palette.ts`; store accents as CSS hex strings.
 - **Design tokens** — see `client/src/index.css` (`--canvas-bg`, `--radius-chip`, `--focus-ring`, etc.).
 - **Playground** — `/dev/playground` for manual QA of shared primitives.
+- **Phase delivery** — at the end of every implementation phase, give the user a step-by-step **QA checklist** (playground routes when applicable + features to examine for approval or tweaks).
+- **Phase git** — on phase start: branch `phase-N-short-slug` from updated `main`. On approval: commit remaining work, push the phase branch, merge into `main`, push `main`, delete local/remote phase branch.
 
 ## Common commands
 
