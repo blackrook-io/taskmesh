@@ -317,6 +317,7 @@ export const canvases = pgTable("canvases", {
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
   /** tldraw document snapshot (shapes/pages); session/camera kept client-side. */
   document: jsonb("document")
     .$type<Record<string, unknown>>()

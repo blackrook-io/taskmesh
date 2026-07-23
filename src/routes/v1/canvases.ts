@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -14,6 +14,11 @@ const createBody = z.object({
 const patchBody = z.object({
   title: z.string().min(1).max(500).optional(),
   document: z.record(z.string(), z.unknown()).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+const reorderBody = z.object({
+  orderedCanvasIds: z.array(z.number().int().positive()).min(1),
 });
 
 export const canvasesRouter = Router({ mergeParams: true });
@@ -41,12 +46,13 @@ canvasesRouter.get("/", async (req, res) => {
         id: schema.canvases.id,
         projectId: schema.canvases.projectId,
         title: schema.canvases.title,
+        sortOrder: schema.canvases.sortOrder,
         createdAt: schema.canvases.createdAt,
         updatedAt: schema.canvases.updatedAt,
       })
       .from(schema.canvases)
       .where(eq(schema.canvases.projectId, projectId))
-      .orderBy(desc(schema.canvases.updatedAt), asc(schema.canvases.id));
+      .orderBy(asc(schema.canvases.sortOrder), asc(schema.canvases.id));
     res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
@@ -61,11 +67,17 @@ canvasesRouter.post("/", async (req, res) => {
       return;
     }
     const parsed = createBody.parse(req.body);
+    const existing = await db
+      .select({ m: schema.canvases.sortOrder })
+      .from(schema.canvases)
+      .where(eq(schema.canvases.projectId, projectId));
+    const nextSort = existing.length ? Math.max(...existing.map((r) => r.m)) + 1 : 0;
     const [row] = await db
       .insert(schema.canvases)
       .values({
         projectId,
         title: parsed.title?.trim() || "Untitled canvas",
+        sortOrder: nextSort,
         document: parsed.document ?? {},
       })
       .returning();
@@ -74,6 +86,51 @@ canvasesRouter.post("/", async (req, res) => {
       return;
     }
     res.status(201).json({ data: row });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+canvasesRouter.patch("/reorder", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    if (!(await requireProject(projectId))) {
+      sendError(res, 404, "not_found", "Project not found");
+      return;
+    }
+    const { orderedCanvasIds } = reorderBody.parse(req.body);
+    const existing = await db
+      .select({ id: schema.canvases.id })
+      .from(schema.canvases)
+      .where(eq(schema.canvases.projectId, projectId));
+    const allowed = new Set(existing.map((r) => r.id));
+    if (
+      orderedCanvasIds.length !== allowed.size ||
+      orderedCanvasIds.some((id) => !allowed.has(id))
+    ) {
+      sendError(res, 400, "invalid_reorder", "orderedCanvasIds must list every canvas exactly once");
+      return;
+    }
+    for (let i = 0; i < orderedCanvasIds.length; i++) {
+      const id = orderedCanvasIds[i]!;
+      await db
+        .update(schema.canvases)
+        .set({ sortOrder: i, updatedAt: new Date() })
+        .where(eq(schema.canvases.id, id));
+    }
+    const rows = await db
+      .select({
+        id: schema.canvases.id,
+        projectId: schema.canvases.projectId,
+        title: schema.canvases.title,
+        sortOrder: schema.canvases.sortOrder,
+        createdAt: schema.canvases.createdAt,
+        updatedAt: schema.canvases.updatedAt,
+      })
+      .from(schema.canvases)
+      .where(eq(schema.canvases.projectId, projectId))
+      .orderBy(asc(schema.canvases.sortOrder), asc(schema.canvases.id));
+    res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -104,8 +161,12 @@ canvasesRouter.patch("/:canvasId", async (req, res) => {
       return;
     }
     const parsed = patchBody.parse(req.body);
-    if (parsed.title === undefined && parsed.document === undefined) {
-      sendError(res, 400, "empty_patch", "Provide title and/or document");
+    if (
+      parsed.title === undefined &&
+      parsed.document === undefined &&
+      parsed.sortOrder === undefined
+    ) {
+      sendError(res, 400, "empty_patch", "Provide title, document, and/or sortOrder");
       return;
     }
     const [row] = await db
@@ -113,6 +174,7 @@ canvasesRouter.patch("/:canvasId", async (req, res) => {
       .set({
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.document !== undefined ? { document: parsed.document } : {}),
+        ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.canvases.id, canvasId))

@@ -172,6 +172,7 @@ export type CanvasSummary = {
   id: number;
   projectId: number;
   title: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
