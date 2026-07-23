@@ -1,0 +1,18 @@
+# Phase 10d — nginx + bind localhost (TaskMesh on :80)
+
+**Branch:** `phase-10d-host-port80`
+
+## Goal
+
+Reach TaskMesh at the server LAN IP on port **80** (no `:3000`). Express binds `127.0.0.1` only; nginx reverse-proxies.
+
+## Exit criteria
+
+- `HOST=127.0.0.1` (default) + `PORT=3000` in `.env.example` / Express listen
+- `deploy/nginx-taskmesh.conf` + systemd unit template under `deploy/`
+- INSTALL: nginx install, site enable, UFW allow **80** (not 3000), future landing note
+- README points at LAN URL pattern `http://<server-ip>/`
+
+## Non-goals
+
+TLS, multi-app portal UI, merging Phase 10c.

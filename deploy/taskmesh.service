@@ -1,0 +1,17 @@
+[Unit]
+Description=TaskMesh (Express + static SPA)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/srv/taskmesh
+Environment=NODE_ENV=production
+EnvironmentFile=/srv/taskmesh/.env
+ExecStart=/usr/bin/node /srv/taskmesh/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

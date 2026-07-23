@@ -21,13 +21,14 @@ TaskMesh is a **single-user, private-network** app: no auth in this build. Prefe
 11. [Run database migrations](#11-run-database-migrations)
 12. [Development run (API + Vite UI)](#12-development-run-api--vite-ui)
 13. [Production build and run](#13-production-build-and-run)
-14. [Optional: systemd service](#14-optional-systemd-service)
-15. [Optional: firewall (UFW)](#15-optional-firewall-ufw)
-16. [Optional: access from your laptop (SSH tunnel)](#16-optional-access-from-your-laptop-ssh-tunnel)
-17. [Backups](#17-backups)
-18. [Verify the install](#18-verify-the-install)
-19. [Updating TaskMesh](#19-updating-taskmesh)
-20. [Troubleshooting](#20-troubleshooting)
+14. [systemd service (production)](#14-systemd-service-production)
+15. [nginx on port 80 (LAN)](#15-nginx-on-port-80-lan)
+16. [Firewall (UFW)](#16-firewall-ufw)
+17. [Optional: SSH tunnel](#17-optional-ssh-tunnel)
+18. [Backups](#18-backups)
+19. [Verify the install](#19-verify-the-install)
+20. [Updating TaskMesh](#20-updating-taskmesh)
+21. [Troubleshooting](#21-troubleshooting)
 
 ---
 
@@ -37,6 +38,7 @@ TaskMesh is a **single-user, private-network** app: no auth in this build. Prefe
 |-----------|------|
 | **PostgreSQL** | Primary datastore (projects, ideas, tasks, boards, wiki, canvases, …) |
 | **Node.js + npm** | Runs the Express API and builds the Vite + React client |
+| **nginx** | Reverse proxy on port **80** → Express on `127.0.0.1:3000` (LAN access) |
 | **git** | Clone and update this repository |
 | **build-essential** | Native module builds some npm packages may need |
 | **TaskMesh** | Express API (`src/`) + SPA (`client/`); uploads under `data/uploads/` by default |
@@ -66,6 +68,8 @@ Use these official docs alongside the commands below:
 | Vite | https://vite.dev/guide/ |
 | React | https://react.dev/ |
 | systemd unit files | https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html |
+| nginx (Ubuntu) | https://ubuntu.com/server/docs/web-servers-nginx |
+| Ubuntu UFW | https://ubuntu.com/server/docs/firewall |
 | UFW firewall | https://ubuntu.com/server/docs/firewall |
 | OpenSSH client (`ssh -L`) | https://manpages.ubuntu.com/manpages/noble/en/man1/ssh.1.html |
 | tmux (optional long sessions) | https://github.com/tmux/tmux/wiki |
@@ -222,8 +226,11 @@ Minimum production-ready `.env`:
 
 ```env
 DATABASE_URL=postgresql://taskmesh:your-secure-password@127.0.0.1:5432/taskmesh
+HOST=127.0.0.1
 PORT=3000
 ```
+
+Express listens on **`HOST`:`PORT`** only (default loopback). Other devices reach the app through **nginx on port 80** (§15), not by opening 3000 on the LAN.
 
 Optional (from [`.env.example`](.env.example)):
 
@@ -332,40 +339,19 @@ npm run build:all
 NODE_ENV=production npm start
 ```
 
-- App: http://127.0.0.1:3000/
+- App (on this host): http://127.0.0.1:3000/
 - Health: http://127.0.0.1:3000/api/health
 
-For a durable process, use §14 (systemd) rather than a raw SSH session.
+For a durable process and LAN access, use **§14 (systemd)** + **§15 (nginx)** rather than a raw SSH session. Other devices should use `http://<server-lan-ip>/` (port 80), not `:3000`.
 
 ---
 
-## 14. Optional: systemd service
+## 14. systemd service (production)
 
-Create a unit that runs the production server as your app user (replace `YOUR_USER` and paths if needed):
-
-```bash
-sudo tee /etc/systemd/system/taskmesh.service >/dev/null <<'EOF'
-[Unit]
-Description=TaskMesh (Express + static SPA)
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-User=YOUR_USER
-WorkingDirectory=/srv/taskmesh
-Environment=NODE_ENV=production
-EnvironmentFile=/srv/taskmesh/.env
-ExecStart=/usr/bin/node /srv/taskmesh/dist/index.js
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
+Install the unit template from the repo (replace `YOUR_USER`):
 
 ```bash
+sudo cp /srv/taskmesh/deploy/taskmesh.service /etc/systemd/system/taskmesh.service
 sudo sed -i "s/YOUR_USER/$USER/" /etc/systemd/system/taskmesh.service
 cd /srv/taskmesh
 npm run build:all
@@ -375,46 +361,80 @@ sudo systemctl status taskmesh --no-pager
 curl -sS http://127.0.0.1:3000/api/health
 ```
 
-After pulling updates: rebuild, then `sudo systemctl restart taskmesh`.
+Ensure `.env` has `HOST=127.0.0.1` (the unit sets `NODE_ENV=production`). After pulling updates: rebuild, then `sudo systemctl restart taskmesh`.
 
 Reference: [systemd.service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html).
 
 ---
 
-## 15. Optional: firewall (UFW)
+## 15. nginx on port 80 (LAN)
 
-For a **private** server that you only reach via SSH, deny public HTTP and rely on an SSH tunnel (§16):
+Bind TaskMesh to loopback (§9 / §14), then put **nginx** in front so phones/tablets open `http://<server-ip>/` with no port number.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y nginx
+sudo cp /srv/taskmesh/deploy/nginx-taskmesh.conf /etc/nginx/sites-available/taskmesh
+sudo ln -sf /etc/nginx/sites-available/taskmesh /etc/nginx/sites-enabled/taskmesh
+# Prefer TaskMesh as the only default site on this host:
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl enable --now nginx
+sudo systemctl reload nginx
+```
+
+Confirm:
+
+```bash
+curl -sS http://127.0.0.1/api/health
+# from another device on the LAN:
+# http://192.168.x.x/   (this server’s IP)
+```
+
+Template notes live in [`deploy/nginx-taskmesh.conf`](deploy/nginx-taskmesh.conf) (`client_max_body_size 10m` for uploads).
+
+### Future: multi-app landing (docs only)
+
+When a second app shares this host, move TaskMesh off `/`:
+
+1. Change nginx to `location /taskmesh/ { proxy_pass http://127.0.0.1:3000/; … }` (or a dedicated `server_name`).
+2. Serve a static portal (or another app) at `/`.
+3. Update any absolute links if needed.
+
+No portal UI ships in this phase.
+
+References: [Ubuntu nginx](https://ubuntu.com/server/docs/web-servers-nginx), [ngx_http_proxy_module](https://nginx.org/en/docs/http/ngx_http_proxy_module.html).
+
+---
+
+## 16. Firewall (UFW)
+
+Allow SSH and **HTTP :80**. Do **not** expose port 3000 on the LAN — only nginx should be reachable on the private network.
 
 ```bash
 sudo apt-get install -y ufw
 sudo ufw allow OpenSSH
+sudo ufw allow from 192.168.0.0/16 to any port 80 proto tcp
+# adjust CIDR to your LAN
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw enable
 sudo ufw status
 ```
 
-If you intentionally expose the app on a trusted LAN interface:
-
-```bash
-sudo ufw allow from 192.168.0.0/16 to any port 3000 proto tcp
-# adjust CIDR to your LAN
-sudo ufw reload
-```
-
 Reference: [Ubuntu UFW](https://ubuntu.com/server/docs/firewall).
 
 ---
 
-## 16. Optional: access from your laptop (SSH tunnel)
+## 17. Optional: SSH tunnel
 
-Keep TaskMesh bound to `127.0.0.1` on the server; forward a local port:
+If you skip nginx and keep the app on loopback only, forward from a laptop:
 
 ```bash
 ssh -L 3000:127.0.0.1:3000 your-user@your-server
 ```
 
-Then open http://127.0.0.1:3000/ on the laptop (production) or tunnel **5173** similarly for Vite:
+Then open http://127.0.0.1:3000/ on the laptop. For Vite dev, also tunnel **5173**:
 
 ```bash
 ssh -L 5173:127.0.0.1:5173 -L 3000:127.0.0.1:3000 your-user@your-server
@@ -424,7 +444,8 @@ Reference: [ssh(1)](https://manpages.ubuntu.com/manpages/noble/en/man1/ssh.1.htm
 
 ---
 
-## 17. Backups
+## 18. Backups
+
 
 TaskMesh can dump **PostgreSQL** and tar **uploads** into `BACKUP_DIR` (default `data/backups/`).
 
@@ -483,21 +504,21 @@ Or restore from a TaskMesh backup folder’s `.sql` file under `BACKUP_DIR/<id>/
 
 ---
 
-## 18. Verify the install
+## 19. Verify the install
 
 ```bash
 curl -sS http://127.0.0.1:3000/api/health
 # expect JSON health payload / HTTP 200
 
-# Production UI (after build + start):
-curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/
+# Via nginx (after §15):
+curl -sS http://127.0.0.1/api/health
+curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1/
 ```
 
-In a browser: open the UI, create a project, attach an image in Markdown (upload path), and open a canvas (Excalidraw).
-
+In a browser on the LAN: open `http://<server-ip>/`, create a project, attach an image in Markdown, and open a canvas (Excalidraw).
 ---
 
-## 19. Updating TaskMesh
+## 20. Updating TaskMesh
 
 ```bash
 cd /srv/taskmesh
@@ -513,13 +534,15 @@ Always run migrations after pulling schema changes; review `drizzle/` if you mai
 
 ---
 
-## 20. Troubleshooting
+## 21. Troubleshooting
 
 | Symptom | Things to check |
 |---------|-----------------|
 | `npm run db:migrate` fails on permissions | Re-run §6 schema grants; confirm `DATABASE_URL` user owns/can write `public` |
 | `ECONNREFUSED` on Postgres | `sudo systemctl status postgresql`; host `127.0.0.1` vs `localhost`; password in URL |
 | Port 3000 in use | `ss -tlnp \| grep 3000`; change `PORT` in `.env` |
+| Cannot open app from phone on LAN | Confirm nginx (§15), `HOST=127.0.0.1`, UFW allows **80** (not 3000); try `curl http://127.0.0.1/api/health` on server |
+| nginx 502 Bad Gateway | TaskMesh not running (`systemctl status taskmesh`); wrong `HOST`/`PORT`; `ss -tlnp \| grep 3000` should show `127.0.0.1:3000` |
 | Blank Excalidraw / missing fonts | Re-run `cd client && npm install`; confirm `client/public/excalidraw-assets/fonts` exists; `index.html` sets `EXCALIDRAW_ASSET_PATH` |
 | SPA 404 on refresh in production | Ensure `NODE_ENV=production` and `client/dist/index.html` exists (`npm run build:all`) |
 | Client `postinstall` skipped | Run `node client/scripts/copy-excalidraw-assets.mjs` manually from `client/` |
@@ -532,9 +555,9 @@ Always run migrations after pulling schema changes; review `drizzle/` if you mai
 2. Enable PostgreSQL; create `taskmesh` user + database + schema grants  
 3. Install Node.js **22.x** (NodeSource)  
 4. Clone repo to `/srv/taskmesh`  
-5. Copy `.env.example` → `.env`; set `DATABASE_URL` / `PORT`  
+5. Copy `.env.example` → `.env`; set `DATABASE_URL`, `HOST=127.0.0.1`, `PORT=3000`  
 6. `npm install` (root) and `npm install` in `client/`  
 7. `npm run db:migrate`  
-8. Dev: `npm run dev:web` **or** prod: `npm run build:all` + `NODE_ENV=production npm start` (+ systemd)  
-9. Confirm `/api/health` and the UI  
+8. Prod: `npm run build:all` + systemd (§14) + nginx (§15); UFW allow LAN → port **80**  
+9. Confirm `http://<server-ip>/api/health` and the UI from another device  
 10. Schedule Postgres + uploads backups  

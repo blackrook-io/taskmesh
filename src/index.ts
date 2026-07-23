@@ -57,8 +57,9 @@ app.use(
 );
 
 const port = Number(process.env.PORT) || 3000;
-const server = app.listen(port, () => {
-  console.log(`TaskMesh API listening on http://localhost:${port}`);
+const host = process.env.HOST || "127.0.0.1";
+const server = app.listen(port, host, () => {
+  console.log(`TaskMesh API listening on http://${host}:${port}`);
   startBackupScheduler();
 });
 

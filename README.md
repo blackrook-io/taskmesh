@@ -8,7 +8,7 @@ Single-user, private-network oriented (no auth in this build). Deletions require
 
 ## Install
 
-**Full bare-metal Ubuntu setup** (packages, Postgres, Node.js, clone, env, migrate, dev/prod, systemd, backups, troubleshooting):
+**Full bare-metal Ubuntu setup** (packages, Postgres, Node.js, clone, env, migrate, systemd, **nginx :80**, backups, troubleshooting):
 
 → **[INSTALL.md](INSTALL.md)**
 
@@ -20,8 +20,7 @@ npm run build:all
 NODE_ENV=production npm start
 ```
 
-Then open http://127.0.0.1:3000/ (API under `/api/...`, health at `/api/health`).
-
+On the server: http://127.0.0.1:3000/ — on the LAN after nginx (§15): **http://&lt;server-ip&gt;/** (API under `/api/...`, health at `/api/health`).
 ## Development
 
 From the repo root (Postgres running, `.env` configured, migrations applied — see [INSTALL.md](INSTALL.md)):
@@ -64,12 +63,12 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | PostgreSQL connection string |
+| `HOST` | API bind address (default `127.0.0.1`; use nginx for LAN) |
 | `PORT` | API listen port (default `3000`) |
 | `UPLOAD_DIR` | Image upload directory (default `data/uploads/`) |
 | `UPLOAD_MAX_BYTES` | Max upload size (default 5 MiB) |
 
-Back up **Postgres** and the uploads directory together. Commands and scheduling notes are in [INSTALL.md § Backups](INSTALL.md#17-backups).
-
+Back up **Postgres** and the uploads directory together. Commands and scheduling notes are in [INSTALL.md § Backups](INSTALL.md#18-backups).
 ## Project layout
 
 ```
