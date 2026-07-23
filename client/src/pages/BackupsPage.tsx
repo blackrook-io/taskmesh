@@ -264,7 +264,8 @@ export function BackupsPage() {
           <p className="muted">No backups yet. Run one now.</p>
         ) : null}
         {(listQuery.data?.items.length ?? 0) > 0 ? (
-          <table className="data-table" style={{ marginTop: "0.5rem" }}>
+          <div className="table-scroll">
+          <table className="data-table">
             <thead>
               <tr>
                 <th>When</th>
@@ -295,7 +296,7 @@ export function BackupsPage() {
                   <td>{formatBytes(b.bytes)}</td>
                   <td className="muted">{b.error ?? "—"}</td>
                   <td>
-                    <div className="btn-row" style={{ flexWrap: "nowrap", gap: "0.35rem" }}>
+                    <div className="btn-row" style={{ gap: "0.35rem" }}>
                       <button
                         type="button"
                         className="btn small danger"
@@ -326,6 +327,7 @@ export function BackupsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : null}
       </section>
 

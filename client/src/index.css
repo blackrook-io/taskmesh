@@ -10,7 +10,8 @@
   --radius: 10px;
   --radius-chip: 999px;
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
-  --content-max: 960px;
+  --content-max: 1100px;
+  --touch-min: 2.75rem; /* ~44px tap target */
   /* Canvas surfaces are intentionally darker than the app chrome */
   --canvas-bg: #14151a;
   --canvas-grid: #1a1b22;
@@ -105,15 +106,16 @@ code {
 .layout {
   max-width: var(--content-max);
   margin: 0 auto;
-  padding: 0 1rem 2rem;
+  padding: 0 max(1rem, env(safe-area-inset-right))
+    max(2rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 0;
+  gap: 0.75rem;
+  padding: 0.85rem 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: 1.25rem;
 }
@@ -153,7 +155,8 @@ code {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 12vh 1rem 2rem;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  padding-top: max(12vh, env(safe-area-inset-top));
 }
 
 .command-palette {
@@ -164,7 +167,7 @@ code {
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
-  max-height: min(70vh, 520px);
+  max-height: min(70dvh, 520px);
   overflow: hidden;
 }
 
@@ -220,7 +223,8 @@ code {
   background: transparent;
   color: var(--text);
   text-align: left;
-  padding: 0.45rem 1rem;
+  padding: 0.65rem 1rem;
+  min-height: var(--touch-min);
   cursor: pointer;
   font: inherit;
 }
@@ -263,6 +267,17 @@ code {
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 0.5rem;
+  max-width: 100%;
+}
+
+.table-scroll .data-table {
+  margin-top: 0;
 }
 
 .data-table {
@@ -327,6 +342,14 @@ code {
 .grid {
   display: grid;
   gap: 0.75rem;
+}
+
+/* Documents / To Do list side panes — stacks on tablet/phone (see media queries). */
+.split-panel {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  align-items: start;
 }
 
 .card {
@@ -453,8 +476,9 @@ textarea.raw-md {
 }
 
 .btn.small {
-  padding: 0.25rem 0.55rem;
+  padding: 0.45rem 0.7rem;
   font-size: 0.85rem;
+  min-height: var(--touch-min);
 }
 
 .btn-row {
@@ -472,7 +496,8 @@ textarea.raw-md {
 
 .md-editor--focus {
   position: fixed;
-  inset: 0.75rem;
+  inset: max(0.35rem, env(safe-area-inset-top)) max(0.35rem, env(safe-area-inset-right))
+    max(0.35rem, env(safe-area-inset-bottom)) max(0.35rem, env(safe-area-inset-left));
   z-index: 80;
   display: flex;
   flex-direction: column;
@@ -669,17 +694,24 @@ textarea.raw-md {
 
 .tabs {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
   margin: 1rem 0;
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .tabs button {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: 0.5rem 0.75rem;
+  padding: 0.65rem 0.85rem;
+  min-height: var(--touch-min);
   color: var(--text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .tabs button.active {
@@ -694,7 +726,8 @@ textarea.raw-md {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   z-index: 50;
 }
 
@@ -705,6 +738,8 @@ textarea.raw-md {
   padding: 1.25rem;
   max-width: 420px;
   width: 100%;
+  max-height: min(90dvh, 640px);
+  overflow: auto;
 }
 
 button:focus-visible,
@@ -787,11 +822,14 @@ a:focus-visible {
 }
 
 .color-popover-cell {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 4px;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 0;
+  cursor: pointer;
 }
 
 .color-popover-cell.selected {
@@ -885,17 +923,32 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.1rem;
-  height: 1.1rem;
+  width: var(--touch-min);
+  height: var(--touch-min);
   padding: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: 1.1rem;
   line-height: 1;
-  opacity: 0.4;
+  opacity: 0.55;
   cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .task-card-dismiss {
+    width: 1.25rem;
+    height: 1.25rem;
+    font-size: 0.9rem;
+    opacity: 0.4;
+    border-radius: 3px;
+  }
+
+  .element-shell--card:hover .task-card-dismiss,
+  .task-card-dismiss:focus-visible {
+    opacity: 0.85;
+  }
 }
 
 .element-shell--card:hover .task-card-dismiss,
@@ -958,7 +1011,7 @@ a:focus-visible {
 .element-shell--modal {
   width: 100%;
   max-width: none;
-  max-height: min(85vh, 720px);
+  max-height: min(85dvh, 720px);
   overflow: auto;
 }
 
@@ -1373,12 +1426,15 @@ a:focus-visible {
 
 .board-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: stretch;
   gap: 0.15rem;
   margin: 0 0 1rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .board-tab {
@@ -1386,7 +1442,9 @@ a:focus-visible {
   align-items: center;
   gap: 0.2rem;
   max-width: 14rem;
-  padding: 0.45rem 0.55rem 0.5rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.65rem 0.6rem;
+  min-height: var(--touch-min);
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -1434,14 +1492,14 @@ a:focus-visible {
 
 .board-tab__close {
   flex-shrink: 0;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: var(--touch-min);
+  height: var(--touch-min);
   padding: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 1rem;
+  font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -1525,8 +1583,8 @@ a:focus-visible {
 }
 
 .kanban-carousel__nav {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: var(--touch-min);
+  height: var(--touch-min);
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -1639,16 +1697,10 @@ a:focus-visible {
   max-width: calc(100vw - 5.5rem);
   display: flex;
   flex-direction: column;
-  max-height: min(70vh, 720px);
+  max-height: min(70dvh, 720px);
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--canvas-bg, var(--bg-elevated, #2a2a2a));
-}
-
-@media (max-width: 640px) {
-  .kanban-carousel {
-    --kanban-col-width: min(280px, calc(100vw - 5.5rem));
-  }
 }
 
 .kanban-column.is-over {
@@ -1774,12 +1826,6 @@ a:focus-visible {
   align-items: start;
 }
 
-@media (max-width: 800px) {
-  .wiki-panel {
-    grid-template-columns: 1fr;
-  }
-}
-
 .wiki-panel__toc-head {
   display: flex;
   align-items: center;
@@ -1817,7 +1863,8 @@ a:focus-visible {
 }
 
 .btn-add {
-  min-width: 2rem;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
   padding-inline: 0.45rem;
   font-size: 1.15rem;
   font-weight: 600;
@@ -1825,7 +1872,8 @@ a:focus-visible {
 }
 
 .btn-icon {
-  min-width: 2rem;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
   padding-inline: 0.4rem;
   display: inline-flex;
   align-items: center;
@@ -1943,13 +1991,13 @@ a:focus-visible {
 }
 
 .canvases-panel .canvas-editor {
-  height: min(78vh, 860px);
+  height: min(78dvh, 860px);
   min-height: 480px;
 }
 
 .canvas-editor {
   position: relative;
-  height: min(70vh, 720px);
+  height: min(70dvh, 720px);
   min-height: 420px;
   border-radius: 8px;
   overflow: hidden;
@@ -2015,3 +2063,108 @@ a:focus-visible {
 .canvas-editor--readonly {
   border-style: dashed;
 }
+
+/* —— Responsive (Phase 10c: ~412 phone / ~800–1030 tablet) —— */
+
+@media (max-width: 800px) {
+  .wiki-panel,
+  .split-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0.65rem 0;
+    margin-bottom: 1rem;
+  }
+
+  .brand {
+    font-size: 1.05rem;
+  }
+
+  .kanban-carousel {
+    --kanban-col-width: min(280px, calc(100vw - 5.5rem));
+  }
+
+  .command-palette-backdrop {
+    padding: max(0.5rem, env(safe-area-inset-top)) 0 0;
+    align-items: stretch;
+  }
+
+  .command-palette {
+    width: 100%;
+    max-height: min(92dvh, 100%);
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .command-palette__footer {
+    display: none;
+  }
+
+  .md-toolbar__hint {
+    display: none;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    max-width: none;
+    width: 100%;
+    max-height: min(92dvh, 100%);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .element-shell-backdrop.modal-backdrop {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .element-shell-backdrop > [role="dialog"] {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  .element-shell--modal {
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .page-head .btn-row {
+    width: 100%;
+  }
+
+  .page-head .btn-row > .btn {
+    flex: 1 1 auto;
+  }
+
+  .canvas-editor,
+  .canvases-panel .canvas-editor {
+    height: min(58dvh, 520px);
+    min-height: 280px;
+  }
+
+  .backup-schedule-form {
+    max-width: none;
+  }
+}
+
+@media (hover: none) {
+  .board-tab__close:hover {
+    background: transparent;
+    color: var(--text-muted);
+  }
+}
+

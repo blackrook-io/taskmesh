@@ -578,7 +578,7 @@ export function ProjectDetailPage() {
       ) : null}
 
       {tab === "documents" ? (
-        <div className="grid" style={{ gridTemplateColumns: "minmax(200px, 260px) 1fr", alignItems: "start" }}>
+        <div className="split-panel">
           <div className="card">
             <h3>Documents</h3>
             <div className="field">
