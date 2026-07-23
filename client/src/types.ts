@@ -87,6 +87,16 @@ export type TodoListItem = {
 
 export type TodoListDetail = TodoList & { items: TodoListItem[] };
 
+export type ProjectModule = {
+  id: number;
+  projectId: number;
+  moduleKey: string;
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ApiErrorBody = { error: { code: string; message: string } };
 
 export type { EntityType } from "./lib/entityType";

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -8,17 +8,49 @@ import { TagInput } from "../components/shared/TagInput";
 import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
 import { TodoListView } from "../components/TodoListView";
-import type { Project, ProjectDocument, ProjectPhase, Task, TodoList } from "../types";
+import {
+  IMPLEMENTED_MODULES,
+  isProjectModuleKey,
+  MODULE_BLURBS,
+  MODULE_LABELS,
+  type ProjectModuleKey,
+} from "../lib/projectModules";
+import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TodoList } from "../types";
 
-type Tab = "overview" | "tasks" | "todos" | "documents";
+type Tab = "overview" | ProjectModuleKey;
+
+const TAB_ALIASES: Record<string, Tab> = {
+  overview: "overview",
+  todos: "todo_lists",
+  todo_lists: "todo_lists",
+  tasks: "tasks",
+  documents: "documents",
+  boards: "boards",
+  wiki: "wiki",
+  canvases: "canvases",
+};
+
+function parseTab(raw: string | null): Tab {
+  if (!raw) return "overview";
+  return TAB_ALIASES[raw] ?? "overview";
+}
 
 export function ProjectDetailPage() {
   const { id } = useParams();
   const projectId = Number(id);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>("overview");
+  const tab = parseTab(searchParams.get("tab"));
+  const setTab = (next: Tab) => {
+    if (next === "overview") {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab: next }, { replace: true });
+    }
+  };
+
   const [name, setName] = useState("");
   const [status, setStatus] = useState("idea");
   const [description, setDescription] = useState("");
@@ -39,6 +71,17 @@ export function ProjectDetailPage() {
     enabled: !invalidId,
     queryFn: async () => {
       const res = await apiJson<{ data: Project }>(`/api/v1/projects/${projectId}`);
+      return res.data;
+    },
+  });
+
+  const modulesQuery = useQuery({
+    queryKey: ["project-modules", projectId],
+    enabled: !invalidId,
+    queryFn: async () => {
+      const res = await apiJson<{ data: ProjectModule[] }>(
+        `/api/v1/projects/${projectId}/modules`,
+      );
       return res.data;
     },
   });
@@ -96,7 +139,31 @@ export function ProjectDetailPage() {
     },
   });
 
+  const toggleModule = useMutation({
+    mutationFn: async ({ key, enabled }: { key: ProjectModuleKey; enabled: boolean }) => {
+      const res = await apiJson<{ data: ProjectModule }>(
+        `/api/v1/projects/${projectId}/modules/${key}`,
+        { method: "PATCH", body: JSON.stringify({ enabled }) },
+      );
+      return res.data;
+    },
+    onSuccess: (row) => {
+      void qc.invalidateQueries({ queryKey: ["project-modules", projectId] });
+      if (!row.enabled && tab === row.moduleKey) {
+        setTab("overview");
+      }
+    },
+  });
+
   const project = projectQuery.data;
+  const modules = modulesQuery.data ?? [];
+  const enabledModules = useMemo(
+    () =>
+      modules
+        .filter((m) => m.enabled && isProjectModuleKey(m.moduleKey))
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    [modules],
+  );
   const phases = phasesQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
   const documents = documentsQuery.data ?? [];
@@ -113,6 +180,13 @@ export function ProjectDetailPage() {
       setDescription(project.description ?? "");
     }
   }, [project]);
+
+  useEffect(() => {
+    if (!modulesQuery.isSuccess) return;
+    if (tab === "overview") return;
+    const mod = modules.find((m) => m.moduleKey === tab);
+    if (!mod?.enabled) setTab("overview");
+  }, [modules, modulesQuery.isSuccess, tab]);
 
   const saveMeta = useMutation({
     mutationFn: async () => {
@@ -248,43 +322,102 @@ export function ProjectDetailPage() {
         <button type="button" className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
           Overview
         </button>
-        <button type="button" className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>
-          Tasks
-        </button>
-        <button type="button" className={tab === "todos" ? "active" : ""} onClick={() => setTab("todos")}>
-          To Dos
-        </button>
-        <button type="button" className={tab === "documents" ? "active" : ""} onClick={() => setTab("documents")}>
-          Documents
-        </button>
+        {enabledModules.map((m) => {
+          const key = m.moduleKey as ProjectModuleKey;
+          return (
+            <button
+              key={key}
+              type="button"
+              className={tab === key ? "active" : ""}
+              onClick={() => setTab(key)}
+            >
+              {MODULE_LABELS[key]}
+            </button>
+          );
+        })}
       </div>
 
       {tab === "overview" ? (
-        <div className="card">
-          <div className="field">
-            <label htmlFor="proj-name">Name</label>
-            <input id="proj-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="grid" style={{ gap: "1rem" }}>
+          <div className="card">
+            <div className="field">
+              <label htmlFor="proj-name">Name</label>
+              <input id="proj-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="proj-status">Status</label>
+              <select id="proj-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="idea">idea</option>
+                <option value="active">active</option>
+                <option value="paused">paused</option>
+                <option value="done">done</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Description</label>
+              <MarkdownEditor value={description} onChange={setDescription} height={280} />
+            </div>
+            <div className="field field--tags-below">
+              <TagInput entityType="project" entityId={projectId} />
+            </div>
+            <button type="button" className="btn primary" onClick={() => saveMeta.mutate()} disabled={saveMeta.isPending}>
+              Save overview
+            </button>
+            {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
           </div>
-          <div className="field">
-            <label htmlFor="proj-status">Status</label>
-            <select id="proj-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="idea">idea</option>
-              <option value="active">active</option>
-              <option value="paused">paused</option>
-              <option value="done">done</option>
-            </select>
+
+          <div className="card">
+            <h3 style={{ marginTop: 0 }}>Project modules</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Enable the pieces this project needs. Disabled modules stay available as opportunities below.
+            </p>
+            <div className="module-hub">
+              {modules
+                .filter((m) => isProjectModuleKey(m.moduleKey))
+                .map((m) => {
+                  const key = m.moduleKey as ProjectModuleKey;
+                  return (
+                    <div key={key} className={`module-hub__item${m.enabled ? " is-enabled" : ""}`}>
+                      <div className="module-hub__copy">
+                        <strong>{MODULE_LABELS[key]}</strong>
+                        <span className="muted">{MODULE_BLURBS[key]}</span>
+                      </div>
+                      <div className="module-hub__actions">
+                        {m.enabled ? (
+                          <>
+                            <button type="button" className="btn small primary" onClick={() => setTab(key)}>
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              className="btn small ghost"
+                              disabled={toggleModule.isPending}
+                              onClick={() => toggleModule.mutate({ key, enabled: false })}
+                            >
+                              Disable
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn small primary"
+                            disabled={toggleModule.isPending}
+                            onClick={() => {
+                              toggleModule.mutate(
+                                { key, enabled: true },
+                                { onSuccess: () => setTab(key) },
+                              );
+                            }}
+                          >
+                            Enable
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
-          <div className="field">
-            <label>Description</label>
-            <MarkdownEditor value={description} onChange={setDescription} height={320} />
-          </div>
-          <div className="field field--tags-below">
-            <TagInput entityType="project" entityId={projectId} />
-          </div>
-          <button type="button" className="btn primary" onClick={() => saveMeta.mutate()} disabled={saveMeta.isPending}>
-            Save overview
-          </button>
-          {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
         </div>
       ) : null}
 
@@ -338,7 +471,7 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
 
-      {tab === "todos" ? (
+      {tab === "todo_lists" ? (
         <div>
           <div className="card" style={{ marginBottom: "1rem" }}>
             <h3>Project To Do lists</h3>
@@ -432,6 +565,22 @@ export function ProjectDetailPage() {
               <p className="muted">Select or create a document.</p>
             )}
           </div>
+        </div>
+      ) : null}
+
+      {tab === "boards" || tab === "wiki" || tab === "canvases" ? (
+        <div className="card module-placeholder">
+          <h2 style={{ marginTop: 0 }}>{MODULE_LABELS[tab]}</h2>
+          <p>{MODULE_BLURBS[tab]}</p>
+          <p className="muted">
+            This module is enabled for the project hub. Full UI lands in a later phase — deep link{" "}
+            <code>?tab={tab}</code> already works.
+          </p>
+          {!IMPLEMENTED_MODULES.has(tab) ? (
+            <button type="button" className="btn ghost" onClick={() => setTab("overview")}>
+              Back to overview
+            </button>
+          ) : null}
         </div>
       ) : null}
 

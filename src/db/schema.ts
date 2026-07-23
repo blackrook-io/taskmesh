@@ -175,6 +175,29 @@ export const todoListItems = pgTable(
   }),
 );
 
+/** Per-project enablement of hub modules (tasks, wiki, boards, …). */
+export const projectModules = pgTable(
+  "project_modules",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    moduleKey: text("module_key").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    projectModuleUniq: unique("project_modules_project_key_uidx").on(t.projectId, t.moduleKey),
+  }),
+);
+
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
 }));
@@ -188,6 +211,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   tasks: many(tasks),
   documents: many(projectDocuments),
   todoLists: many(todoLists),
+  modules: many(projectModules),
 }));
 
 export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
@@ -239,5 +263,12 @@ export const todoListItemsRelations = relations(todoListItems, ({ one }) => ({
   list: one(todoLists, {
     fields: [todoListItems.listId],
     references: [todoLists.id],
+  }),
+}));
+
+export const projectModulesRelations = relations(projectModules, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectModules.projectId],
+    references: [projects.id],
   }),
 }));
