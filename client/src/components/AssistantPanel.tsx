@@ -8,7 +8,6 @@ import {
   type ChatTurn,
 } from "../api/assistant";
 import { apiJson } from "../api/client";
-import { ConfirmDialog } from "./ConfirmDialog";
 
 const TRANSCRIPT_KEY = "taskmesh.assistant.transcript";
 
@@ -24,12 +23,14 @@ function loadTranscript(): ChatTurn[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ChatTurn[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (t) =>
-        t &&
-        (t.role === "user" || t.role === "assistant") &&
-        typeof t.content === "string",
-    ).slice(-40);
+    return parsed
+      .filter(
+        (t) =>
+          t &&
+          (t.role === "user" || t.role === "assistant") &&
+          typeof t.content === "string",
+      )
+      .slice(-40);
   } catch {
     return [];
   }
@@ -43,6 +44,16 @@ function saveTranscript(turns: ChatTurn[]) {
   }
 }
 
+function previewFields(fields: Record<string, unknown>): string {
+  const lines: string[] = [];
+  for (const [k, v] of Object.entries(fields)) {
+    const raw = v == null ? "∅" : typeof v === "string" ? v : JSON.stringify(v);
+    const clipped = raw.length > 280 ? `${raw.slice(0, 280)}…` : raw;
+    lines.push(`${k}: ${clipped}`);
+  }
+  return lines.join("\n") || "(no fields)";
+}
+
 export function AssistantPanel({ open, onClose, pageContext }: Props) {
   const qc = useQueryClient();
   const [input, setInput] = useState("");
@@ -51,7 +62,8 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
   const [toolNote, setToolNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [pendingProposal, setPendingProposal] = useState<AssistantProposal | null>(null);
+  const [proposals, setProposals] = useState<AssistantProposal[]>([]);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -65,16 +77,16 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pendingProposal) onClose();
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, pendingProposal]);
+  }, [open, onClose]);
 
   useEffect(() => {
     if (!open) return;
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [open, turns, streaming, toolNote]);
+  }, [open, turns, streaming, toolNote, proposals]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -89,6 +101,7 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
       if (!p.path || !p.method) {
         throw new Error("Invalid proposal (missing path/method). Restart TaskMesh and try again.");
       }
+      setApplyingId(p.id);
       await apiJson(p.path, {
         method: p.method,
         body: JSON.stringify(p.fields),
@@ -96,7 +109,8 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
       return p;
     },
     onSuccess: (p) => {
-      setPendingProposal(null);
+      setApplyingId(null);
+      setProposals((list) => list.filter((x) => x.id !== p.id));
       if (p.entityType === "idea") {
         void qc.invalidateQueries({ queryKey: ["ideas"] });
       } else if (p.entityType === "document" && p.projectId != null) {
@@ -121,8 +135,8 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
       ]);
     },
     onError: (e: Error) => {
+      setApplyingId(null);
       setError(e.message);
-      setPendingProposal(null);
     },
   });
 
@@ -137,7 +151,6 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
       const ac = new AbortController();
       abortRef.current = ac;
       let full = "";
-      let aborted = false;
       try {
         await streamAssistantChat({
           message,
@@ -152,7 +165,10 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
             setToolNote(`Using ${info.name}…`);
           },
           onProposal: (proposal) => {
-            setPendingProposal(proposal);
+            setProposals((list) => {
+              if (list.some((x) => x.id === proposal.id)) return list;
+              return [...list, proposal];
+            });
           },
         });
         if (!ac.signal.aborted) {
@@ -164,7 +180,7 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
         setStreaming("");
         setToolNote(null);
       } catch (e) {
-        aborted =
+        const aborted =
           (e instanceof DOMException && e.name === "AbortError") ||
           (e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message)));
         if (aborted) {
@@ -223,9 +239,10 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
             <button
               type="button"
               className="btn small ghost"
-              disabled={busy || turns.length === 0}
+              disabled={busy || (turns.length === 0 && proposals.length === 0)}
               onClick={() => {
                 setTurns([]);
+                setProposals([]);
                 saveTranscript([]);
               }}
             >
@@ -251,10 +268,10 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
         ) : null}
 
         <div className="assistant-panel__messages" ref={listRef}>
-          {turns.length === 0 && !streaming ? (
+          {turns.length === 0 && !streaming && proposals.length === 0 ? (
             <p className="muted">
-              Ask to search, summarize, or draft changes. Suggested edits appear as confirmations
-              before anything is saved.
+              Ask to search, summarize, or draft changes. Suggested creates/edits appear below as
+              review cards — nothing is saved until you click Apply.
             </p>
           ) : null}
           {turns.map((t, i) => (
@@ -271,6 +288,46 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
             <div className="assistant-bubble assistant-bubble--assistant">
               <div className="assistant-bubble__role">Assistant</div>
               <div className="assistant-bubble__body">{streaming}</div>
+            </div>
+          ) : null}
+
+          {proposals.length > 0 ? (
+            <div className="assistant-proposals">
+              <h3 className="assistant-proposals__title">Pending changes</h3>
+              <p className="muted" style={{ margin: "0 0 0.5rem", fontSize: "0.85rem" }}>
+                Review each card, then Apply to write to TaskMesh (or Dismiss).
+              </p>
+              {proposals.map((p) => (
+                <article key={p.id} className="assistant-proposal-card">
+                  <header className="assistant-proposal-card__head">
+                    <strong>
+                      {p.action === "create" ? "Create" : "Update"} {p.entityType}
+                      {p.entityId != null ? ` #${p.entityId}` : ""}
+                      {p.projectId != null ? ` · project #${p.projectId}` : ""}
+                    </strong>
+                  </header>
+                  <p className="assistant-proposal-card__summary">{p.summary}</p>
+                  <pre className="assistant-proposal-card__fields">{previewFields(p.fields)}</pre>
+                  <div className="btn-row" style={{ marginTop: "0.5rem" }}>
+                    <button
+                      type="button"
+                      className="btn small ghost"
+                      disabled={applyingId === p.id}
+                      onClick={() => setProposals((list) => list.filter((x) => x.id !== p.id))}
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      type="button"
+                      className="btn small primary"
+                      disabled={applyingId != null}
+                      onClick={() => applyMutation.mutate(p)}
+                    >
+                      {applyingId === p.id ? "Applying…" : "Apply"}
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
           ) : null}
         </div>
@@ -323,43 +380,6 @@ export function AssistantPanel({ open, onClose, pageContext }: Props) {
           </div>
         </form>
       </aside>
-
-      <ConfirmDialog
-        open={pendingProposal != null}
-        title={
-          pendingProposal?.action === "create"
-            ? "Create with assistant?"
-            : "Apply assistant change?"
-        }
-        message={
-          pendingProposal
-            ? `${pendingProposal.summary}\n\n${
-                pendingProposal.action === "create" ? "Create" : "Update"
-              } ${pendingProposal.entityType}${
-                pendingProposal.entityId != null ? ` #${pendingProposal.entityId}` : ""
-              }${
-                pendingProposal.projectId != null
-                  ? ` (project #${pendingProposal.projectId})`
-                  : ""
-              }\nFields: ${Object.keys(pendingProposal.fields).join(", ") || "(none)"}`
-            : ""
-        }
-        confirmLabel={
-          applyMutation.isPending
-            ? "Working…"
-            : pendingProposal?.action === "create"
-              ? "Create"
-              : "Apply"
-        }
-        onCancel={() => {
-          if (!applyMutation.isPending) setPendingProposal(null);
-        }}
-        onConfirm={() => {
-          if (pendingProposal && !applyMutation.isPending) {
-            applyMutation.mutate(pendingProposal);
-          }
-        }}
-      />
     </div>
   );
 }

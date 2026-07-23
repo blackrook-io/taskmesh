@@ -2284,6 +2284,51 @@ a:focus-visible {
   font-size: 0.85rem;
 }
 
+.assistant-proposals {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.assistant-proposals__title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.assistant-proposal-card {
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  padding: 0.65rem 0.75rem;
+}
+
+.assistant-proposal-card__head {
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.assistant-proposal-card__summary {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+}
+
+.assistant-proposal-card__fields {
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  max-height: 10rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
 .assistant-status-list {
   margin: 0.75rem 0 0;
   padding-left: 1.2rem;
