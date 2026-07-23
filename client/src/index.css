@@ -1752,6 +1752,7 @@ a:focus-visible {
 }
 
 .canvas-editor {
+  position: relative;
   height: min(70vh, 720px);
   min-height: 420px;
   border-radius: 8px;
@@ -1766,10 +1767,6 @@ a:focus-visible {
   gap: 0.45rem;
 }
 
-.canvas-editor-shell .canvas-editor {
-  flex: 1;
-}
-
 .canvas-assist {
   display: flex;
   flex-wrap: wrap;
@@ -1779,6 +1776,7 @@ a:focus-visible {
   border-radius: 8px;
   background: color-mix(in srgb, var(--canvas-bg) 80%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  flex-shrink: 0;
 }
 
 .canvas-assist__group {
@@ -1804,7 +1802,12 @@ a:focus-visible {
   pointer-events: none;
 }
 
+/* tldraw UI (tool rail, style panel) needs a definite box — fill the host. */
 .canvas-editor .tl-container {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
   --color-background: var(--canvas-bg);
 }
 

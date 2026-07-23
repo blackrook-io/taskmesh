@@ -95,11 +95,11 @@ export function CanvasEditor({ canvasId, document, readOnly = false, onSaveDocum
     <div className={`canvas-editor-shell${readOnly ? " canvas-editor-shell--readonly" : ""}`}>
       {!readOnly ? (
         <CanvasLayoutBar
-          key={selectionTick}
           editor={editor}
           prefs={prefs}
           onPrefsChange={onPrefsChange}
           disabled={!editor}
+          selectionTick={selectionTick}
         />
       ) : null}
       <div className={`canvas-editor${readOnly ? " canvas-editor--readonly" : ""}`}>

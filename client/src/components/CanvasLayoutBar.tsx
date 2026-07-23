@@ -89,6 +89,8 @@ type Props = {
   prefs: CanvasLayoutPrefs;
   onPrefsChange: (prefs: CanvasLayoutPrefs) => void;
   disabled?: boolean;
+  /** Bumps when selection changes so enable/disable updates. */
+  selectionTick?: number;
 };
 
 function AssistBtn({
@@ -119,7 +121,13 @@ function AssistBtn({
   );
 }
 
-export function CanvasLayoutBar({ editor, prefs, onPrefsChange, disabled }: Props) {
+export function CanvasLayoutBar({
+  editor,
+  prefs,
+  onPrefsChange,
+  disabled,
+  selectionTick: _selectionTick = 0,
+}: Props) {
   const selectedCount = editor?.getSelectedShapeIds().length ?? 0;
   const multi = selectedCount >= 2;
   const anySelected = selectedCount >= 1;
