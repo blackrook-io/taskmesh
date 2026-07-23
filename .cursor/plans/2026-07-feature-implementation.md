@@ -309,9 +309,9 @@ Drawn from UpNote / Notion / Linear / Trello / Lucid-class products:
 
 ### 10c — Responsive phone/tablet (branch `phase-10c-responsive`; QA deferred)
 
-### 10d — nginx :80 host (in progress on `phase-10d-host-port80`)
+### 10d — nginx :80 host (shipped)
 
-- `HOST=127.0.0.1`, nginx → Express, UFW allow LAN :80; future multi-app landing documented only
+- `HOST=127.0.0.1`, nginx → Express on :80, UFW LAN :80; future multi-app landing documented only
 
 ---
 
