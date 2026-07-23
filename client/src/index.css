@@ -1547,3 +1547,88 @@ a:focus-visible {
   align-self: stretch;
   flex-shrink: 0;
 }
+
+.wiki-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .wiki-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wiki-panel__toc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.wiki-toc__row {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-bottom: 0.2rem;
+  padding: 0.2rem 0.25rem;
+  border-radius: 6px;
+}
+
+.wiki-toc__row.is-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.wiki-toc__twist {
+  width: 1.1rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wiki-toc__twist:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.wiki-toc__title {
+  flex: 1;
+  min-width: 0;
+  padding: 0.15rem 0.25rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-toc__title:hover {
+  color: var(--accent);
+}
+
+.wiki-breadcrumb {
+  margin-bottom: 0.85rem;
+  font-size: 0.9rem;
+}
+
+.wiki-breadcrumb__link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.wiki-breadcrumb__link:hover {
+  text-decoration: underline;
+}

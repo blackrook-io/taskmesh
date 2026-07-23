@@ -9,6 +9,7 @@ import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
 import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
+import { WikiPanel } from "../components/WikiPanel";
 import {
   IMPLEMENTED_MODULES,
   isProjectModuleKey,
@@ -571,7 +572,9 @@ export function ProjectDetailPage() {
 
       {tab === "boards" ? <KanbanBoardsPanel projectId={projectId} phases={phases} /> : null}
 
-      {tab === "wiki" || tab === "canvases" ? (
+      {tab === "wiki" ? <WikiPanel projectId={projectId} /> : null}
+
+      {tab === "canvases" ? (
         <div className="card module-placeholder">
           <h2 style={{ marginTop: 0 }}>{MODULE_LABELS[tab]}</h2>
           <p>{MODULE_BLURBS[tab]}</p>

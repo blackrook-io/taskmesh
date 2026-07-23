@@ -23,7 +23,7 @@ export const MODULE_BLURBS: Record<ProjectModuleKey, string> = {
   documents: "Standalone Markdown documents for this project.",
   todo_lists: "Mix ideas and tasks in project To Do lists.",
   boards: "Kanban planning boards for tasks.",
-  wiki: "Nested wiki TOC for docs and canvases (coming soon).",
+  wiki: "Nested wiki TOC for Markdown pages.",
   canvases: "Diagrams and mood boards (coming soon).",
 };
 
@@ -33,6 +33,7 @@ export const IMPLEMENTED_MODULES = new Set<ProjectModuleKey>([
   "documents",
   "todo_lists",
   "boards",
+  "wiki",
 ]);
 
 export function isProjectModuleKey(value: string): value is ProjectModuleKey {

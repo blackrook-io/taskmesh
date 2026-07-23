@@ -11,6 +11,7 @@ import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
 import { phasesRouter } from "./phases.js";
 import { tasksRouter } from "./tasks.js";
+import { wikiRouter } from "./wiki.js";
 
 const projectStatus = z.enum(["idea", "active", "paused", "done"]);
 
@@ -141,3 +142,4 @@ projectsRouter.use("/:projectId/tasks", tasksRouter);
 projectsRouter.use("/:projectId/documents", documentsRouter);
 projectsRouter.use("/:projectId/modules", modulesRouter);
 projectsRouter.use("/:projectId/boards", boardsRouter);
+projectsRouter.use("/:projectId/wiki", wikiRouter);

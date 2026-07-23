@@ -148,6 +148,26 @@ export type BoardDetail = Board & {
   cards: BoardCard[];
 };
 
+export type WikiNode = {
+  id: number;
+  projectId: number;
+  parentId: number | null;
+  entityType: string;
+  entityId: number;
+  title: string;
+  sortOrder: number;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WikiTreeNode = WikiNode & { children: WikiTreeNode[] };
+
+export type WikiTreeResponse = {
+  nodes: WikiNode[];
+  tree: WikiTreeNode[];
+};
+
 export type ApiErrorBody = { error: { code: string; message: string } };
 
 export type { EntityType } from "./lib/entityType";

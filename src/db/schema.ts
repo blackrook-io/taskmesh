@@ -7,6 +7,7 @@ import {
   text,
   timestamp,
   unique,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const ideas = pgTable("ideas", {
@@ -276,6 +277,38 @@ export const boardCards = pgTable(
   }),
 );
 
+/** Nested wiki TOC nodes pointing at documents (and later canvases). */
+export const wikiNodes = pgTable(
+  "wiki_nodes",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    parentId: integer("parent_id").references((): AnyPgColumn => wikiNodes.id, {
+      onDelete: "cascade",
+    }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    title: text("title").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    pinned: boolean("pinned").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    projectEntityUniq: unique("wiki_nodes_project_entity_uidx").on(
+      t.projectId,
+      t.entityType,
+      t.entityId,
+    ),
+  }),
+);
+
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
 }));
@@ -291,6 +324,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   todoLists: many(todoLists),
   modules: many(projectModules),
   boards: many(boards),
+  wikiNodes: many(wikiNodes),
 }));
 
 export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
@@ -391,4 +425,17 @@ export const boardCardsRelations = relations(boardCards, ({ one }) => ({
     fields: [boardCards.laneId],
     references: [boardLanes.id],
   }),
+}));
+
+export const wikiNodesRelations = relations(wikiNodes, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [wikiNodes.projectId],
+    references: [projects.id],
+  }),
+  parent: one(wikiNodes, {
+    fields: [wikiNodes.parentId],
+    references: [wikiNodes.id],
+    relationName: "wiki_tree",
+  }),
+  children: many(wikiNodes, { relationName: "wiki_tree" }),
 }));
