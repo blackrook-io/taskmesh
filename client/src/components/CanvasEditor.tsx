@@ -9,6 +9,13 @@ import {
   type TLStoreSnapshot,
 } from "tldraw";
 import "tldraw/tldraw.css";
+import {
+  applyCanvasLayoutPrefs,
+  CanvasLayoutBar,
+  loadCanvasLayoutPrefs,
+  saveCanvasLayoutPrefs,
+  type CanvasLayoutPrefs,
+} from "./CanvasLayoutBar";
 
 type Props = {
   canvasId: number;
@@ -26,6 +33,9 @@ export function CanvasEditor({ canvasId, document, readOnly = false, onSaveDocum
   const editorRef = useRef<Editor | null>(null);
   const saveRef = useRef(onSaveDocument);
   saveRef.current = onSaveDocument;
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [selectionTick, setSelectionTick] = useState(0);
+  const [prefs, setPrefs] = useState<CanvasLayoutPrefs>(() => loadCanvasLayoutPrefs());
 
   const [store] = useState(() => {
     const next = createTLStore();
@@ -42,6 +52,20 @@ export function CanvasEditor({ canvasId, document, readOnly = false, onSaveDocum
   useEffect(() => {
     editorRef.current?.updateInstanceState({ isReadonly: readOnly });
   }, [readOnly]);
+
+  useEffect(() => {
+    if (!editor) return;
+    applyCanvasLayoutPrefs(editor, prefs);
+  }, [editor, prefs]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const unsub = editor.store.listen(
+      () => setSelectionTick((n) => n + 1),
+      { scope: "session" },
+    );
+    return () => unsub();
+  }, [editor]);
 
   useEffect(() => {
     if (readOnly) return;
@@ -62,15 +86,33 @@ export function CanvasEditor({ canvasId, document, readOnly = false, onSaveDocum
     };
   }, [store, readOnly, canvasId]);
 
+  const onPrefsChange = (next: CanvasLayoutPrefs) => {
+    setPrefs(next);
+    saveCanvasLayoutPrefs(next);
+  };
+
   return (
-    <div className={`canvas-editor${readOnly ? " canvas-editor--readonly" : ""}`}>
-      <Tldraw
-        store={store}
-        onMount={(editor) => {
-          editorRef.current = editor;
-          editor.updateInstanceState({ isReadonly: readOnly });
-        }}
-      />
+    <div className={`canvas-editor-shell${readOnly ? " canvas-editor-shell--readonly" : ""}`}>
+      {!readOnly ? (
+        <CanvasLayoutBar
+          key={selectionTick}
+          editor={editor}
+          prefs={prefs}
+          onPrefsChange={onPrefsChange}
+          disabled={!editor}
+        />
+      ) : null}
+      <div className={`canvas-editor${readOnly ? " canvas-editor--readonly" : ""}`}>
+        <Tldraw
+          store={store}
+          onMount={(ed) => {
+            editorRef.current = ed;
+            setEditor(ed);
+            ed.updateInstanceState({ isReadonly: readOnly });
+            applyCanvasLayoutPrefs(ed, loadCanvasLayoutPrefs());
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -1,0 +1,31 @@
+# Phase 8b — Canvas smart layout assists
+
+**Branch:** `phase-8b-canvas-layout`  
+**Depends on:** Phase 8a canvases (merged)
+
+## Scope
+
+Use tldraw’s built-in snap, grid, align, distribute, stack, and pack APIs. Surface them in TaskMesh chrome so layout assists are obvious (not only buried in tldraw menus). Theme the editor dark to match `--canvas-bg`. Apply shared **ColorPopover** fill to selected shapes via tldraw color styles closest to the platform palette.
+
+### Work
+
+1. Default **snap** + **grid** on for new editor mounts (instance state).
+2. Assist toolbar (hidden when `readOnly`): Snap, Grid, Align (6), Distribute H/V, Stack H/V, Pack.
+3. Dark color scheme via user preferences on mount.
+4. ColorPopover on the assist bar for selected-shape fill (map hex → nearest tldraw `DefaultColorStyle`).
+5. CSS polish for toolbar + canvas chrome.
+
+### Out of scope
+
+- Custom Mermaid/ERD (8c)
+- Export PNG/SVG (8c)
+- Replacing tldraw’s internal style panel entirely
+- Lazy-loading tldraw chunk (Phase 9)
+
+## Exit criteria
+
+- Snap guides appear when dragging near other shapes (toggleable)
+- Grid toggle works
+- Multi-select align/distribute/stack/pack adjusts layout
+- ColorPopover changes fill of selected shapes to a palette color
+- QA checklist delivered

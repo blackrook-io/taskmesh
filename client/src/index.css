@@ -1760,6 +1760,50 @@ a:focus-visible {
   background: var(--canvas-bg);
 }
 
+.canvas-editor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.canvas-editor-shell .canvas-editor {
+  flex: 1;
+}
+
+.canvas-assist {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--canvas-bg) 80%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.canvas-assist__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.canvas-assist__group + .canvas-assist__group {
+  padding-left: 0.45rem;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.canvas-assist__btn.is-active {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.canvas-assist__color.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .canvas-editor .tl-container {
   --color-background: var(--canvas-bg);
 }
