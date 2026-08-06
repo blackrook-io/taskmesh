@@ -16,51 +16,67 @@ type PaletteItem = {
   hint?: string;
   path: string;
   /** Special client action instead of navigation */
-  action?: "open-assistant";
+  action?: "open-assistant" | "open-settings";
+  settingsSection?: "appearance" | "import-export" | "backups" | "assistant";
 };
 
 const STATIC_COMMANDS: PaletteItem[] = [
   { id: "nav-home", group: "Go to", label: "Home", path: "/" },
   { id: "nav-ideas", group: "Go to", label: "Ideas", path: "/ideas" },
   { id: "nav-projects", group: "Go to", label: "Projects", path: "/projects" },
-  { id: "nav-todos", group: "Go to", label: "To Dos", path: "/todos" },
+  { id: "nav-todos", group: "Go to", label: "To Dos / Lists", path: "/todos" },
+  { id: "nav-filesystem", group: "Go to", label: "Filesystem", path: "/filesystem" },
+  { id: "nav-image-board", group: "Go to", label: "Image board", path: "/image-board" },
+  { id: "nav-calendar", group: "Go to", label: "Calendar", path: "/calendar" },
   { id: "nav-search", group: "Go to", label: "Search page", path: "/search" },
   {
     id: "open-assistant",
     group: "Assistant",
     label: "Open assistant",
     hint: "Chat",
-    path: "/settings/assistant",
+    path: "/",
     action: "open-assistant",
+  },
+  {
+    id: "nav-settings",
+    group: "Go to",
+    label: "Settings",
+    path: "/",
+    action: "open-settings",
+    settingsSection: "appearance",
+  },
+  {
+    id: "nav-appearance",
+    group: "Go to",
+    label: "Appearance / themes",
+    path: "/",
+    action: "open-settings",
+    settingsSection: "appearance",
   },
   {
     id: "nav-assistant-settings",
     group: "Go to",
     label: "Assistant settings",
-    path: "/settings/assistant",
+    path: "/",
+    action: "open-settings",
+    settingsSection: "assistant",
   },
   {
     id: "nav-import-export",
     group: "Go to",
     label: "Import / Export",
-    path: "/settings/import-export",
+    path: "/",
+    action: "open-settings",
+    settingsSection: "import-export",
   },
   {
     id: "nav-backups",
     group: "Go to",
     label: "Backups",
-    path: "/settings/backups",
+    path: "/",
+    action: "open-settings",
+    settingsSection: "backups",
   },
-  ...(import.meta.env.DEV
-    ? [
-        {
-          id: "nav-playground",
-          group: "Go to",
-          label: "Playground",
-          path: "/dev/playground",
-        } satisfies PaletteItem,
-      ]
-    : []),
   { id: "new-idea", group: "Create", label: "New idea", path: "/ideas/new" },
   { id: "new-project", group: "Create", label: "New project", path: "/projects/new" },
 ];
@@ -190,6 +206,15 @@ export function CommandPalette({ open, onClose }: Props) {
       if (item.action === "open-assistant") {
         onClose();
         window.dispatchEvent(new CustomEvent("taskmesh:open-assistant"));
+        return;
+      }
+      if (item.action === "open-settings") {
+        onClose();
+        window.dispatchEvent(
+          new CustomEvent("taskmesh:open-settings", {
+            detail: { section: item.settingsSection ?? "appearance" },
+          }),
+        );
         return;
       }
       pushRecentNav(item.path, item.label);

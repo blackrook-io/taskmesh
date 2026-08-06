@@ -38,8 +38,6 @@ npm run dev:web
 | http://127.0.0.1:5173/ | Vite SPA (proxies `/api` to the API) |
 | http://127.0.0.1:3000/api/health | API health |
 
-Shared UI playground: `/dev/playground`.
-
 ## Scripts
 
 | Script | Description |

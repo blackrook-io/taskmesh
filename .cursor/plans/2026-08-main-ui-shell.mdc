@@ -1,0 +1,200 @@
+---
+name: Main UI shell
+overview: "Phased main-UI redesign: (1) layout, (2) icons, (3) themes, (4) Settings modal, (5) remove Playground, (6) project Settings middle-nav for modules."
+todos:
+  - id: phase-layout
+    content: "Phase 1 — Layout: AppShell three-pane; SystemClock; wordmark text; Projects accordion; ContextNav; stubs; strip project tabs; mobile collapse; placeholder icons"
+    status: completed
+  - id: phase-icons
+    content: "Phase 2 — Icons: Font Awesome + NavIcon; mesh mark/favicon; theme-colored currentColor"
+    status: completed
+  - id: phase-themes
+    content: "Phase 3 — Themes: dark accent packs (green/blue/orange/yellow/purple/red); persist; Settings Appearance picker"
+    status: completed
+  - id: phase-settings-modal
+    content: "Phase 4 — Settings modal: Import/Export, Backups, Assistant, Theme picker in modal; Settings gear opens it"
+    status: completed
+  - id: phase-remove-playground
+    content: "Phase 5 — Remove Playground: delete /dev/playground route, page, AppNav/⌘K links, CSS, and doc references"
+    status: completed
+  - id: phase-project-settings-nav
+    content: "Phase 6 — Project middle-nav Settings: move module enable/disable hub off Overview into ?tab=settings"
+    status: completed
+isProject: false
+---
+
+# Main UI redesign (phased)
+
+Work ships as **six sequential phases**. Each phase ends with its own QA checklist and git branch (`phase-N-…`) per development rules. Later phases build on earlier ones.
+
+```mermaid
+flowchart LR
+  P1[Phase1_Layout] --> P2[Phase2_Icons]
+  P2 --> P3[Phase3_Themes]
+  P3 --> P4[Phase4_SettingsModal]
+  P4 --> P5[Phase5_RemovePlayground]
+  P5 --> P6[Phase6_ProjectSettingsNav]
+```
+
+## Decisions locked (all phases)
+
+- **Layout target:** three panes — AppNav | ContextNav | Main (`Outlet`).
+- **Theme tokens:** all colors via CSS variables; **mutable until feature-complete**.
+- **Themes (shipped):** green (default), blue, orange, yellow, purple, red — picker lives under Settings (AppNav swatches removed).
+- **Ideas:** top-level section only (post-it holding area); deeper Ideas UX deferred.
+- **Image board:** PureRef-inspired; global stub + project **Images** stub.
+- **Project middle nav:** Overview, Tasks, Kanban, Canvas, Images, Documents (Wiki); **Settings** added in Phase 6 for module enable/disable (not the app-wide Settings modal).
+- **Lists:** app-nav → `/todos` (project To Dos stay on overview/⌘K).
+- **App Settings modal (Phase 4):** overlay only — does not replace middle/main panes.
+- **Clock:** bottom of AppNav, centered — local + `(…Z)` Zulu + weekday/date.
+- **Branding sheet:** reference for wordmark (Task / Mesh) and mesh mark — not the functional icon source.
+- **Icons (from Phase 2):** Font Awesome Free via `NavIcon` + `currentColor`.
+- **Playground:** no longer needed for showcasing shared primitives — remove in Phase 5.
+
+---
+
+## Phase 1 — Layout
+
+**Status:** completed (`phase-12a-main-ui-layout` → continued on later branches).
+
+**Goal:** Replace topbar shell with the three-pane structure and wire navigation.
+
+---
+
+## Phase 2 — Icons
+
+**Status:** completed (`phase-12b-main-ui-icons`).
+
+**Goal:** Font Awesome nav icons, mesh mark, favicon.
+
+---
+
+## Phase 3 — Selectable themes
+
+**Status:** completed (`phase-12c-main-ui-themes`).
+
+**Goal:** Dark accent themes; persist in `localStorage`; picker under Settings Appearance (not AppNav).
+
+---
+
+## Phase 4 — Settings modal
+
+**Goal:** Gear opens a **Settings modal**; move existing settings UI into it (plus theme picker from Phase 3).
+
+### Scope
+
+- `SettingsModal` (reuse patterns from [`ConfirmDialog`](client/src/components/ConfirmDialog.tsx) / panel chrome): overlay, focus trap, Esc to close, confirm-on-destructive already in child pages.
+- **Tabs or sidebar inside modal:**
+  - **Appearance** — theme picker (from Phase 3)
+  - **Import / Export** — content from [`ImportExportPage`](client/src/pages/ImportExportPage.tsx)
+  - **Backups** — content from [`BackupsPage`](client/src/pages/BackupsPage.tsx)
+  - **Assistant** — content from [`AssistantSettingsPage`](client/src/pages/AssistantSettingsPage.tsx)
+- AppNav **Settings** opens modal (not a middle-nav settings list).
+- Deep links: keep `/settings/*` routes working by opening the modal to the right tab (or redirect into modal state) so ⌘K / bookmarks still work.
+- Remove redundant Home buttons that only duplicated settings entry points (or point them at the modal).
+- Update CommandPalette: “Settings” / per-section actions open the modal.
+
+### Out of scope (Phase 4)
+
+- New settings domains (auth, multi-user, etc.)
+- Rewriting backup/import business logic
+- Playground removal (Phase 5)
+
+### QA (Phase 4)
+
+- Gear opens modal; all four sections usable
+- Import/export, backups schedule, assistant settings behave as before
+- Theme change from Appearance persists
+- Esc / backdrop closes; ⌘K settings entries open modal
+- Direct `/settings/backups` (etc.) still reaches the right content
+
+**Branch:** `phase-12d-main-ui-settings-modal`
+
+---
+
+## Phase 5 — Remove Playground
+
+**Goal:** Delete the shared-primitives Playground entirely — the real app shell is the showcase now.
+
+### Scope
+
+- Remove DEV route `/dev/playground` from [`main.tsx`](client/src/main.tsx).
+- Delete [`PlaygroundPage.tsx`](client/src/pages/PlaygroundPage.tsx).
+- Remove AppNav Playground link ([`AppNav.tsx`](client/src/components/shell/AppNav.tsx)).
+- Remove CommandPalette “Playground” Go-to entry ([`CommandPalette.tsx`](client/src/components/CommandPalette.tsx)).
+- Remove playground-only CSS (e.g. `.playground-canvas-demo` in [`index.css`](client/src/index.css)).
+- Update docs that advertise the playground:
+  - [`README.md`](README.md) (Shared UI playground line)
+  - [`AGENTS.md`](AGENTS.md) (Playground convention bullet; phase-delivery QA wording can drop “playground routes when applicable”)
+  - Optionally soften [`.cursor/rules/development-rules.mdc`](.cursor/rules/development-rules.mdc) QA checklist language so it no longer requires `/dev/playground`
+- Grep for remaining `playground` / `Playground` references and clean product-facing ones (historical executed plans may stay).
+
+### Out of scope (Phase 5)
+
+- Removing shared primitives themselves (`ColorPopover`, `ElementShell`, etc.) — only the playground harness goes away
+- Settings modal work (Phase 4)
+
+### QA (Phase 5)
+
+- `/dev/playground` redirects to home (catch-all) or 404→home; no Playground in AppNav or ⌘K
+- App still builds; shared components used in-product still work
+- README / AGENTS no longer point users at the playground
+
+**Branch:** `phase-12e-remove-playground`
+
+**Note:** Can run before or after Phase 6; no dependency on project Settings nav.
+
+---
+
+## Phase 6 — Project Settings (middle nav)
+
+**Goal:** Move the **Project modules** enable/disable hub off the project Overview main page into a dedicated project middle-nav item **Settings**.
+
+This is **per-project** configuration (which modules are enabled), distinct from the app-wide Settings modal (Appearance / Import / Backups / Assistant).
+
+### Scope
+
+- Add middle-nav item **Settings** (gear icon) when a project is selected, in [`useShellNav`](client/src/lib/useShellNav.ts) `PROJECT_MIDDLE` — e.g. last in the list after Documents (Wiki), always available (not gated on a module key).
+- Route via existing tab query: `/projects/:id?tab=settings` (extend `Tab` / `TAB_ALIASES` on [`ProjectDetailPage`](client/src/pages/ProjectDetailPage.tsx); treat like `images` — no module enable check).
+- Move the **Project modules** card (`.module-hub` Enable / Disable / Open controls) from the Overview tab into the new Settings main pane.
+- Overview keeps project name/status/description/tags editing only — no module hub.
+- Optional: “Open” on an enabled module still switches to that module tab; after Enable, navigate to the module or stay on Settings (prefer stay on Settings unless current Open behavior is clearer).
+- Context nav label **Settings** must not be confused with AppNav Settings — same word is OK if scoped under the “Project” middle-nav title.
+
+### Out of scope (Phase 6)
+
+- App-wide Settings modal changes
+- New project prefs beyond existing module toggles (color, archive, etc.) unless already on Overview and naturally belong here
+- Playground removal (Phase 5)
+
+### QA (Phase 6)
+
+- Project middle nav shows **Settings**; selecting it shows the module hub only
+- Overview no longer lists Project modules
+- Enable / Disable still updates which middle-nav module items are available
+- Open (or equivalent) still reaches Tasks / Kanban / etc.
+- AppNav Settings still opens the app modal without changing project panes
+
+**Branch:** `phase-12f-project-settings-nav`
+
+---
+
+## Target layout (reference)
+
+| Pane | Role |
+|------|------|
+| **App nav** | Wordmark; sections; Settings (app modal); mesh; version; AI/⌘K; clock at bottom |
+| **Context nav** | Project modules + project Settings / Ideas filters / Lists chrome / stub copy |
+| **Main** | Page `Outlet` |
+
+Projects: left-rail accordion → middle items (Overview, Tasks, Kanban, Canvas, Images, Documents/Wiki, **Settings**).
+
+---
+
+## Cross-cutting out of scope (entire redesign)
+
+- PureRef canvas implementation; calendar/reminder data model
+- Ideas post-it redesign beyond shell placement
+- Merging Documents + Wiki data models
+- Global (non-project) Kanban/Canvas routes
+- Locking a final permanent brand palette

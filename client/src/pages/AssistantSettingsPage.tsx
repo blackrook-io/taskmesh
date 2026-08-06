@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { fetchAssistantStatus } from "../api/assistant";
 
-export function AssistantSettingsPage() {
+type Props = {
+  embedded?: boolean;
+};
+
+export function AssistantSettingsPage({ embedded = false }: Props) {
   const statusQuery = useQuery({
     queryKey: ["assistant-status"],
     queryFn: fetchAssistantStatus,
@@ -11,14 +14,13 @@ export function AssistantSettingsPage() {
   const data = statusQuery.data;
 
   return (
-    <div>
-      <div className="page-head">
-        <h1>Assistant</h1>
-        <Link to="/" className="btn ghost">
-          Home
-        </Link>
-      </div>
-      <p className="muted">
+    <div className={embedded ? "settings-panel" : undefined}>
+      {embedded ? null : (
+        <div className="page-head">
+          <h1>Assistant</h1>
+        </div>
+      )}
+      <p className="muted" style={embedded ? { marginTop: 0 } : undefined}>
         TaskMesh talks to OpenAI with a server-side API key. Keys stay in <code>.env</code> on the
         host (not entered in the browser). Outbound HTTPS to <code>api.openai.com</code> is
         required.
@@ -69,8 +71,8 @@ ASSISTANT_DEFAULT_PROVIDER=openai
 ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini`}</pre>
             </li>
             <li>
-              Restart: <code>sudo systemctl restart taskmesh</code> (or restart <code>npm run
-              dev:web</code>).
+              Restart: <code>sudo systemctl restart taskmesh</code> (or restart{" "}
+              <code>npm run dev:web</code>).
             </li>
           </ol>
           <p className="muted" style={{ marginTop: "0.75rem" }}>

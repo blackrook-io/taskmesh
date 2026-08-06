@@ -1,27 +1,14 @@
-import { Link } from "react-router-dom";
-
 export function HomePage() {
   return (
-    <div>
-      <h1>TaskMesh</h1>
+    <div className="home-landing">
+      <h1>
+        <span className="brand-wordmark__task">Task</span>
+        <span className="brand-wordmark__mesh">Mesh</span>
+      </h1>
       <p className="muted">Personal projects, ideas, and Markdown — on your server.</p>
-      <div className="btn-row" style={{ marginTop: "1rem" }}>
-        <Link to="/ideas" className="btn primary">
-          Ideas
-        </Link>
-        <Link to="/projects" className="btn">
-          Projects
-        </Link>
-        <Link to="/settings/import-export" className="btn ghost">
-          Import / Export
-        </Link>
-        <Link to="/settings/backups" className="btn ghost">
-          Backups
-        </Link>
-        <Link to="/settings/assistant" className="btn ghost">
-          Assistant
-        </Link>
-      </div>
+      <p className="muted" style={{ marginTop: "1rem" }}>
+        Use the left rail to open Projects, Ideas, Lists, or Settings. Press ⌘K / Ctrl+K to jump anywhere.
+      </p>
     </div>
   );
 }

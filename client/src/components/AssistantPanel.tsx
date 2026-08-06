@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   fetchAssistantStatus,
   streamAssistantChat,
@@ -9,6 +8,7 @@ import {
 } from "../api/assistant";
 import { apiJson } from "../api/client";
 import { useAssistantAttachTarget } from "../lib/assistantAttach";
+import { dispatchOpenSettings } from "../lib/settings";
 
 const TRANSCRIPT_KEY = "taskmesh.assistant.transcript";
 
@@ -256,9 +256,16 @@ export function AssistantPanel({ open, onClose }: Props) {
             >
               Clear
             </button>
-            <Link to="/settings/assistant" className="btn small ghost" onClick={onClose}>
+            <button
+              type="button"
+              className="btn small ghost"
+              onClick={() => {
+                onClose();
+                dispatchOpenSettings("assistant");
+              }}
+            >
               Settings
-            </Link>
+            </button>
             <button type="button" className="btn small ghost" onClick={onClose}>
               Close
             </button>
@@ -268,9 +275,16 @@ export function AssistantPanel({ open, onClose }: Props) {
         {!enabled && !statusQuery.isLoading ? (
           <p className="assistant-panel__banner">
             Set <code>OPENAI_API_KEY</code> in the server <code>.env</code> and restart TaskMesh. See{" "}
-            <Link to="/settings/assistant" onClick={onClose}>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                onClose();
+                dispatchOpenSettings("assistant");
+              }}
+            >
               Assistant settings
-            </Link>
+            </button>
             .
           </p>
         ) : null}

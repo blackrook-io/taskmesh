@@ -15,4 +15,4 @@ alwaysApply: true
 
 # Phase delivery
 
-* **End of every implementation phase:** provide a clear **QA checklist** for the user — step-by-step tests (include `/dev/playground` and other playground routes when applicable) plus a short list of specific features to examine for approval or requested tweaks.
+* **End of every implementation phase:** provide a clear **QA checklist** for the user — step-by-step tests plus a short list of specific features to examine for approval or requested tweaks.

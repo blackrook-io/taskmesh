@@ -49,7 +49,7 @@ function healthLabel(h: string): string {
   return "No backup";
 }
 
-export function BackupsPage() {
+export function BackupsPage({ embedded = false }: { embedded?: boolean }) {
   const qc = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<BackupItem | null>(null);
@@ -152,11 +152,13 @@ export function BackupsPage() {
     runMutation.isPending || restoreMutation.isPending || deleteMutation.isPending;
 
   return (
-    <div>
-      <div className="page-head">
-        <h1>Backups</h1>
-      </div>
-      <p className="muted">
+    <div className={embedded ? "settings-panel" : undefined}>
+      {embedded ? null : (
+        <div className="page-head">
+          <h1>Backups</h1>
+        </div>
+      )}
+      <p className="muted" style={embedded ? { marginTop: 0 } : undefined}>
         Database dumps and upload archives under the configured backup directory. A backup is{" "}
         <strong>healthy</strong> when the latest successful dump is less than{" "}
         {listQuery.data?.freshHours ?? 36} hours old. Restore replaces the current database (and

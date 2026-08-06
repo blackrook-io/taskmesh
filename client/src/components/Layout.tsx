@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { ThemeProvider } from "../lib/ThemeProvider";
+import { SettingsProvider } from "../lib/settings";
 import { AssistantAttachProvider } from "../lib/assistantAttach";
 import { AssistantPanel } from "./AssistantPanel";
 import { CommandPalette } from "./CommandPalette";
-
-const isDev = import.meta.env.DEV;
+import { AppShell } from "./shell/AppShell";
+import { SettingsModal } from "./shell/SettingsModal";
 
 export function Layout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -32,44 +33,18 @@ export function Layout() {
   }, []);
 
   return (
-    <AssistantAttachProvider>
-      <div className="layout">
-        <header className="topbar">
-          <Link to="/" className="brand">
-            TaskMesh
-          </Link>
-          <nav className="nav" aria-label="App">
-            <button
-              type="button"
-              className="btn ghost small"
-              onClick={() => setAssistantOpen(true)}
-              title="Assistant (Ctrl/⌘J)"
-              aria-keyshortcuts="Control+J Meta+J"
-            >
-              AI
-            </button>
-            <button
-              type="button"
-              className="btn ghost small command-palette-trigger"
-              onClick={() => setPaletteOpen(true)}
-              title="Command palette (Ctrl/⌘K)"
-              aria-keyshortcuts="Control+K Meta+K"
-            >
-              ⌘K
-            </button>
-            {isDev ? (
-              <NavLink to="/dev/playground" className={({ isActive }) => (isActive ? "active" : "")}>
-                Playground
-              </NavLink>
-            ) : null}
-          </nav>
-        </header>
-        <main className="main">
-          <Outlet />
-        </main>
-        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-        <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
-      </div>
-    </AssistantAttachProvider>
+    <ThemeProvider>
+      <SettingsProvider>
+        <AssistantAttachProvider>
+          <AppShell
+            onOpenPalette={() => setPaletteOpen(true)}
+            onOpenAssistant={() => setAssistantOpen(true)}
+          />
+          <SettingsModal />
+          <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+          <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+        </AssistantAttachProvider>
+      </SettingsProvider>
+    </ThemeProvider>
   );
 }

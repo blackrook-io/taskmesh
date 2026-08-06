@@ -7,15 +7,15 @@ import { Layout } from "./components/Layout.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { IdeaEditPage } from "./pages/IdeaEditPage.tsx";
 import { IdeasListPage } from "./pages/IdeasListPage.tsx";
-import { PlaygroundPage } from "./pages/PlaygroundPage.tsx";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage.tsx";
 import { ProjectNewPage } from "./pages/ProjectNewPage.tsx";
 import { ProjectsListPage } from "./pages/ProjectsListPage.tsx";
 import { SearchPage } from "./pages/SearchPage.tsx";
 import { TodoListsPage } from "./pages/TodoListsPage.tsx";
-import { ImportExportPage } from "./pages/ImportExportPage.tsx";
-import { BackupsPage } from "./pages/BackupsPage.tsx";
-import { AssistantSettingsPage } from "./pages/AssistantSettingsPage.tsx";
+import { FilesystemPage } from "./pages/FilesystemPage.tsx";
+import { ImageBoardPage } from "./pages/ImageBoardPage.tsx";
+import { CalendarPage } from "./pages/CalendarPage.tsx";
+import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
 
 const queryClient = new QueryClient();
 
@@ -33,12 +33,13 @@ createRoot(document.getElementById("root")!).render(
             <Route path="projects/:id" element={<ProjectDetailPage />} />
             <Route path="todos" element={<TodoListsPage />} />
             <Route path="search" element={<SearchPage />} />
-            <Route path="settings/import-export" element={<ImportExportPage />} />
-            <Route path="settings/backups" element={<BackupsPage />} />
-            <Route path="settings/assistant" element={<AssistantSettingsPage />} />
-            {import.meta.env.DEV ? (
-              <Route path="dev/playground" element={<PlaygroundPage />} />
-            ) : null}
+            <Route path="filesystem" element={<FilesystemPage />} />
+            <Route path="image-board" element={<ImageBoardPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
+            <Route path="settings" element={<SettingsHubPage />} />
+            <Route path="settings/import-export" element={<SettingsHubPage />} />
+            <Route path="settings/backups" element={<SettingsHubPage />} />
+            <Route path="settings/assistant" element={<SettingsHubPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

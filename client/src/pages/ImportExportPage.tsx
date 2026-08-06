@@ -14,7 +14,12 @@ type ImportResult = {
 
 type Entity = "projects" | "tasks";
 
-export function ImportExportPage() {
+type Props = {
+  /** Render without page chrome (inside Settings modal). */
+  embedded?: boolean;
+};
+
+export function ImportExportPage({ embedded = false }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [entity, setEntity] = useState<Entity>("projects");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -53,11 +58,13 @@ export function ImportExportPage() {
   };
 
   return (
-    <div>
-      <div className="page-head">
-        <h1>Import / Export</h1>
-      </div>
-      <p className="muted">
+    <div className={embedded ? "settings-panel" : undefined}>
+      {embedded ? null : (
+        <div className="page-head">
+          <h1>Import / Export</h1>
+        </div>
+      )}
+      <p className="muted" style={embedded ? { marginTop: 0 } : undefined}>
         Export Projects or Tasks as <strong>CSV</strong> (portable). Import accepts CSV or XLSX and
         is <strong>insert-only</strong>: existing ids are never overwritten; invalid rows are
         discarded with reasons below.

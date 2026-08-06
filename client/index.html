@@ -7,6 +7,13 @@
     <title>TaskMesh</title>
     <script>
       window.EXCALIDRAW_ASSET_PATH = "/excalidraw-assets/";
+      try {
+        var t = localStorage.getItem("taskmesh.theme");
+        var ok = { green: 1, blue: 1, orange: 1, yellow: 1, purple: 1, red: 1 };
+        document.documentElement.dataset.theme = ok[t] ? t : "green";
+      } catch (e) {
+        document.documentElement.dataset.theme = "green";
+      }
     </script>
   </head>
   <body>

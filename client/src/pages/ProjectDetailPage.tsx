@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -12,6 +12,7 @@ import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
 import { CanvasesPanel } from "../components/CanvasesPanel";
+import { ComingSoonPage } from "../components/shell/ComingSoonPage";
 import {
   isProjectModuleKey,
   MODULE_BLURBS,
@@ -21,10 +22,12 @@ import {
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TodoList } from "../types";
 
-type Tab = "overview" | ProjectModuleKey;
+type Tab = "overview" | "images" | "settings" | ProjectModuleKey;
 
 const TAB_ALIASES: Record<string, Tab> = {
   overview: "overview",
+  images: "images",
+  settings: "settings",
   todos: "todo_lists",
   todo_lists: "todo_lists",
   tasks: "tasks",
@@ -174,13 +177,6 @@ export function ProjectDetailPage() {
 
   const project = projectQuery.data;
   const modules = modulesQuery.data ?? [];
-  const enabledModules = useMemo(
-    () =>
-      modules
-        .filter((m) => m.enabled && isProjectModuleKey(m.moduleKey))
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    [modules],
-  );
   const phases = phasesQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
   const documents = documentsQuery.data ?? [];
@@ -200,7 +196,7 @@ export function ProjectDetailPage() {
 
   useEffect(() => {
     if (!modulesQuery.isSuccess) return;
-    if (tab === "overview") return;
+    if (tab === "overview" || tab === "images" || tab === "settings") return;
     const mod = modules.find((m) => m.moduleKey === tab);
     if (!mod?.enabled) setTab("overview");
   }, [modules, modulesQuery.isSuccess, tab]);
@@ -336,33 +332,18 @@ export function ProjectDetailPage() {
       <div className="page-head">
         <h1>{project.name}</h1>
         <div className="btn-row">
-          <Link to="/projects" className="btn ghost">
-            All projects
-          </Link>
           <button type="button" className="btn danger" onClick={() => setDeleteProjectOpen(true)}>
             Delete project
           </button>
         </div>
       </div>
 
-      <div className="tabs">
-        <button type="button" className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
-          Overview
-        </button>
-        {enabledModules.map((m) => {
-          const key = m.moduleKey as ProjectModuleKey;
-          return (
-            <button
-              key={key}
-              type="button"
-              className={tab === key ? "active" : ""}
-              onClick={() => setTab(key)}
-            >
-              {MODULE_LABELS[key]}
-            </button>
-          );
-        })}
-      </div>
+      {tab === "images" ? (
+        <ComingSoonPage
+          title="Images"
+          blurb="Per-project PureRef-style image board. Stand-in until the Image board feature ships."
+        />
+      ) : null}
 
       {tab === "overview" ? (
         <div className="grid" style={{ gap: "1rem" }}>
@@ -435,58 +416,56 @@ export function ProjectDetailPage() {
             )}
             {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
           </div>
+        </div>
+      ) : null}
 
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Project modules</h3>
-            <p className="muted" style={{ marginTop: 0 }}>
-              Enable the pieces this project needs. Disabled modules stay available as opportunities below.
-            </p>
-            <div className="module-hub">
-              {modules
-                .filter((m) => isProjectModuleKey(m.moduleKey))
-                .map((m) => {
-                  const key = m.moduleKey as ProjectModuleKey;
-                  return (
-                    <div key={key} className={`module-hub__item${m.enabled ? " is-enabled" : ""}`}>
-                      <div className="module-hub__copy">
-                        <strong>{MODULE_LABELS[key]}</strong>
-                        <span className="muted">{MODULE_BLURBS[key]}</span>
-                      </div>
-                      <div className="module-hub__actions">
-                        {m.enabled ? (
-                          <>
-                            <button type="button" className="btn small primary" onClick={() => setTab(key)}>
-                              Open
-                            </button>
-                            <button
-                              type="button"
-                              className="btn small ghost"
-                              disabled={toggleModule.isPending}
-                              onClick={() => toggleModule.mutate({ key, enabled: false })}
-                            >
-                              Disable
-                            </button>
-                          </>
-                        ) : (
+      {tab === "settings" ? (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Project modules</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Enable the pieces this project needs. Disabled modules stay available as opportunities
+            below.
+          </p>
+          <div className="module-hub">
+            {modules
+              .filter((m) => isProjectModuleKey(m.moduleKey))
+              .map((m) => {
+                const key = m.moduleKey as ProjectModuleKey;
+                return (
+                  <div key={key} className={`module-hub__item${m.enabled ? " is-enabled" : ""}`}>
+                    <div className="module-hub__copy">
+                      <strong>{MODULE_LABELS[key]}</strong>
+                      <span className="muted">{MODULE_BLURBS[key]}</span>
+                    </div>
+                    <div className="module-hub__actions">
+                      {m.enabled ? (
+                        <>
+                          <button type="button" className="btn small primary" onClick={() => setTab(key)}>
+                            Open
+                          </button>
                           <button
                             type="button"
-                            className="btn small primary"
+                            className="btn small ghost"
                             disabled={toggleModule.isPending}
-                            onClick={() => {
-                              toggleModule.mutate(
-                                { key, enabled: true },
-                                { onSuccess: () => setTab(key) },
-                              );
-                            }}
+                            onClick={() => toggleModule.mutate({ key, enabled: false })}
                           >
-                            Enable
+                            Disable
                           </button>
-                        )}
-                      </div>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn small primary"
+                          disabled={toggleModule.isPending}
+                          onClick={() => toggleModule.mutate({ key, enabled: true })}
+                        >
+                          Enable
+                        </button>
+                      )}
                     </div>
-                  );
-                })}
-            </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       ) : null}
