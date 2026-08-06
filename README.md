@@ -49,6 +49,7 @@ npm run dev:web
 | `npm run build:client` | Production SPA → `client/dist/` |
 | `npm run build:all` | API + client production builds |
 | `npm start` | Run compiled API (`node dist/index.js`) |
+| `npm run deploy:prod` | Build current tree + restart systemd prod behind nginx `:80` |
 | `npm run db:generate` | SQL migrations from `src/db/schema.ts` |
 | `npm run db:migrate` | Apply `./drizzle` migrations |
 | `npm run db:studio` | Drizzle Studio |

@@ -11,6 +11,7 @@
     "build:client": "npm run build --prefix client",
     "build:all": "npm run build && npm run build:client",
     "start": "node dist/index.js",
+    "deploy:prod": "bash deploy/deploy-prod.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",

@@ -534,6 +534,21 @@ In a browser on the LAN: open `http://<server-ip>/`, create a project, attach an
 
 ## 20. Updating TaskMesh
 
+### Same-host promote to production (:80)
+
+When Dev and Prod share `/srv/taskmesh` (Vite on `:5173`, systemd + nginx on `:80`), promote the **current working tree** with:
+
+```bash
+cd /srv/taskmesh
+npm run deploy:prod
+# faster iterate when deps/schema unchanged:
+# npm run deploy:prod -- --skip-install --skip-migrate
+```
+
+[`deploy/deploy-prod.sh`](deploy/deploy-prod.sh) runs install → migrate → `build:all` → `systemctl restart taskmesh`, then health-checks `:3000` and nginx `:80`. It does not stop `dev:web`.
+
+### Manual update (fallback)
+
 ```bash
 cd /srv/taskmesh
 git pull
