@@ -545,7 +545,7 @@ npm run deploy:prod
 # npm run deploy:prod -- --skip-install --skip-migrate
 ```
 
-[`deploy/deploy-prod.sh`](deploy/deploy-prod.sh) runs install → migrate → `build:all` → `systemctl restart taskmesh`, then health-checks `:3000` and nginx `:80`. It does not stop `dev:web`.
+[`deploy/deploy-prod.sh`](deploy/deploy-prod.sh) runs install → migrate → `build:all` → restart `taskmesh` (passwordless `sudo systemctl` when available; otherwise signals the service MainPID so systemd `Restart=on-failure` reloads `dist/`), then health-checks `:3000` and nginx HTTPS (`:80` redirects to `:443`). It does not stop `dev:web`.
 
 ### Manual update (fallback)
 

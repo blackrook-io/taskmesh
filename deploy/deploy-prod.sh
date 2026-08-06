@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy current working tree to the local production instance
-# (systemd taskmesh on :3000, nginx on :80).
+# (systemd taskmesh on :3000, nginx :80 → HTTPS :443 → Express).
 #
 # Usage:
 #   npm run deploy:prod
@@ -38,9 +38,40 @@ fail() {
   echo "  sudo systemctl status taskmesh --no-pager" >&2
   echo "  journalctl -u taskmesh -n 50 --no-pager" >&2
   echo "  curl -v http://127.0.0.1:3000/api/health" >&2
-  echo "  curl -v http://127.0.0.1/api/health   # nginx :80 → Express" >&2
+  echo "  curl -vk https://127.0.0.1/api/health   # nginx HTTPS (HTTP :80 redirects here)" >&2
   echo "See INSTALL.md §21 Troubleshooting." >&2
   exit 1
+}
+
+restart_taskmesh() {
+  if sudo -n systemctl restart taskmesh 2>/dev/null; then
+    echo "    restarted via sudo systemctl"
+    return 0
+  fi
+
+  # Non-interactive sudo unavailable: stop the MainPID so Restart=on-failure
+  # brings the unit back with the newly built dist/ (SIGKILL is not a "clean" stop).
+  local pid
+  pid="$(systemctl show taskmesh -p MainPID --value 2>/dev/null || true)"
+  if [[ -z "${pid}" || "${pid}" == "0" ]]; then
+    fail "cannot restart taskmesh (no sudo; MainPID unknown). Configure passwordless sudo for systemctl restart taskmesh, or run: sudo systemctl restart taskmesh"
+  fi
+
+  echo "    sudo unavailable — signaling PID ${pid} (systemd on-failure restart)"
+  kill -KILL "${pid}" || fail "failed to signal taskmesh PID ${pid}"
+
+  local i
+  for i in $(seq 1 30); do
+    if systemctl is-active --quiet taskmesh; then
+      local new_pid
+      new_pid="$(systemctl show taskmesh -p MainPID --value 2>/dev/null || true)"
+      if [[ -n "${new_pid}" && "${new_pid}" != "0" && "${new_pid}" != "${pid}" ]]; then
+        return 0
+      fi
+    fi
+    sleep 0.5
+  done
+  fail "taskmesh did not become active after process signal"
 }
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
@@ -51,7 +82,7 @@ else
   DIRTY="clean"
 fi
 
-echo "==> TaskMesh deploy to production (:80)"
+echo "==> TaskMesh deploy to production (nginx :80 → :443)"
 echo "    root:   $ROOT"
 echo "    git:    $BRANCH @ $SHA ($DIRTY)"
 echo "    flags:  skip-install=$SKIP_INSTALL skip-migrate=$SKIP_MIGRATE"
@@ -78,10 +109,10 @@ echo "==> build:all"
 npm run build:all || fail "build:all failed"
 
 echo "==> restart taskmesh.service"
-sudo systemctl restart taskmesh || fail "systemctl restart taskmesh failed"
+restart_taskmesh
 
-echo "==> waiting for process…"
-sleep 2
+echo "==> waiting for listen…"
+sleep 1
 
 if ! systemctl is-active --quiet taskmesh; then
   fail "taskmesh.service is not active after restart"
@@ -90,10 +121,10 @@ fi
 echo "==> health check :3000"
 curl -fsS http://127.0.0.1:3000/api/health >/dev/null || fail "health check failed on :3000"
 
-echo "==> health check :80 (nginx)"
-curl -fsS http://127.0.0.1/api/health >/dev/null || fail "health check failed on :80 (nginx)"
+echo "==> health check HTTPS :443 (via nginx; -k for self-signed)"
+curl -fsSk https://127.0.0.1/api/health >/dev/null || fail "health check failed on https://127.0.0.1/ (nginx)"
 
 echo ""
 echo "Deploy OK — $BRANCH @ $SHA ($DIRTY)"
-echo "  http://127.0.0.1/          (LAN: http://<server-ip>/)"
-echo "  http://127.0.0.1/api/health"
+echo "  https://127.0.0.1/          (LAN: https://<server-ip>/ ; HTTP :80 redirects)"
+echo "  https://127.0.0.1/api/health"
