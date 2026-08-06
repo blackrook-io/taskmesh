@@ -11,8 +11,12 @@ alwaysApply: true
 # Phase git workflow
 
 * **On phase start:** create branch `phase-N-short-slug` from updated `main`, switch to it (SetActiveBranch), then implement.
-* **On phase approval:** commit any remaining phase work on the phase branch, push the branch, then **close** it by merging into `main`, pushing `main`, and deleting the local (and remote if exists) phase branch after merge.
+* **On phase approval / “finish up”:** when the user says **finish up** (or equivalent approval to close a phased implementation), do all of the following in order:
+  1. **Commit** any remaining phase work on the phase branch(es).
+  2. **Merge** into `main` (ff-only when possible) and delete local (and remote if exists) phase branch(es) after merge.
+  3. **Publish** — push `main` to `origin` (and any other remotes the repo normally uses).
+  4. **Archive** the plan — move the active `.cursor/plans/*.mdc` into `.cursor/plans/executed/` (same filename), commit that move on `main`, and push again.
 
 # Phase delivery
 
-* **End of every implementation phase:** provide a clear **QA checklist** for the user — step-by-step tests plus a short list of specific features to examine for approval or requested tweaks.
+* **End of every implementation phase:** provide a clear **QA checklist** for the user — step-by-step tests plus a short list of specific features to examine for approval or requested tweaks. Do **not** commit/merge/publish/archive until the user asks to **finish up** (or explicitly requests those steps).
