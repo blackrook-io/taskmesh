@@ -20,7 +20,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Canvases** — Excalidraw (`@excalidraw/excalidraw`, MIT) in `CanvasEditor`; scene JSON in `canvases.document`. Fonts copied on client `postinstall` to `public/excalidraw-assets/`.
 - **Command palette** — Ctrl/Cmd+K (Phase 9a); see `client/src/components/CommandPalette.tsx`.
 - **Phase delivery** — at the end of every implementation phase, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks).
-- **Phase git** — on phase start: branch `phase-N-short-slug` from updated `main`. **Finish up** (user approval to close): commit → merge into `main` → push `main` → archive the plan under `.cursor/plans/executed/` (commit + push) → delete local/remote phase branch(es).
+- **Phase git** — on phase start: branch `phase-N-short-slug` from updated `main`. **Finish up** (user approval to close): commit → merge into `main` → push `main` → archive the plan under `.cursor/plans/executed/` (commit + push) → delete local/remote phase branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks).
 
 ## Common commands
 

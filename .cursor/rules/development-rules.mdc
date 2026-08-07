@@ -16,6 +16,7 @@ alwaysApply: true
   2. **Merge** into `main` (ff-only when possible) and delete local (and remote if exists) phase branch(es) after merge.
   3. **Publish** — push `main` to `origin` (and any other remotes the repo normally uses).
   4. **Archive** the plan — move the active `.cursor/plans/*.mdc` into `.cursor/plans/executed/` (same filename), commit that move on `main`, and push again.
+  5. **Deploy to PROD** — from repo root on the app host, run `npm run deploy:prod` (install → migrate → `build:all` → restart `taskmesh` → health checks on `:3000` and nginx HTTPS). Confirm both health checks succeed before considering finish-up complete.
 
 # Phase delivery
 

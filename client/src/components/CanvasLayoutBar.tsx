@@ -92,7 +92,7 @@ function applyElementPatch(
   const nextElements = api.getSceneElements().map((el) => {
     const patch = patchById.get(el.id);
     if (!patch) return el;
-    return newElementWith(el, patch);
+    return newElementWith(el, patch as Parameters<typeof newElementWith>[1]);
   });
   api.updateScene({
     elements: nextElements,

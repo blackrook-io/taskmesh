@@ -552,13 +552,11 @@ function SortableTaskRow({
 
 function SortablePhaseHeader({
   phase,
-  phaseKey,
   collapsed,
   onToggle,
   onRename,
 }: {
   phase: ProjectPhase | null;
-  phaseKey: number | "none";
   collapsed: boolean;
   onToggle: () => void;
   onRename?: (name: string) => void;
@@ -792,7 +790,6 @@ export function TaskBoard({
                   <SortablePhaseHeader
                     key={row.key}
                     phase={row.phase}
-                    phaseKey={phaseKey}
                     collapsed={collapsed.has(phaseKey)}
                     onToggle={() => {
                       setCollapsed((prev) => {
