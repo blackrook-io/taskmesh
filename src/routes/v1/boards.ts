@@ -7,6 +7,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { ensureDefaultPhase } from "../../services/phases.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
+import { allocateTaskNumber } from "../../services/tasks.js";
 
 const boardBody = z.object({
   name: z.string().min(1).max(500),
@@ -37,9 +38,9 @@ const columnPatch = z.object({
 
 const cardBody = z.object({
   columnId: z.number().int().positive(),
-  entityType: z.enum(["task"]),
+  entityType: z.enum(["task", "idea", "todo_list"]).default("task"),
   entityId: z.number().int().positive().optional(),
-  /** Create a new task on the project and place it on the board */
+  /** Create a new task/idea (when entityType is task or idea) and place it on the board */
   title: z.string().min(1).max(2000).optional(),
   laneId: z.number().int().positive().nullable().optional(),
 });
@@ -52,6 +53,21 @@ const moveBody = z.object({
 
 const columnsReorderBody = z.object({
   orderedColumnIds: z.array(z.number().int().positive()).min(1),
+});
+
+const laneBody = z.object({
+  name: z.string().min(1).max(200),
+  sortOrder: z.number().int().optional(),
+  insertAt: z.number().int().min(0).optional(),
+});
+
+const lanePatch = z.object({
+  name: z.string().min(1).max(200).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+const lanesReorderBody = z.object({
+  orderedLaneIds: z.array(z.number().int().positive()).min(1),
 });
 
 export const boardsRouter = Router({ mergeParams: true });
@@ -389,6 +405,161 @@ boardsRouter.delete("/:boardId/columns/:columnId", async (req, res) => {
   }
 });
 
+boardsRouter.post("/:boardId/lanes", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    const boardId = parseRouteId(req, "boardId");
+    if (!(await requireBoard(projectId, boardId))) {
+      sendError(res, 404, "not_found", "Board not found");
+      return;
+    }
+    const parsed = laneBody.parse(req.body);
+    const existing = await db
+      .select()
+      .from(schema.boardLanes)
+      .where(eq(schema.boardLanes.boardId, boardId))
+      .orderBy(asc(schema.boardLanes.sortOrder), asc(schema.boardLanes.id));
+
+    let insertIndex: number;
+    if (parsed.insertAt !== undefined) {
+      insertIndex = Math.min(parsed.insertAt, existing.length);
+    } else if (parsed.sortOrder !== undefined) {
+      insertIndex = Math.min(Math.max(0, parsed.sortOrder), existing.length);
+    } else {
+      insertIndex = existing.length;
+    }
+
+    const [row] = await db
+      .insert(schema.boardLanes)
+      .values({
+        boardId,
+        name: parsed.name,
+        sortOrder: insertIndex,
+      })
+      .returning();
+    if (!row) {
+      sendError(res, 500, "insert_failed", "Could not create lane");
+      return;
+    }
+
+    const orderedIds = [
+      ...existing.slice(0, insertIndex).map((c) => c.id),
+      row.id,
+      ...existing.slice(insertIndex).map((c) => c.id),
+    ];
+    for (let i = 0; i < orderedIds.length; i++) {
+      const id = orderedIds[i];
+      if (id === undefined) continue;
+      await db
+        .update(schema.boardLanes)
+        .set({ sortOrder: i, updatedAt: new Date() })
+        .where(eq(schema.boardLanes.id, id));
+    }
+
+    const [updated] = await db
+      .select()
+      .from(schema.boardLanes)
+      .where(eq(schema.boardLanes.id, row.id));
+    res.status(201).json({ data: updated ?? row });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+boardsRouter.patch("/:boardId/lanes/reorder", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    const boardId = parseRouteId(req, "boardId");
+    if (!(await requireBoard(projectId, boardId))) {
+      sendError(res, 404, "not_found", "Board not found");
+      return;
+    }
+    const { orderedLaneIds } = lanesReorderBody.parse(req.body);
+    const existing = await db
+      .select({ id: schema.boardLanes.id })
+      .from(schema.boardLanes)
+      .where(eq(schema.boardLanes.boardId, boardId));
+    const allowed = new Set(existing.map((e) => e.id));
+    if (orderedLaneIds.length !== allowed.size || orderedLaneIds.some((id) => !allowed.has(id))) {
+      sendError(res, 400, "invalid_reorder", "orderedLaneIds must list every lane exactly once");
+      return;
+    }
+    for (let i = 0; i < orderedLaneIds.length; i++) {
+      const id = orderedLaneIds[i];
+      if (id === undefined) continue;
+      await db
+        .update(schema.boardLanes)
+        .set({ sortOrder: i, updatedAt: new Date() })
+        .where(eq(schema.boardLanes.id, id));
+    }
+    const detail = await loadBoardDetail(db, boardId);
+    res.json({ data: detail?.lanes ?? [] });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+boardsRouter.patch("/:boardId/lanes/:laneId", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    const boardId = parseRouteId(req, "boardId");
+    const laneId = parseRouteId(req, "laneId");
+    if (!(await requireBoard(projectId, boardId))) {
+      sendError(res, 404, "not_found", "Board not found");
+      return;
+    }
+    const [lane] = await db
+      .select()
+      .from(schema.boardLanes)
+      .where(eq(schema.boardLanes.id, laneId));
+    if (!lane || lane.boardId !== boardId) {
+      sendError(res, 404, "not_found", "Lane not found");
+      return;
+    }
+    const parsed = lanePatch.parse(req.body);
+    const [row] = await db
+      .update(schema.boardLanes)
+      .set({
+        ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+        ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.boardLanes.id, laneId))
+      .returning();
+    res.json({ data: row });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+boardsRouter.delete("/:boardId/lanes/:laneId", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    const boardId = parseRouteId(req, "boardId");
+    const laneId = parseRouteId(req, "laneId");
+    if (!(await requireBoard(projectId, boardId))) {
+      sendError(res, 404, "not_found", "Board not found");
+      return;
+    }
+    const [lane] = await db
+      .select()
+      .from(schema.boardLanes)
+      .where(eq(schema.boardLanes.id, laneId));
+    if (!lane || lane.boardId !== boardId) {
+      sendError(res, 404, "not_found", "Lane not found");
+      return;
+    }
+    await db
+      .update(schema.boardCards)
+      .set({ laneId: null, updatedAt: new Date() })
+      .where(and(eq(schema.boardCards.boardId, boardId), eq(schema.boardCards.laneId, laneId)));
+    await db.delete(schema.boardLanes).where(eq(schema.boardLanes.id, laneId));
+    res.status(204).end();
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
 boardsRouter.post("/:boardId/cards", async (req, res) => {
   try {
     const projectId = parseRouteId(req, "projectId");
@@ -398,6 +569,7 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
       return;
     }
     const parsed = cardBody.parse(req.body);
+    const entityType = parsed.entityType;
     const [col] = await db
       .select()
       .from(schema.boardColumns)
@@ -407,33 +579,84 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
       return;
     }
 
-    let entityId = parsed.entityId;
-    if (parsed.title?.trim()) {
-      const phaseId = await ensureDefaultPhase(db, projectId);
-      const [task] = await db
-        .insert(schema.tasks)
-        .values({
-          projectId,
-          phaseId,
-          title: parsed.title.trim(),
-          sortOrder: 0,
-        })
-        .returning();
-      if (!task) {
-        sendError(res, 500, "insert_failed", "Could not create task");
+    let laneId = parsed.laneId ?? null;
+    if (laneId != null) {
+      const [lane] = await db
+        .select()
+        .from(schema.boardLanes)
+        .where(eq(schema.boardLanes.id, laneId));
+      if (!lane || lane.boardId !== boardId) {
+        sendError(res, 404, "not_found", "Lane not found");
         return;
       }
-      entityId = task.id;
+    }
+
+    let entityId = parsed.entityId;
+    if (parsed.title?.trim()) {
+      if (entityType === "task") {
+        const phaseId = await ensureDefaultPhase(db, projectId);
+        const number = await allocateTaskNumber(db);
+        const [task] = await db
+          .insert(schema.tasks)
+          .values({
+            projectId,
+            phaseId,
+            number,
+            title: parsed.title.trim(),
+            sortOrder: 0,
+          })
+          .returning();
+        if (!task) {
+          sendError(res, 500, "insert_failed", "Could not create task");
+          return;
+        }
+        entityId = task.id;
+      } else if (entityType === "idea") {
+        const [idea] = await db
+          .insert(schema.ideas)
+          .values({ title: parsed.title.trim() })
+          .returning();
+        if (!idea) {
+          sendError(res, 500, "insert_failed", "Could not create idea");
+          return;
+        }
+        entityId = idea.id;
+      } else {
+        sendError(
+          res,
+          400,
+          "validation_error",
+          "Provide entityId to place a to-do list; title create is only for task or idea",
+        );
+        return;
+      }
     }
     if (entityId == null) {
-      sendError(res, 400, "validation_error", "Provide entityId or title to create a task");
+      sendError(res, 400, "validation_error", "Provide entityId or title to create a card");
       return;
     }
 
-    const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, entityId));
-    if (!task || task.projectId !== projectId) {
-      sendError(res, 404, "not_found", "Task not found on this project");
-      return;
+    if (entityType === "task") {
+      const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, entityId));
+      if (!task || task.projectId !== projectId) {
+        sendError(res, 404, "not_found", "Task not found on this project");
+        return;
+      }
+    } else if (entityType === "idea") {
+      const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, entityId));
+      if (!idea) {
+        sendError(res, 404, "not_found", "Idea not found");
+        return;
+      }
+    } else if (entityType === "todo_list") {
+      const [list] = await db
+        .select()
+        .from(schema.todoLists)
+        .where(eq(schema.todoLists.id, entityId));
+      if (!list || (list.projectId != null && list.projectId !== projectId)) {
+        sendError(res, 404, "not_found", "To-do list not found for this project");
+        return;
+      }
     }
 
     if (col.wipLimit != null) {
@@ -449,15 +672,15 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
       }
     }
 
-    const sortOrder = await nextCardSort(db, boardId, col.id);
+    const sortOrder = await nextCardSort(db, boardId, col.id, laneId);
     try {
       const [row] = await db
         .insert(schema.boardCards)
         .values({
           boardId,
           columnId: col.id,
-          laneId: parsed.laneId ?? null,
-          entityType: "task",
+          laneId,
+          entityType,
           entityId,
           sortOrder,
         })
@@ -472,7 +695,7 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
     } catch (insertErr) {
       const pg = insertErr as { code?: string };
       if (pg.code === "23505") {
-        sendError(res, 409, "already_on_board", "That task is already on this board");
+        sendError(res, 409, "already_on_board", "That record is already on this board");
         return;
       }
       throw insertErr;
@@ -500,6 +723,17 @@ boardsRouter.patch("/:boardId/cards/move", async (req, res) => {
       return;
     }
 
+    if (parsed.laneId != null) {
+      const [lane] = await db
+        .select()
+        .from(schema.boardLanes)
+        .where(eq(schema.boardLanes.id, parsed.laneId));
+      if (!lane || lane.boardId !== boardId) {
+        sendError(res, 404, "not_found", "Lane not found");
+        return;
+      }
+    }
+
     const existing = await db
       .select()
       .from(schema.boardCards)
@@ -512,9 +746,21 @@ boardsRouter.patch("/:boardId/cards/move", async (req, res) => {
       }
     }
 
-    if (col.wipLimit != null && parsed.orderedCardIds.length > col.wipLimit) {
-      sendError(res, 400, "wip_limit", `Column "${col.name}" WIP limit is ${col.wipLimit}`);
-      return;
+    const targetLaneId = parsed.laneId !== undefined ? parsed.laneId : undefined;
+
+    // WIP: count cards that will be in this column after the move
+    if (col.wipLimit != null) {
+      const moving = new Set(parsed.orderedCardIds);
+      let count = parsed.orderedCardIds.length;
+      for (const card of existing) {
+        if (moving.has(card.id)) continue;
+        if (card.columnId === col.id) count += 1;
+      }
+      // If lane-scoped move, cards already in column but other lanes still count toward WIP
+      if (count > col.wipLimit) {
+        sendError(res, 400, "wip_limit", `Column "${col.name}" WIP limit is ${col.wipLimit}`);
+        return;
+      }
     }
 
     for (let i = 0; i < parsed.orderedCardIds.length; i++) {
@@ -525,22 +771,23 @@ boardsRouter.patch("/:boardId/cards/move", async (req, res) => {
         .set({
           columnId: col.id,
           sortOrder: i,
-          ...(parsed.laneId !== undefined ? { laneId: parsed.laneId } : {}),
+          ...(targetLaneId !== undefined ? { laneId: targetLaneId } : {}),
           updatedAt: new Date(),
         })
         .where(eq(schema.boardCards.id, id));
     }
 
-    // Re-pack remaining cards in other columns that lost items
+    // Re-pack remaining cards in other (column, lane) cells that lost items
     const moved = new Set(parsed.orderedCardIds);
-    const otherCols = new Map<number, typeof existing>();
+    const otherCells = new Map<string, typeof existing>();
     for (const card of existing) {
       if (moved.has(card.id)) continue;
-      const list = otherCols.get(card.columnId) ?? [];
+      const key = `${card.columnId}:${card.laneId ?? "null"}`;
+      const list = otherCells.get(key) ?? [];
       list.push(card);
-      otherCols.set(card.columnId, list);
+      otherCells.set(key, list);
     }
-    for (const [, list] of otherCols) {
+    for (const [, list] of otherCells) {
       list.sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
       for (let i = 0; i < list.length; i++) {
         const card = list[i]!;

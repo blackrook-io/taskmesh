@@ -7,8 +7,20 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 
 export const searchRouter = Router();
 
+const emptyResults = {
+  ideas: [] as const,
+  projects: [] as const,
+  tasks: [] as const,
+  documents: [] as const,
+  boards: [] as const,
+  canvases: [] as const,
+  todo_lists: [] as const,
+  wiki: [] as const,
+  tag: null as null,
+};
+
 /**
- * Global search across ideas, projects, tasks, and documents.
+ * Global search across ideas, projects, tasks, documents, boards, canvases, todo lists, and wiki.
  * Query params: `q` (text), `tag` (tag name) and/or `tagId` (number).
  * At least one of q / tag / tagId is required.
  */
@@ -46,9 +58,7 @@ searchRouter.get("/", async (req, res) => {
         .from(schema.tags)
         .where(eq(schema.tags.name, tagName));
       if (!tagRow) {
-        res.json({
-          data: { ideas: [], projects: [], tasks: [], documents: [], tag: null },
-        });
+        res.json({ data: { ...emptyResults } });
         return;
       }
       filterTagId = tagRow.id;
@@ -66,9 +76,7 @@ searchRouter.get("/", async (req, res) => {
         .where(eq(schema.tags.id, filterTagId));
       tagMeta = t ?? null;
       if (!tagMeta) {
-        res.json({
-          data: { ideas: [], projects: [], tasks: [], documents: [], tag: null },
-        });
+        res.json({ data: { ...emptyResults } });
         return;
       }
     }
@@ -89,11 +97,24 @@ searchRouter.get("/", async (req, res) => {
       return rows.map((r) => r.entityId);
     }
 
-    const [ideaIds, projectIds, taskIds, documentIds] = await Promise.all([
+    const [
+      ideaIds,
+      projectIds,
+      taskIds,
+      documentIds,
+      boardIds,
+      canvasIds,
+      todoListIds,
+      wikiNodeIds,
+    ] = await Promise.all([
       idsForType("idea"),
       idsForType("project"),
       idsForType("task"),
       idsForType("document"),
+      idsForType("board"),
+      idsForType("canvas"),
+      idsForType("todo_list"),
+      idsForType("wiki_node"),
     ]);
 
     const ideas =
@@ -180,12 +201,120 @@ searchRouter.get("/", async (req, res) => {
             .orderBy(desc(schema.projectDocuments.updatedAt))
             .limit(50);
 
+    const boards =
+      boardIds != null && boardIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.boards)
+            .where(
+              and(
+                boardIds != null ? inArray(schema.boards.id, boardIds) : sql`true`,
+                pattern ? ilike(schema.boards.name, pattern) : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.boards.updatedAt))
+            .limit(50);
+
+    const canvases =
+      canvasIds != null && canvasIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: schema.canvases.id,
+              projectId: schema.canvases.projectId,
+              title: schema.canvases.title,
+              sortOrder: schema.canvases.sortOrder,
+              createdAt: schema.canvases.createdAt,
+              updatedAt: schema.canvases.updatedAt,
+            })
+            .from(schema.canvases)
+            .where(
+              and(
+                canvasIds != null ? inArray(schema.canvases.id, canvasIds) : sql`true`,
+                pattern ? ilike(schema.canvases.title, pattern) : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.canvases.updatedAt))
+            .limit(50);
+
+    const todo_lists =
+      todoListIds != null && todoListIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.todoLists)
+            .where(
+              and(
+                todoListIds != null
+                  ? inArray(schema.todoLists.id, todoListIds)
+                  : sql`true`,
+                pattern ? ilike(schema.todoLists.title, pattern) : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.todoLists.updatedAt))
+            .limit(50);
+
+    const wikiNodeIdFilter: number[] | null =
+      filterTagId == null
+        ? null
+        : await (async () => {
+            const fromNodes = wikiNodeIds ?? [];
+            const docSet = new Set(documentIds ?? []);
+            const canvasSet = new Set(canvasIds ?? []);
+            if (fromNodes.length === 0 && docSet.size === 0 && canvasSet.size === 0) {
+              return [] as number[];
+            }
+            const linked = await db
+              .select({ id: schema.wikiNodes.id })
+              .from(schema.wikiNodes)
+              .where(
+                or(
+                  fromNodes.length ? inArray(schema.wikiNodes.id, fromNodes) : sql`false`,
+                  docSet.size
+                    ? and(
+                        eq(schema.wikiNodes.entityType, "document"),
+                        inArray(schema.wikiNodes.entityId, [...docSet]),
+                      )
+                    : sql`false`,
+                  canvasSet.size
+                    ? and(
+                        eq(schema.wikiNodes.entityType, "canvas"),
+                        inArray(schema.wikiNodes.entityId, [...canvasSet]),
+                      )
+                    : sql`false`,
+                ),
+              );
+            return [...new Set(linked.map((r) => r.id))];
+          })();
+
+    const wiki =
+      wikiNodeIdFilter != null && wikiNodeIdFilter.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.wikiNodes)
+            .where(
+              and(
+                wikiNodeIdFilter != null
+                  ? inArray(schema.wikiNodes.id, wikiNodeIdFilter)
+                  : sql`true`,
+                pattern ? ilike(schema.wikiNodes.title, pattern) : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.wikiNodes.updatedAt))
+            .limit(50);
+
     res.json({
       data: {
         ideas,
         projects,
         tasks,
         documents,
+        boards,
+        canvases,
+        todo_lists,
+        wiki,
         tag: tagMeta,
       },
     });

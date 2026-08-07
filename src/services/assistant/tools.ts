@@ -133,8 +133,10 @@ export const OPENAI_TOOLS = [
           taskId: { type: "integer" },
           title: { type: "string" },
           notes: { type: "string" },
-          dueAt: { type: "string", description: "ISO datetime or null to clear" },
+          dueDate: { type: "string", description: "YYYY-MM-DD or null to clear" },
           color: { type: "string" },
+          state: { type: "string" },
+          priority: { type: "string" },
           summary: { type: "string" },
         },
         required: ["projectId", "taskId", "summary"],
@@ -188,7 +190,7 @@ export const OPENAI_TOOLS = [
           projectId: { type: "integer" },
           title: { type: "string" },
           notes: { type: "string" },
-          dueAt: { type: "string", description: "ISO datetime" },
+          dueDate: { type: "string", description: "YYYY-MM-DD" },
           color: { type: "string" },
           summary: { type: "string" },
         },
@@ -364,7 +366,11 @@ async function toolGetEntity(args: unknown): Promise<string> {
     projectId: row.projectId,
     title: row.title,
     notes: clip(row.notes ?? "", 4000),
-    dueAt: row.dueAt?.toISOString() ?? null,
+    dueDate: row.dueDate ?? null,
+    number: row.number,
+    state: row.state,
+    priority: row.priority,
+    parentId: row.parentId,
     color: row.color,
     phaseId: row.phaseId,
   });
@@ -485,8 +491,10 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
       taskId: z.number().int().positive(),
       title: z.string().min(1).max(2000).optional(),
       notes: z.string().max(50_000).optional().nullable(),
-      dueAt: z.string().nullable().optional(),
+      dueDate: z.string().nullable().optional(),
       color: z.string().max(64).optional().nullable(),
+      state: z.string().optional(),
+      priority: z.string().optional(),
       summary: z.string().min(1).max(500),
     })
     .parse(args);
@@ -498,8 +506,10 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
   const fields: Record<string, unknown> = {};
   if (parsed.title !== undefined) fields.title = parsed.title;
   if (parsed.notes !== undefined) fields.notes = parsed.notes;
-  if (parsed.dueAt !== undefined) fields.dueAt = parsed.dueAt;
+  if (parsed.dueDate !== undefined) fields.dueDate = parsed.dueDate;
   if (parsed.color !== undefined) fields.color = parsed.color;
+  if (parsed.state !== undefined) fields.state = parsed.state;
+  if (parsed.priority !== undefined) fields.priority = parsed.priority;
   if (Object.keys(fields).length === 0) {
     return JSON.stringify({ error: "Provide at least one field to update" });
   }
@@ -589,7 +599,7 @@ async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Pro
       projectId: z.coerce.number().int().positive(),
       title: z.string().min(1).max(2000),
       notes: z.string().max(50_000).optional().nullable(),
-      dueAt: z.string().optional().nullable(),
+      dueDate: z.string().optional().nullable(),
       color: z.string().max(64).optional().nullable(),
       summary: z.string().min(1).max(500),
     })
@@ -601,7 +611,7 @@ async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Pro
   if (!proj) return JSON.stringify({ error: "Project not found" });
   const fields: Record<string, unknown> = { title: parsed.title };
   if (parsed.notes !== undefined) fields.notes = parsed.notes;
-  if (parsed.dueAt !== undefined && parsed.dueAt !== null) fields.dueAt = parsed.dueAt;
+  if (parsed.dueDate !== undefined && parsed.dueDate !== null) fields.dueDate = parsed.dueDate;
   if (parsed.color !== undefined) fields.color = parsed.color;
   const proposal: AssistantProposal = {
     id: proposalId(),

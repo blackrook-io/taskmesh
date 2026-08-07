@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "PORT=${DEV_API_PORT:-3001} tsx watch src/index.ts",
     "dev:client": "npm run dev --prefix client",
     "dev:web": "concurrently -n api,web -c blue,green \"npm run dev\" \"npm run dev --prefix client\"",
     "build": "tsc",

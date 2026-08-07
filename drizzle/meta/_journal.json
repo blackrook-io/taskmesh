@@ -71,6 +71,13 @@
       "when": 1784775348257,
       "tag": "0009_past_george_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786097808312,
+      "tag": "0010_fancy_whizzer",
+      "breakpoints": true
     }
   ]
 }

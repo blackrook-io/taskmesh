@@ -1,10 +1,11 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ensureDefaultPhase } from "../../services/phases.js";
+import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
 
 const listBody = z.object({
@@ -54,7 +55,84 @@ async function loadList(listId: number) {
   return list ?? null;
 }
 
+/** Ideas/tasks not on any named list; tasks also must have no project. */
+async function hydrateUnsortedItems(inboxListId: number) {
+  const namedLists = await db
+    .select({ id: schema.todoLists.id })
+    .from(schema.todoLists)
+    .where(eq(schema.todoLists.kind, "list"));
+  const namedIds = namedLists.map((l) => l.id);
+
+  const listed =
+    namedIds.length === 0
+      ? []
+      : await db
+          .select({
+            entityType: schema.todoListItems.entityType,
+            entityId: schema.todoListItems.entityId,
+          })
+          .from(schema.todoListItems)
+          .where(inArray(schema.todoListItems.listId, namedIds));
+
+  const listedIdeas = new Set(
+    listed.filter((r) => r.entityType === "idea").map((r) => r.entityId),
+  );
+  const listedTasks = new Set(
+    listed.filter((r) => r.entityType === "task").map((r) => r.entityId),
+  );
+
+  const ideas = await db.select().from(schema.ideas).orderBy(asc(schema.ideas.id));
+  const tasks = await db
+    .select()
+    .from(schema.tasks)
+    .where(isNull(schema.tasks.projectId))
+    .orderBy(asc(schema.tasks.id));
+
+  const out = [];
+  let sort = 0;
+  for (const idea of ideas) {
+    if (listedIdeas.has(idea.id)) continue;
+    out.push({
+      id: -(sort + 1),
+      listId: inboxListId,
+      entityType: "idea" as const,
+      entityId: idea.id,
+      sortOrder: sort++,
+      checked: false,
+      createdAt: idea.createdAt,
+      updatedAt: idea.updatedAt,
+      title: idea.title,
+      href: `/ideas/${idea.id}`,
+      virtual: true,
+    });
+  }
+  for (const task of tasks) {
+    if (listedTasks.has(task.id)) continue;
+    out.push({
+      id: -(sort + 1),
+      listId: inboxListId,
+      entityType: "task" as const,
+      entityId: task.id,
+      sortOrder: sort++,
+      checked: false,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      title: task.title,
+      href: null as string | null,
+      virtual: true,
+      state: task.state,
+      dueDate: task.dueDate,
+    });
+  }
+  return out;
+}
+
 async function hydrateItems(listId: number) {
+  const list = await loadList(listId);
+  if (list?.kind === "inbox") {
+    return hydrateUnsortedItems(listId);
+  }
+
   const rows = await db
     .select()
     .from(schema.todoListItems)
@@ -65,6 +143,8 @@ async function hydrateItems(listId: number) {
   for (const row of rows) {
     let title = `${row.entityType} #${row.entityId}`;
     let href: string | null = null;
+    let state: string | undefined;
+    let dueDate: string | null | undefined;
     if (row.entityType === "idea") {
       const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, row.entityId));
       if (idea) {
@@ -75,10 +155,12 @@ async function hydrateItems(listId: number) {
       const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, row.entityId));
       if (task) {
         title = task.title;
-        href = `/projects/${task.projectId}?tab=tasks`;
+        href = task.projectId != null ? `/projects/${task.projectId}?tab=tasks` : null;
+        state = task.state;
+        dueDate = task.dueDate;
       }
     }
-    out.push({ ...row, title, href });
+    out.push({ ...row, title, href, state, dueDate });
   }
   return out;
 }
@@ -219,6 +301,15 @@ todoListsRouter.post("/:id/items", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    if (list.kind === "inbox") {
+      sendError(
+        res,
+        400,
+        "virtual_list",
+        "Unsorted is computed automatically — add items to a named list, or create unassigned tasks/ideas",
+      );
+      return;
+    }
     const parsed = itemBody.parse(req.body);
     if (parsed.entityType === "idea") {
       const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, parsed.entityId));
@@ -292,26 +383,22 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
       entityId = idea.id;
     } else {
       const projectId = parsed.projectId ?? list.projectId ?? null;
-      if (projectId == null) {
-        sendError(
-          res,
-          400,
-          "project_required",
-          "A project is required to create a task — pick a project-scoped list or pass projectId",
-        );
-        return;
+      let phaseId: number | null = null;
+      if (projectId != null) {
+        const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
+        if (!proj) {
+          sendError(res, 404, "not_found", "Project not found");
+          return;
+        }
+        phaseId = await ensureDefaultPhase(db, projectId);
       }
-      const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
-      if (!proj) {
-        sendError(res, 404, "not_found", "Project not found");
-        return;
-      }
-      const phaseId = await ensureDefaultPhase(db, projectId);
+      const number = await allocateTaskNumber(db);
       const [task] = await db
         .insert(schema.tasks)
         .values({
           projectId,
           phaseId,
+          number,
           title,
           sortOrder: 0,
         })
@@ -321,6 +408,15 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
         return;
       }
       entityId = task.id;
+    }
+
+    if (list.kind === "inbox") {
+      // Unsorted is virtual — entity appears automatically when unlisted / unassigned.
+      const match = (await hydrateItems(listId)).find(
+        (i) => i.entityType === entityType && i.entityId === entityId,
+      );
+      res.status(201).json({ data: match ?? { entityType, entityId, title } });
+      return;
     }
 
     const existing = await db
@@ -352,8 +448,13 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
 todoListsRouter.patch("/:id/items/reorder", async (req, res) => {
   try {
     const listId = idParam.parse(req.params.id);
-    if (!(await loadList(listId))) {
+    const list = await loadList(listId);
+    if (!list) {
       sendError(res, 404, "not_found", "List not found");
+      return;
+    }
+    if (list.kind === "inbox") {
+      sendError(res, 400, "virtual_list", "Unsorted order is not persisted");
       return;
     }
     const { orderedItemIds } = reorderBody.parse(req.body);
@@ -472,11 +573,13 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       return;
     }
     const phaseId = await ensureDefaultPhase(db, parsed.projectId);
+    const number = await allocateTaskNumber(db);
     const [task] = await db
       .insert(schema.tasks)
       .values({
         projectId: parsed.projectId,
         phaseId,
+        number,
         title: parsed.title?.trim() || idea.title,
         notes: idea.body,
         sortOrder: 0,

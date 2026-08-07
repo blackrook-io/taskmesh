@@ -638,6 +638,13 @@ export function WikiPanel({ projectId }: Props) {
             ) : (
               <h1 className="wiki-page-title">{displayTitle}</h1>
             )}
+            <div className="field field--tags-below">
+              <TagInput
+                entityType="canvas"
+                entityId={detailQuery.data.canvas.id}
+                readOnly={!pageEdit}
+              />
+            </div>
             <CanvasEditor
               key={detailQuery.data.canvas.id}
               canvasId={detailQuery.data.canvas.id}

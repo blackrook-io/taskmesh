@@ -26,7 +26,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 
 | Goal | Command |
 |------|---------|
-| API + SPA dev (two processes) | `npm run dev:web` (from repo root; run `npm install` in `client/` the first time) |
+| API + SPA dev (two processes) | `npm run dev:web` — UI **:5173**, DEV API **:3001** (PROD stays on **:3000** / nginx **:80**) |
 | Dev API only | `npm run dev` |
 | Production bundles | `npm run build:all` then `NODE_ENV=production npm start` |
 | DB migrations | `npm run db:migrate` |

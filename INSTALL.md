@@ -313,7 +313,8 @@ npm run db:migrate
 
 ## 12. Development run (API + Vite UI)
 
-Two processes: Express API on **3000**, Vite on **5173** (Vite proxies `/api` → the API).
+PROD (systemd) keeps Express on **`127.0.0.1:3000`** with nginx **:80 → :3000**.  
+DEV uses a **separate** API on **`127.0.0.1:3001`** plus Vite on **5173** (Vite proxies `/api` → `:3001`). You normally only open **:5173** in the browser.
 
 ```bash
 cd /srv/taskmesh
@@ -321,10 +322,13 @@ sudo systemctl status postgresql --no-pager
 npm run dev:web
 ```
 
-- UI: http://127.0.0.1:5173/
-- API health: http://127.0.0.1:3000/api/health
+- UI (use this): http://127.0.0.1:5173/
+- DEV API health: http://127.0.0.1:3001/api/health
+- PROD API (unchanged): http://127.0.0.1:3000/api/health
 
-API-only:
+Override the DEV API port with `DEV_API_PORT=3002 npm run dev:web` if needed (Vite picks up the same variable).
+
+API-only (still on the DEV port):
 
 ```bash
 npm run dev
@@ -451,7 +455,7 @@ ssh -L 3000:127.0.0.1:3000 your-user@your-server
 Then open http://127.0.0.1:3000/ on the laptop. For Vite dev, also tunnel **5173**:
 
 ```bash
-ssh -L 5173:127.0.0.1:5173 -L 3000:127.0.0.1:3000 your-user@your-server
+ssh -L 5173:127.0.0.1:5173 -L 3001:127.0.0.1:3001 your-user@your-server
 ```
 
 Reference: [ssh(1)](https://manpages.ubuntu.com/manpages/noble/en/man1/ssh.1.html) (`-L`).
@@ -536,7 +540,7 @@ In a browser on the LAN: open `http://<server-ip>/`, create a project, attach an
 
 ### Same-host promote to production (:80)
 
-When Dev and Prod share `/srv/taskmesh` (Vite on `:5173`, systemd + nginx on `:80`), promote the **current working tree** with:
+When Dev and Prod share `/srv/taskmesh` (Vite **:5173** + DEV API **:3001**, systemd Express **:3000** + nginx **:80**), promote the **current working tree** with:
 
 ```bash
 cd /srv/taskmesh
@@ -569,7 +573,8 @@ Always run migrations after pulling schema changes; review `drizzle/` if you mai
 |---------|-----------------|
 | `npm run db:migrate` fails on permissions | Re-run §6 schema grants; confirm `DATABASE_URL` user owns/can write `public` |
 | `ECONNREFUSED` on Postgres | `sudo systemctl status postgresql`; host `127.0.0.1` vs `localhost`; password in URL |
-| Port 3000 in use | `ss -tlnp \| grep 3000`; change `PORT` in `.env` |
+| Port 3000 in use | Expected if PROD (`taskmesh` systemd) is running. Use `npm run dev:web` (DEV API on **3001**). Do not set `.env` `PORT` to free 3000 for DEV. |
+| Port 3001 in use | `ss -tlnp \| grep 3001`; set `DEV_API_PORT=3002 npm run dev:web` |
 | Cannot open app from phone on LAN | Confirm nginx (§15), `HOST=127.0.0.1`, UFW allows **80** (not 3000); try `curl http://127.0.0.1/api/health` on server |
 | nginx 502 Bad Gateway | TaskMesh not running (`systemctl status taskmesh`); wrong `HOST`/`PORT`; `ss -tlnp \| grep 3000` should show `127.0.0.1:3000` |
 | Blank Excalidraw / missing fonts | Re-run `cd client && npm install`; confirm `client/public/excalidraw-assets/fonts` exists; `index.html` sets `EXCALIDRAW_ASSET_PATH` |

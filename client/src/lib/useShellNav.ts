@@ -5,7 +5,6 @@ import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { apiJson } from "../api/client";
 import {
   isProjectModuleKey,
-  MODULE_LABELS,
   type ProjectModuleKey,
 } from "./projectModules";
 import type { ProjectModule } from "../types";
@@ -43,6 +42,20 @@ const PROJECT_MIDDLE: {
 }[] = [
   { id: "overview", label: "Overview", tab: "overview", icon: shellIcons.home },
   { id: "tasks", label: "Tasks", tab: "tasks", moduleKey: "tasks", icon: shellIcons.tasks },
+  {
+    id: "todo_lists",
+    label: "To Dos",
+    tab: "todo_lists",
+    moduleKey: "todo_lists",
+    icon: shellIcons.lists,
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    tab: "documents",
+    moduleKey: "documents",
+    icon: shellIcons.documents,
+  },
   { id: "boards", label: "Kanban", tab: "boards", moduleKey: "boards", icon: shellIcons.kanban },
   {
     id: "canvases",
@@ -54,7 +67,7 @@ const PROJECT_MIDDLE: {
   { id: "images", label: "Images", tab: "images", icon: shellIcons.imageBoard },
   {
     id: "wiki",
-    label: "Documents (Wiki)",
+    label: "Wiki",
     tab: "wiki",
     moduleKey: "wiki",
     icon: shellIcons.documents,
@@ -99,6 +112,17 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
     },
   });
 
+  const listsQuery = useQuery({
+    queryKey: ["todo-lists", "global"],
+    enabled: section === "lists",
+    queryFn: async () => {
+      const res = await apiJson<{ data: import("../types").TodoList[] }>(
+        "/api/v1/todo-lists?projectId=null",
+      );
+      return res.data;
+    },
+  });
+
   return useMemo(() => {
     if (section === "projects" && projectId != null) {
       const modules = modulesQuery.data ?? [];
@@ -108,25 +132,24 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
       const rawTab = searchParams.get("tab") ?? "overview";
       const activeTab = rawTab === "todos" ? "todo_lists" : rawTab;
 
-      const items: ContextNavItem[] = PROJECT_MIDDLE.map((entry) => {
+      const items: ContextNavItem[] = PROJECT_MIDDLE.flatMap((entry) => {
         const needsModule = entry.moduleKey != null;
         const isEnabled = !needsModule || enabled.has(entry.moduleKey!);
+        if (needsModule && !isEnabled) return [];
         const path =
           entry.tab === "overview"
             ? `/projects/${projectId}`
             : `/projects/${projectId}?tab=${entry.tab}`;
-        return {
-          id: entry.id,
-          label: entry.label,
-          path: isEnabled ? path : undefined,
-          disabled: !isEnabled,
-          title: !isEnabled
-            ? `Enable ${MODULE_LABELS[entry.moduleKey!]} in project Settings`
-            : undefined,
-          active: isEnabled && activeTab === entry.tab,
-          icon: entry.icon,
-          pin: entry.pin,
-        };
+        return [
+          {
+            id: entry.id,
+            label: entry.label,
+            path,
+            active: activeTab === entry.tab,
+            icon: entry.icon,
+            pin: entry.pin,
+          },
+        ];
       });
 
       return { title: "Project", items };
@@ -156,44 +179,59 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
 
     if (section === "ideas") {
       const sort = searchParams.get("sort") ?? "date";
+      const order = searchParams.get("order") === "asc" ? "asc" : "desc";
+      const flip = order === "desc" ? "asc" : "desc";
+      const sortLink = (key: string, active: boolean) => {
+        const nextOrder = active ? flip : key === "title" ? "asc" : "desc";
+        return `/ideas?sort=${key}&order=${nextOrder}`;
+      };
       return {
         title: "Ideas",
         items: [
           {
             id: "sort-date",
-            label: "Date",
-            path: "/ideas",
+            label: order === "asc" && sort === "date" ? "Date created ↑" : "Date created",
+            path: sortLink("date", sort === "date"),
             active: sort === "date",
             icon: shellIcons.calendar,
           },
           {
-            id: "sort-tag",
-            label: "Tag",
-            path: "/ideas?sort=tag",
-            active: sort === "tag",
-            icon: shellIcons.lists,
+            id: "sort-title",
+            label: order === "desc" && sort === "title" ? "Title ↓" : "Title A–Z",
+            path: sortLink("title", sort === "title"),
+            active: sort === "title",
+            icon: shellIcons.documents,
           },
           {
-            id: "sort-priority",
-            label: "Priority",
-            disabled: true,
-            title: "Priority sorting comes later",
-            icon: shellIcons.tasks,
+            id: "sort-tag",
+            label: order === "asc" && sort === "tag" ? "Tags ↑" : "Grouped by Tags",
+            path: sortLink("tag", sort === "tag"),
+            active: sort === "tag",
+            icon: shellIcons.lists,
           },
         ],
       };
     }
 
     if (section === "lists") {
+      const listMatch = matchPath("/todos/:listId", location.pathname);
+      const activeListId = listMatch?.params.listId ? Number(listMatch.params.listId) : null;
       return {
         title: "Lists",
         items: [
-          {
-            id: "todos",
-            label: "To Do lists",
-            path: "/todos",
-            active: location.pathname.startsWith("/todos"),
+          ...(listsQuery.data ?? []).map((l) => ({
+            id: `list-${l.id}`,
+            label: l.kind === "inbox" ? "Unsorted" : l.title,
+            path: `/todos/${l.id}`,
+            active: activeListId === l.id || (activeListId == null && l.kind === "inbox" && location.pathname === "/todos"),
             icon: shellIcons.lists,
+          })),
+          {
+            id: "create-list",
+            label: "Create list",
+            path: "/todos?create=1",
+            active: searchParams.get("create") === "1",
+            icon: shellIcons.add,
           },
         ],
       };
@@ -231,6 +269,7 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
     section,
     projectId,
     modulesQuery.data,
+    listsQuery.data,
     searchParams,
     location.pathname,
   ]);

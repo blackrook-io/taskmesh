@@ -117,6 +117,42 @@ function flattenSearch(data: SearchResults): PaletteItem[] {
       path: `/projects/${d.projectId}?tab=documents`,
     });
   }
+  for (const b of data.boards ?? []) {
+    out.push({
+      id: `board-${b.id}`,
+      group: "Boards",
+      label: b.name,
+      hint: `Project #${b.projectId}`,
+      path: `/projects/${b.projectId}?tab=boards`,
+    });
+  }
+  for (const c of data.canvases ?? []) {
+    out.push({
+      id: `canvas-${c.id}`,
+      group: "Canvases",
+      label: c.title,
+      hint: `Project #${c.projectId}`,
+      path: `/projects/${c.projectId}?tab=canvases`,
+    });
+  }
+  for (const l of data.todo_lists ?? []) {
+    out.push({
+      id: `todo-list-${l.id}`,
+      group: "To Do lists",
+      label: l.title,
+      hint: l.projectId != null ? `Project #${l.projectId}` : "Global",
+      path: l.projectId != null ? `/projects/${l.projectId}?tab=todo_lists` : `/todos/${l.id}`,
+    });
+  }
+  for (const w of data.wiki ?? []) {
+    out.push({
+      id: `wiki-${w.id}`,
+      group: "Wiki",
+      label: w.title,
+      hint: `Project #${w.projectId}`,
+      path: `/projects/${w.projectId}?tab=wiki`,
+    });
+  }
   return out;
 }
 

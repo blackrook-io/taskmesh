@@ -27,11 +27,17 @@ export type ProjectPhase = {
 
 export type Task = {
   id: number;
-  projectId: number;
+  projectId: number | null;
   phaseId: number | null;
+  parentId: number | null;
+  number: number;
   title: string;
   notes: string | null;
-  dueAt: string | null;
+  state: "new" | "in_progress" | "complete" | "canceled" | "on_hold";
+  priority: "none" | "low" | "medium" | "high" | "urgent";
+  dueDate: string | null;
+  /** @deprecated Prefer dueDate */
+  dueAt?: string | null;
   color: string | null;
   sortOrder: number;
   createdAt: string;
@@ -60,6 +66,10 @@ export type SearchResults = {
   projects: Project[];
   tasks: Task[];
   documents: ProjectDocument[];
+  boards: Board[];
+  canvases: CanvasSummary[];
+  todo_lists: TodoList[];
+  wiki: WikiNode[];
   tag: { id: number; name: string; color: string | null } | null;
 };
 
@@ -83,6 +93,9 @@ export type TodoListItem = {
   updatedAt: string;
   title: string;
   href: string | null;
+  state?: string;
+  dueDate?: string | null;
+  virtual?: boolean;
 };
 
 export type TodoListDetail = TodoList & { items: TodoListItem[] };

@@ -39,7 +39,16 @@ export function SearchPage() {
   const totals = useMemo(() => {
     const d = searchQuery.data;
     if (!d) return 0;
-    return d.ideas.length + d.projects.length + d.tasks.length + d.documents.length;
+    return (
+      d.ideas.length +
+      d.projects.length +
+      d.tasks.length +
+      d.documents.length +
+      d.boards.length +
+      d.canvases.length +
+      d.todo_lists.length +
+      d.wiki.length
+    );
   }, [searchQuery.data]);
 
   const runSearch = (next?: { q?: string; tag?: string }) => {
@@ -72,7 +81,7 @@ export function SearchPage() {
             id="search-q"
             type="search"
             value={q}
-            placeholder="Search ideas, projects, tasks, documents…"
+            placeholder="Search ideas, projects, tasks, documents, boards…"
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
@@ -180,8 +189,44 @@ export function SearchPage() {
                 items={searchQuery.data.documents.map((d) => ({
                   key: d.id,
                   label: d.title,
-                  to: `/projects/${d.projectId}`,
+                  to: `/projects/${d.projectId}?tab=documents`,
                   hint: `project #${d.projectId}`,
+                }))}
+              />
+              <ResultGroup
+                title="Boards"
+                items={searchQuery.data.boards.map((b) => ({
+                  key: b.id,
+                  label: b.name,
+                  to: `/projects/${b.projectId}?tab=boards`,
+                  hint: `project #${b.projectId}`,
+                }))}
+              />
+              <ResultGroup
+                title="Canvases"
+                items={searchQuery.data.canvases.map((c) => ({
+                  key: c.id,
+                  label: c.title,
+                  to: `/projects/${c.projectId}?tab=canvases`,
+                  hint: `project #${c.projectId}`,
+                }))}
+              />
+              <ResultGroup
+                title="To Do lists"
+                items={searchQuery.data.todo_lists.map((l) => ({
+                  key: l.id,
+                  label: l.title,
+                  to: l.projectId != null ? `/projects/${l.projectId}?tab=todo_lists` : `/todos/${l.id}`,
+                  hint: l.projectId != null ? `project #${l.projectId}` : "global",
+                }))}
+              />
+              <ResultGroup
+                title="Wiki"
+                items={searchQuery.data.wiki.map((w) => ({
+                  key: w.id,
+                  label: w.title,
+                  to: `/projects/${w.projectId}?tab=wiki`,
+                  hint: `project #${w.projectId}`,
                 }))}
               />
             </>

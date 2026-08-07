@@ -5,6 +5,7 @@ import { ideasRouter } from "./ideas.js";
 import { importExportRouter } from "./importExport.js";
 import { projectsRouter } from "./projects.js";
 import { searchRouter } from "./search.js";
+import { standaloneTasksRouter } from "./standaloneTasks.js";
 import { taggingsRouter } from "./taggings.js";
 import { tagsRouter } from "./tags.js";
 import { todoListsRouter } from "./todoLists.js";
@@ -15,6 +16,7 @@ export const v1Router = Router();
 
 v1Router.use("/ideas", ideasRouter);
 v1Router.use("/projects", projectsRouter);
+v1Router.use("/tasks", standaloneTasksRouter);
 v1Router.use("/tags", tagsRouter);
 v1Router.use("/taggings", taggingsRouter);
 v1Router.use("/search", searchRouter);

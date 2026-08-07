@@ -32,6 +32,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="projects/new" element={<ProjectNewPage />} />
             <Route path="projects/:id" element={<ProjectDetailPage />} />
             <Route path="todos" element={<TodoListsPage />} />
+            <Route path="todos/:listId" element={<TodoListsPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="filesystem" element={<FilesystemPage />} />
             <Route path="image-board" element={<ImageBoardPage />} />

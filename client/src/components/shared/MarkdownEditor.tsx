@@ -13,18 +13,38 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Placeholder from "@tiptap/extension-placeholder";
+import {
+  faAlignCenter,
+  faAlignLeft,
+  faAlignRight,
+  faBold,
+  faCompress,
+  faExpand,
+  faImage,
+  faItalic,
+  faLink,
+  faListOl,
+  faListUl,
+  faSquareCheck,
+  faTable,
+  faUnderline,
+} from "@fortawesome/free-solid-svg-icons";
+import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { uploadFile } from "../../api/client";
-import { PencilIcon } from "./PencilIcon";
+import { NavIcon } from "../shell/NavIcon";
 
 type Props = {
   value: string;
   onChange: (v: string) => void;
   onBlur?: (v: string) => void;
   height?: number;
+  /** Grow to fill a flex parent instead of a fixed min-height. */
+  fill?: boolean;
   enableImageUpload?: boolean;
   placeholder?: string;
   /** Preview-only: no toolbar, not editable. */
   readOnly?: boolean;
+  className?: string;
 };
 
 type Mode = "edit" | "preview";
@@ -54,6 +74,7 @@ function ToolbarButton({
       aria-label={title}
       aria-pressed={active}
       disabled={disabled}
+      tabIndex={-1}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
     >
@@ -62,18 +83,45 @@ function ToolbarButton({
   );
 }
 
+function IconBtn({
+  icon,
+  title,
+  active,
+  disabled,
+  onClick,
+}: {
+  icon: IconDefinition;
+  title: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <ToolbarButton
+      label={<NavIcon icon={icon} size={13} />}
+      title={title}
+      active={active}
+      disabled={disabled}
+      onClick={onClick}
+    />
+  );
+}
+
 export function MarkdownEditor({
   value,
   onChange,
   onBlur,
   height = 280,
+  fill = false,
   enableImageUpload = true,
   placeholder = "Write Markdown…",
   readOnly = false,
+  className,
 }: Props) {
-  const [mode, setMode] = useState<Mode>(readOnly ? "preview" : "edit");
+  const [mode, setMode] = useState<Mode>("preview");
   const [focusMode, setFocusMode] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const lastEmitted = useRef(value);
   const editorRef = useRef<Editor | null>(null);
   const modeRef = useRef(mode);
@@ -82,6 +130,18 @@ export function MarkdownEditor({
   modeRef.current = mode;
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
+
+  const activateEdit = () => {
+    if (readOnly) return;
+    setMode("edit");
+    const ed = editorRef.current;
+    if (ed) {
+      ed.setEditable(true);
+      requestAnimationFrame(() => {
+        ed.commands.focus();
+      });
+    }
+  };
 
   useEffect(() => {
     if (readOnly) {
@@ -150,8 +210,24 @@ export function MarkdownEditor({
       lastEmitted.current = md;
       onChangeRef.current(md);
     },
-    onBlur: ({ editor: ed }) => {
-      onBlurRef.current?.(ed.getMarkdown());
+    onFocus: () => {
+      if (readOnly) return;
+      setMode("edit");
+    },
+    onBlur: ({ editor: ed, event }) => {
+      const md = ed.getMarkdown();
+      onBlurRef.current?.(md);
+      if (readOnly) return;
+      const next = event?.relatedTarget;
+      if (next instanceof Node && rootRef.current?.contains(next)) {
+        return;
+      }
+      // Defer so toolbar mousedown-preventDefault focus retention wins when applicable.
+      requestAnimationFrame(() => {
+        if (!rootRef.current?.contains(document.activeElement)) {
+          setMode("preview");
+        }
+      });
     },
   });
 
@@ -211,140 +287,160 @@ export function MarkdownEditor({
 
   return (
     <div
-      className={`md-editor${focusMode ? " md-editor--focus" : ""}${readOnly ? " md-editor--readonly" : ""}`}
+      ref={rootRef}
+      className={[
+        "md-editor",
+        focusMode ? "md-editor--focus" : null,
+        readOnly ? "md-editor--readonly" : null,
+        fill ? "md-editor--fill" : null,
+        mode === "preview" && !readOnly ? "md-editor--previewing" : null,
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
-      {!readOnly ? (
-      <div className="md-toolbar" role="toolbar" aria-label="Markdown formatting">
-        <div className="md-toolbar__group">
-          <ToolbarButton
-            label={<PencilIcon />}
-            title="Edit"
-            active={mode === "edit"}
-            onClick={() => setMode("edit")}
-          />
-          <ToolbarButton
-            label="Preview"
-            title="Preview"
-            active={mode === "preview"}
-            onClick={() => setMode("preview")}
-          />
-          <ToolbarButton
-            label={focusMode ? "Exit focus" : "Focus"}
-            title={focusMode ? "Exit focus" : "Focus"}
-            active={focusMode}
-            onClick={() => setFocusMode((v) => !v)}
-          />
-        </div>
-        <div className="md-toolbar__group">
-          <ToolbarButton
-            label="H1"
-            title="Heading 1"
-            disabled={disabled}
-            active={editor?.isActive("heading", { level: 1 })}
-            onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-          />
-          <ToolbarButton
-            label="H2"
-            title="Heading 2"
-            disabled={disabled}
-            active={editor?.isActive("heading", { level: 2 })}
-            onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-          />
-          <ToolbarButton
-            label="H3"
-            title="Heading 3"
-            disabled={disabled}
-            active={editor?.isActive("heading", { level: 3 })}
-            onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-          />
-        </div>
-        <div className="md-toolbar__group">
-          <ToolbarButton
-            label="B"
-            title="Bold"
-            disabled={disabled}
-            active={editor?.isActive("bold")}
-            onClick={() => editor?.chain().focus().toggleBold().run()}
-          />
-          <ToolbarButton
-            label="I"
-            title="Italic"
-            disabled={disabled}
-            active={editor?.isActive("italic")}
-            onClick={() => editor?.chain().focus().toggleItalic().run()}
-          />
-          <ToolbarButton
-            label="U"
-            title="Underline"
-            disabled={disabled}
-            active={editor?.isActive("underline")}
-            onClick={() => editor?.chain().focus().toggleUnderline().run()}
-          />
-          <ToolbarButton label="Link" title="Link" disabled={disabled} active={editor?.isActive("link")} onClick={setLink} />
-        </div>
-        <div className="md-toolbar__group">
-          <ToolbarButton
-            label="• List"
-            title="Bullet list"
-            disabled={disabled}
-            active={editor?.isActive("bulletList")}
-            onClick={() => editor?.chain().focus().toggleBulletList().run()}
-          />
-          <ToolbarButton
-            label="1. List"
-            title="Ordered list"
-            disabled={disabled}
-            active={editor?.isActive("orderedList")}
-            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-          />
-          <ToolbarButton
-            label="☑"
-            title="Checklist"
-            disabled={disabled}
-            active={editor?.isActive("taskList")}
-            onClick={() => editor?.chain().focus().toggleTaskList().run()}
-          />
-          <ToolbarButton label="Table" title="Insert table" disabled={disabled} onClick={insertTable} />
-        </div>
-        <div className="md-toolbar__group">
-          <ToolbarButton
-            label="⟸"
-            title="Align left"
-            disabled={disabled}
-            active={editor?.isActive({ textAlign: "left" })}
-            onClick={() => editor?.chain().focus().setTextAlign("left").run()}
-          />
-          <ToolbarButton
-            label="⇔"
-            title="Align center"
-            disabled={disabled}
-            active={editor?.isActive({ textAlign: "center" })}
-            onClick={() => editor?.chain().focus().setTextAlign("center").run()}
-          />
-          <ToolbarButton
-            label="⟹"
-            title="Align right"
-            disabled={disabled}
-            active={editor?.isActive({ textAlign: "right" })}
-            onClick={() => editor?.chain().focus().setTextAlign("right").run()}
-          />
-        </div>
-        {enableImageUpload ? (
-          <div className="md-toolbar__group">
-            <ToolbarButton
-              label={uploading ? "Uploading…" : "Image"}
-              title="Upload image"
-              disabled={disabled || uploading}
-              onClick={() => void pickAndUploadImage()}
-            />
-            <span className="muted md-toolbar__hint">Paste image to upload</span>
-          </div>
-        ) : null}
-      </div>
-      ) : null}
-      <div className="md-editor__surface" style={{ minHeight: height }}>
+      <div
+        className="md-editor__surface"
+        style={fill ? undefined : { minHeight: height }}
+        tabIndex={readOnly || mode === "edit" ? undefined : 0}
+        onFocus={(e) => {
+          if (readOnly || mode === "edit") return;
+          if (e.target !== e.currentTarget) return;
+          activateEdit();
+        }}
+        onMouseDown={() => {
+          if (!readOnly && mode !== "edit") activateEdit();
+        }}
+      >
         <EditorContent editor={editor} />
       </div>
+      {!readOnly ? (
+        <div className="md-toolbar" role="toolbar" aria-label="Markdown formatting">
+          <div className="md-toolbar__group">
+            <IconBtn
+              icon={focusMode ? faCompress : faExpand}
+              title={focusMode ? "Exit focus" : "Focus"}
+              active={focusMode}
+              onClick={() => setFocusMode((v) => !v)}
+            />
+          </div>
+          <div className="md-toolbar__group">
+            <ToolbarButton
+              label={<span className="md-toolbar__heading">H1</span>}
+              title="Heading 1"
+              disabled={disabled}
+              active={editor?.isActive("heading", { level: 1 })}
+              onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+            />
+            <ToolbarButton
+              label={<span className="md-toolbar__heading">H2</span>}
+              title="Heading 2"
+              disabled={disabled}
+              active={editor?.isActive("heading", { level: 2 })}
+              onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+            />
+            <ToolbarButton
+              label={<span className="md-toolbar__heading">H3</span>}
+              title="Heading 3"
+              disabled={disabled}
+              active={editor?.isActive("heading", { level: 3 })}
+              onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+            />
+          </div>
+          <div className="md-toolbar__group">
+            <IconBtn
+              icon={faBold}
+              title="Bold"
+              disabled={disabled}
+              active={editor?.isActive("bold")}
+              onClick={() => editor?.chain().focus().toggleBold().run()}
+            />
+            <IconBtn
+              icon={faItalic}
+              title="Italic"
+              disabled={disabled}
+              active={editor?.isActive("italic")}
+              onClick={() => editor?.chain().focus().toggleItalic().run()}
+            />
+            <IconBtn
+              icon={faUnderline}
+              title="Underline"
+              disabled={disabled}
+              active={editor?.isActive("underline")}
+              onClick={() => editor?.chain().focus().toggleUnderline().run()}
+            />
+            <IconBtn
+              icon={faLink}
+              title="Link"
+              disabled={disabled}
+              active={editor?.isActive("link")}
+              onClick={setLink}
+            />
+          </div>
+          <div className="md-toolbar__group">
+            <IconBtn
+              icon={faListUl}
+              title="Bullet list"
+              disabled={disabled}
+              active={editor?.isActive("bulletList")}
+              onClick={() => editor?.chain().focus().toggleBulletList().run()}
+            />
+            <IconBtn
+              icon={faListOl}
+              title="Ordered list"
+              disabled={disabled}
+              active={editor?.isActive("orderedList")}
+              onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+            />
+            <IconBtn
+              icon={faSquareCheck}
+              title="Checklist"
+              disabled={disabled}
+              active={editor?.isActive("taskList")}
+              onClick={() => editor?.chain().focus().toggleTaskList().run()}
+            />
+            <IconBtn
+              icon={faTable}
+              title="Insert table"
+              disabled={disabled}
+              onClick={insertTable}
+            />
+          </div>
+          <div className="md-toolbar__group">
+            <IconBtn
+              icon={faAlignLeft}
+              title="Align left"
+              disabled={disabled}
+              active={editor?.isActive({ textAlign: "left" })}
+              onClick={() => editor?.chain().focus().setTextAlign("left").run()}
+            />
+            <IconBtn
+              icon={faAlignCenter}
+              title="Align center"
+              disabled={disabled}
+              active={editor?.isActive({ textAlign: "center" })}
+              onClick={() => editor?.chain().focus().setTextAlign("center").run()}
+            />
+            <IconBtn
+              icon={faAlignRight}
+              title="Align right"
+              disabled={disabled}
+              active={editor?.isActive({ textAlign: "right" })}
+              onClick={() => editor?.chain().focus().setTextAlign("right").run()}
+            />
+          </div>
+          {enableImageUpload ? (
+            <div className="md-toolbar__group">
+              <IconBtn
+                icon={faImage}
+                title={uploading ? "Uploading…" : "Upload image"}
+                disabled={disabled || uploading}
+                onClick={() => void pickAndUploadImage()}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

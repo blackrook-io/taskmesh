@@ -6,7 +6,6 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { PencilIcon } from "../components/shared/PencilIcon";
 import { TagInput } from "../components/shared/TagInput";
-import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
 import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
@@ -250,10 +249,14 @@ export function ProjectDetailPage() {
   });
 
   const reorderTasks = useMutation({
-    mutationFn: async (orderedTaskIds: number[]) => {
+    mutationFn: async (payload: {
+      orderedTaskIds: number[];
+      parentId?: number | null;
+      phaseId?: number | null;
+    }) => {
       const res = await apiJson<{ data: Task[] }>(`/api/v1/projects/${projectId}/tasks/reorder`, {
         method: "PATCH",
-        body: JSON.stringify({ orderedTaskIds }),
+        body: JSON.stringify(payload),
       });
       return res.data;
     },
@@ -416,6 +419,32 @@ export function ProjectDetailPage() {
             )}
             {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
           </div>
+
+          {modules.some((m) => m.enabled && isProjectModuleKey(m.moduleKey)) ? (
+            <div className="card">
+              <h2 style={{ marginTop: 0 }}>Enabled views</h2>
+              <p className="muted" style={{ marginTop: 0 }}>
+                Jump to modules enabled for this project. Turn others on in Settings.
+              </p>
+              <div className="btn-row" style={{ flexWrap: "wrap" }}>
+                {modules
+                  .filter((m) => m.enabled && isProjectModuleKey(m.moduleKey))
+                  .map((m) => {
+                    const key = m.moduleKey as ProjectModuleKey;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className="btn small"
+                        onClick={() => setTab(key)}
+                      >
+                        {MODULE_LABELS[key]}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -423,8 +452,8 @@ export function ProjectDetailPage() {
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Project modules</h2>
           <p className="muted" style={{ marginTop: 0 }}>
-            Enable the pieces this project needs. Disabled modules stay available as opportunities
-            below.
+            Enable the pieces this project needs. Disabled modules stay Settings-only until enabled —
+            they do not appear in the project middle nav.
           </p>
           <div className="module-hub">
             {modules
@@ -500,13 +529,35 @@ export function ProjectDetailPage() {
               </div>
             </div>
           </div>
-          <PhaseManager projectId={projectId} phases={phases} />
           <div style={{ marginTop: "1rem" }}>
             <TaskBoard
+              projectId={projectId}
               phases={phases}
               tasks={tasks}
-              onReorder={async (orderedTaskIds) => {
-                await reorderTasks.mutateAsync(orderedTaskIds);
+              onReorder={async (payload) => {
+                await reorderTasks.mutateAsync(payload);
+              }}
+              onReorderPhases={async (orderedPhaseIds) => {
+                await apiJson(`/api/v1/projects/${projectId}/phases/reorder`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ orderedPhaseIds }),
+                });
+                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
+                void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+              }}
+              onRenamePhase={async (phaseId, name) => {
+                await apiJson(`/api/v1/projects/${projectId}/phases/${phaseId}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ name }),
+                });
+                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
+              }}
+              onCreatePhase={async (name) => {
+                await apiJson(`/api/v1/projects/${projectId}/phases`, {
+                  method: "POST",
+                  body: JSON.stringify({ name }),
+                });
+                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
               }}
               onPatchTask={async (taskId, patch) => {
                 await patchTask.mutateAsync({ taskId, body: patch });

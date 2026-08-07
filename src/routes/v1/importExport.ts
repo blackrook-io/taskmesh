@@ -7,6 +7,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ensureDefaultPhase } from "../../services/phases.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
+import { allocateTaskNumber } from "../../services/tasks.js";
 import {
   objectsToCsv,
   objectsToXlsxBuffer,
@@ -43,10 +44,15 @@ function projectExportRow(p: typeof schema.projects.$inferSelect): Record<string
 function taskExportRow(t: typeof schema.tasks.$inferSelect): Record<string, unknown> {
   return {
     id: t.id,
-    projectId: t.projectId,
+    projectId: t.projectId ?? "",
     phaseId: t.phaseId ?? "",
+    parentId: t.parentId ?? "",
+    number: t.number,
     title: t.title,
     notes: t.notes ?? "",
+    state: t.state,
+    priority: t.priority,
+    dueDate: t.dueDate ?? "",
     dueAt: t.dueAt ? t.dueAt.toISOString() : "",
     color: t.color ?? "",
     sortOrder: t.sortOrder,
@@ -383,6 +389,22 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
       continue;
     }
 
+    let dueDate: string | null = null;
+    if (raw.dueDate != null && String(raw.dueDate).trim() !== "") {
+      const d = String(raw.dueDate).trim().slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        discarded.push({
+          row: rowNum,
+          code: "invalid_data",
+          reason: "dueDate must be YYYY-MM-DD",
+        });
+        continue;
+      }
+      dueDate = d;
+    } else if (dueAt instanceof Date) {
+      dueDate = dueAt.toISOString().slice(0, 10);
+    }
+
     let color: string | null = null;
     if (raw.color != null && raw.color !== "") {
       color = String(raw.color);
@@ -445,14 +467,17 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
     }
 
     try {
+      const number = await allocateTaskNumber(db);
       const [row] = await db
         .insert(schema.tasks)
         .values({
           projectId,
           phaseId,
+          number,
           title,
           notes,
-          dueAt,
+          dueDate,
+          dueAt: dueAt instanceof Date ? dueAt : null,
           color,
           sortOrder,
         })

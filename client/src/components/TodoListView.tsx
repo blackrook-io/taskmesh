@@ -9,12 +9,16 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
-import type { Idea, Project, Task, TodoListDetail, TodoListItem } from "../types";
+import { formatTaskNumber } from "../lib/taskFields";
+import type { Idea, Project, ProjectPhase, Task, TodoListDetail, TodoListItem } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { TaskEditorFields } from "./TaskBoard";
 import { ElementShell } from "./shared/ElementShell";
+import { MarkdownEditor } from "./shared/MarkdownEditor";
+import { TagInput } from "./shared/TagInput";
 
 function SortableItem({
   item,
@@ -40,23 +44,35 @@ function SortableItem({
       ref={setNodeRef}
       style={style}
       className={`todo-item${isDragging ? " dragging" : ""}${item.checked ? " is-checked" : ""}`}
+      onDoubleClick={onOpen}
     >
-      <span className="task-drag-handle" {...attributes} {...listeners} title="Drag to reorder">
-        ::
-      </span>
+      {!item.virtual ? (
+        <span className="task-drag-handle" {...attributes} {...listeners} title="Drag to reorder">
+          ::
+        </span>
+      ) : (
+        <span className="task-drag-handle" style={{ visibility: "hidden" }}>
+          ::
+        </span>
+      )}
       <input
         type="checkbox"
         checked={item.checked}
+        disabled={!!item.virtual}
         aria-label={`Mark ${item.title} ${item.checked ? "incomplete" : "complete"}`}
         onChange={onToggle}
       />
-      <button type="button" className="todo-item__title" onClick={onOpen}>
+      <button type="button" className="todo-item__title" onClick={onOpen} onDoubleClick={onOpen}>
         <span className="todo-item__type muted">{item.entityType}</span>
         {item.title}
+        {item.state ? <span className="muted"> · {item.state}</span> : null}
+        {item.dueDate ? <span className="muted"> · {item.dueDate}</span> : null}
       </button>
-      <button type="button" className="task-card-dismiss" aria-label="Remove from list" onClick={onRemove}>
-        ×
-      </button>
+      {!item.virtual ? (
+        <button type="button" className="task-card-dismiss" aria-label="Remove from list" onClick={onRemove}>
+          ×
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -70,6 +86,7 @@ type Props = {
 export function TodoListView({ listId, defaultProjectId }: Props) {
   const qc = useQueryClient();
   const [openItem, setOpenItem] = useState<TodoListItem | null>(null);
+  const [taskHeaderActions, setTaskHeaderActions] = useState<ReactNode>(null);
   const [pendingRemove, setPendingRemove] = useState<TodoListItem | null>(null);
   const [createType, setCreateType] = useState<"idea" | "task">("idea");
   const [createTitle, setCreateTitle] = useState("");
@@ -129,16 +146,13 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     mutationFn: async () => {
       const projectId =
         createType === "task"
-          ? (defaultProjectId ?? detailQuery.data?.projectId ?? projectsQuery.data?.[0]?.id ?? null)
+          ? (defaultProjectId ?? detailQuery.data?.projectId ?? null)
           : null;
       const body: { entityType: "idea" | "task"; title: string; projectId?: number } = {
         entityType: createType,
         title: createTitle.trim(),
       };
-      if (createType === "task") {
-        if (projectId == null) {
-          throw new Error("Create a project before adding tasks to this list");
-        }
+      if (createType === "task" && projectId != null) {
         body.projectId = projectId;
       }
       const res = await apiJson<{ data: TodoListItem }>(`/api/v1/todo-lists/${listId}/items/create`, {
@@ -245,13 +259,19 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     queryKey: ["task-solo", openItem?.entityId],
     enabled: openItem?.entityType === "task",
     queryFn: async () => {
-      const projects = (await apiJson<{ data: Project[] }>("/api/v1/projects")).data;
-      for (const p of projects) {
-        const res = await apiJson<{ data: Task[] }>(`/api/v1/projects/${p.id}/tasks`);
-        const found = res.data.find((t) => t.id === openItem!.entityId);
-        if (found) return found;
-      }
-      throw new Error("Task not found");
+      const res = await apiJson<{ data: Task }>(`/api/v1/tasks/${openItem!.entityId}`);
+      return res.data;
+    },
+  });
+
+  const phasesQuery = useQuery({
+    queryKey: ["phases", openTaskQuery.data?.projectId],
+    enabled: openTaskQuery.data?.projectId != null,
+    queryFn: async () => {
+      const res = await apiJson<{ data: ProjectPhase[] }>(
+        `/api/v1/projects/${openTaskQuery.data!.projectId}/phases`,
+      );
+      return res.data;
     },
   });
 
@@ -268,6 +288,11 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
 
   return (
     <div className="todo-list-view">
+      {list.kind !== "inbox" ? (
+        <div className="field field--tags-below" style={{ marginBottom: "0.75rem" }}>
+          <TagInput entityType="todo_list" entityId={list.id} />
+        </div>
+      ) : null}
       <div className="todo-create-row">
         <input
           type="text"
@@ -303,6 +328,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         </p>
       ) : null}
 
+      {list.kind !== "inbox" ? (
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {items.map((item) => (
@@ -316,8 +342,22 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           ))}
         </SortableContext>
       </DndContext>
+      ) : (
+        <div>
+          {items.map((item) => (
+            <SortableItem
+              key={item.id}
+              item={item}
+              onToggle={() => undefined}
+              onOpen={() => setOpenItem(item)}
+              onRemove={() => undefined}
+            />
+          ))}
+        </div>
+      )}
       {items.length === 0 ? <p className="muted">No items yet — create one above.</p> : null}
 
+      {list.kind !== "inbox" ? (
       <div className="todo-link-existing">
         <h3>Add existing</h3>
         <div className="todo-add-row">
@@ -356,12 +396,21 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           </p>
         ) : null}
       </div>
+      ) : null}
 
       {openItem ? (
         <ElementShell
           mode="modal"
           entityType={openItem.entityType === "idea" ? "idea" : "task"}
           title={openItem.title}
+          titleLeading={
+            openItem.entityType === "task" && openTaskQuery.data
+              ? formatTaskNumber(openTaskQuery.data.number)
+              : undefined
+          }
+          showType={openItem.entityType !== "task"}
+          accentColor={openItem.entityType === "task" ? openTaskQuery.data?.color : undefined}
+          actions={openItem.entityType === "task" ? taskHeaderActions : undefined}
           open
           onClose={() => setOpenItem(null)}
           footer={
@@ -371,7 +420,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
                   Open full record
                 </Link>
               ) : null}
-              {openItem.entityType === "idea" && convertProjectId != null ? (
+              {openItem.entityType === "idea" && convertProjectId != null && !openItem.virtual ? (
                 <button
                   type="button"
                   className="btn"
@@ -390,13 +439,71 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           {openItem.entityType === "idea" ? (
             openIdeaQuery.isLoading ? (
               <p className="muted">Loading…</p>
+            ) : openIdeaQuery.data ? (
+              <div className="task-expand">
+                <div className="field">
+                  <label>Title</label>
+                  <input
+                    type="text"
+                    defaultValue={openIdeaQuery.data.title}
+                    onBlur={(e) => {
+                      const title = e.target.value.trim();
+                      if (title && title !== openIdeaQuery.data!.title) {
+                        void apiJson(`/api/v1/ideas/${openIdeaQuery.data!.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ title }),
+                        }).then(() => invalidate());
+                      }
+                    }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Notes</label>
+                  <MarkdownEditor
+                    value={openIdeaQuery.data.body ?? ""}
+                    onChange={() => {}}
+                    height={180}
+                    onBlur={(v) => {
+                      void apiJson(`/api/v1/ideas/${openIdeaQuery.data!.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ body: v.trim() ? v : null }),
+                      }).then(() => invalidate());
+                    }}
+                  />
+                </div>
+                <TagInput entityType="idea" entityId={openIdeaQuery.data.id} />
+              </div>
             ) : (
-              <pre className="todo-preview-body">{openIdeaQuery.data?.body || "No body."}</pre>
+              <p className="muted">Idea not found.</p>
             )
           ) : openTaskQuery.isLoading ? (
             <p className="muted">Loading…</p>
+          ) : openTaskQuery.data ? (
+            <TaskEditorFields
+              key={openTaskQuery.data.id}
+              task={openTaskQuery.data}
+              phases={phasesQuery.data ?? []}
+              onRequestClose={() => setOpenItem(null)}
+              onHeaderActions={setTaskHeaderActions}
+              onSavePatch={async (p) => {
+                const task = openTaskQuery.data!;
+                if (task.projectId != null) {
+                  await apiJson(`/api/v1/projects/${task.projectId}/tasks/${task.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify(p),
+                  });
+                } else {
+                  await apiJson(`/api/v1/tasks/${task.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify(p),
+                  });
+                }
+                invalidate();
+                void qc.invalidateQueries({ queryKey: ["task-solo", task.id] });
+              }}
+            />
           ) : (
-            <pre className="todo-preview-body">{openTaskQuery.data?.notes || "No notes."}</pre>
+            <p className="muted">Task not found.</p>
           )}
         </ElementShell>
       ) : null}

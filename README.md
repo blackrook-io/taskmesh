@@ -20,7 +20,8 @@ npm run build:all
 NODE_ENV=production npm start
 ```
 
-On the server: http://127.0.0.1:3000/ — on the LAN after nginx (§15): **http://\<server-ip\>/** (API under `/api/...`, health at `/api/health`).
+**PROD:** Express on `127.0.0.1:3000`; nginx proxies **:80** → that API (LAN: **http://\<server-ip\>/**).  
+**DEV:** open only **http://127.0.0.1:5173/** — Vite proxies `/api` to a separate API on **:3001** so PROD can stay up.
 
 ## Development
 
@@ -35,16 +36,17 @@ npm run dev:web
 
 | URL | Purpose |
 |-----|---------|
-| http://127.0.0.1:5173/ | Vite SPA (proxies `/api` to the API) |
-| http://127.0.0.1:3000/api/health | API health |
+| http://127.0.0.1:5173/ | Dev UI (use this; proxies `/api` → DEV API) |
+| http://127.0.0.1:3001/api/health | DEV API health (optional direct check) |
+| http://127.0.0.1:3000/api/health | PROD API (systemd; leave alone while developing) |
 
 ## Scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Express API with reload (`tsx watch`) |
-| `npm run dev:client` | Vite only (`client/`; proxies `/api`) |
-| `npm run dev:web` | API + Vite together |
+| `npm run dev` | DEV Express API on `:3001` with reload (`tsx watch`) |
+| `npm run dev:client` | Vite on `:5173` only (proxies `/api` → `:3001`) |
+| `npm run dev:web` | DEV API `:3001` + Vite `:5173` together |
 | `npm run build` | Compile API TypeScript → `dist/` |
 | `npm run build:client` | Production SPA → `client/dist/` |
 | `npm run build:all` | API + client production builds |
@@ -64,7 +66,8 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 |----------|---------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `HOST` | API bind address (default `127.0.0.1`; use nginx for LAN) |
-| `PORT` | API listen port (default `3000`) |
+| `PORT` | PROD API listen port (default `3000`; used by systemd / `npm start`) |
+| `DEV_API_PORT` | DEV API port for `npm run dev` / `dev:web` (default `3001`) |
 | `UPLOAD_DIR` | Image upload directory (default `data/uploads/`) |
 | `UPLOAD_MAX_BYTES` | Max upload size (default 5 MiB) |
 | `OPENAI_API_KEY` | Enables embedded assistant (optional) |

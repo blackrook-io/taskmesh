@@ -7,6 +7,10 @@ type Props = {
   mode: ElementMode;
   entityType: EntityType;
   title: string;
+  /** Shown before the title (e.g. task number T0013). */
+  titleLeading?: string | null;
+  /** Show entity type chip next to the title (modal/page). Default true. */
+  showType?: boolean;
   /** Left accent / color bar (card) or header chip color */
   accentColor?: string | null;
   actions?: ReactNode;
@@ -26,6 +30,8 @@ export function ElementShell({
   mode,
   entityType,
   title,
+  titleLeading,
+  showType = true,
   accentColor,
   actions,
   footer,
@@ -69,8 +75,11 @@ export function ElementShell({
         <header className="element-shell__header">
           <div className="element-shell__title-row">
             <span className="element-shell__accent" aria-hidden />
+            {titleLeading ? (
+              <span className="element-shell__leading muted">{titleLeading}</span>
+            ) : null}
             <h2 className="element-shell__title">{title}</h2>
-            <span className="element-shell__type muted">{entityType}</span>
+            {showType ? <span className="element-shell__type muted">{entityType}</span> : null}
           </div>
           <div className="element-shell__actions">
             {actions}

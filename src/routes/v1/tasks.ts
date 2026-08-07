@@ -5,29 +5,65 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import {
+  dueDateSchema,
+  taskPrioritySchema,
+  taskStateSchema,
+} from "../../lib/taskFields.js";
 import { ensureDefaultPhase } from "../../services/phases.js";
+import {
+  allocateTaskNumber,
+  assertParentCompatible,
+  nextSiblingSortOrder,
+  syncDescendantPhases,
+  wouldCreateParentCycle,
+} from "../../services/tasks.js";
 
 const taskBody = z.object({
   title: z.string().min(1).max(2000),
   notes: z.string().max(50_000).optional().nullable(),
+  dueDate: dueDateSchema,
+  /** @deprecated Accept datetime for older clients; stored as dueDate date part. */
   dueAt: z.string().datetime().optional().nullable(),
   color: z.string().max(64).optional().nullable(),
   phaseId: z.number().int().positive().optional().nullable(),
+  parentId: z.number().int().positive().optional().nullable(),
+  state: taskStateSchema.optional(),
+  priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
 });
 
 const taskPatch = z.object({
   title: z.string().min(1).max(2000).optional(),
   notes: z.string().max(50_000).optional().nullable(),
+  dueDate: dueDateSchema,
   dueAt: z.string().datetime().optional().nullable(),
   color: z.string().max(64).optional().nullable(),
   phaseId: z.number().int().positive().optional().nullable(),
+  parentId: z.number().int().positive().nullable().optional(),
+  state: taskStateSchema.optional(),
+  priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
 });
 
 const reorderBody = z.object({
+  /** Sibling order (roots or children under the same parent). */
   orderedTaskIds: z.array(z.number().int().positive()).min(1),
+  /** Scope: reorder among children of this parent (null = top-level). */
+  parentId: z.number().int().positive().nullable().optional(),
+  /** When set, apply this phaseId to each reordered root (and sync descendants). */
+  phaseId: z.number().int().positive().nullable().optional(),
 });
+
+function resolveDueDate(input: {
+  dueDate?: string | null;
+  dueAt?: string | null;
+}): string | null | undefined {
+  if (input.dueDate !== undefined) return input.dueDate;
+  if (input.dueAt === undefined) return undefined;
+  if (input.dueAt === null) return null;
+  return input.dueAt.slice(0, 10);
+}
 
 export const tasksRouter = Router({ mergeParams: true });
 
@@ -75,24 +111,37 @@ tasksRouter.post("/", async (req, res) => {
       phaseId = ph.id;
     }
 
-    const maxSort = await db
-      .select({ m: schema.tasks.sortOrder })
-      .from(schema.tasks)
-      .where(eq(schema.tasks.projectId, projectId))
-      .orderBy(asc(schema.tasks.sortOrder));
+    const parentId = parsed.parentId ?? null;
+    const parentOk = await assertParentCompatible(db, projectId, parentId);
+    if (!parentOk.ok) {
+      sendError(res, 400, "invalid_parent", parentOk.message);
+      return;
+    }
+
+    if (parentId != null) {
+      const [parent] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parentId));
+      if (parent?.phaseId != null) {
+        phaseId = parent.phaseId;
+      }
+    }
 
     const nextSort =
-      parsed.sortOrder ??
-      (maxSort.length ? Math.max(...maxSort.map((r) => r.m)) + 1 : 0);
+      parsed.sortOrder ?? (await nextSiblingSortOrder(db, projectId, parentId));
+    const number = await allocateTaskNumber(db);
+    const dueDate = resolveDueDate(parsed) ?? null;
 
     const [row] = await db
       .insert(schema.tasks)
       .values({
         projectId,
         phaseId,
+        parentId,
+        number,
         title: parsed.title,
         notes: parsed.notes ?? null,
-        dueAt: parsed.dueAt ? new Date(parsed.dueAt) : null,
+        state: parsed.state ?? "new",
+        priority: parsed.priority ?? "none",
+        dueDate,
         color: parsed.color ?? null,
         sortOrder: nextSort,
       })
@@ -115,20 +164,23 @@ tasksRouter.patch("/reorder", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
-    const { orderedTaskIds } = reorderBody.parse(req.body);
+    const parsed = reorderBody.parse(req.body);
 
-    const existing = await db
-      .select({ id: schema.tasks.id })
-      .from(schema.tasks)
-      .where(eq(schema.tasks.projectId, projectId));
-    const allowed = new Set(existing.map((e) => e.id));
-    if (orderedTaskIds.length !== allowed.size) {
-      sendError(res, 400, "invalid_reorder", "orderedTaskIds must list every task in the project exactly once");
+    if (parsed.orderedTaskIds.length === 0) {
+      sendError(res, 400, "invalid_reorder", "orderedTaskIds required");
       return;
     }
+
+    const projectTasks = await db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.projectId, projectId));
+    const byId = new Map(projectTasks.map((t) => [t.id, t]));
+
     const seen = new Set<number>();
-    for (const tid of orderedTaskIds) {
-      if (!allowed.has(tid)) {
+    for (const tid of parsed.orderedTaskIds) {
+      const t = byId.get(tid);
+      if (!t) {
         sendError(res, 400, "invalid_task", `Task ${tid} is not in this project`);
         return;
       }
@@ -139,13 +191,36 @@ tasksRouter.patch("/reorder", async (req, res) => {
       seen.add(tid);
     }
 
-    for (let i = 0; i < orderedTaskIds.length; i++) {
-      const tid = orderedTaskIds[i];
+    if (parsed.phaseId !== undefined && parsed.phaseId != null) {
+      const [ph] = await db
+        .select()
+        .from(schema.projectPhases)
+        .where(eq(schema.projectPhases.id, parsed.phaseId));
+      if (!ph || ph.projectId !== projectId) {
+        sendError(res, 400, "invalid_phase", "Phase does not belong to this project");
+        return;
+      }
+    }
+
+    for (let i = 0; i < parsed.orderedTaskIds.length; i++) {
+      const tid = parsed.orderedTaskIds[i];
       if (tid === undefined) continue;
-      await db
-        .update(schema.tasks)
-        .set({ sortOrder: i, updatedAt: new Date() })
-        .where(eq(schema.tasks.id, tid));
+      const set: {
+        sortOrder: number;
+        updatedAt: Date;
+        phaseId?: number | null;
+        parentId?: number | null;
+      } = { sortOrder: i, updatedAt: new Date() };
+      if (parsed.parentId !== undefined) {
+        set.parentId = parsed.parentId;
+      }
+      if (parsed.phaseId !== undefined) {
+        set.phaseId = parsed.phaseId;
+      }
+      await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, tid));
+      if (parsed.phaseId !== undefined) {
+        await syncDescendantPhases(db, tid, parsed.phaseId);
+      }
     }
 
     const rows = await db
@@ -196,26 +271,41 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       }
     }
 
-    const dueAt =
-      parsed.dueAt === undefined
-        ? undefined
-        : parsed.dueAt === null
-          ? null
-          : new Date(parsed.dueAt);
+    if (parsed.parentId !== undefined) {
+      if (await wouldCreateParentCycle(db, taskId, parsed.parentId)) {
+        sendError(res, 400, "invalid_parent", "Parent would create a cycle");
+        return;
+      }
+      const parentOk = await assertParentCompatible(db, projectId, parsed.parentId);
+      if (!parentOk.ok) {
+        sendError(res, 400, "invalid_parent", parentOk.message);
+        return;
+      }
+    }
+
+    const dueDate = resolveDueDate(parsed);
 
     const [row] = await db
       .update(schema.tasks)
       .set({
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.notes !== undefined ? { notes: parsed.notes } : {}),
-        ...(dueAt !== undefined ? { dueAt } : {}),
+        ...(dueDate !== undefined ? { dueDate } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
         ...(parsed.phaseId !== undefined ? { phaseId: parsed.phaseId } : {}),
+        ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
+        ...(parsed.state !== undefined ? { state: parsed.state } : {}),
+        ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.tasks.id, taskId))
       .returning();
+
+    if (row && parsed.phaseId !== undefined) {
+      await syncDescendantPhases(db, taskId, parsed.phaseId);
+    }
+
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);

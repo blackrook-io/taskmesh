@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  date,
   integer,
   jsonb,
   pgTable,
@@ -57,14 +58,27 @@ export const projectPhases = pgTable("project_phases", {
 
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id")
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
+  /** Null when task lives only in Lists / Unsorted (not project-scoped). */
+  projectId: integer("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
   phaseId: integer("phase_id").references(() => projectPhases.id, {
     onDelete: "set null",
   }),
+  parentId: integer("parent_id").references((): AnyPgColumn => tasks.id, {
+    onDelete: "set null",
+  }),
+  /** App-wide unique display number → T####. */
+  number: integer("number").notNull().unique(),
   title: text("title").notNull(),
   notes: text("notes"),
+  /** new | in_progress | complete | canceled | on_hold */
+  state: text("state").notNull().default("new"),
+  /** none | low | medium | high | urgent */
+  priority: text("priority").notNull().default("none"),
+  /** Date-only due date (YYYY-MM-DD). */
+  dueDate: date("due_date", { mode: "string" }),
+  /** @deprecated Prefer dueDate; kept for migration compatibility. */
   dueAt: timestamp("due_at", { withTimezone: true }),
   color: text("color"),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -358,7 +372,7 @@ export const projectPhasesRelations = relations(projectPhases, ({ one, many }) =
   tasks: many(tasks),
 }));
 
-export const tasksRelations = relations(tasks, ({ one }) => ({
+export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, {
     fields: [tasks.projectId],
     references: [projects.id],
@@ -367,6 +381,12 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
     fields: [tasks.phaseId],
     references: [projectPhases.id],
   }),
+  parent: one(tasks, {
+    fields: [tasks.parentId],
+    references: [tasks.id],
+    relationName: "task_hierarchy",
+  }),
+  children: many(tasks, { relationName: "task_hierarchy" }),
 }));
 
 export const projectDocumentsRelations = relations(projectDocuments, ({ one }) => ({

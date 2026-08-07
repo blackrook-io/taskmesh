@@ -19,6 +19,7 @@ import { apiJson } from "../api/client";
 import type { Canvas, CanvasSummary } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CanvasEditor } from "./CanvasEditor";
+import { TagInput } from "./shared/TagInput";
 
 type Props = { projectId: number };
 
@@ -298,14 +299,19 @@ export function CanvasesPanel({ projectId }: Props) {
         <p className="muted">Loading canvas…</p>
       ) : detailQuery.data ? (
         <div className="canvases-panel__stage">
-          <div className="canvases-panel__status muted">
-            {saveState === "saving"
-              ? "Saving…"
-              : saveState === "saved"
-                ? "Saved"
-                : saveState === "error"
-                  ? "Save failed"
-                  : "Autosave"}
+          <div className="canvases-panel__meta">
+            <div className="field field--tags-below" style={{ marginBottom: 0, flex: 1 }}>
+              <TagInput entityType="canvas" entityId={detailQuery.data.id} />
+            </div>
+            <div className="canvases-panel__status muted">
+              {saveState === "saving"
+                ? "Saving…"
+                : saveState === "saved"
+                  ? "Saved"
+                  : saveState === "error"
+                    ? "Save failed"
+                    : "Autosave"}
+            </div>
           </div>
           <CanvasEditor
             key={detailQuery.data.id}

@@ -2,8 +2,11 @@ import { THEME } from "@excalidraw/excalidraw";
 import type { BinaryFiles, ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
-/** Default Excalidraw drawing surface (light paper). */
-export const CANVAS_BG = "#f8f9fa";
+/**
+ * Drawing surface — darker than app chrome (`--bg` / `--surface`) so the canvas
+ * reads as a distinct workspace. Matches `--canvas-bg` token intent.
+ */
+export const CANVAS_BG = "#12131a";
 
 const PERSISTED_APP_STATE_KEYS = [
   "viewBackgroundColor",
@@ -49,11 +52,17 @@ export function toInitialData(
       ? (doc.appState as Record<string, unknown>)
       : {};
 
+  const priorBg =
+    typeof prior.viewBackgroundColor === "string" ? prior.viewBackgroundColor : null;
+  // Migrate old light paper default to the darker workspace color.
+  const viewBackgroundColor =
+    !priorBg || priorBg.toLowerCase() === "#f8f9fa" ? CANVAS_BG : priorBg;
+
   const appState: NonNullable<ExcalidrawInitialDataState["appState"]> = {
     ...defaultAppState(gridModeEnabled),
     ...prior,
     theme: THEME.DARK,
-    viewBackgroundColor: CANVAS_BG,
+    viewBackgroundColor,
     gridModeEnabled:
       typeof prior.gridModeEnabled === "boolean" ? prior.gridModeEnabled : gridModeEnabled,
   };
@@ -76,7 +85,10 @@ function pickPersistedAppState(appState: Record<string, unknown>): Record<string
     if (key in appState) out[key] = appState[key];
   }
   out.theme = THEME.DARK;
-  out.viewBackgroundColor = CANVAS_BG;
+  const bg = out.viewBackgroundColor;
+  if (typeof bg !== "string" || bg.toLowerCase() === "#f8f9fa") {
+    out.viewBackgroundColor = CANVAS_BG;
+  }
   return out;
 }
 
