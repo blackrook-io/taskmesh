@@ -14,6 +14,7 @@ import { SearchPage } from "./pages/SearchPage.tsx";
 import { TodoListsPage } from "./pages/TodoListsPage.tsx";
 import { FilesystemPage } from "./pages/FilesystemPage.tsx";
 import { ImageBoardPage } from "./pages/ImageBoardPage.tsx";
+import { ImageBoardEditorPage } from "./pages/ImageBoardEditorPage.tsx";
 import { CalendarPage } from "./pages/CalendarPage.tsx";
 import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
 
@@ -36,6 +37,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="search" element={<SearchPage />} />
             <Route path="filesystem" element={<FilesystemPage />} />
             <Route path="image-board" element={<ImageBoardPage />} />
+            <Route path="image-board/:id" element={<ImageBoardEditorPage />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="settings" element={<SettingsHubPage />} />
             <Route path="settings/import-export" element={<SettingsHubPage />} />

@@ -123,6 +123,17 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
     },
   });
 
+  const imageBoardsQuery = useQuery({
+    queryKey: ["image-boards", "all"],
+    enabled: section === "image-board",
+    queryFn: async () => {
+      const res = await apiJson<{ data: import("../types").ImageBoardSummary[] }>(
+        "/api/v1/image-boards",
+      );
+      return res.data;
+    },
+  });
+
   return useMemo(() => {
     if (section === "projects" && projectId != null) {
       const modules = modulesQuery.data ?? [];
@@ -244,9 +255,27 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
       };
     }
     if (section === "image-board") {
+      const boards = imageBoardsQuery.data ?? [];
+      const editorMatch = matchPath("/image-board/:id", location.pathname);
+      const activeId = editorMatch?.params.id ? Number(editorMatch.params.id) : null;
       return {
         title: "Image board",
-        items: [{ id: "soon", label: "Coming soon", active: true, icon: shellIcons.imageBoard }],
+        items: [
+          {
+            id: "all-boards",
+            label: "All boards",
+            path: "/image-board",
+            active: location.pathname === "/image-board",
+            icon: shellIcons.imageBoard,
+          },
+          ...boards.map((b) => ({
+            id: `ib-${b.id}`,
+            label: b.title,
+            path: `/image-board/${b.id}`,
+            active: activeId === b.id,
+            icon: shellIcons.imageBoard,
+          })),
+        ],
       };
     }
     if (section === "calendar") {
@@ -270,6 +299,7 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
     projectId,
     modulesQuery.data,
     listsQuery.data,
+    imageBoardsQuery.data,
     searchParams,
     location.pathname,
   ]);

@@ -11,7 +11,7 @@ import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
 import { CanvasesPanel } from "../components/CanvasesPanel";
-import { ComingSoonPage } from "../components/shell/ComingSoonPage";
+import { ImageBoardList } from "../components/imageBoard/ImageBoardList";
 import {
   isProjectModuleKey,
   MODULE_BLURBS,
@@ -342,10 +342,7 @@ export function ProjectDetailPage() {
       </div>
 
       {tab === "images" ? (
-        <ComingSoonPage
-          title="Images"
-          blurb="Per-project PureRef-style image board. Stand-in until the Image board feature ships."
-        />
+        <ImageBoardList projectId={project.id} heading="Images" />
       ) : null}
 
       {tab === "overview" ? (

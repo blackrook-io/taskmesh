@@ -194,6 +194,20 @@ export type Canvas = CanvasSummary & {
   document: Record<string, unknown>;
 };
 
+export type ImageBoardSummary = {
+  id: number;
+  projectId: number | null;
+  projectName: string | null;
+  title: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ImageBoard = ImageBoardSummary & {
+  document: Record<string, unknown>;
+};
+
 export type ApiErrorBody = { error: { code: string; message: string } };
 
 export type { EntityType } from "./lib/entityType";

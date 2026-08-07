@@ -2,6 +2,7 @@ import { Router } from "express";
 import { assistantRouter } from "./assistant.js";
 import { backupsRouter } from "./backups.js";
 import { ideasRouter } from "./ideas.js";
+import { imageBoardsRouter } from "./imageBoards.js";
 import { importExportRouter } from "./importExport.js";
 import { projectsRouter } from "./projects.js";
 import { searchRouter } from "./search.js";
@@ -23,6 +24,7 @@ v1Router.use("/search", searchRouter);
 v1Router.use("/todo-lists", todoListsRouter);
 v1Router.use("/backups", backupsRouter);
 v1Router.use("/assistant", assistantRouter);
+v1Router.use("/image-boards", imageBoardsRouter);
 v1Router.use(importExportRouter);
 v1Router.use(uploadsRouter);
 

@@ -68,6 +68,29 @@ A responsive webapp for collecting thoughts, notes, and tasks into simple collec
 - Columns and lanes are editable.
 - Depicted Tasks can be opened and edited quickly from the board.
 
+## Image Board
+
+This feature is based on https://pureref.com/ and features should mimic it's basic functionality and aesthetic.
+
+- An infinite canvas (themed dark like the rest of the UI) that allows for the pasting/loading of pictures for display as an idea board.
+  - Left-click-drag in empty canvas space allows panning around.
+  - Scroll-wheel zooms in/out.
+- The user should be able to drag-and-drop images from anywhere.
+- Double-clicking in empty space on the canvas opens an 'Open file' dialog that allows selection of any image file on the filesystem.
+- Ctrl-V over the canvas anywhere pastes the contents of the clipboard if it is of an image file type only.
+- Images can be resized via dragging the four corners but the image never changes size ratio.
+- Images can be click-dragged around the canvas.
+- Hitting the 'T' button over the canvas brings up the Text tool - for typing text onto the canvas
+  - when selected, presents a small text toolbar for selecting font size, font color, alignment, bold, italic, underline, bullet list, ordered list.
+- Hitting the 'B' button over the canvas allows the user to draw a box container for dropping images into. It should auto-resize to fit contents and allow for right-clicking it and setting a Title and a Color for the box (with alpha).
+- Hitting the 'G' button over the canvas shows a dotted reference/alignment grid in subtle grey. The grid should show 50px, 100px, 200px squares at various zoom levels.
+- As images can be stacked/layered in Z, hitting the 'Z' button over an image brings that image forward in 'Z' order, cycling to the back/bottom.
+
+Out of scope:
+- Alignment snapping, guides, etc. This is a simple idea/image/mood board. 
+- Image editing (future feature may allow rotations, however)
+- Any 'always on top' behavior since this is a web app in a browser (for now).
+
 ## Wiki
 
 - Collection and structure for Markdown files and Canvas records.

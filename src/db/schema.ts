@@ -345,6 +345,27 @@ export const canvases = pgTable("canvases", {
     .defaultNow(),
 });
 
+/** PureRef-style image boards; optional project association. */
+export const imageBoards = pgTable("image_boards", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
+  title: text("title").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  /** Scene JSON: camera, gridVisible, items (images / text / boxes). */
+  document: jsonb("document")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
 }));
@@ -362,6 +383,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   boards: many(boards),
   wikiNodes: many(wikiNodes),
   canvases: many(canvases),
+  imageBoards: many(imageBoards),
 }));
 
 export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
@@ -486,6 +508,13 @@ export const wikiNodesRelations = relations(wikiNodes, ({ one, many }) => ({
 export const canvasesRelations = relations(canvases, ({ one }) => ({
   project: one(projects, {
     fields: [canvases.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const imageBoardsRelations = relations(imageBoards, ({ one }) => ({
+  project: one(projects, {
+    fields: [imageBoards.projectId],
     references: [projects.id],
   }),
 }));

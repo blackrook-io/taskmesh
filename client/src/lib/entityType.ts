@@ -8,6 +8,7 @@ export const ENTITY_TYPES = [
   "board",
   "canvas",
   "wiki_node",
+  "image_board",
 ] as const;
 
 export type EntityType = (typeof ENTITY_TYPES)[number];

@@ -1,0 +1,20 @@
+# Image Board (PureRef-style)
+
+## Scope locked
+
+- **Both global and project-linked:** `image_boards.projectId` is **nullable**. Standalone boards live in the global list; project Images tab shows boards where `projectId` matches (create defaults to that project). A board can be linked/unlinked via patch.
+- **Multiple boards** supported (list + create/rename/delete with confirm).
+- **Custom DOM canvas** — not Excalidraw and not Kanban `boards`.
+- **Out of scope:** snapping/guides, image editing/rotation, always-on-top.
+
+## Delivered
+
+- Schema `image_boards` + migration `0011_dusty_darwin.sql`
+- API `/api/v1/image-boards`
+- Global `/image-board` list + `/image-board/:id` editor
+- Project Images tab wired to filtered list
+- PureRef viewport: pan/zoom, paste/DnD/file, resize, T/B/G/Z tools
+
+## Branch
+
+`phase-12-image-board`
