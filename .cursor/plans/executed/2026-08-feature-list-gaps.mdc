@@ -1,0 +1,213 @@
+---
+name: Feature list phases
+overview: "Phased roadmap to close remaining gaps in feature_list.md against the current TaskMesh app: richer Tasks (state, hierarchy, columnar list), Ideas sort/list UX, Lists shell + Unsorted semantics, Tags on remaining types, Kanban lanes/mixed types, Canvas polish, and Project module nav cleanup."
+todos:
+  - id: n12-task-model
+    content: "Phase N12: Task schema/API — state, priority, number, parentId, nullable projectId, dueDate"
+    status: completed
+  - id: n13-task-list
+    content: "Phase N13: Columnar task list, phases DnD/collapse, checkbox cycle, header sort, parent/child rows"
+    status: completed
+  - id: n14-ideas-sort
+    content: "Phase N14: Ideas list view + middle-nav sort/reverse (date, title, tags)"
+    status: completed
+  - id: n15-lists-shell
+    content: "Phase N15: Lists middle-nav, computed Unsorted, list view + Task/Idea modals"
+    status: completed
+  - id: n16-tags-rest
+    content: "Phase N16: Tags + search for boards, canvases, todo lists, wiki"
+    status: completed
+  - id: n17-kanban-lanes
+    content: "Phase N17: Board lanes CRUD/UI + mixed entity card types"
+    status: completed
+  - id: n18-canvas-polish
+    content: "Phase N18: Dark canvas bg, ColorPopover fill, layout assist"
+    status: completed
+  - id: n19-project-nav
+    content: "Phase N19: Settings-only disabled modules; complete enabled middle-nav coverage"
+    status: completed
+  - id: n20-canvas-diagrams
+    content: "Phase N20: Architecture/ERD templates (optional text→diagram)"
+    status: completed
+isProject: false
+---
+
+# Feature list gap roadmap (phased)
+
+Source: [`.cursor/plans/feature_list.md`](.cursor/plans/feature_list.md). Baseline: Phases 0–11 largely shipped (Markdown, tags, todos, modules, Kanban, wiki, Excalidraw, palette, backups, assistant). This plan covers **remaining gaps only**.
+
+**Locked decisions**
+- Disabled project modules: **Settings-only** — hide from Project middle-nav and tabs until enabled (no inline Create/Enable opportunity in the main view).
+- Task Priority: `none | low | medium | high | urgent`.
+- Tasks may have `projectId = null` (Lists / Unsorted).
+- Canvas: darker background + layout assist first; Lucid-style auto-routing / text→ERD deferred to a late polish phase.
+- Out of scope: Calendar / Filesystem / Image Board stubs.
+
+```mermaid
+flowchart TB
+  N12[N12_Task_data_model]
+  N13[N13_Task_list_view]
+  N14[N14_Ideas_list_sort]
+  N15[N15_Lists_shell]
+  N16[N16_Tags_remaining]
+  N17[N17_Kanban_lanes]
+  N18[N18_Canvas_polish]
+  N19[N19_Project_nav]
+  N20[N20_Canvas_diagrams]
+  N12 --> N13
+  N13 --> N15
+  N14 --> N15
+  N12 --> N17
+  N16 --> N17
+  N13 --> N19
+  N18 --> N20
+```
+
+---
+
+## Already done (skip)
+
+Markdown TipTap parity, TagInput (idea/project/task/document), ElementShell modes, task notes + blur autosave + 10-step undo, project modules CRUD, Kanban columns/cards (task-only), wiki DnD TOC, Excalidraw persist, command palette, import/export/backups/assistant.
+
+---
+
+## Phase N12 — Task data model
+
+**Goal:** Schema/API for fields the list view and checkbox cycle need.
+
+**Schema** ([`src/db/schema.ts`](src/db/schema.ts))
+- Add `state` enum: `new | in_progress | complete | canceled | on_hold` (default `new`).
+- Add `priority` enum: `none | low | medium | high | urgent` (default `none`).
+- Add `number` integer unique (app-wide or per-project — **app-wide** unique for simple `T####` display).
+- Add nullable `parentId` → `tasks.id` (self-FK); child `sortOrder` scoped under parent.
+- Change `projectId` to **nullable**.
+- Prefer date-only: add `dueDate` (`date`) and migrate/stop writing time on `dueAt`, or treat `dueAt` as date-only at midnight UTC in API/UI. Prefer a real `dueDate` column for clarity.
+
+**API** ([`src/routes/v1/tasks.ts`](src/routes/v1/tasks.ts))
+- Accept/return new fields; generate `number` on create (`T` + zero-padded 4+ digits from sequence/max+1).
+- Reorder endpoint: support parent-scoped children; moving a parent moves children with it; dragging a task into/out of a phase updates `phaseId`.
+- Validation: no cycles on `parentId`; children stay under same project (or both null).
+
+**Exit:** Create/patch/list tasks with state, priority, number, parent, dueDate; migration clean.
+
+---
+
+## Phase N13 — Task list view + phases UX
+
+**Goal:** Replace card board with the feature-list columnar Task list under Projects → Tasks.
+
+**UI** (primarily [`client/src/components/TaskBoard.tsx`](client/src/components/TaskBoard.tsx), [`PhaseManager.tsx`](client/src/components/PhaseManager.tsx))
+- Columns: color stripe | 5-state checkbox | Number (`T####`) | Title | State | Priority | Date.
+- Group by **Phases**: named, collapsible, drag-reorder phases (tasks move with phase), drag tasks between phases / unphased.
+- Nested **child** rows under parent; indent + affordance; children keep manual order; column-header sort does **not** reorder children.
+- Double-click row → existing Task modal (`ElementShell` + notes Markdown + tags + new fields). Single-click elsewhere stays non-destructive.
+- Double-click **column header** → sort tasks within each phase (not children).
+- Checkbox cycle: empty→`/` In Progress → `*` Complete → `X` Canceled → `-` On Hold → empty New (colors: blue / green / red / orange).
+- Date: date-only calendar control (not `datetime-local`).
+- Integrate phase chrome into the list (collapse/rename/DnD) rather than a separate PhaseManager card above a flat board.
+
+**Exit:** Project Tasks tab matches feature_list list + phase + parent/child behaviors; QA checklist for sort, DnD, checkbox, modal.
+
+---
+
+## Phase N14 — Ideas list + middle-nav sort
+
+**Goal:** Ideas main pane as a real list; middle nav sorts work and reverse.
+
+**UI**
+- [`IdeasListPage.tsx`](client/src/pages/IdeasListPage.tsx): list rows (not card grid); open on double-click or clear row action → existing idea page/modal pattern.
+- [`useShellNav.ts`](client/src/lib/useShellNav.ts): middle-nav options — Date created, Title Alphabetical, Grouped by Tags. Clicking active sort toggles asc/desc (URL params `sort` + `order`).
+- Wire API/client fetch to honor sort (client-side OK initially if list is small; prefer server query if already paginated).
+
+**Exit:** All three sorts + reverse verified; Priority nav stub removed or left disabled only if intentionally deferred (feature list does not require Idea priority).
+
+---
+
+## Phase N15 — Lists shell + Unsorted + list view parity
+
+**Goal:** App-nav Lists matches feature_list middle-nav + list UX.
+
+**Shell**
+- When section is Lists: middle nav lists named lists + immutable **Unsorted** + create-list control (move create out of page-only chrome into ContextNav / shared pattern).
+- **Unsorted semantics:** virtual/query view of Ideas and Tasks **not** in any user list and (for tasks) not in a project — not a manual membership inbox. Keep current `kind: "inbox"` row as the nav target, but back it with a computed membership query (or migrate away from storing inbox memberships).
+
+**Main pane**
+- Shared list-row patterns from N13 where applicable (at least title, type, state/date for tasks; simplified idea row).
+- Double-click → Task modal (reuse Task editor) or simplified Idea modal.
+- Continue supporting Ideas **or** Tasks in named lists.
+
+**Exit:** Middle-nav list picker + Unsorted computed contents + modals work.
+
+---
+
+## Phase N16 — Tags on remaining record types
+
+**Goal:** “All record types” tagging.
+
+- Wire `TagInput` onto: boards, canvases, todo lists, wiki pages (and wiki_node/canvas entities as appropriate).
+- Extend search ([`src/routes/v1/search.ts`](src/routes/v1) / client search) to include those types when tagged/queried.
+- No change to existing TagChip / 3-char suggest / hover × / right-click ColorPopover behavior.
+
+**Exit:** Tag a board and a canvas; search/filter finds them.
+
+---
+
+## Phase N17 — Kanban lanes + mixed types
+
+**Goal:** Close Kanban gaps in feature_list.
+
+**Data/API** ([`src/routes/v1/boards.ts`](src/routes/v1/boards.ts), schema already has `board_lanes`)
+- Lane CRUD + reorder; cards accept `laneId`.
+- Allow `entityType` beyond `task` (at least `todo_list` items / ideas / tasks as cards — intermingle per feature list). Resolve display via polymorphic card target.
+
+**UI** ([`KanbanBoardsPanel`](client/src/components/) or equivalent)
+- Editable lanes (add/rename/reorder).
+- DnD across columns **and** lanes.
+- Quick-open editor for depicted records (reuse Task modal / Idea simplified modal).
+
+**Exit:** Multi-board project with lanes + mixed card types + quick edit.
+
+---
+
+## Phase N18 — Canvas visual polish
+
+**Goal:** Match feature_list canvas chrome without full diagram automation yet.
+
+- Darker grey Excalidraw background than app chrome ([`excalidrawScene.ts`](client/src/lib/excalidrawScene.ts) — stop forcing light `#f8f9fa`).
+- Shape/fill color via same ColorPopover behavior as tags (prefer context/right-click or consistent Fill affordance).
+- Layout assist bar: align / distribute / grid spacing (extend [`CanvasLayoutBar.tsx`](client/src/components/CanvasLayoutBar.tsx)).
+
+**Exit:** Dark canvas + color UX + basic spacing tools.
+
+---
+
+## Phase N19 — Project nav / modules cleanup
+
+**Goal:** Align Project shell with Settings-only disabled modules + complete module coverage.
+
+- Middle nav / tabs: only **enabled** modules; disabled stay out of nav (Settings Enable remains the path).
+- Ensure middle nav includes all enabled module types that exist as tabs today (`todo_lists`, `documents` if distinct from wiki, boards, wiki, canvases, tasks) — fix current omissions.
+- Overview still links into enabled views only.
+
+**Exit:** Enabling/disabling a module correctly shows/hides nav + tabs; no Create opportunity for disabled types.
+
+---
+
+## Phase N20 — Canvas diagram assists (deferred polish)
+
+**Goal:** Architecture / ERD entry points without blocking prior phases.
+
+- Templates or insert helpers for system-architecture and ERD-style starters (Excalidraw library / seeded frames).
+- Optional text→diagram (Mermaid/D2 render → place on canvas) if complexity stays bounded; otherwise templates-only is the exit bar.
+- Smart line routing beyond Excalidraw defaults only if feasible without a second graph engine.
+
+**Exit:** User can start an architecture or ERD canvas quickly; document limits in QA notes.
+
+---
+
+## Implementation notes
+
+- **Git:** each phase = branch `phase-N12-…` from updated `main`; end with QA checklist; merge/archive only on user **finish up**.
+- **Plan file:** write this roadmap to [`.cursor/plans/`](.cursor/plans/) as an `.mdc` (e.g. `2026-08-feature-list-gaps.mdc`) when execution starts; archive prior superseded [`2026-07-feature-implementation.md`](.cursor/plans/2026-07-feature-implementation.md) to `executed/` when this plan becomes active.
+- **Reuse:** `MarkdownEditor`, `ElementShell`, `TagInput`/`ColorPopover`, `useUndoStack`, `@dnd-kit`, existing board/wiki patterns.
+- **Deletes:** keep confirm dialogs; no soft-delete/trash unless added later (not in feature_list).

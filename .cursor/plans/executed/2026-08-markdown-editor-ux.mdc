@@ -1,0 +1,58 @@
+---
+name: Markdown editor UX
+overview: Update the shared MarkdownEditor so Notes/body uses focus-driven Edit vs Preview, puts a compact icon toolbar under the content (Tab hits the body first), and drops the manual Edit/Preview controls.
+todos:
+  - id: focus-edit-preview
+    content: Wire focus→edit / blur→preview; remove Edit/Preview buttons
+    status: completed
+  - id: toolbar-bottom-tab
+    content: Move toolbar below surface; tabIndex=-1 on toolbar controls
+    status: completed
+  - id: icon-toolbar
+    content: Compact FA icon toolbar + CSS density
+    status: completed
+isProject: false
+---
+
+# Markdown editor focus + toolbar UX
+
+Shared component: [`client/src/components/shared/MarkdownEditor.tsx`](client/src/components/shared/MarkdownEditor.tsx) (used by Task notes, Ideas, Wiki, project docs/description). Changes apply everywhere unless `readOnly`.
+
+**Default (no UpNote screenshot attached):** compact Font Awesome icons already in the client (`@fortawesome/free-solid-svg-icons` + `NavIcon`/`FontAwesomeIcon` patterns), UpNote-like density.
+
+## Behavior
+
+1. **Focus → Edit, blur → Preview**
+   - Default `mode` when not `readOnly`: **`preview`**.
+   - On ProseMirror / surface **focus** (click or Tab): set `mode` to `edit`, `editor.setEditable(true)`, keep caret.
+   - On editor **blur**: if focus did not move into this editor’s toolbar (use `relatedTarget` / `contains` check), set `mode` to `preview` and `setEditable(false)`. Keep existing `onBlur` markdown callback for autosave.
+   - Toolbar buttons already use `onMouseDown={(e) => e.preventDefault()}` so clicks don’t steal focus; keep that so formatting stays in Edit.
+   - Remove **Edit** and **Preview** toolbar controls and any UI that toggles mode manually.
+   - Keep **Focus** (distraction-free) as an icon control.
+
+2. **Tab order: body first**
+   - DOM order: **surface (`EditorContent`) first**, then **toolbar** below.
+   - Set toolbar controls to `tabIndex={-1}` so Tab into Notes lands in the body, and the next Tab leaves the widget (to tags / next field) without walking every format button. Mouse still uses the bottom toolbar.
+
+3. **Compact icon toolbar (bottom)**
+   - Remove text labels like “Preview”, “• List”, “Image”, and the “Paste image to upload” hint.
+   - Icon set (FA solid), tooltip/`aria-label` for each:
+     - Focus: `faExpand` / `faCompress`
+     - Headings: compact `H1`/`H2`/`H3` (small type, not full words)
+     - Bold / Italic / Underline: `faBold` / `faItalic` / `faUnderline`
+     - Link: `faLink`
+     - Bullet / ordered / checklist: `faListUl` / `faListOl` / `faSquareCheck`
+     - Table: `faTable`
+     - Align L/C/R: `faAlignLeft` / `faAlignCenter` / `faAlignRight`
+     - Image: `faImage` (upload picker; paste-to-upload remains without the hint text)
+   - CSS in [`client/src/index.css`](client/src/index.css): `.md-toolbar` under surface; denser `.md-toolbar__btn` (icon-sized, less padding); `.md-editor--fill` still grows the surface; toolbar `flex-shrink: 0` at bottom.
+
+## Implementation touchpoints
+
+- Refactor [`MarkdownEditor.tsx`](client/src/components/shared/MarkdownEditor.tsx): mode/focus handlers, DOM order, toolbar icons, drop Edit/Preview, drop `PencilIcon` usage if unused.
+- Style updates only in [`index.css`](client/src/index.css) under `.md-editor` / `.md-toolbar` (no call-site API changes required; Task notes already uses `fill`).
+
+## Out of scope
+
+- Fixing residual Task modal empty-space layout (separate from this toolbar work).
+- Adding new Markdown features beyond current TipTap commands.
