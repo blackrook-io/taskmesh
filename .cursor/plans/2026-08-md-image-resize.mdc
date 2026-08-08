@@ -1,0 +1,39 @@
+---
+name: MD image resize
+overview: Enable TipTap’s built-in select-and-resize handles on Markdown images (display size only), style the handles for TaskMesh, and persist width/height in saved Markdown via HTML `<img>` so sizes survive reload.
+todos:
+  - id: branch-plan
+    content: Create phase-13-md-image-resize from main + write .cursor/plans/2026-08-md-image-resize.mdc
+    status: in_progress
+  - id: resizable-ext
+    content: Add ResizableMarkdownImage (TipTap resize + HTML markdown round-trip)
+    status: pending
+  - id: wire-editor
+    content: Swap Image for ResizableMarkdownImage in MarkdownEditor
+    status: pending
+  - id: resize-css
+    content: Add md-prose / data-resize-handle styles in index.css
+    status: pending
+isProject: false
+---
+
+# Markdown image select-resize
+
+## Context
+
+- Branch: `phase-13-md-image-resize`
+- Shared editor: [`client/src/components/shared/MarkdownEditor.tsx`](client/src/components/shared/MarkdownEditor.tsx)
+- TipTap Image `resize` updates display `width`/`height` attrs only (not the upload file)
+- Custom `renderMarkdown` required so sizes survive Markdown save/reload
+
+## Approach
+
+1. Add [`ResizableMarkdownImage.ts`](client/src/components/shared/ResizableMarkdownImage.ts) — TipTap Image with resize + HTML `<img>` round-trip when sized
+2. Wire into MarkdownEditor
+3. Style `[data-resize-handle]` in `index.css`
+
+## Out of scope
+
+- Re-encoding upload files
+- Edge handles / free distort
+- Image Board / canvas UIs

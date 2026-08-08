@@ -3,7 +3,6 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import { Table } from "@tiptap/extension-table";
@@ -32,6 +31,7 @@ import {
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { uploadFile } from "../../api/client";
 import { NavIcon } from "../shell/NavIcon";
+import { ResizableMarkdownImage } from "./ResizableMarkdownImage";
 
 type Props = {
   value: string;
@@ -161,7 +161,7 @@ export function MarkdownEditor({
         openOnClick: false,
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
       }),
-      Image.configure({ allowBase64: false }),
+      ResizableMarkdownImage,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Table.configure({ resizable: false }),
       TableRow,

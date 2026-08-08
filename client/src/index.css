@@ -1165,8 +1165,75 @@ textarea.raw-md {
 
 .md-prose img {
   max-width: 100%;
+  height: auto;
   border-radius: 6px;
   border: 1px solid var(--border);
+}
+
+/* TipTap ResizableNodeView — display-only image resize handles */
+.md-editor [data-resize-container] {
+  max-width: 100%;
+  margin: 0.35rem 0;
+}
+
+.md-editor [data-resize-wrapper] {
+  max-width: 100%;
+  line-height: 0;
+}
+
+.md-editor [data-resize-wrapper] img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.md-editor [data-resize-handle] {
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  background: var(--accent);
+  border: 2px solid var(--canvas-bg, #1a1d1c);
+  border-radius: 2px;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+}
+
+.md-editor [data-resize-handle="top-left"] {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+  transform: translate(-25%, -25%);
+}
+
+.md-editor [data-resize-handle="top-right"] {
+  top: 0;
+  right: 0;
+  left: auto;
+  cursor: nesw-resize;
+  transform: translate(25%, -25%);
+}
+
+.md-editor [data-resize-handle="bottom-left"] {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+  transform: translate(-25%, 25%);
+}
+
+.md-editor [data-resize-handle="bottom-right"] {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  cursor: nwse-resize;
+  transform: translate(25%, 25%);
+}
+
+.md-editor [data-resize-state="true"] {
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .md-prose a {
