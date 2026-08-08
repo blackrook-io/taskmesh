@@ -380,7 +380,9 @@ export function TasksListPage() {
             allTasks={tasks}
             onRequestClose={closeModal}
             onHeaderActions={setHeaderActions}
-            onSavePatch={(p) => patchTask.mutateAsync({ id: modalTask.id, patch: { ...p } })}
+            onSavePatch={async (p) => {
+              await patchTask.mutateAsync({ id: modalTask.id, patch: { ...p } });
+            }}
           />
         </ElementShell>
       ) : null}
