@@ -1,0 +1,35 @@
+---
+description: Require a plan and a phase branch before starting any bugfix or feature
+alwaysApply: true
+---
+
+# Start-of-work gate: plan + branch
+
+Before editing code for **any new bugfix or feature**, first check whether we
+are **already in the midst of one**:
+
+- **Already in progress** (proceed, no challenge) when EITHER:
+  - the current git branch matches `phase-*` (a dedicated feature/fix branch), OR
+  - an active plan exists for this work (a `.cursor/plans/*.mdc`, or a plan just
+    approved this session).
+- **Not in progress** (challenge required): the branch is `main` (or another
+  base branch) and there is no active plan for the requested work.
+
+## The challenge
+
+When not already in progress, **STOP before making edits** and propose both:
+
+1. A plan file at `.cursor/plans/<YYYY-MM>-<slug>.mdc` (skip a full plan only for
+   truly trivial one-liners such as a typo or comment — when unsure, write it).
+2. A phase branch `phase-N-<slug>` created from an updated `main`
+   (`git switch main && git pull`, then `git switch -c phase-N-<slug>`).
+
+Wait for the user to confirm (or adjust) before editing. Do not commit directly
+to `main`.
+
+## After approval
+
+Follow [development-rules.mdc](development-rules.mdc) for the full phase git and
+"finish up" workflow (commit → merge to `main` ff-only → push → archive the plan
+to `.cursor/plans/executed/` → delete the phase branch → `npm run deploy:prod`),
+and give a QA checklist at the end of each phase.
