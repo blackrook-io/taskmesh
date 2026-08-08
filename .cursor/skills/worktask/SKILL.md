@@ -22,9 +22,10 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 
 1. **PROD only for task I/O** — base URL `http://127.0.0.1:3000` (systemd PROD). Never use DEV `:3001` or Vite `:5173` for task reads/writes.
 2. Prefer the **HTTP API** (see [reference.md](reference.md)). Do not use raw SQL for task updates.
-3. Do **not** change `dueDate`.
+3. Do **not** change `dueDate` (including on Complete).
 4. State values: `new` | `in_progress` | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”).
 5. Follow repo plan + git + finish-up rules; this skill **adds** task bookkeeping and **replaces** `phase-N-*` branch naming with `T####-*` for this workstream.
+6. **Never** update git config (`user.name` / `user.email`). If commit fails for missing identity, set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for that command only (see [reference.md](reference.md)).
 
 ## Workflow checklist
 
@@ -79,7 +80,7 @@ If `state` is not `new`:
 
 Only after the user approves the plan:
 
-1. `git switch main && git pull`, then `git switch -c T####-<slug>` (e.g. `T0036-task-history-filter`).
+1. `git switch main && git pull` (use SSH remote if HTTPS cannot auth — see reference), then `git switch -c T####-<slug>`.
 2. SetActiveBranch to that branch.
 3. PROD: `PATCH /api/v1/tasks/{id}` → `{ "state": "in_progress" }`.
 4. PROD: post a comment summarizing branch + plan (path + short summary). Template in [reference.md](reference.md).
@@ -87,11 +88,14 @@ Only after the user approves the plan:
 
 ### 6. Finish up (user says “finish up”)
 
-Do the normal finish-up sequence from development-rules, then **additionally**:
+Do **all** of the following in order (same as development-rules, with Task bookkeeping last):
 
-1. PROD comment: completion summary (branch merged, deploy note if applicable).
-2. PROD: `PATCH` → `{ "state": "complete" }`.
-3. Leave `dueDate` unchanged.
+1. **Commit** remaining work on the feature branch (HEREDOC message; author env vars if needed).
+2. **Merge** into `main` (ff-only when possible); delete local (and remote if exists) `T####-*` branch after merge.
+3. **Publish** — push `main` (SSH URL if HTTPS origin fails: `git push git@github.com:blackrook-io/taskmesh.git main`).
+4. **Archive** the plan — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/`, commit on `main`, push again.
+5. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed.
+6. **PROD Task** — completion comment, then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
 
 If the user wants finish-up **without** closing the Task (follow-ups remain), ask once and skip the Complete transition / still add a progress comment if useful.
 

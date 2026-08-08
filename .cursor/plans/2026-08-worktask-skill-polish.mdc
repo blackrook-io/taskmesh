@@ -1,0 +1,20 @@
+---
+description: "Polish /worktask skill with first-run finish-up lessons"
+todos:
+  - id: skill-docs
+    content: Expand SKILL.md finish-up + git ops from T0036 first run
+  - id: reference
+    content: Document SSH push and commit author env in reference.md
+  - id: finish
+    content: Commit, merge, archive, push, deploy
+---
+
+# Worktask skill polish
+
+First `/worktask T0036` run shipped the skill bundled with product work. This pass
+locks in operational lessons so the next worktask finish-up is reliable:
+
+- Ordered finish-up checklist matching development-rules (incl. archive + deploy + Complete)
+- Git: never `git config`; use `GIT_AUTHOR_*` / `GIT_COMMITTER_*` when identity missing
+- Push via SSH (`git@github.com:blackrook-io/taskmesh.git`) when HTTPS origin cannot auth
+- Keep `dueDate` untouched on Complete

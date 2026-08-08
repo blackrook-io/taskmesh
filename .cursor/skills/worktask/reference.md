@@ -89,3 +89,36 @@ curl -fsS -X POST "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/activity" \
 From the task row: `id`, `number`, `title`, `description`, `state`, `priority`, `projectId`, `phaseId`, `parentId`.
 
 From activity: all `kind: "comment"` bodies (chronological); skim `kind: "change"` for prior state/priority edits.
+
+## Git ops (this host)
+
+**Never** run `git config` to set identity.
+
+If `git commit` fails with “Author identity unknown”, prefix that commit only:
+
+```bash
+GIT_AUTHOR_NAME='Rook' \
+GIT_AUTHOR_EMAIL='166227646+blackrook-io@users.noreply.github.com' \
+GIT_COMMITTER_NAME='Rook' \
+GIT_COMMITTER_EMAIL='166227646+blackrook-io@users.noreply.github.com' \
+git commit -m "$(cat <<'EOF'
+Message here.
+EOF
+)"
+```
+
+(Match name/email to recent `git log` authors in this repo.)
+
+**Push:** `origin` may be HTTPS without credentials. Prefer:
+
+```bash
+git push git@github.com:blackrook-io/taskmesh.git main
+```
+
+**Pull before branch:**
+
+```bash
+git switch main
+git pull git@github.com:blackrook-io/taskmesh.git main
+git switch -c T####-<slug>
+```
