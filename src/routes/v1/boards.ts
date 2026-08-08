@@ -5,7 +5,6 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 
@@ -594,13 +593,12 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
     let entityId = parsed.entityId;
     if (parsed.title?.trim()) {
       if (entityType === "task") {
-        const phaseId = await ensureDefaultPhase(db, projectId);
         const number = await allocateTaskNumber(db);
         const [task] = await db
           .insert(schema.tasks)
           .values({
             projectId,
-            phaseId,
+            phaseId: null,
             number,
             title: parsed.title.trim(),
             sortOrder: 0,

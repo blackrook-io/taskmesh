@@ -5,7 +5,6 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 
 const phaseBody = z.object({
   name: z.string().min(1).max(200),
@@ -35,7 +34,6 @@ phasesRouter.post("/", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
-    await ensureDefaultPhase(db, projectId);
     const parsed = phaseBody.parse(req.body);
     const existing = await db
       .select({ m: schema.projectPhases.sortOrder })
@@ -133,28 +131,17 @@ phasesRouter.delete("/:phaseId", async (req, res) => {
   try {
     const projectId = parseRouteId(req, "projectId");
     const phaseId = parseRouteId(req, "phaseId");
-    const phases = await db
+    const [existing] = await db
       .select()
       .from(schema.projectPhases)
-      .where(eq(schema.projectPhases.projectId, projectId))
-      .orderBy(asc(schema.projectPhases.sortOrder));
-    const existing = phases.find((p) => p.id === phaseId);
-    if (!existing) {
+      .where(eq(schema.projectPhases.id, phaseId));
+    if (!existing || existing.projectId !== projectId) {
       sendError(res, 404, "not_found", "Phase not found");
-      return;
-    }
-    if (phases.length <= 1) {
-      sendError(res, 400, "last_phase", "Cannot delete the only phase");
-      return;
-    }
-    const fallback = phases.find((p) => p.id !== phaseId);
-    if (!fallback) {
-      sendError(res, 500, "internal_error", "No fallback phase");
       return;
     }
     await db
       .update(schema.tasks)
-      .set({ phaseId: fallback.id, updatedAt: new Date() })
+      .set({ phaseId: null, updatedAt: new Date() })
       .where(eq(schema.tasks.phaseId, phaseId));
     await db.delete(schema.projectPhases).where(eq(schema.projectPhases.id, phaseId));
     res.status(204).end();

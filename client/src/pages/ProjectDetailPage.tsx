@@ -556,6 +556,13 @@ export function ProjectDetailPage() {
                 });
                 void qc.invalidateQueries({ queryKey: ["phases", projectId] });
               }}
+              onDeletePhase={async (phaseId) => {
+                await apiJson(`/api/v1/projects/${projectId}/phases/${phaseId}`, {
+                  method: "DELETE",
+                });
+                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
+                void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+              }}
               onPatchTask={async (taskId, patch) => {
                 return patchTask.mutateAsync({ taskId, body: patch });
               }}

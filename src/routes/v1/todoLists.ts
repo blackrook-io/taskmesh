@@ -4,7 +4,6 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
 
@@ -390,7 +389,6 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
           sendError(res, 404, "not_found", "Project not found");
           return;
         }
-        phaseId = await ensureDefaultPhase(db, projectId);
       }
       const number = await allocateTaskNumber(db);
       const [task] = await db
@@ -572,13 +570,12 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
-    const phaseId = await ensureDefaultPhase(db, parsed.projectId);
     const number = await allocateTaskNumber(db);
     const [task] = await db
       .insert(schema.tasks)
       .values({
         projectId: parsed.projectId,
-        phaseId,
+        phaseId: null,
         number,
         title: parsed.title?.trim() || idea.title,
         description: idea.body,

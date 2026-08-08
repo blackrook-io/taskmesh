@@ -28,6 +28,7 @@ import {
   type TaskState,
 } from "../lib/taskFields";
 import type { Project, ProjectPhase, Task } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
@@ -160,10 +161,8 @@ function buildRows(
   for (const ph of orderedPhases) {
     pushPhase(ph, ph.id);
   }
-  const unassigned = roots.filter((t) => t.phaseId == null);
-  if (unassigned.length > 0 || orderedPhases.length === 0) {
-    pushPhase(null, "none");
-  }
+  // Always show Unassigned so dump-from-delete and zero-phase projects are visible.
+  pushPhase(null, "none");
   return rows;
 }
 
@@ -683,13 +682,17 @@ function SortableTaskRow({
 function SortablePhaseHeader({
   phase,
   collapsed,
+  taskCount,
   onToggle,
   onRename,
+  onRequestDelete,
 }: {
   phase: ProjectPhase | null;
   collapsed: boolean;
+  taskCount: number;
   onToggle: () => void;
   onRename?: (name: string) => void;
+  onRequestDelete?: () => void;
 }) {
   const sortableId = phase ? `phase-${phase.id}` : "phase-none";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -701,17 +704,43 @@ function SortablePhaseHeader({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  const [editing, setEditing] = useState(false);
   const [name, setName] = useState(phase?.name ?? "Unassigned");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setName(phase?.name ?? "Unassigned");
   }, [phase?.name]);
 
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const commitRename = () => {
+    if (!phase || !onRename) {
+      setEditing(false);
+      return;
+    }
+    const next = name.trim();
+    if (!next) {
+      setName(phase.name);
+      setEditing(false);
+      return;
+    }
+    if (next !== phase.name) onRename(next);
+    setEditing(false);
+  };
+
+  const cancelRename = () => {
+    setName(phase?.name ?? "Unassigned");
+    setEditing(false);
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-phase-header${isDragging ? " dragging" : ""}`}
+      className={`task-phase-header${phase == null ? " task-phase-header--unassigned" : ""}${isDragging ? " dragging" : ""}`}
     >
       <button type="button" className="task-phase-header__collapse" onClick={onToggle} aria-expanded={!collapsed}>
         {collapsed ? "▸" : "▾"}
@@ -725,18 +754,57 @@ function SortablePhaseHeader({
           ::
         </span>
       )}
-      {phase && onRename ? (
+      {phase && onRename && editing ? (
         <input
+          ref={inputRef}
           className="task-phase-header__name"
           value={name}
+          aria-label="Phase name"
           onChange={(e) => setName(e.target.value)}
-          onBlur={() => {
-            if (name.trim() && name.trim() !== phase.name) onRename(name.trim());
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitRename();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancelRename();
+            }
           }}
         />
       ) : (
-        <span className="task-phase-header__name">{name}</span>
+        <span
+          className="task-phase-header__name"
+          title={phase && onRename ? "Double-click to rename" : undefined}
+          onDoubleClick={
+            phase && onRename
+              ? (e) => {
+                  e.preventDefault();
+                  setEditing(true);
+                }
+              : undefined
+          }
+        >
+          {phase?.name ?? "Unassigned"}
+        </span>
       )}
+      <span className="task-phase-header__count muted" aria-label={`${taskCount} tasks`}>
+        {taskCount}
+      </span>
+      {phase && onRequestDelete ? (
+        <button
+          type="button"
+          className="btn small ghost task-phase-header__delete"
+          title="Delete phase"
+          aria-label={`Delete phase ${phase.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRequestDelete();
+          }}
+        >
+          ×
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -749,6 +817,7 @@ type Props = {
   onReorderPhases: (orderedPhaseIds: number[]) => Promise<void>;
   onRenamePhase: (phaseId: number, name: string) => Promise<void>;
   onCreatePhase: (name: string) => Promise<void>;
+  onDeletePhase: (phaseId: number) => Promise<void>;
   onPatchTask: (taskId: number, patch: Record<string, unknown>) => Promise<Task | void>;
   onDeleteTask: (taskId: number) => Promise<void>;
 };
@@ -760,6 +829,7 @@ export function TaskBoard({
   onReorderPhases,
   onRenamePhase,
   onCreatePhase,
+  onDeletePhase,
   onPatchTask,
   onDeleteTask: _onDeleteTask,
 }: Props) {
@@ -770,6 +840,7 @@ export function TaskBoard({
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [newPhaseName, setNewPhaseName] = useState("");
+  const [pendingPhaseDelete, setPendingPhaseDelete] = useState<ProjectPhase | null>(null);
 
   const rows = useMemo(
     () => buildRows(phases, tasks, collapsed, sortCol, sortDir),
@@ -898,11 +969,15 @@ export function TaskBoard({
             {rows.map((row) => {
               if (row.kind === "phase") {
                 const phaseKey: number | "none" = row.phase?.id ?? "none";
+                const taskCount = tasks.filter(
+                  (t) => t.parentId == null && (t.phaseId ?? null) === (row.phase?.id ?? null),
+                ).length;
                 return (
                   <SortablePhaseHeader
                     key={row.key}
                     phase={row.phase}
                     collapsed={collapsed.has(phaseKey)}
+                    taskCount={taskCount}
                     onToggle={() => {
                       setCollapsed((prev) => {
                         const next = new Set(prev);
@@ -915,6 +990,9 @@ export function TaskBoard({
                       row.phase
                         ? (name) => void onRenamePhase(row.phase!.id, name)
                         : undefined
+                    }
+                    onRequestDelete={
+                      row.phase ? () => setPendingPhaseDelete(row.phase) : undefined
                     }
                   />
                 );
@@ -992,6 +1070,29 @@ export function TaskBoard({
           />
         </ElementShell>
       ) : null}
+
+      <ConfirmDialog
+        open={pendingPhaseDelete != null}
+        title="Delete phase?"
+        message={
+          pendingPhaseDelete
+            ? (() => {
+                const n = tasks.filter((t) => t.phaseId === pendingPhaseDelete.id).length;
+                return n === 0
+                  ? `Delete phase “${pendingPhaseDelete.name}”? It has no tasks.`
+                  : `Delete phase “${pendingPhaseDelete.name}”? ${n} task${n === 1 ? "" : "s"} will move to Unassigned.`;
+              })()
+            : ""
+        }
+        confirmLabel="Delete"
+        onCancel={() => setPendingPhaseDelete(null)}
+        onConfirm={() => {
+          if (!pendingPhaseDelete) return;
+          const id = pendingPhaseDelete.id;
+          setPendingPhaseDelete(null);
+          void onDeletePhase(id);
+        }}
+      />
     </>
   );
 }

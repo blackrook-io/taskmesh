@@ -170,8 +170,8 @@ export function PhaseManager({ projectId, phases }: Props) {
         title="Delete phase?"
         message={
           pendingDelete
-            ? `Tasks in “${pendingDelete.name}” will move to another phase.`
-            : "Tasks will be reassigned."
+            ? `Tasks in “${pendingDelete.name}” will move to Unassigned.`
+            : "Tasks will move to Unassigned."
         }
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {

@@ -5,7 +5,6 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import {
@@ -277,7 +276,6 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
         });
         continue;
       }
-      await ensureDefaultPhase(db, row.id);
       await ensureProjectModules(db, row.id);
       created += 1;
     } catch (err) {
@@ -429,8 +427,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
       continue;
     }
 
-    const defaultPhaseId = await ensureDefaultPhase(db, projectId);
-    let phaseId = defaultPhaseId;
+    let phaseId: number | null = null;
     if (typeof phaseIdRaw === "number") {
       const [ph] = await db
         .select()

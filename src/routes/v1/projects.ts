@@ -4,7 +4,6 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
@@ -56,7 +55,6 @@ projectsRouter.post("/", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create project");
       return;
     }
-    await ensureDefaultPhase(db, row.id);
     await ensureProjectModules(db, row.id);
     res.status(201).json({ data: row });
   } catch (err) {
@@ -126,7 +124,6 @@ projectsRouter.get("/:id/phases", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
-    await ensureDefaultPhase(db, id);
     const rows = await db
       .select()
       .from(schema.projectPhases)

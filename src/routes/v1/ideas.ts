@@ -4,7 +4,6 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 
 const ideaBody = z.object({
   title: z.string().min(1).max(500),
@@ -123,8 +122,6 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create project");
       return;
     }
-
-    await ensureDefaultPhase(db, project.id);
 
     res.status(201).json({ data: project });
   } catch (err) {

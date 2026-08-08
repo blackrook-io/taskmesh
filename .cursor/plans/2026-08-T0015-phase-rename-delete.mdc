@@ -1,0 +1,39 @@
+---
+description: "T0015 — Phase rename/delete; zero phases allowed; tasks need no phase"
+todos:
+  - id: no-auto-phase
+    content: Stop auto-creating Main; projects may have zero phases; tasks phaseId optional
+  - id: api-delete
+    content: DELETE phase → phaseId null; allow deleting last phase
+  - id: dblclick-rename
+    content: TaskBoard — double-click phase title to rename
+  - id: delete-ui
+    content: Delete control + confirm (task count) on TaskBoard
+  - id: unassigned-ui
+    content: Always show Unassigned section; distinct header styling
+  - id: qa
+    content: Manual QA
+---
+
+# T0015 — Phases rename/delete + optional phases
+
+## Context (PROD)
+
+- **T0015** / id `15` — *Allow Task Phases to be renamed, deleted*
+- Plus product decision: **no auto-created phases**; projects may have **zero** phases; **tasks do not require** a phase.
+
+## Decisions
+
+1. Do **not** call `ensureDefaultPhase` on project create, project/task list, or task create — new projects start with **no** phases; new project tasks get `phaseId: null` unless a phase is chosen.
+2. DELETE phase → set affected tasks’ `phaseId` to **null** (unassigned). Allow deleting the **last** phase.
+3. Rename: **double-click** phase title → edit; Enter/blur save; Escape cancel.
+4. Always show **Unassigned** section on the Task board (even when empty).
+5. Differentiate Unassigned via **header** styling (not required on every row).
+6. Delete uses ConfirmDialog including count of tasks that will become unassigned.
+
+## Approach
+
+- Slim/remove `ensureDefaultPhase` call sites that force “Main”; keep a helper only if something still needs “get first phase if any” without inserting.
+- `phases.ts` DELETE: null out `phaseId`; drop `last_phase` block.
+- Task create paths: `phaseId` optional / default null.
+- TaskBoard + ProjectDetailPage UX as above.

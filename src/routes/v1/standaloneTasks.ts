@@ -9,7 +9,6 @@ import {
   taskPrioritySchema,
   taskStateSchema,
 } from "../../lib/taskFields.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 import {
   allocateTaskNumber,
   assertParentCompatible,
@@ -157,16 +156,16 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
           sendError(res, 400, "invalid_project", "Project not found");
           return;
         }
-        const defaultPhaseId = await ensureDefaultPhase(db, parsed.projectId);
+        // Keep phase only if it already belongs to the target project; otherwise unassigned.
         if (parsed.phaseId === undefined) {
           if (existing.phaseId != null) {
             const [ph] = await db
               .select()
               .from(schema.projectPhases)
               .where(eq(schema.projectPhases.id, existing.phaseId));
-            nextPhaseId = ph && ph.projectId === parsed.projectId ? existing.phaseId : defaultPhaseId;
+            nextPhaseId = ph && ph.projectId === parsed.projectId ? existing.phaseId : null;
           } else {
-            nextPhaseId = defaultPhaseId;
+            nextPhaseId = null;
           }
         }
       }

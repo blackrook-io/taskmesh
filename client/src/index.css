@@ -1450,6 +1450,17 @@ textarea.raw-md {
   font-weight: 600;
 }
 
+.task-phase-header--unassigned {
+  background: color-mix(in srgb, var(--bg-elevated, var(--bg)) 88%, var(--text-muted) 8%);
+  font-weight: 500;
+}
+
+.task-phase-header--unassigned .task-phase-header__name {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 500;
+}
+
 .task-phase-header__collapse {
   background: none;
   border: none;
@@ -1467,11 +1478,25 @@ textarea.raw-md {
   font-weight: 600;
   padding: 0.15rem 0.35rem;
   border-radius: 4px;
+  min-width: 0;
 }
 
 .task-phase-header__name:focus {
   border-color: var(--border);
   outline: none;
+}
+
+.task-phase-header__count {
+  font-size: 0.8rem;
+  font-weight: 500;
+  min-width: 1.25rem;
+  text-align: right;
+}
+
+.task-phase-header__delete {
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
 }
 
 .task-phase-add {

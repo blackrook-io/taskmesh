@@ -10,7 +10,6 @@ import {
   taskPrioritySchema,
   taskStateSchema,
 } from "../../lib/taskFields.js";
-import { ensureDefaultPhase } from "../../services/phases.js";
 import {
   allocateTaskNumber,
   assertParentCompatible,
@@ -76,7 +75,6 @@ tasksRouter.get("/", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
-    await ensureDefaultPhase(db, projectId);
     const rows = await db
       .select()
       .from(schema.tasks)
@@ -97,9 +95,8 @@ tasksRouter.post("/", async (req, res) => {
       return;
     }
     const parsed = taskBody.parse(req.body);
-    const defaultPhaseId = await ensureDefaultPhase(db, projectId);
 
-    let phaseId = parsed.phaseId ?? defaultPhaseId;
+    let phaseId: number | null = parsed.phaseId ?? null;
     if (parsed.phaseId != null) {
       const [ph] = await db
         .select()
