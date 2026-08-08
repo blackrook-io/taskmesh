@@ -1,0 +1,14 @@
+# Move phase-add widget below Task List
+
+## Context
+
+Branch: `phase-12a-phase-add-bottom`
+
+The "New phase name" / Add phase control in the project Task List view currently sits above the list. Move it below the list.
+
+## Change
+
+- In `client/src/components/TaskBoard.tsx`, relocate `.task-phase-add` from before `.task-list` to after it (before the task modal).
+- In `client/src/index.css`, change `.task-phase-add` spacing from `margin-bottom: 0.75rem` to `margin-top: 0.75rem`.
+
+No API, state, or behavior changes. `PhaseManager.tsx` is unchanged.

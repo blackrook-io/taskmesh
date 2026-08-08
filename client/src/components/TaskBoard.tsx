@@ -787,29 +787,6 @@ export function TaskBoard({
 
   return (
     <>
-      <div className="task-phase-add">
-        <input
-          type="text"
-          placeholder="New phase name"
-          value={newPhaseName}
-          onChange={(e) => setNewPhaseName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newPhaseName.trim()) {
-              e.preventDefault();
-              void onCreatePhase(newPhaseName.trim()).then(() => setNewPhaseName(""));
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="btn small"
-          disabled={!newPhaseName.trim()}
-          onClick={() => void onCreatePhase(newPhaseName.trim()).then(() => setNewPhaseName(""))}
-        >
-          Add phase
-        </button>
-      </div>
-
       <div className="task-list">
         <div className="task-list-header">
           <span className="task-list-header__stripe" />
@@ -873,6 +850,29 @@ export function TaskBoard({
             })}
           </SortableContext>
         </DndContext>
+      </div>
+
+      <div className="task-phase-add">
+        <input
+          type="text"
+          placeholder="New phase name"
+          value={newPhaseName}
+          onChange={(e) => setNewPhaseName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && newPhaseName.trim()) {
+              e.preventDefault();
+              void onCreatePhase(newPhaseName.trim()).then(() => setNewPhaseName(""));
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="btn small"
+          disabled={!newPhaseName.trim()}
+          onClick={() => void onCreatePhase(newPhaseName.trim()).then(() => setNewPhaseName(""))}
+        >
+          Add phase
+        </button>
       </div>
 
       {modalTask ? (

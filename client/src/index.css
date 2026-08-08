@@ -1482,7 +1482,7 @@ textarea.raw-md {
 .task-phase-add {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  margin-top: 0.75rem;
   flex-wrap: wrap;
 }
 
