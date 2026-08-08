@@ -1,0 +1,24 @@
+---
+name: Top-level Tasks
+overview: Add a left-rail Tasks section listing every task with TaskBoard-parity editing, New Task top-right, project assignment, API list, and command-palette fixes.
+todos:
+  - id: branch-plan
+    content: Create phase-14-top-level-tasks + .cursor/plans/2026-08-top-level-tasks.mdc
+    status: in_progress
+  - id: api-list-patch
+    content: GET /api/v1/tasks list + PATCH projectId phase handling
+    status: pending
+  - id: shell-route
+    content: AppNav, useShellNav, main.tsx route, CommandPalette
+    status: pending
+  - id: tasks-page
+    content: "TasksListPage: TaskBoard-parity editing, New Task top-right, project column/assign"
+    status: pending
+isProject: false
+---
+
+# Top-level Tasks (all tasks)
+
+Branch: `phase-14-top-level-tasks`
+
+See Cursor plan `top-level_tasks_38b2c6ad` for full approach: `GET /api/v1/tasks`, AppNav Tasks, TasksListPage with TaskBoard-parity editing and New Task top-right.

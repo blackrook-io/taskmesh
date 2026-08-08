@@ -163,7 +163,7 @@ function buildRows(
   return rows;
 }
 
-function StateCheckbox({
+export function StateCheckbox({
   state,
   onCycle,
 }: {

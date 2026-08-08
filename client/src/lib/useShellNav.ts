@@ -26,6 +26,7 @@ export type ShellSection =
   | "home"
   | "projects"
   | "ideas"
+  | "tasks"
   | "filesystem"
   | "image-board"
   | "lists"
@@ -80,6 +81,7 @@ export function useShellSection(): ShellSection {
   if (pathname === "/") return "home";
   if (pathname.startsWith("/projects")) return "projects";
   if (pathname.startsWith("/ideas")) return "ideas";
+  if (pathname.startsWith("/tasks")) return "tasks";
   if (pathname.startsWith("/filesystem")) return "filesystem";
   if (pathname.startsWith("/image-board")) return "image-board";
   if (pathname.startsWith("/todos")) return "lists";
@@ -224,6 +226,29 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
       };
     }
 
+    if (section === "tasks") {
+      const filter = searchParams.get("filter") ?? "all";
+      return {
+        title: "Tasks",
+        items: [
+          {
+            id: "all",
+            label: "All tasks",
+            path: "/tasks",
+            active: filter === "all" || !searchParams.get("filter"),
+            icon: shellIcons.tasks,
+          },
+          {
+            id: "unassigned",
+            label: "Unassigned",
+            path: "/tasks?filter=unassigned",
+            active: filter === "unassigned",
+            icon: shellIcons.lists,
+          },
+        ],
+      };
+    }
+
     if (section === "lists") {
       const listMatch = matchPath("/todos/:listId", location.pathname);
       const activeListId = listMatch?.params.listId ? Number(listMatch.params.listId) : null;
@@ -290,6 +315,7 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
       items: [
         { id: "home", label: "Home", path: "/", active: location.pathname === "/", icon: shellIcons.home },
         { id: "ideas", label: "Ideas", path: "/ideas", icon: shellIcons.ideas },
+        { id: "tasks", label: "Tasks", path: "/tasks", icon: shellIcons.tasks },
         { id: "projects", label: "Projects", path: "/projects", icon: shellIcons.projects },
         { id: "lists", label: "Lists", path: "/todos", icon: shellIcons.lists },
       ],

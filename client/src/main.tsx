@@ -17,6 +17,7 @@ import { ImageBoardPage } from "./pages/ImageBoardPage.tsx";
 import { ImageBoardEditorPage } from "./pages/ImageBoardEditorPage.tsx";
 import { CalendarPage } from "./pages/CalendarPage.tsx";
 import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
+import { TasksListPage } from "./pages/TasksListPage.tsx";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ createRoot(document.getElementById("root")!).render(
             <Route index element={<HomePage />} />
             <Route path="ideas" element={<IdeasListPage />} />
             <Route path="ideas/:id" element={<IdeaEditPage />} />
+            <Route path="tasks" element={<TasksListPage />} />
             <Route path="projects" element={<ProjectsListPage />} />
             <Route path="projects/new" element={<ProjectNewPage />} />
             <Route path="projects/:id" element={<ProjectDetailPage />} />

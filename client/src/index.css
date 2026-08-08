@@ -1328,6 +1328,23 @@ textarea.raw-md {
   border-bottom: 1px solid var(--border);
 }
 
+.task-list--global.task-list .task-list-header,
+.task-list--global.task-list .task-list-row {
+  grid-template-columns: 6px 1.5rem 1.75rem 4.5rem minmax(8rem, 1.4fr) 7rem 6.5rem 8rem minmax(5rem, 8rem);
+}
+
+.task-list-row__project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.task-project-assign select {
+  max-width: 12rem;
+  font-size: 0.85rem;
+}
+
 .task-list-header {
   background: color-mix(in srgb, var(--bg-elevated, var(--bg)) 80%, var(--accent) 8%);
   font-size: 0.75rem;

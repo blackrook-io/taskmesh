@@ -23,6 +23,7 @@ type PaletteItem = {
 const STATIC_COMMANDS: PaletteItem[] = [
   { id: "nav-home", group: "Go to", label: "Home", path: "/" },
   { id: "nav-ideas", group: "Go to", label: "Ideas", path: "/ideas" },
+  { id: "nav-tasks", group: "Go to", label: "Tasks", path: "/tasks" },
   { id: "nav-projects", group: "Go to", label: "Projects", path: "/projects" },
   { id: "nav-todos", group: "Go to", label: "To Dos / Lists", path: "/todos" },
   { id: "nav-filesystem", group: "Go to", label: "Filesystem", path: "/filesystem" },
@@ -78,6 +79,7 @@ const STATIC_COMMANDS: PaletteItem[] = [
     settingsSection: "backups",
   },
   { id: "new-idea", group: "Create", label: "New idea", path: "/ideas/new" },
+  { id: "new-task", group: "Create", label: "New task", path: "/tasks?new=1" },
   { id: "new-project", group: "Create", label: "New project", path: "/projects/new" },
 ];
 
@@ -104,8 +106,8 @@ function flattenSearch(data: SearchResults): PaletteItem[] {
       id: `task-${t.id}`,
       group: "Tasks",
       label: t.title,
-      hint: `Project #${t.projectId}`,
-      path: `/projects/${t.projectId}?tab=tasks`,
+      hint: t.projectId != null ? `Project #${t.projectId}` : "Unassigned",
+      path: `/tasks?open=${t.id}`,
     });
   }
   for (const d of data.documents) {

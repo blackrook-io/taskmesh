@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -9,6 +9,7 @@ import {
   taskPrioritySchema,
   taskStateSchema,
 } from "../../lib/taskFields.js";
+import { ensureDefaultPhase } from "../../services/phases.js";
 import {
   allocateTaskNumber,
   assertParentCompatible,
@@ -38,10 +39,45 @@ const patchBody = z.object({
   priority: taskPrioritySchema.optional(),
   parentId: z.number().int().positive().nullable().optional(),
   projectId: z.number().int().positive().nullable().optional(),
+  phaseId: z.number().int().positive().nullable().optional(),
+});
+
+const listQuery = z.object({
+  /** `null` string = unassigned only; omit = all; number = that project */
+  projectId: z
+    .union([z.literal("null"), z.coerce.number().int().positive()])
+    .optional(),
+  state: taskStateSchema.optional(),
 });
 
 /** Top-level tasks (including projectId null). */
 export const standaloneTasksRouter = Router();
+
+standaloneTasksRouter.get("/", async (req, res) => {
+  try {
+    const parsed = listQuery.parse({
+      projectId: req.query.projectId as string | undefined,
+      state: req.query.state as string | undefined,
+    });
+    const filters = [];
+    if (parsed.projectId === "null") {
+      filters.push(isNull(schema.tasks.projectId));
+    } else if (typeof parsed.projectId === "number") {
+      filters.push(eq(schema.tasks.projectId, parsed.projectId));
+    }
+    if (parsed.state) {
+      filters.push(eq(schema.tasks.state, parsed.state));
+    }
+    const rows = await db
+      .select()
+      .from(schema.tasks)
+      .where(filters.length ? and(...filters) : undefined)
+      .orderBy(desc(schema.tasks.updatedAt), desc(schema.tasks.id));
+    res.json({ data: rows });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
 
 standaloneTasksRouter.get("/:taskId", async (req, res) => {
   try {
@@ -103,19 +139,70 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
-    if (parsed.parentId !== undefined) {
-      if (await wouldCreateParentCycle(db, taskId, parsed.parentId)) {
+
+    let nextProjectId =
+      parsed.projectId !== undefined ? parsed.projectId : existing.projectId;
+    let nextPhaseId = parsed.phaseId !== undefined ? parsed.phaseId : existing.phaseId;
+    let nextParentId = parsed.parentId !== undefined ? parsed.parentId : existing.parentId;
+
+    if (parsed.projectId !== undefined && parsed.projectId !== existing.projectId) {
+      if (parsed.projectId === null) {
+        nextPhaseId = null;
+      } else {
+        const [proj] = await db
+          .select()
+          .from(schema.projects)
+          .where(eq(schema.projects.id, parsed.projectId));
+        if (!proj) {
+          sendError(res, 400, "invalid_project", "Project not found");
+          return;
+        }
+        const defaultPhaseId = await ensureDefaultPhase(db, parsed.projectId);
+        if (parsed.phaseId === undefined) {
+          if (existing.phaseId != null) {
+            const [ph] = await db
+              .select()
+              .from(schema.projectPhases)
+              .where(eq(schema.projectPhases.id, existing.phaseId));
+            nextPhaseId = ph && ph.projectId === parsed.projectId ? existing.phaseId : defaultPhaseId;
+          } else {
+            nextPhaseId = defaultPhaseId;
+          }
+        }
+      }
+      // Parent must share project scope; clear when project changes unless client set parent.
+      if (parsed.parentId === undefined) {
+        nextParentId = null;
+      }
+    }
+
+    if (nextPhaseId != null && nextProjectId != null) {
+      const [ph] = await db
+        .select()
+        .from(schema.projectPhases)
+        .where(eq(schema.projectPhases.id, nextPhaseId));
+      if (!ph || ph.projectId !== nextProjectId) {
+        sendError(res, 400, "invalid_phase", "Phase does not belong to project");
+        return;
+      }
+    }
+    if (nextPhaseId != null && nextProjectId == null) {
+      sendError(res, 400, "invalid_phase", "Phase requires a project");
+      return;
+    }
+
+    if (parsed.parentId !== undefined || nextParentId !== existing.parentId) {
+      if (await wouldCreateParentCycle(db, taskId, nextParentId)) {
         sendError(res, 400, "invalid_parent", "Parent would create a cycle");
         return;
       }
-      const projectId =
-        parsed.projectId !== undefined ? parsed.projectId : existing.projectId;
-      const parentOk = await assertParentCompatible(db, projectId, parsed.parentId);
+      const parentOk = await assertParentCompatible(db, nextProjectId, nextParentId);
       if (!parentOk.ok) {
         sendError(res, 400, "invalid_parent", parentOk.message);
         return;
       }
     }
+
     const [row] = await db
       .update(schema.tasks)
       .set({
@@ -125,8 +212,15 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
         ...(parsed.state !== undefined ? { state: parsed.state } : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
-        ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
-        ...(parsed.projectId !== undefined ? { projectId: parsed.projectId } : {}),
+        ...(parsed.projectId !== undefined || nextProjectId !== existing.projectId
+          ? { projectId: nextProjectId }
+          : {}),
+        ...(parsed.phaseId !== undefined || nextPhaseId !== existing.phaseId
+          ? { phaseId: nextPhaseId }
+          : {}),
+        ...(parsed.parentId !== undefined || nextParentId !== existing.parentId
+          ? { parentId: nextParentId }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.tasks.id, taskId))

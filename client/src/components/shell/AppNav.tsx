@@ -110,6 +110,12 @@ export function AppNav({ onOpenPalette, onOpenAssistant, onNavigate }: Props) {
           </span>
           <span className="app-nav__label">Ideas</span>
         </NavLink>
+        <NavLink to="/tasks" className={itemClass} onClick={onNavigate}>
+          <span className="app-nav__glyph" aria-hidden>
+            <NavIcon icon={shellIcons.tasks} />
+          </span>
+          <span className="app-nav__label">Tasks</span>
+        </NavLink>
         <NavLink to="/filesystem" className={itemClass} onClick={onNavigate}>
           <span className="app-nav__glyph" aria-hidden>
             <NavIcon icon={shellIcons.filesystem} />
