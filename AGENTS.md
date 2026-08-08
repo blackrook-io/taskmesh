@@ -8,7 +8,8 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 
 - **platform-rules.mdc** — product vision, stack, UI, security (always applied).
 - **coding-rules.mdc** — code quality expectations when editing `**/*.ts`.
-- **development-rules.mdc** — plan files under `.cursor/plans/`, archive to `executed/`, phase git workflow (start/approve/merge), and phase-end QA checklists.
+- **development-rules.mdc** — plan files under `.cursor/plans/`, archive to `executed/`, feature git workflow (start/approve/merge), and QA checklists.
+- **`/worktask` skill** — [.cursor/skills/worktask/SKILL.md](.cursor/skills/worktask/SKILL.md): explicit Task Number → plan → `T####-*` branch → PROD task In Progress / Complete bookkeeping.
 
 ## Shared conventions (Phase 0+)
 
@@ -19,8 +20,8 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Design tokens** — see `client/src/index.css` (`--canvas-bg`, `--radius-chip`, `--focus-ring`, etc.).
 - **Canvases** — Excalidraw (`@excalidraw/excalidraw`, MIT) in `CanvasEditor`; scene JSON in `canvases.document`. Fonts copied on client `postinstall` to `public/excalidraw-assets/`.
 - **Command palette** — Ctrl/Cmd+K (Phase 9a); see `client/src/components/CommandPalette.tsx`.
-- **Phase delivery** — at the end of every implementation phase, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks).
-- **Phase git** — on phase start: branch `phase-N-short-slug` from updated `main`. **Finish up** (user approval to close): commit → merge into `main` → push `main` → archive the plan under `.cursor/plans/executed/` (commit + push) → delete local/remote phase branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks).
+- **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks).
+- **Feature git** — on start: branch `T####-short-slug` (worktask) or `phase-N-short-slug` (ad-hoc) from updated `main`. **Finish up** (user approval to close): commit → merge into `main` → push `main` → archive the plan under `.cursor/plans/executed/` (commit + push) → delete local/remote feature branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks) → for `/worktask`, mark the PROD Task `complete` and add a completion comment.
 
 ## Common commands
 

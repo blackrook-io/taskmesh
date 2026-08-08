@@ -19,6 +19,7 @@ import {
   type ProjectModuleKey,
 } from "../lib/projectModules";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
+import { patchTaskRecord } from "../lib/patchTask";
 import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TodoList } from "../types";
 
 type Tab = "overview" | "images" | "settings" | ProjectModuleKey;
@@ -267,14 +268,13 @@ export function ProjectDetailPage() {
 
   const patchTask = useMutation({
     mutationFn: async ({ taskId, body }: { taskId: number; body: Record<string, unknown> }) => {
-      const res = await apiJson<{ data: Task }>(`/api/v1/projects/${projectId}/tasks/${taskId}`, {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      });
-      return res.data;
+      return patchTaskRecord(taskId, body, projectId);
     },
-    onSuccess: () => {
+    onSuccess: (row) => {
       void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+      if (row.projectId != null && row.projectId !== projectId) {
+        void qc.invalidateQueries({ queryKey: ["tasks", row.projectId] });
+      }
     },
   });
 
@@ -557,7 +557,7 @@ export function ProjectDetailPage() {
                 void qc.invalidateQueries({ queryKey: ["phases", projectId] });
               }}
               onPatchTask={async (taskId, patch) => {
-                await patchTask.mutateAsync({ taskId, body: patch });
+                return patchTask.mutateAsync({ taskId, body: patch });
               }}
               onDeleteTask={async (taskId) => {
                 setPendingTaskDelete(taskId);

@@ -1,0 +1,50 @@
+---
+description: "T0036 — Project selector on Task edit view"
+todos:
+  - id: editor-field
+    content: Add Project select to TaskEditorFields; extend TaskPatch + save path
+  - id: wire-callers
+    content: Pass projects list; ensure projectId changes use standalone PATCH; refresh phases after move
+  - id: dedupe-list
+    content: Remove/replace TasksListPage header-only project assign once editor field exists
+  - id: qa
+    content: Manual QA across Tasks list, Project TaskBoard, TodoList, Kanban modals
+---
+
+# T0036 — Tasks: Project selector in Edit view
+
+## Context (PROD)
+
+- **T0036** / id `36` — *Tasks do not show Project selector*
+- State: `new` · Priority: medium · Project id: `4`
+- Description: Task Edit view has no way to set or change **Project**.
+- Activity: description was broadened from “Unassigned Task” → any Task.
+
+## Diagnosis
+
+- API already supports reassignment: `PATCH /api/v1/tasks/:id` with `{ projectId }` (clears/adjusts phase & parent as needed). Project-scoped `PATCH .../projects/:id/tasks/:id` does **not** accept `projectId`.
+- Global **Tasks** modal (`TasksListPage`) has a header `<select>` (`.task-project-assign`, sr-only label) — easy to miss and not part of the main field grid.
+- **TaskBoard** / Kanban / TodoList modals use `TaskEditorFields` with Phase/State/Priority/etc. but **no Project** field.
+
+## Decisions (approved)
+
+1. Project selector on **every** Task edit modal.
+2. Allow **No project**.
+3. Labeled field in the Phase/State grid.
+4. Keep modal open after project change (hold task if it leaves the current list).
+5. Record `projectId` in Task History (`TRACKED_FIELDS`).
+
+## Approach
+
+1. Add a labeled **Project** `<select>` to `TaskEditorFields` (same pattern as Phase), including **No project**.
+2. Extend the editor’s patch/snapshot path so `projectId` autosaves like other fields.
+3. Callers must:
+   - Supply the projects list (or fetch inside the editor).
+   - Persist `projectId` via **standalone** `PATCH /api/v1/tasks/:id` (even when opened from a project page).
+   - After a project change: reload phases for the new project (or empty when unassigned); remount/reset editor as needed (`key` already includes `projectId` on Tasks list).
+4. Remove the duplicate header control on `TasksListPage` once the in-form field exists.
+5. Out of scope unless requested: tracking `projectId` in task activity `TRACKED_FIELDS`; schema/dueDate work.
+
+## Size
+
+Single-session UI wiring — **not** recommending a split.

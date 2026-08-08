@@ -1340,11 +1340,6 @@ textarea.raw-md {
   font-size: 0.85rem;
 }
 
-.task-project-assign select {
-  max-width: 12rem;
-  font-size: 0.85rem;
-}
-
 .task-list-header {
   background: color-mix(in srgb, var(--bg-elevated, var(--bg)) 80%, var(--accent) 8%);
   font-size: 0.75rem;

@@ -13,6 +13,7 @@ const FIELD_LABELS: Record<string, string> = {
   color: "Color",
   phaseId: "Phase",
   parentId: "Parent",
+  projectId: "Project",
 };
 
 function formatTimestamp(ts: string): string {

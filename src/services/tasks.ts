@@ -100,6 +100,7 @@ const TRACKED_FIELDS = [
   "color",
   "phaseId",
   "parentId",
+  "projectId",
 ] as const;
 
 type TrackedField = (typeof TRACKED_FIELDS)[number];
@@ -130,6 +131,13 @@ async function formatChangeValue(
         .from(schema.projectPhases)
         .where(eq(schema.projectPhases.id, Number(value)));
       return ph?.name ?? `#${String(value)}`;
+    }
+    case "projectId": {
+      const [proj] = await db
+        .select({ name: schema.projects.name })
+        .from(schema.projects)
+        .where(eq(schema.projects.id, Number(value)));
+      return proj?.name ?? `#${String(value)}`;
     }
     case "parentId": {
       const [parent] = await db

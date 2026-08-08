@@ -1,17 +1,20 @@
 ---
-description: Require a plan and a phase branch before starting any bugfix or feature
+description: Require a plan and a feature branch before starting any bug fix or feature
 alwaysApply: true
 ---
 
 # Start-of-work gate: plan + branch
 
-Before editing code for **any new bugfix or feature**, first check whether we
+Before editing code for **any new bug fix or feature**, first check whether we
 are **already in the midst of one**:
 
 - **Already in progress** (proceed, no challenge) when EITHER:
-  - the current git branch matches `phase-*` (a dedicated feature/fix branch), OR
+  - the current git branch matches `T[0-9]+-*` (worktask) or `phase-*`
+    (ad-hoc feature/fix branch), OR
   - an active plan exists for this work (a `.cursor/plans/*.mdc`, or a plan just
-    approved this session).
+    approved this session), OR
+  - the user explicitly invoked `/worktask` / the worktask skill this session
+    and you are following that skill’s workflow.
 - **Not in progress** (challenge required): the branch is `main` (or another
   base branch) and there is no active plan for the requested work.
 
@@ -19,17 +22,21 @@ are **already in the midst of one**:
 
 When not already in progress, **STOP before making edits** and propose both:
 
-1. A plan file at `.cursor/plans/<YYYY-MM>-<slug>.mdc` (skip a full plan only for
-   truly trivial one-liners such as a typo or comment — when unsure, write it).
-2. A phase branch `phase-N-<slug>` created from an updated `main`
-   (`git switch main && git pull`, then `git switch -c phase-N-<slug>`).
+1. A plan file at `.cursor/plans/<YYYY-MM>-<slug>.mdc` (for worktasks:
+   `<YYYY-MM>-T####-<slug>.mdc`). Skip a full plan only for truly trivial
+   one-liners such as a typo or comment — when unsure, write it.
+2. A feature branch from updated `main`
+   (`git switch main && git pull`, then `git switch -c …`):
+   - `/worktask`: `T####-<slug>`
+   - otherwise: `phase-N-<slug>`
 
 Wait for the user to confirm (or adjust) before editing. Do not commit directly
 to `main`.
 
 ## After approval
 
-Follow [development-rules.mdc](development-rules.mdc) for the full phase git and
+Follow [development-rules.mdc](development-rules.mdc) for the full git and
 "finish up" workflow (commit → merge to `main` ff-only → push → archive the plan
-to `.cursor/plans/executed/` → delete the phase branch → `npm run deploy:prod`),
-and give a QA checklist at the end of each phase.
+to `.cursor/plans/executed/` → delete the feature branch → `npm run deploy:prod`,
+plus worktask PROD Task Complete + comment when applicable), and give a QA
+checklist at the end of each implementation pass.

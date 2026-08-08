@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   PointerSensor,
@@ -15,6 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { apiJson } from "../api/client";
 import { useUndoStack } from "../hooks/useUndoStack";
 import {
   TASK_PRIORITIES,
@@ -26,7 +27,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
-import type { ProjectPhase, Task } from "../types";
+import type { Project, ProjectPhase, Task } from "../types";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
@@ -48,6 +49,7 @@ type TaskPatch = {
   color?: string | null;
   phaseId?: number | null;
   parentId?: number | null;
+  projectId?: number | null;
   state?: TaskState;
   priority?: TaskPriority;
 };
@@ -58,6 +60,7 @@ type TaskSnapshot = {
   dueDate: string | null;
   color: string | null;
   phaseId: number | null;
+  projectId: number | null;
   state: TaskState;
   priority: TaskPriority;
 };
@@ -73,6 +76,7 @@ function snapshotFromTask(task: Task): TaskSnapshot {
     dueDate: taskDue(task),
     color: task.color,
     phaseId: task.phaseId,
+    projectId: task.projectId,
     state: task.state,
     priority: task.priority,
   };
@@ -208,7 +212,7 @@ export function StateCheckbox({
 
 export function TaskEditorFields({
   task,
-  phases,
+  phases: phasesProp,
   allTasks,
   onSavePatch,
   onRequestClose,
@@ -217,7 +221,7 @@ export function TaskEditorFields({
   task: Task;
   phases: ProjectPhase[];
   allTasks?: Task[];
-  onSavePatch: (patch: TaskPatch) => Promise<void> | void;
+  onSavePatch: (patch: TaskPatch) => Promise<Task | void> | Task | void;
   onRequestClose?: () => void;
   /** Renders controls into the modal header (left of Close). */
   onHeaderActions?: (node: ReactNode) => void;
@@ -231,9 +235,34 @@ export function TaskEditorFields({
   const [dueLocal, setDueLocal] = useState(initial.dueDate ?? "");
   const [color, setColor] = useState(initial.color);
   const [phaseId, setPhaseId] = useState(initial.phaseId);
+  const [projectId, setProjectId] = useState(initial.projectId);
   const [state, setState] = useState(initial.state);
   const [priority, setPriority] = useState(initial.priority);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: async () => {
+      const res = await apiJson<{ data: Project[] }>("/api/v1/projects");
+      return res.data;
+    },
+  });
+
+  const phasesQuery = useQuery({
+    queryKey: ["phases", projectId],
+    enabled: projectId != null,
+    queryFn: async () => {
+      const res = await apiJson<{ data: ProjectPhase[] }>(
+        `/api/v1/projects/${projectId}/phases`,
+      );
+      return res.data;
+    },
+  });
+
+  const phases =
+    projectId == null
+      ? []
+      : (phasesQuery.data ?? (projectId === task.projectId ? phasesProp : []));
 
   const children = (allTasks ?? []).filter((t) => t.parentId === task.id);
 
@@ -245,10 +274,16 @@ export function TaskEditorFields({
     setDueLocal(snap.dueDate ?? "");
     setColor(snap.color);
     setPhaseId(snap.phaseId);
+    setProjectId(snap.projectId);
     setState(snap.state);
     setPriority(snap.priority);
     setSaveError(null);
   }, [task.id, reset]);
+
+  useEffect(() => {
+    setProjectId(task.projectId);
+    setPhaseId(task.phaseId);
+  }, [task.projectId, task.phaseId]);
 
   const currentSnap = (): TaskSnapshot => ({
     title,
@@ -256,6 +291,7 @@ export function TaskEditorFields({
     dueDate: dueLocal || null,
     color,
     phaseId,
+    projectId,
     state,
     priority,
   });
@@ -266,18 +302,36 @@ export function TaskEditorFields({
     setDueLocal(snap.dueDate ?? "");
     setColor(snap.color);
     setPhaseId(snap.phaseId);
+    setProjectId(snap.projectId);
     setState(snap.state);
     setPriority(snap.priority);
+  };
+
+  const applyServerTask = (row: Task) => {
+    setTitle(row.title);
+    setDescription(row.description ?? "");
+    setDueLocal(taskDue(row) ?? "");
+    setColor(row.color);
+    setPhaseId(row.phaseId);
+    setProjectId(row.projectId);
+    setState(row.state);
+    setPriority(row.priority);
   };
 
   const commit = async (previous: TaskSnapshot, patch: TaskPatch) => {
     push(previous);
     try {
-      await onSavePatch(patch);
+      const updated = await onSavePatch(patch);
+      if (updated) applyServerTask(updated);
       setSaveError(null);
       void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
+      if (patch.projectId !== undefined) {
+        void qc.invalidateQueries({ queryKey: ["phases", patch.projectId] });
+        void qc.invalidateQueries({ queryKey: ["tasks"] });
+      }
     } catch (err) {
       setSaveError((err as Error).message);
+      applySnap(previous);
     }
   };
 
@@ -285,15 +339,17 @@ export function TaskEditorFields({
     const restored = undo();
     applySnap(restored);
     try {
-      await onSavePatch({
+      const updated = await onSavePatch({
         title: restored.title,
         description: restored.description.trim() ? restored.description : null,
         dueDate: restored.dueDate,
         color: restored.color,
         phaseId: restored.phaseId,
+        projectId: restored.projectId,
         state: restored.state,
         priority: restored.priority,
       });
+      if (updated) applyServerTask(updated);
       setSaveError(null);
       void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
     } catch (err) {
@@ -395,10 +451,33 @@ export function TaskEditorFields({
       </div>
       <div className="task-editor-grid">
         <div className="field">
+          <label htmlFor={`t-project-${task.id}`}>Project</label>
+          <select
+            id={`t-project-${task.id}`}
+            value={projectId ?? ""}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const nextProject = raw === "" ? null : Number(raw);
+              const prev = { ...currentSnap(), projectId };
+              setProjectId(nextProject);
+              if (nextProject == null) setPhaseId(null);
+              void commit(prev, { projectId: nextProject });
+            }}
+          >
+            <option value="">No project</option>
+            {(projectsQuery.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
           <label htmlFor={`t-phase-${task.id}`}>Phase</label>
           <select
             id={`t-phase-${task.id}`}
             value={phaseId ?? ""}
+            disabled={projectId == null}
             onChange={(e) => {
               const v = e.target.value;
               const nextPhase = v ? Number(v) : null;
@@ -407,7 +486,7 @@ export function TaskEditorFields({
               void commit(prev, { phaseId: nextPhase });
             }}
           >
-            <option value="">Unassigned</option>
+            <option value="">{projectId == null ? "—" : "Unassigned"}</option>
             {phases.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -670,7 +749,7 @@ type Props = {
   onReorderPhases: (orderedPhaseIds: number[]) => Promise<void>;
   onRenamePhase: (phaseId: number, name: string) => Promise<void>;
   onCreatePhase: (name: string) => Promise<void>;
-  onPatchTask: (taskId: number, patch: Record<string, unknown>) => Promise<void>;
+  onPatchTask: (taskId: number, patch: Record<string, unknown>) => Promise<Task | void>;
   onDeleteTask: (taskId: number) => Promise<void>;
 };
 
@@ -685,6 +764,7 @@ export function TaskBoard({
   onDeleteTask: _onDeleteTask,
 }: Props) {
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
+  const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [collapsed, setCollapsed] = useState<Set<number | "none">>(() => new Set());
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
@@ -696,7 +776,11 @@ export function TaskBoard({
     [phases, tasks, collapsed, sortCol, sortDir],
   );
 
-  const modalTask = modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
+  const fromList = modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
+  useEffect(() => {
+    if (fromList) setModalTaskHeld(fromList);
+  }, [fromList]);
+  const modalTask = fromList ?? (modalTaskId != null ? modalTaskHeld : null);
 
   const sortableIds = useMemo(() => {
     const ids: string[] = [];
@@ -885,16 +969,26 @@ export function TaskBoard({
           accentColor={modalTask.color}
           actions={headerActions}
           open
-          onClose={() => setModalTaskId(null)}
+          onClose={() => {
+            setModalTaskId(null);
+            setModalTaskHeld(null);
+          }}
         >
           <TaskEditorFields
             key={modalTask.id}
             task={modalTask}
             phases={phases}
             allTasks={tasks}
-            onRequestClose={() => setModalTaskId(null)}
+            onRequestClose={() => {
+              setModalTaskId(null);
+              setModalTaskHeld(null);
+            }}
             onHeaderActions={setHeaderActions}
-            onSavePatch={(p) => onPatchTask(modalTask.id, { ...p })}
+            onSavePatch={async (p) => {
+              const updated = await onPatchTask(modalTask.id, { ...p });
+              if (updated) setModalTaskHeld(updated);
+              return updated;
+            }}
           />
         </ElementShell>
       ) : null}

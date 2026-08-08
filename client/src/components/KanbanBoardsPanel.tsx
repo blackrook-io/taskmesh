@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { formatTaskNumber } from "../lib/taskFields";
+import { patchTaskRecord } from "../lib/patchTask";
 import type {
   Board,
   BoardCard,
@@ -789,11 +790,8 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
 
   const patchTask = useMutation({
     mutationFn: async ({ taskId, body }: { taskId: number; body: Record<string, unknown> }) => {
-      const res = await apiJson<{ data: Task }>(`/api/v1/projects/${projectId}/tasks/${taskId}`, {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      });
-      return res.data;
+      const currentProjectId = openTaskQuery.data?.projectId ?? projectId;
+      return patchTaskRecord(taskId, body, currentProjectId);
     },
     onSuccess: () => {
       invalidate();
@@ -1128,7 +1126,7 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
             onRequestClose={() => setOpenCard(null)}
             onHeaderActions={setTaskHeaderActions}
             onSavePatch={async (p) => {
-              await patchTask.mutateAsync({ taskId: openTaskQuery.data!.id, body: p });
+              return patchTask.mutateAsync({ taskId: openTaskQuery.data!.id, body: p });
             }}
           />
         </ElementShell>

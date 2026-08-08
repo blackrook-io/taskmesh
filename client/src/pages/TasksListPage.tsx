@@ -63,6 +63,7 @@ export function TasksListPage() {
   const [modalTaskId, setModalTaskId] = useState<number | null>(
     openParam && Number.isFinite(Number(openParam)) ? Number(openParam) : null,
   );
+  const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [sortCol, setSortCol] = useState<SortCol | null>("number");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
@@ -105,7 +106,12 @@ export function TasksListPage() {
     [tasksQuery.data, sortCol, sortDir, projectNameById],
   );
 
-  const modalTask = modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
+  const modalTaskFromList =
+    modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
+  useEffect(() => {
+    if (modalTaskFromList) setModalTaskHeld(modalTaskFromList);
+  }, [modalTaskFromList]);
+  const modalTask = modalTaskFromList ?? (modalTaskId != null ? modalTaskHeld : null);
 
   const phasesQuery = useQuery({
     queryKey: ["phases", modalTask?.projectId],
@@ -206,6 +212,7 @@ export function TasksListPage() {
 
   const closeModal = () => {
     setModalTaskId(null);
+    setModalTaskHeld(null);
     setHeaderActions(null);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -343,45 +350,21 @@ export function TasksListPage() {
           titleLeading={formatTaskNumber(modalTask.number)}
           showType={false}
           accentColor={modalTask.color}
-          actions={
-            <>
-              <label className="task-project-assign">
-                <span className="sr-only">Project</span>
-                <select
-                  value={modalTask.projectId ?? ""}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    const projectId = raw === "" ? null : Number(raw);
-                    void patchTask.mutateAsync({
-                      id: modalTask.id,
-                      patch: { projectId },
-                    });
-                  }}
-                  aria-label="Assign project"
-                >
-                  <option value="">No project</option>
-                  {(projectsQuery.data ?? []).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {headerActions}
-            </>
-          }
+          actions={headerActions}
           open
           onClose={closeModal}
         >
           <TaskEditorFields
-            key={`${modalTask.id}-${modalTask.projectId ?? "none"}`}
+            key={modalTask.id}
             task={modalTask}
             phases={phasesQuery.data ?? []}
             allTasks={tasks}
             onRequestClose={closeModal}
             onHeaderActions={setHeaderActions}
             onSavePatch={async (p) => {
-              await patchTask.mutateAsync({ id: modalTask.id, patch: { ...p } });
+              const updated = await patchTask.mutateAsync({ id: modalTask.id, patch: { ...p } });
+              setModalTaskHeld(updated);
+              return updated;
             }}
           />
         </ElementShell>

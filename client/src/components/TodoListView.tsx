@@ -13,6 +13,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { formatTaskNumber } from "../lib/taskFields";
+import { patchTaskRecord } from "../lib/patchTask";
 import type { Idea, Project, ProjectPhase, Task, TodoListDetail, TodoListItem } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { TaskEditorFields } from "./TaskBoard";
@@ -487,19 +488,10 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
               onHeaderActions={setTaskHeaderActions}
               onSavePatch={async (p) => {
                 const task = openTaskQuery.data!;
-                if (task.projectId != null) {
-                  await apiJson(`/api/v1/projects/${task.projectId}/tasks/${task.id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify(p),
-                  });
-                } else {
-                  await apiJson(`/api/v1/tasks/${task.id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify(p),
-                  });
-                }
+                const updated = await patchTaskRecord(task.id, { ...p }, task.projectId);
                 invalidate();
                 void qc.invalidateQueries({ queryKey: ["task-solo", task.id] });
+                return updated;
               }}
             />
           ) : (
