@@ -2,7 +2,10 @@ type Props = {
   open: boolean;
   title: string;
   message: string;
+  /** Extra alert shown in danger color (e.g. unlink warning). */
+  warning?: string;
   confirmLabel?: string;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -11,7 +14,9 @@ export function ConfirmDialog({
   open,
   title,
   message,
+  warning,
   confirmLabel = "Delete",
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: Props) {
@@ -27,11 +32,21 @@ export function ConfirmDialog({
       >
         <h2 id="confirm-title">{title}</h2>
         <p>{message}</p>
+        {warning ? (
+          <p className="confirm-dialog__warning" role="alert">
+            {warning}
+          </p>
+        ) : null}
         <div className="modal-actions">
           <button type="button" className="btn ghost" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="btn danger" onClick={onConfirm}>
+          <button
+            type="button"
+            className="btn danger"
+            disabled={confirmDisabled}
+            onClick={onConfirm}
+          >
             {confirmLabel}
           </button>
         </div>

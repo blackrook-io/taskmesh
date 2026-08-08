@@ -1946,6 +1946,19 @@ a:focus-visible {
   margin-top: 0.8rem;
 }
 
+.confirm-dialog__warning {
+  margin: 0.5rem 0 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.task-expand__footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  margin-top: 0.5rem;
+}
+
 /* —— ColorPopover —— */
 .color-popover-root {
   position: relative;

@@ -68,7 +68,6 @@ export function ProjectDetailPage() {
   const [newTodoListTitle, setNewTodoListTitle] = useState("");
 
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
-  const [pendingTaskDelete, setPendingTaskDelete] = useState<number | null>(null);
   const [pendingDocDelete, setPendingDocDelete] = useState<number | null>(null);
   const [overviewEdit, setOverviewEdit] = useState(false);
 
@@ -275,15 +274,6 @@ export function ProjectDetailPage() {
       if (row.projectId != null && row.projectId !== projectId) {
         void qc.invalidateQueries({ queryKey: ["tasks", row.projectId] });
       }
-    },
-  });
-
-  const deleteTask = useMutation({
-    mutationFn: async (taskId: number) => {
-      await apiJson(`/api/v1/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
     },
   });
 
@@ -566,9 +556,6 @@ export function ProjectDetailPage() {
               onPatchTask={async (taskId, patch) => {
                 return patchTask.mutateAsync({ taskId, body: patch });
               }}
-              onDeleteTask={async (taskId) => {
-                setPendingTaskDelete(taskId);
-              }}
             />
           </div>
           {reorderTasks.isError ? <p role="alert">{(reorderTasks.error as Error).message}</p> : null}
@@ -686,18 +673,6 @@ export function ProjectDetailPage() {
         onConfirm={() => {
           setDeleteProjectOpen(false);
           deleteProject.mutate();
-        }}
-      />
-
-      <ConfirmDialog
-        open={pendingTaskDelete != null}
-        title="Delete task?"
-        message="This cannot be undone."
-        onCancel={() => setPendingTaskDelete(null)}
-        onConfirm={() => {
-          const tid = pendingTaskDelete;
-          setPendingTaskDelete(null);
-          if (tid != null) void deleteTask.mutateAsync(tid);
         }}
       />
 

@@ -485,6 +485,10 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
               task={openTaskQuery.data}
               phases={phasesQuery.data ?? []}
               onRequestClose={() => setOpenItem(null)}
+              onDeleted={() => {
+                setOpenItem(null);
+                invalidate();
+              }}
               onHeaderActions={setTaskHeaderActions}
               onSavePatch={async (p) => {
                 const task = openTaskQuery.data!;

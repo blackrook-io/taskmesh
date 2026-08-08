@@ -215,6 +215,7 @@ export function TaskEditorFields({
   allTasks,
   onSavePatch,
   onRequestClose,
+  onDeleted,
   onHeaderActions,
 }: {
   task: Task;
@@ -222,6 +223,8 @@ export function TaskEditorFields({
   allTasks?: Task[];
   onSavePatch: (patch: TaskPatch) => Promise<Task | void> | Task | void;
   onRequestClose?: () => void;
+  /** Called after the task is deleted successfully (close modal / invalidate). */
+  onDeleted?: () => void;
   /** Renders controls into the modal header (left of Close). */
   onHeaderActions?: (node: ReactNode) => void;
 }) {
@@ -238,6 +241,9 @@ export function TaskEditorFields({
   const [state, setState] = useState(initial.state);
   const [priority, setPriority] = useState(initial.priority);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -263,7 +269,16 @@ export function TaskEditorFields({
       ? []
       : (phasesQuery.data ?? (projectId === task.projectId ? phasesProp : []));
 
-  const children = (allTasks ?? []).filter((t) => t.parentId === task.id);
+  const knownChildren = (allTasks ?? []).filter((t) => t.parentId === task.id);
+  const childrenQuery = useQuery({
+    queryKey: ["tasks", "children-of", task.id],
+    enabled: deleteOpen && allTasks === undefined,
+    queryFn: async () => {
+      const res = await apiJson<{ data: Task[] }>("/api/v1/tasks");
+      return res.data.filter((t) => t.parentId === task.id);
+    },
+  });
+  const children = allTasks !== undefined ? knownChildren : (childrenQuery.data ?? knownChildren);
 
   useEffect(() => {
     const snap = snapshotFromTask(task);
@@ -606,6 +621,67 @@ export function TaskEditorFields({
           {saveError}
         </p>
       ) : null}
+      <div className="task-expand__footer">
+        <button
+          type="button"
+          className="btn danger"
+          onClick={() => {
+            setDeleteError(null);
+            setDeleteOpen(true);
+          }}
+        >
+          Delete
+        </button>
+      </div>
+      {deleteError ? (
+        <p role="alert" className="tag-input__error">
+          {deleteError}
+        </p>
+      ) : null}
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete task?"
+        message="This cannot be undone."
+        warning={
+          children.length > 0
+            ? `This task has ${children.length} child task${children.length === 1 ? "" : "s"}. They will be unlinked, not deleted.`
+            : undefined
+        }
+        confirmLabel={
+          deleteOpen && allTasks === undefined && childrenQuery.isFetching
+            ? "Checking…"
+            : deleting
+              ? "Deleting…"
+              : "Delete"
+        }
+        confirmDisabled={
+          deleting || (deleteOpen && allTasks === undefined && childrenQuery.isFetching)
+        }
+        onCancel={() => {
+          if (deleting) return;
+          setDeleteOpen(false);
+          setDeleteError(null);
+        }}
+        onConfirm={() => {
+          if (deleting) return;
+          if (allTasks === undefined && childrenQuery.isFetching) return;
+          void (async () => {
+            setDeleting(true);
+            setDeleteError(null);
+            try {
+              await apiJson(`/api/v1/tasks/${task.id}`, { method: "DELETE" });
+              setDeleteOpen(false);
+              void qc.invalidateQueries({ queryKey: ["tasks"] });
+              onDeleted?.();
+              onRequestClose?.();
+            } catch (err) {
+              setDeleteError((err as Error).message);
+            } finally {
+              setDeleting(false);
+            }
+          })();
+        }}
+      />
     </div>
   );
 }
@@ -819,7 +895,6 @@ type Props = {
   onCreatePhase: (name: string) => Promise<void>;
   onDeletePhase: (phaseId: number) => Promise<void>;
   onPatchTask: (taskId: number, patch: Record<string, unknown>) => Promise<Task | void>;
-  onDeleteTask: (taskId: number) => Promise<void>;
 };
 
 export function TaskBoard({
@@ -831,7 +906,6 @@ export function TaskBoard({
   onCreatePhase,
   onDeletePhase,
   onPatchTask,
-  onDeleteTask: _onDeleteTask,
 }: Props) {
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
@@ -1058,6 +1132,10 @@ export function TaskBoard({
             phases={phases}
             allTasks={tasks}
             onRequestClose={() => {
+              setModalTaskId(null);
+              setModalTaskHeld(null);
+            }}
+            onDeleted={() => {
               setModalTaskId(null);
               setModalTaskHeld(null);
             }}

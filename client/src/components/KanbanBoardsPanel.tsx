@@ -1124,6 +1124,10 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
             task={openTaskQuery.data}
             phases={phases}
             onRequestClose={() => setOpenCard(null)}
+            onDeleted={() => {
+              setOpenCard(null);
+              invalidate();
+            }}
             onHeaderActions={setTaskHeaderActions}
             onSavePatch={async (p) => {
               return patchTask.mutateAsync({ taskId: openTaskQuery.data!.id, body: p });

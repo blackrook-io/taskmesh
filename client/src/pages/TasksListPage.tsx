@@ -360,6 +360,7 @@ export function TasksListPage() {
             phases={phasesQuery.data ?? []}
             allTasks={tasks}
             onRequestClose={closeModal}
+            onDeleted={closeModal}
             onHeaderActions={setHeaderActions}
             onSavePatch={async (p) => {
               const updated = await patchTask.mutateAsync({ id: modalTask.id, patch: { ...p } });

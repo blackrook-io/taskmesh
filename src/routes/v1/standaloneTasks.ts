@@ -232,3 +232,20 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
     handleRouteError(res, err);
   }
 });
+
+standaloneTasksRouter.delete("/:taskId", async (req, res) => {
+  try {
+    const taskId = idParam.parse(req.params.taskId);
+    const deleted = await db
+      .delete(schema.tasks)
+      .where(eq(schema.tasks.id, taskId))
+      .returning({ id: schema.tasks.id });
+    if (!deleted[0]) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    res.status(204).end();
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});

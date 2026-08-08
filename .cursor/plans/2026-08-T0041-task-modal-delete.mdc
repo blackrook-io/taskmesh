@@ -1,0 +1,40 @@
+# T0041 — Delete in Edit Task modal
+
+**Task:** T0041 (`id` 41) — Missing Delete functionality in Edit Task modal view  
+**Branch (on approve):** `T0041-task-modal-delete`  
+**State:** `new` → `in_progress` after plan approval
+
+## Goal
+
+Add a **Delete** control on the Edit Task modal that asks for confirmation, then permanently removes the task. Place the button at the **bottom-right** of the modal body.
+
+## Context
+
+- Shared editor: `TaskEditorFields` in `client/src/components/TaskBoard.tsx` (used by project board, Tasks list, todo-list open task, kanban card modal).
+- Confirm pattern already exists: `ConfirmDialog` + `.btn.danger` (e.g. Idea edit).
+- Project-scoped API exists: `DELETE /api/v1/projects/:projectId/tasks/:taskId`.
+- `TaskBoard` already accepts `onDeleteTask` but it is unused (`_onDeleteTask`); Project detail wires confirm → DELETE only if something calls that prop.
+- Standalone router (`/api/v1/tasks`) has GET/POST/PATCH but **no DELETE** — needed for unassigned tasks (`projectId == null`).
+- DB: deleting a parent sets child `parentId` to `null` (not cascade-delete children).
+
+## Approach
+
+1. **API** — Add `DELETE /api/v1/tasks/:taskId` on `standaloneTasksRouter` (204 on success, 404 if missing). Prefer this from the client when `projectId` is null; otherwise keep using the project-scoped route (or always use standalone for simplicity — prefer one path: standalone DELETE by id for all callers from the modal).
+2. **UI in `TaskEditorFields`** — Footer row at the bottom of the editor: right-aligned **Delete** (`.btn.danger` / small). Opens `ConfirmDialog` (“Delete task?” / “This cannot be undone.”). On confirm: DELETE, then `onDeleted?.()` so parents close the modal and invalidate queries.
+3. **Wire callers** — Pass `onDeleted` from TaskBoard modal, TasksListPage, TodoListView, KanbanBoardsPanel: close modal + invalidate task lists / board cards as appropriate.
+4. **Cleanup** — Either remove the dead `onDeleteTask` TaskBoard prop + ProjectDetail pending-delete path if fully superseded, or thin-wire it only if something else still needs list-level delete (none today). Prefer removing unused prop/confirm duplication once modal delete ships.
+5. **Child tasks** — Do **not** cascade-delete. Children are unlinked (`parentId → null`). When the open task has children, the confirm dialog shows a **red warning** that children will be unlinked, not deleted.
+
+## Out of scope
+
+- Soft-delete / trash / undo after delete
+- Bulk delete
+- Delete from list row context menus (modal-only per task description)
+
+## Acceptance
+
+- Edit Task modal shows Delete at bottom-right.
+- Cancel on confirm leaves the task and modal intact.
+- Confirm deletes the task, closes the modal, and removes it from lists/boards after refresh.
+- Works for project-assigned and unassigned tasks.
+- No change to `dueDate` or other task fields beyond deletion.
