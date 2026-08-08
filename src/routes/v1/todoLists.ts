@@ -581,7 +581,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
         phaseId,
         number,
         title: parsed.title?.trim() || idea.title,
-        notes: idea.body,
+        description: idea.body,
         sortOrder: 0,
       })
       .returning();

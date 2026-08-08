@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   PointerSensor,
@@ -30,6 +31,7 @@ import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { TagInput } from "./shared/TagInput";
+import { TaskHistory } from "./shared/TaskHistory";
 
 export type TaskReorderPayload = {
   orderedTaskIds: number[];
@@ -41,7 +43,7 @@ type SortCol = "number" | "title" | "state" | "priority" | "dueDate";
 
 type TaskPatch = {
   title?: string;
-  notes?: string | null;
+  description?: string | null;
   dueDate?: string | null;
   color?: string | null;
   phaseId?: number | null;
@@ -52,7 +54,7 @@ type TaskPatch = {
 
 type TaskSnapshot = {
   title: string;
-  notes: string;
+  description: string;
   dueDate: string | null;
   color: string | null;
   phaseId: number | null;
@@ -67,7 +69,7 @@ function taskDue(task: Task): string | null {
 function snapshotFromTask(task: Task): TaskSnapshot {
   return {
     title: task.title,
-    notes: task.notes ?? "",
+    description: task.description ?? "",
     dueDate: taskDue(task),
     color: task.color,
     phaseId: task.phaseId,
@@ -220,10 +222,12 @@ export function TaskEditorFields({
   /** Renders controls into the modal header (left of Close). */
   onHeaderActions?: (node: ReactNode) => void;
 }) {
+  const qc = useQueryClient();
+  const containerRef = useRef<HTMLDivElement>(null);
   const initial = snapshotFromTask(task);
   const { push, undo, reset, canUndo, revision } = useUndoStack(initial);
   const [title, setTitle] = useState(initial.title);
-  const [notes, setNotes] = useState(initial.notes);
+  const [description, setDescription] = useState(initial.description);
   const [dueLocal, setDueLocal] = useState(initial.dueDate ?? "");
   const [color, setColor] = useState(initial.color);
   const [phaseId, setPhaseId] = useState(initial.phaseId);
@@ -237,7 +241,7 @@ export function TaskEditorFields({
     const snap = snapshotFromTask(task);
     reset(snap);
     setTitle(snap.title);
-    setNotes(snap.notes);
+    setDescription(snap.description);
     setDueLocal(snap.dueDate ?? "");
     setColor(snap.color);
     setPhaseId(snap.phaseId);
@@ -248,7 +252,7 @@ export function TaskEditorFields({
 
   const currentSnap = (): TaskSnapshot => ({
     title,
-    notes,
+    description,
     dueDate: dueLocal || null,
     color,
     phaseId,
@@ -258,7 +262,7 @@ export function TaskEditorFields({
 
   const applySnap = (snap: TaskSnapshot) => {
     setTitle(snap.title);
-    setNotes(snap.notes);
+    setDescription(snap.description);
     setDueLocal(snap.dueDate ?? "");
     setColor(snap.color);
     setPhaseId(snap.phaseId);
@@ -271,6 +275,7 @@ export function TaskEditorFields({
     try {
       await onSavePatch(patch);
       setSaveError(null);
+      void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
     } catch (err) {
       setSaveError((err as Error).message);
     }
@@ -282,7 +287,7 @@ export function TaskEditorFields({
     try {
       await onSavePatch({
         title: restored.title,
-        notes: restored.notes.trim() ? restored.notes : null,
+        description: restored.description.trim() ? restored.description : null,
         dueDate: restored.dueDate,
         color: restored.color,
         phaseId: restored.phaseId,
@@ -290,6 +295,7 @@ export function TaskEditorFields({
         priority: restored.priority,
       });
       setSaveError(null);
+      void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
     } catch (err) {
       setSaveError((err as Error).message);
     }
@@ -315,6 +321,46 @@ export function TaskEditorFields({
     return () => document.removeEventListener("keydown", onKey);
   }, [onRequestClose]);
 
+  // When the editor body overflows vertically, widen the modal by the
+  // scrollbar width + 10px so the scrollbar doesn't cover content on the right.
+  useEffect(() => {
+    const el = containerRef.current;
+    const dialog = el?.closest('[role="dialog"]') as HTMLElement | null;
+    if (!el || !dialog) return;
+    let raf = 0;
+    const GAP = 20;
+    const measure = () => {
+      const scrollbarWidth = el.offsetWidth - el.clientWidth;
+      const hasScroll = el.scrollHeight > el.clientHeight + 1;
+      if (hasScroll) {
+        // Gap between content and scrollbar, plus modal growth to keep content width.
+        el.style.paddingRight = `${GAP}px`;
+        dialog.style.setProperty("--task-modal-extra", `${Math.max(scrollbarWidth, 0) + GAP}px`);
+      } else {
+        el.style.paddingRight = "";
+        dialog.style.setProperty("--task-modal-extra", "0px");
+      }
+    };
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(measure);
+    };
+    schedule();
+    const ro = new ResizeObserver(schedule);
+    ro.observe(el);
+    const mo = new MutationObserver(schedule);
+    mo.observe(el, { childList: true, subtree: true, attributes: true, characterData: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", schedule);
+      dialog.style.removeProperty("--task-modal-extra");
+      el.style.paddingRight = "";
+    };
+  }, []);
+
   useEffect(() => {
     if (!onHeaderActions) return;
     onHeaderActions(
@@ -332,7 +378,7 @@ export function TaskEditorFields({
   }, [canUndo, onHeaderActions]);
 
   return (
-    <div className="task-expand">
+    <div className="task-expand" ref={containerRef}>
       <div className="field">
         <label htmlFor={`t-title-${task.id}`}>Title</label>
         <input
@@ -426,6 +472,7 @@ export function TaskEditorFields({
               <ColorPopover
                 color={color}
                 label="Task color"
+                placement="left"
                 onChange={(c) => {
                   const prev = { ...currentSnap(), color };
                   setColor(c);
@@ -438,18 +485,21 @@ export function TaskEditorFields({
         </div>
       </div>
       <div className="field task-expand__notes">
-        <label>Notes</label>
+        <label>Description</label>
         <MarkdownEditor
-          key={`${task.id}-${revision}-notes`}
-          value={notes}
-          onChange={setNotes}
+          key={`${task.id}-${revision}-description`}
+          value={description}
+          onChange={setDescription}
           fill
-          placeholder="Task notes…"
+          placeholder="Task description…"
           onBlur={(v) => {
-            setNotes(v);
+            setDescription(v);
             const normalized = v.trim() ? v : null;
-            if (normalized !== (task.notes ?? "")) {
-              void commit({ ...currentSnap(), notes: task.notes ?? "" }, { notes: normalized });
+            if (normalized !== (task.description ?? "")) {
+              void commit(
+                { ...currentSnap(), description: task.description ?? "" },
+                { description: normalized },
+              );
             }
           }}
         />
@@ -460,6 +510,7 @@ export function TaskEditorFields({
         </span>
         <TagInput entityType="task" entityId={task.id} />
       </div>
+      <TaskHistory taskId={task.id} />
       {children.length > 0 ? (
         <div className="field">
           <label>Child tasks</label>

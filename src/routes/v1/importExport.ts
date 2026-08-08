@@ -49,7 +49,7 @@ function taskExportRow(t: typeof schema.tasks.$inferSelect): Record<string, unkn
     parentId: t.parentId ?? "",
     number: t.number,
     title: t.title,
-    notes: t.notes ?? "",
+    description: t.description ?? "",
     state: t.state,
     priority: t.priority,
     dueDate: t.dueDate ?? "",
@@ -366,14 +366,15 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
       continue;
     }
 
-    let notes: string | null = null;
-    if (raw.notes != null && raw.notes !== "") {
-      notes = String(raw.notes);
-      if (notes.length > 50_000) {
+    let description: string | null = null;
+    const rawDescription = raw.description ?? raw.notes;
+    if (rawDescription != null && rawDescription !== "") {
+      description = String(rawDescription);
+      if (description.length > 50_000) {
         discarded.push({
           row: rowNum,
           code: "invalid_data",
-          reason: "notes is too long",
+          reason: "description is too long",
         });
         continue;
       }
@@ -475,7 +476,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
           phaseId,
           number,
           title,
-          notes,
+          description,
           dueDate,
           dueAt: dueAt instanceof Date ? dueAt : null,
           color,

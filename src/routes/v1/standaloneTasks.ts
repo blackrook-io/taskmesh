@@ -13,6 +13,7 @@ import {
   allocateTaskNumber,
   assertParentCompatible,
   nextSiblingSortOrder,
+  recordTaskChanges,
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
 
@@ -20,7 +21,7 @@ const idParam = z.coerce.number().int().positive();
 
 const createBody = z.object({
   title: z.string().min(1).max(2000),
-  notes: z.string().max(50_000).optional().nullable(),
+  description: z.string().max(50_000).optional().nullable(),
   dueDate: dueDateSchema,
   color: z.string().max(64).optional().nullable(),
   state: taskStateSchema.optional(),
@@ -30,7 +31,7 @@ const createBody = z.object({
 
 const patchBody = z.object({
   title: z.string().min(1).max(2000).optional(),
-  notes: z.string().max(50_000).optional().nullable(),
+  description: z.string().max(50_000).optional().nullable(),
   dueDate: dueDateSchema,
   color: z.string().max(64).optional().nullable(),
   state: taskStateSchema.optional(),
@@ -75,7 +76,7 @@ standaloneTasksRouter.post("/", async (req, res) => {
         parentId,
         number,
         title: parsed.title,
-        notes: parsed.notes ?? null,
+        description: parsed.description ?? null,
         state: parsed.state ?? "new",
         priority: parsed.priority ?? "none",
         dueDate: parsed.dueDate ?? null,
@@ -119,7 +120,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       .update(schema.tasks)
       .set({
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
-        ...(parsed.notes !== undefined ? { notes: parsed.notes } : {}),
+        ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
         ...(parsed.state !== undefined ? { state: parsed.state } : {}),
@@ -130,6 +131,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       })
       .where(eq(schema.tasks.id, taskId))
       .returning();
+    if (row) {
+      await recordTaskChanges(db, taskId, existing, row);
+    }
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);

@@ -1487,6 +1487,7 @@ textarea.raw-md {
   min-height: 0;
   width: 100%;
   gap: 0.65rem;
+  overflow-y: auto;
 }
 
 .task-expand > .field,
@@ -1495,11 +1496,10 @@ textarea.raw-md {
   margin-bottom: 0;
 }
 
-/* Basis 0 so Notes claims remaining modal height, not just content min-height. */
+/* Description keeps a stable height; the whole editor scrolls (History sits below). */
 .task-expand > .field.task-expand__notes {
-  flex: 1 1 0;
-  flex-shrink: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: 220px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -1535,6 +1535,91 @@ textarea.raw-md {
 .task-expand .task-child-list,
 .task-expand .tag-input__error {
   flex-shrink: 0;
+}
+
+.task-history {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.task-history__label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.task-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.task-history__empty {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.task-history__comment {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.4rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.task-history__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.task-history__edited {
+  font-size: 0.72rem;
+  font-style: italic;
+}
+
+.task-history__actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.task-history__change {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  border-left: 2px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.task-history__change-text strong {
+  color: var(--text);
+}
+
+.task-history__val {
+  color: var(--text);
+}
+
+.task-history__change-ts {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.task-history__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .phase-heading {
@@ -1797,6 +1882,22 @@ a:focus-visible {
   gap: 0.4rem;
 }
 
+/* Above the trigger, right-aligned so the trigger sits below the panel's
+   bottom-right corner (e.g. right-clicked tag chips near the screen edge). */
+.color-popover-panel--top {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: auto;
+  right: 0;
+}
+
+/* To the left of the trigger (e.g. task color swatch on the far right). */
+.color-popover-panel--left {
+  top: 0;
+  left: auto;
+  right: calc(100% + 6px);
+}
+
 .color-popover-grid {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
@@ -2030,7 +2131,10 @@ a:focus-visible {
 .element-shell-backdrop > [role="dialog"] {
   display: flex;
   flex-direction: column;
-  width: min(var(--content-max), calc(100vw - 2rem));
+  width: min(
+    calc(var(--content-max) + var(--task-modal-extra, 0px)),
+    calc(100vw - 2rem)
+  );
   max-width: 100%;
   height: min(85dvh, 720px);
   max-height: min(85dvh, 720px);

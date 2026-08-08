@@ -32,7 +32,7 @@ export type Task = {
   parentId: number | null;
   number: number;
   title: string;
-  notes: string | null;
+  description: string | null;
   state: "new" | "in_progress" | "complete" | "canceled" | "on_hold";
   priority: "none" | "low" | "medium" | "high" | "urgent";
   dueDate: string | null;
@@ -42,6 +42,20 @@ export type Task = {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type TaskActivityEntry = {
+  id: number;
+  taskId: number;
+  kind: "comment" | "change";
+  /** Comment rows */
+  body: string | null;
+  editedAt: string | null;
+  /** Change rows */
+  field: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: string;
 };
 
 export type ProjectDocument = {

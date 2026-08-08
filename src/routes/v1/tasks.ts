@@ -15,13 +15,14 @@ import {
   allocateTaskNumber,
   assertParentCompatible,
   nextSiblingSortOrder,
+  recordTaskChanges,
   syncDescendantPhases,
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
 
 const taskBody = z.object({
   title: z.string().min(1).max(2000),
-  notes: z.string().max(50_000).optional().nullable(),
+  description: z.string().max(50_000).optional().nullable(),
   dueDate: dueDateSchema,
   /** @deprecated Accept datetime for older clients; stored as dueDate date part. */
   dueAt: z.string().datetime().optional().nullable(),
@@ -35,7 +36,7 @@ const taskBody = z.object({
 
 const taskPatch = z.object({
   title: z.string().min(1).max(2000).optional(),
-  notes: z.string().max(50_000).optional().nullable(),
+  description: z.string().max(50_000).optional().nullable(),
   dueDate: dueDateSchema,
   dueAt: z.string().datetime().optional().nullable(),
   color: z.string().max(64).optional().nullable(),
@@ -138,7 +139,7 @@ tasksRouter.post("/", async (req, res) => {
         parentId,
         number,
         title: parsed.title,
-        notes: parsed.notes ?? null,
+        description: parsed.description ?? null,
         state: parsed.state ?? "new",
         priority: parsed.priority ?? "none",
         dueDate,
@@ -289,7 +290,7 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       .update(schema.tasks)
       .set({
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
-        ...(parsed.notes !== undefined ? { notes: parsed.notes } : {}),
+        ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(dueDate !== undefined ? { dueDate } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
         ...(parsed.phaseId !== undefined ? { phaseId: parsed.phaseId } : {}),
@@ -304,6 +305,10 @@ tasksRouter.patch("/:taskId", async (req, res) => {
 
     if (row && parsed.phaseId !== undefined) {
       await syncDescendantPhases(db, taskId, parsed.phaseId);
+    }
+
+    if (row) {
+      await recordTaskChanges(db, taskId, existing, row);
     }
 
     res.json({ data: row });

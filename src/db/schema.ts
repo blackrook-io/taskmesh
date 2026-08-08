@@ -71,7 +71,7 @@ export const tasks = pgTable("tasks", {
   /** App-wide unique display number → T####. */
   number: integer("number").notNull().unique(),
   title: text("title").notNull(),
-  notes: text("notes"),
+  description: text("description"),
   /** new | in_progress | complete | canceled | on_hold */
   state: text("state").notNull().default("new"),
   /** none | low | medium | high | urgent */
@@ -86,6 +86,26 @@ export const tasks = pgTable("tasks", {
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Task history timeline: user comments + auto-recorded field changes. */
+export const taskActivity = pgTable("task_activity", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  /** comment | change */
+  kind: text("kind").notNull(),
+  /** Comment rows: Markdown body and last-edit timestamp. */
+  body: text("body"),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  /** Change rows: which field and its before/after display values. */
+  field: text("field"),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
@@ -409,6 +429,14 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     relationName: "task_hierarchy",
   }),
   children: many(tasks, { relationName: "task_hierarchy" }),
+  activity: many(taskActivity),
+}));
+
+export const taskActivityRelations = relations(taskActivity, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskActivity.taskId],
+    references: [tasks.id],
+  }),
 }));
 
 export const projectDocumentsRelations = relations(projectDocuments, ({ one }) => ({

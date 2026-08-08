@@ -132,7 +132,7 @@ export const OPENAI_TOOLS = [
           projectId: { type: "integer" },
           taskId: { type: "integer" },
           title: { type: "string" },
-          notes: { type: "string" },
+          description: { type: "string" },
           dueDate: { type: "string", description: "YYYY-MM-DD or null to clear" },
           color: { type: "string" },
           state: { type: "string" },
@@ -189,7 +189,7 @@ export const OPENAI_TOOLS = [
         properties: {
           projectId: { type: "integer" },
           title: { type: "string" },
-          notes: { type: "string" },
+          description: { type: "string" },
           dueDate: { type: "string", description: "YYYY-MM-DD" },
           color: { type: "string" },
           summary: { type: "string" },
@@ -290,7 +290,7 @@ async function toolSearch(args: unknown): Promise<string> {
         projectId: schema.tasks.projectId,
       })
       .from(schema.tasks)
-      .where(or(ilike(schema.tasks.title, pattern), ilike(schema.tasks.notes, pattern)))
+      .where(or(ilike(schema.tasks.title, pattern), ilike(schema.tasks.description, pattern)))
       .orderBy(desc(schema.tasks.updatedAt))
       .limit(8),
     db
@@ -365,7 +365,7 @@ async function toolGetEntity(args: unknown): Promise<string> {
     id: row.id,
     projectId: row.projectId,
     title: row.title,
-    notes: clip(row.notes ?? "", 4000),
+    description: clip(row.description ?? "", 4000),
     dueDate: row.dueDate ?? null,
     number: row.number,
     state: row.state,
@@ -490,7 +490,7 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
       projectId: z.number().int().positive(),
       taskId: z.number().int().positive(),
       title: z.string().min(1).max(2000).optional(),
-      notes: z.string().max(50_000).optional().nullable(),
+      description: z.string().max(50_000).optional().nullable(),
       dueDate: z.string().nullable().optional(),
       color: z.string().max(64).optional().nullable(),
       state: z.string().optional(),
@@ -505,7 +505,7 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
   if (!existing) return JSON.stringify({ error: "Task not found" });
   const fields: Record<string, unknown> = {};
   if (parsed.title !== undefined) fields.title = parsed.title;
-  if (parsed.notes !== undefined) fields.notes = parsed.notes;
+  if (parsed.description !== undefined) fields.description = parsed.description;
   if (parsed.dueDate !== undefined) fields.dueDate = parsed.dueDate;
   if (parsed.color !== undefined) fields.color = parsed.color;
   if (parsed.state !== undefined) fields.state = parsed.state;
@@ -598,7 +598,7 @@ async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Pro
     .object({
       projectId: z.coerce.number().int().positive(),
       title: z.string().min(1).max(2000),
-      notes: z.string().max(50_000).optional().nullable(),
+      description: z.string().max(50_000).optional().nullable(),
       dueDate: z.string().optional().nullable(),
       color: z.string().max(64).optional().nullable(),
       summary: z.string().min(1).max(500),
@@ -610,7 +610,7 @@ async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Pro
     .where(eq(schema.projects.id, parsed.projectId));
   if (!proj) return JSON.stringify({ error: "Project not found" });
   const fields: Record<string, unknown> = { title: parsed.title };
-  if (parsed.notes !== undefined) fields.notes = parsed.notes;
+  if (parsed.description !== undefined) fields.description = parsed.description;
   if (parsed.dueDate !== undefined && parsed.dueDate !== null) fields.dueDate = parsed.dueDate;
   if (parsed.color !== undefined) fields.color = parsed.color;
   const proposal: AssistantProposal = {

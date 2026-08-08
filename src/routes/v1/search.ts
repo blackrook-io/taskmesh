@@ -171,7 +171,7 @@ searchRouter.get("/", async (req, res) => {
                 pattern
                   ? or(
                       ilike(schema.tasks.title, pattern),
-                      ilike(schema.tasks.notes, pattern),
+                      ilike(schema.tasks.description, pattern),
                     )
                   : sql`true`,
               ),

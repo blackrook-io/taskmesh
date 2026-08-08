@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, max } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { formatTaskNumber } from "../lib/taskFields.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -71,6 +72,106 @@ export async function syncDescendantPhases(
       .where(eq(schema.tasks.id, child.id));
     await syncDescendantPhases(db, child.id, phaseId);
   }
+}
+
+const STATE_LABELS: Record<string, string> = {
+  new: "New",
+  in_progress: "In Progress",
+  complete: "Complete",
+  canceled: "Canceled",
+  on_hold: "On Hold",
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  none: "None",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
+/** Fields tracked in the task history change log. */
+const TRACKED_FIELDS = [
+  "title",
+  "description",
+  "state",
+  "priority",
+  "dueDate",
+  "color",
+  "phaseId",
+  "parentId",
+] as const;
+
+type TrackedField = (typeof TRACKED_FIELDS)[number];
+
+type TaskLike = Pick<
+  typeof schema.tasks.$inferSelect,
+  TrackedField
+>;
+
+function clipText(value: string, max = 140): string {
+  return value.length <= max ? value : `${value.slice(0, max)}…`;
+}
+
+async function formatChangeValue(
+  db: Db,
+  field: TrackedField,
+  value: unknown,
+): Promise<string> {
+  if (value == null || value === "") return "none";
+  switch (field) {
+    case "state":
+      return STATE_LABELS[String(value)] ?? String(value);
+    case "priority":
+      return PRIORITY_LABELS[String(value)] ?? String(value);
+    case "phaseId": {
+      const [ph] = await db
+        .select({ name: schema.projectPhases.name })
+        .from(schema.projectPhases)
+        .where(eq(schema.projectPhases.id, Number(value)));
+      return ph?.name ?? `#${String(value)}`;
+    }
+    case "parentId": {
+      const [parent] = await db
+        .select({ number: schema.tasks.number })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, Number(value)));
+      return parent ? formatTaskNumber(parent.number) : `#${String(value)}`;
+    }
+    case "description":
+    case "title":
+    case "color":
+      return clipText(String(value));
+    default:
+      return String(value);
+  }
+}
+
+/**
+ * Diff a task's tracked fields before/after an update and append one
+ * `kind:"change"` row per changed field to the task history timeline.
+ */
+export async function recordTaskChanges(
+  db: Db,
+  taskId: number,
+  before: TaskLike,
+  after: TaskLike,
+): Promise<void> {
+  const rows: (typeof schema.taskActivity.$inferInsert)[] = [];
+  for (const field of TRACKED_FIELDS) {
+    const bv = before[field] ?? null;
+    const av = after[field] ?? null;
+    if (bv === av) continue;
+    rows.push({
+      taskId,
+      kind: "change",
+      field,
+      oldValue: await formatChangeValue(db, field, bv),
+      newValue: await formatChangeValue(db, field, av),
+    });
+  }
+  if (rows.length === 0) return;
+  await db.insert(schema.taskActivity).values(rows);
 }
 
 /** Next sortOrder among siblings (same project + parent). */

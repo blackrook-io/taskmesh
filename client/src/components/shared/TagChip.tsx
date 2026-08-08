@@ -76,6 +76,7 @@ export function TagChip({
       color={tag.color}
       onChange={onColorChange}
       openOn="contextmenu"
+      placement="top"
       allowClear
       label={`Color for ${tag.name}`}
       className="tag-chip-color"

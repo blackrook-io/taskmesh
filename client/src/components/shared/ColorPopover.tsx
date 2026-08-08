@@ -20,6 +20,8 @@ type Props = {
   label?: string;
   /** How the popover opens. Tags use contextmenu (right-click) only. */
   openOn?: "click" | "contextmenu" | "both";
+  /** Where the panel appears relative to the trigger. Defaults to "bottom". */
+  placement?: "bottom" | "top" | "left";
 };
 
 export function ColorPopover({
@@ -30,6 +32,7 @@ export function ColorPopover({
   className,
   label = "Color",
   openOn = "both",
+  placement = "bottom",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(color ?? "");
@@ -124,7 +127,12 @@ export function ColorPopover({
         </button>
       )}
       {open ? (
-        <div className="color-popover-panel" id={panelId} role="dialog" aria-label={label}>
+        <div
+          className={`color-popover-panel color-popover-panel--${placement}`}
+          id={panelId}
+          role="dialog"
+          aria-label={label}
+        >
           <div className="color-popover-grid">
             {DEFAULT_COLOR_PALETTE.map((c) => (
               <button
