@@ -46,6 +46,20 @@ function parseTab(raw: string | null): Tab {
   return TAB_ALIASES[raw] ?? "overview";
 }
 
+const PROJECT_STATUS_OPTIONS = [
+  { value: "idea", label: "Idea" },
+  { value: "active", label: "Active" },
+  { value: "paused", label: "Paused" },
+  { value: "done", label: "Done" },
+] as const;
+
+function projectStatusLabel(status: string): string {
+  const hit = PROJECT_STATUS_OPTIONS.find((o) => o.value === status);
+  if (hit) return hit.label;
+  if (!status) return status;
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function parseIdParam(raw: string | null): number | null {
   if (!raw) return null;
   const n = Number(raw);
@@ -394,12 +408,14 @@ export function ProjectDetailPage() {
 
   return (
     <div>
-      <div className="page-head">
-        <h1>
-          <span className="muted">{formatEntityRef("project", project.number)} </span>
-          {project.name}
-        </h1>
-      </div>
+      {tab !== "overview" ? (
+        <div className="page-head">
+          <h1>
+            <span className="muted">{formatEntityRef("project", project.number)} </span>
+            {project.name}
+          </h1>
+        </div>
+      ) : null}
 
       {tab === "images" ? (
         <ImageBoardList projectId={project.id} heading="Images" />
@@ -409,8 +425,11 @@ export function ProjectDetailPage() {
         <div className="grid" style={{ gap: "1rem" }}>
           <div className="card">
             <div className="wiki-panel__main-head">
-              <span className="sr-only">Project details</span>
-              <div className="wiki-panel__main-actions" style={{ marginLeft: "auto" }}>
+              <h1 className="wiki-page-title" style={{ margin: 0, minWidth: 0, flex: 1 }}>
+                <span className="muted">{formatEntityRef("project", project.number)} </span>
+                {project.name}
+              </h1>
+              <div className="wiki-panel__main-actions">
                 {overviewEdit ? (
                   <>
                     <button type="button" className="btn small ghost" onClick={cancelOverviewEdit}>
@@ -448,10 +467,11 @@ export function ProjectDetailPage() {
                 <div className="field">
                   <label htmlFor="proj-status">Status</label>
                   <select id="proj-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-                    <option value="idea">idea</option>
-                    <option value="active">active</option>
-                    <option value="paused">paused</option>
-                    <option value="done">done</option>
+                    {PROJECT_STATUS_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="field field--tags-below">
@@ -464,12 +484,8 @@ export function ProjectDetailPage() {
               </>
             ) : (
               <>
-                <h1 className="wiki-page-title">
-                  <span className="muted">{formatEntityRef("project", project.number)} </span>
-                  {project.name}
-                </h1>
-                <p className="muted" style={{ marginTop: "-0.35rem", marginBottom: "0.75rem" }}>
-                  {project.status}
+                <p className="muted" style={{ marginTop: "-0.15rem", marginBottom: "0.75rem" }}>
+                  {projectStatusLabel(project.status)}
                 </p>
                 <div className="field field--tags-below">
                   <TagInput entityType="project" entityId={projectId} readOnly />
@@ -479,32 +495,6 @@ export function ProjectDetailPage() {
             )}
             {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
           </div>
-
-          {modules.some((m) => m.enabled && isProjectModuleKey(m.moduleKey)) ? (
-            <div className="card">
-              <h2 style={{ marginTop: 0 }}>Enabled views</h2>
-              <p className="muted" style={{ marginTop: 0 }}>
-                Jump to modules enabled for this project. Turn others on in Settings.
-              </p>
-              <div className="btn-row" style={{ flexWrap: "wrap" }}>
-                {modules
-                  .filter((m) => m.enabled && isProjectModuleKey(m.moduleKey))
-                  .map((m) => {
-                    const key = m.moduleKey as ProjectModuleKey;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className="btn small"
-                        onClick={() => setTab(key)}
-                      >
-                        {MODULE_LABELS[key]}
-                      </button>
-                    );
-                  })}
-              </div>
-            </div>
-          ) : null}
         </div>
       ) : null}
 

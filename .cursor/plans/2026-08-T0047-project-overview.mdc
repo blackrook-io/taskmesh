@@ -1,0 +1,66 @@
+# T0047 — Project Overview changes
+
+**Task:** T0047 (`id` 47) — Project Overview changes  
+**State at plan:** `ready` · priority `medium` · projectId 4  
+**Branch (on approval):** `T0047-project-overview`
+
+## Problem
+
+Project Overview has three UX issues:
+
+1. Status values display in lowercase (`idea`, `active`, …).
+2. The Edit pencil sits above the title instead of inline on the title row; Overview also duplicates the page-head `h1`.
+3. An “Enabled views” jump card on Overview duplicates module navigation that belongs only under Settings.
+
+## Goal
+
+Polish Overview: capitalized status labels, title-row Edit control, and Settings-only module management (no Overview jump card).
+
+## Scope
+
+**In**
+
+- `client/src/pages/ProjectDetailPage.tsx` (Overview tab primarily):
+  - Capitalize Status **display** labels in the edit `<select>` and in view-mode status text (`Idea`, `Active`, `Paused`, `Done`). Keep API/DB values lowercase; retain `idea` as a valid option.
+  - Place pencil (and Cancel / Save overview in edit mode) on the same row as the in-card project title, far right.
+  - On Overview, omit the redundant `page-head` title (card title + inline actions become the primary header).
+  - Remove the Overview “Enabled views” card entirely.
+
+**Out**
+
+- Removing or migrating status `idea`
+- Schema / API status enum changes
+- Settings tab module hub changes
+- Adding a “Status:” label in view mode
+- Other project tabs’ page-head titles (Images, Settings, modules keep current page-head unless they already rely on shared markup — only Overview hides the duplicate)
+
+## Decisions (user)
+
+1. ~~Remove Status `idea`~~ — **dropped**; task description + comment updated on PROD.
+2. Capitalize display labels only; lowercase API values unchanged.
+3. Pencil on in-card title row (far right); drop redundant page-head title on Overview.
+4. Remove Overview “Enabled views” card; Settings tab unchanged.
+5. No “Status:” label in view mode.
+
+## Approach
+
+1. Add a small label map (or `capitalize` helper) for the four status values; use it in the select option text and read-only status line.
+2. Restructure Overview card header: one row with `h1.wiki-page-title` + actions (`wiki-panel__main-actions`); remove the empty head that currently only holds actions. In edit mode, keep name field in the form; title row can still show current saved name + Cancel/Save, or show actions beside a static title — prefer actions on the title row in both modes for consistency.
+3. Conditionally render `page-head` only when `tab !== "overview"` (or leave an empty/minimal head) so Overview is not double-titled.
+4. Delete the “Enabled views” card block and any now-unused bits tied only to that UI.
+
+## Acceptance
+
+- [ ] Status select shows Idea / Active / Paused / Done; values still `idea` / `active` / `paused` / `done`.
+- [ ] View mode shows capitalized status (no Status label).
+- [ ] Pencil is inline far-right of the project title on Overview; Cancel/Save sit there in edit mode.
+- [ ] Overview has a single title (no duplicate page-head + card title).
+- [ ] Overview has no “Enabled views” section; Settings still enables/disables modules and middle nav still works.
+
+## QA checklist (post-implement)
+
+1. Open a project Overview: one title row with pencil on the right.
+2. Edit → Cancel/Save on that row; save status/name/description still works.
+3. Status options and view text are capitalized; saving still stores lowercase.
+4. Confirm no “Enabled views” card on Overview; open Settings and toggle a module — middle nav updates as before.
+5. Spot-check another tab (e.g. Tasks/Settings) still shows a normal page-head title.
