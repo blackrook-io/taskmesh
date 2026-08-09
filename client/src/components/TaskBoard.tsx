@@ -42,6 +42,7 @@ import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
+import { TaskDescriptionTemplatesMenu } from "./shared/TaskDescriptionTemplatesMenu";
 import {
   fetchOpenDependsOn,
   formatCompleteBlockMessage,
@@ -652,7 +653,21 @@ export function TaskEditorFields({
         </div>
       </div>
       <div className="field task-expand__notes">
-        <label>Description</label>
+        <div className="task-expand__notes-head">
+          <label>Description</label>
+          <TaskDescriptionTemplatesMenu
+            projectId={projectId}
+            description={description}
+            onApply={(body) => {
+              const prev = { ...currentSnap(), description: task.description ?? "" };
+              setDescription(body);
+              const normalized = body.trim() ? body : null;
+              if (normalized !== (task.description ?? "")) {
+                void commit(prev, { description: normalized });
+              }
+            }}
+          />
+        </div>
         <MarkdownEditor
           key={`${task.id}-${revision}-description`}
           value={description}

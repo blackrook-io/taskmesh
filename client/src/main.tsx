@@ -56,6 +56,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="admin/system-logs" element={<AdminHubPage />} />
             <Route path="admin/backups" element={<AdminHubPage />} />
             <Route path="admin/system-properties" element={<AdminHubPage />} />
+            <Route path="admin/templates" element={<AdminHubPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

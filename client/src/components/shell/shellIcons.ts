@@ -5,6 +5,7 @@ import {
   faClipboardList,
   faColumns,
   faDrawPolygon,
+  faFileLines,
   faFolder,
   faGear,
   faHouse,
@@ -48,4 +49,5 @@ export const shellIcons = {
   chart: faChartLine,
   logging: faScroll,
   systemProperties: faSliders,
+  templates: faFileLines,
 } as const satisfies Record<string, IconDefinition>;

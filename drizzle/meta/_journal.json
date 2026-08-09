@@ -127,6 +127,13 @@
       "when": 1786296198376,
       "tag": "0017_harsh_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786300673073,
+      "tag": "0018_even_pandemic",
+      "breakpoints": true
     }
   ]
 }

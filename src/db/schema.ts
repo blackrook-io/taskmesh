@@ -188,6 +188,31 @@ export const tasks = pgTable("tasks", {
     .defaultNow(),
 });
 
+/** Reusable Markdown bodies for Task Description (project-scoped or Global). */
+export const taskDescriptionTemplates = pgTable("task_description_templates", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  body: text("body").notNull(),
+  /** Null when saved from an unsorted / non-project task. */
+  projectId: integer("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  /** When true, available on all tasks regardless of project. */
+  isGlobal: boolean("is_global").notNull().default(false),
+  createdById: integer("created_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  updatedById: integer("updated_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 /** Task history timeline: user comments + auto-recorded field changes. */
 export const taskActivity = pgTable("task_activity", {
   id: serial("id").primaryKey(),
@@ -551,6 +576,12 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   createdTasks: many(tasks, { relationName: "task_created_by" }),
   updatedTasks: many(tasks, { relationName: "task_updated_by" }),
+  createdTaskDescriptionTemplates: many(taskDescriptionTemplates, {
+    relationName: "task_description_templates_created_by",
+  }),
+  updatedTaskDescriptionTemplates: many(taskDescriptionTemplates, {
+    relationName: "task_description_templates_updated_by",
+  }),
   apiKeys: many(apiKeys),
 }));
 
@@ -571,6 +602,26 @@ export const apiRequestLogsRelations = relations(apiRequestLogs, ({ one }) => ({
     references: [apiKeys.id],
   }),
 }));
+
+export const taskDescriptionTemplatesRelations = relations(
+  taskDescriptionTemplates,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [taskDescriptionTemplates.projectId],
+      references: [projects.id],
+    }),
+    createdBy: one(users, {
+      fields: [taskDescriptionTemplates.createdById],
+      references: [users.id],
+      relationName: "task_description_templates_created_by",
+    }),
+    updatedBy: one(users, {
+      fields: [taskDescriptionTemplates.updatedById],
+      references: [users.id],
+      relationName: "task_description_templates_updated_by",
+    }),
+  }),
+);
 
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, {

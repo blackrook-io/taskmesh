@@ -1,0 +1,96 @@
+# T0070 — Template of Task Description
+
+**Task:** T0070 (id `82`) — Template of Task Description  
+**Branch (on approval):** `T0070-task-description-templates`  
+**Priority:** High · **State at plan:** Ready
+
+## Context
+
+Edit Task’s Description uses TipTap `MarkdownEditor` in `TaskBoard` with no template support. Spec-driven work wants reusable Markdown bodies. Canvas already has hard-coded diagram templates; this feature is **user-saved, DB-backed Task Description templates** only.
+
+## Decisions (interview)
+
+1. **Storage:** Postgres + API (not `localStorage`) so templates survive browser/machine switches and ride DB backups.
+2. **Scope:** Task Edit Description only (not Ideas / Documents / Projects).
+3. **Dropdown enablement:**
+   - Description **non-empty** → template *apply* options disabled; only **Save Template…** enabled.
+   - Description **empty** → templates selectable to apply; **Save Template…** disabled.
+4. **Visibility:** Saved templates are **project-scoped** by default (`projectId` from the task). Administrators can mark templates **Global** (available across projects) via a new Administration section.
+5. Admin gate stays as today (no RBAC yet; Administration is the admin surface).
+
+## Goals
+
+- Description header row: label left, **Templates** dropdown far right (above editor top-right).
+- Apply selected template → replace Description body; persist via existing task update path.
+- **Save Template…** → prompt for short name → store current Description Markdown as a new template (project-scoped unless later marked Global).
+- List applicable templates when Description is empty: Global templates + those matching the task’s `projectId` (including unsorted / `null` project).
+- Administration → **Templates** section: list all templates (name, project, Global flag, updated); toggle Global; delete with confirmation; rename optional if cheap.
+
+## Non-goals
+
+- Templates for Ideas / Documents / other Markdown fields.
+- Rich template editor inside Admin (view/manage metadata + Global/delete is enough; body is Markdown text).
+- Roles / `is_admin` column.
+- Overwrite confirmation dialog (gated by empty/non-empty instead).
+- Import/export of templates as a separate feature.
+
+## Architecture
+
+### Schema — `task_description_templates`
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `id` | serial PK | |
+| `name` | text not null | Short dropdown label |
+| `body` | text not null | Markdown |
+| `project_id` | integer FK → projects, nullable, ON DELETE CASCADE | Scope; null = unsorted / no project |
+| `is_global` | boolean not null default false | Admin-set; when true, available on all tasks |
+| `created_by_id` / `updated_by_id` | integer FK → users, nullable | Audit (match task patterns) |
+| `created_at` / `updated_at` | timestamptz | |
+
+Unique-ish UX: allow duplicate names across projects; within same project prefer uniqueness on `(project_id, name)` where practical (or soft-warn in UI).
+
+### API
+
+**User / task editor**
+
+- `GET /api/v1/task-description-templates?projectId=` — templates where `is_global` OR `project_id` matches (use `IS NOT DISTINCT FROM` for null).
+- `POST /api/v1/task-description-templates` — `{ name, body, projectId }` → `is_global: false`.
+
+**Admin**
+
+- `GET /api/v1/admin/task-description-templates` — all templates (+ project title when present).
+- `PATCH /api/v1/admin/task-description-templates/:id` — `{ isGlobal?, name? }`.
+- `DELETE /api/v1/admin/task-description-templates/:id` — hard delete; UI confirms first.
+
+### UI
+
+1. **Task editor** (`TaskBoard` Description field): header flex with label + Templates control.
+   - Menu items: applicable templates (disabled when description non-empty) + separator + **Save Template…** (disabled when empty / whitespace-only).
+   - Save: small name prompt (inline modal or `window.prompt` if consistent with app; prefer small confirm dialog matching delete patterns).
+   - Apply: `setDescription(body)` + immediate `commit` so blur isn’t required.
+2. **Administration:** new section `templates` (“Templates”) in `ADMIN_SECTIONS` / labels / deep-link `/admin/templates` / command palette. Panel lists rows with Global toggle + Delete (confirm).
+
+## Implementation steps
+
+1. Schema + Drizzle generate/migrate.
+2. Routes (user list/create + admin list/patch/delete); register on `v1Router`.
+3. Task editor Templates dropdown + empty/non-empty enablement rules.
+4. Admin Templates panel + nav/deep-link/palette wiring.
+5. Light CSS aligned with dark grey / light green tokens.
+6. Smoke-test apply / save / Global visibility / delete confirm.
+
+## Open points (defaults if unstated)
+
+- Unsorted task (`projectId` null): save with `project_id` null; apply list = Global + other null-scoped templates.
+- Applying a template does **not** auto-open Save; user can clear and re-apply another while empty.
+- No inline edit of template body in Admin this pass (re-save a new template from a task if content must change).
+
+## QA checklist (draft)
+
+- [ ] Empty Description → Templates lists Global + project matches; choosing one fills Description and saves.
+- [ ] Non-empty Description → template names disabled; **Save Template…** works; name prompt; appears in dropdown after clear.
+- [ ] Unsorted vs project-scoped visibility behaves as designed.
+- [ ] Admin → Templates: list, toggle Global, confirm delete; Global then appears on another project’s empty task.
+- [ ] Deletion requires confirmation; no silent wipe.
+- [ ] Mobile: dropdown usable in Edit Task modal.

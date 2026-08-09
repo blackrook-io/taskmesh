@@ -5,6 +5,7 @@ import { AdminApisPanel } from "../admin/AdminApisPanel";
 import { AdminKeysPanel } from "../admin/AdminKeysPanel";
 import { AdminLoggingPanel } from "../admin/AdminLoggingPanel";
 import { AdminSystemPropertiesPanel } from "../admin/AdminSystemPropertiesPanel";
+import { AdminTemplatesPanel } from "../admin/AdminTemplatesPanel";
 import { AdminUsersPanel } from "../admin/AdminUsersPanel";
 import { BackupsPage } from "../../pages/BackupsPage";
 import { useModalScrollbarGutter } from "../../lib/useModalScrollbarGutter";
@@ -23,6 +24,7 @@ const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
   logging: shellIcons.logging,
   backups: shellIcons.documents,
   "system-properties": shellIcons.admin,
+  templates: shellIcons.templates,
 };
 
 export function AdministrationModal() {
@@ -106,6 +108,7 @@ export function AdministrationModal() {
             {section === "logging" ? <AdminLoggingPanel /> : null}
             {section === "backups" ? <BackupsPage embedded /> : null}
             {section === "system-properties" ? <AdminSystemPropertiesPanel /> : null}
+            {section === "templates" ? <AdminTemplatesPanel /> : null}
           </div>
         </div>
       </div>

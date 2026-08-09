@@ -27,6 +27,11 @@ import {
   getSystemProperties,
   patchSystemProperties,
 } from "../../services/systemProperties.js";
+import {
+  deleteAdminTemplate,
+  listAdminTemplates,
+  patchAdminTemplate,
+} from "../../services/taskDescriptionTemplates.js";
 import { getCurrentUser } from "../../services/users.js";
 
 export const adminRouter = Router();
@@ -346,6 +351,57 @@ adminRouter.get("/api-logs", async (req, res) => {
     });
     res.json({ data: result.data, total: result.total, limit, offset });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+// ── Task description templates ─────────────────────────────────────────────
+
+adminRouter.get("/task-description-templates", async (_req, res) => {
+  try {
+    res.json({ data: await listAdminTemplates(db) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const templatePatchBody = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    isGlobal: z.boolean().optional(),
+  })
+  .strict()
+  .refine((b) => b.name !== undefined || b.isGlobal !== undefined, {
+    message: "At least one of name or isGlobal is required",
+  });
+
+adminRouter.patch("/task-description-templates/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      sendError(res, 400, "invalid_id", "Invalid template id");
+      return;
+    }
+    const patch = templatePatchBody.parse(req.body);
+    const data = await patchAdminTemplate(db, id, patch);
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/task-description-templates/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      sendError(res, 400, "invalid_id", "Invalid template id");
+      return;
+    }
+    await deleteAdminTemplate(db, id);
+    res.status(204).send();
+  } catch (err) {
+    if (serviceError(res, err)) return;
     handleRouteError(res, err);
   }
 });

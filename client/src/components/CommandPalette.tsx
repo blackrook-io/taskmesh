@@ -24,7 +24,8 @@ type PaletteItem = {
     | "apis"
     | "logging"
     | "backups"
-    | "system-properties";
+    | "system-properties"
+    | "templates";
 };
 
 const STATIC_COMMANDS: PaletteItem[] = [
@@ -140,6 +141,14 @@ const STATIC_COMMANDS: PaletteItem[] = [
     path: "/",
     action: "open-admin",
     adminSection: "system-properties",
+  },
+  {
+    id: "nav-admin-templates",
+    group: "Go to",
+    label: "Admin · Templates",
+    path: "/",
+    action: "open-admin",
+    adminSection: "templates",
   },
   { id: "new-idea", group: "Create", label: "New idea", path: "/ideas/new" },
   { id: "new-task", group: "Create", label: "New task", path: "/tasks?new=1" },
