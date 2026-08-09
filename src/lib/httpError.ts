@@ -8,6 +8,9 @@ export function sendError(
   code: string,
   message: string,
 ): void {
+  if (!res.locals.logMessage) {
+    res.locals.logMessage = message.slice(0, 500);
+  }
   res.status(status).json({ error: { code, message } });
 }
 
@@ -36,5 +39,9 @@ export function handleRouteError(res: Response, err: unknown): void {
     return;
   }
   console.error(err);
+  const detail = err instanceof Error ? err.message : "Unexpected server error";
+  if (!res.locals.logMessage) {
+    res.locals.logMessage = `System error: ${detail}`.slice(0, 500);
+  }
   sendError(res, 500, "internal_error", "Unexpected server error");
 }

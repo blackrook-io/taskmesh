@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gte, ilike, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { formatUserNumber } from "../lib/userFields.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -9,6 +10,8 @@ export type ApiLogOutcome =
   | "api_failure"
   | "auth_failure"
   | "access_violation";
+
+export type ApiLogLevel = "info" | "warn" | "error";
 
 export type UsageRange = "1h" | "1d" | "1w";
 
@@ -24,6 +27,22 @@ export type ApiRequestLogInput = {
   adminKey?: boolean;
 };
 
+const LEVEL_OUTCOMES: Record<ApiLogLevel, ApiLogOutcome[]> = {
+  info: ["success"],
+  warn: ["api_failure"],
+  error: ["auth_failure", "access_violation"],
+};
+
+export function levelFromOutcome(outcome: string): ApiLogLevel {
+  if (outcome === "api_failure") return "warn";
+  if (outcome === "auth_failure" || outcome === "access_violation") return "error";
+  return "info";
+}
+
+export function outcomesForLevel(level: ApiLogLevel): ApiLogOutcome[] {
+  return LEVEL_OUTCOMES[level];
+}
+
 export async function insertApiRequestLog(
   db: Db,
   input: ApiRequestLogInput,
@@ -38,6 +57,19 @@ export async function insertApiRequestLog(
     apiKeyId: input.apiKeyId ?? null,
     message: input.message?.slice(0, 500) ?? null,
     adminKey: input.adminKey ?? false,
+  });
+}
+
+/** Fire-and-forget system/audit row (non-HTTP or CLI). */
+export function recordSystemLog(
+  db: Db,
+  input: Omit<ApiRequestLogInput, "method"> & { method?: string },
+): void {
+  void insertApiRequestLog(db, {
+    ...input,
+    method: input.method ?? "SYSTEM",
+  }).catch((err) => {
+    console.error("system_log insert failed", err);
   });
 }
 
@@ -125,10 +157,18 @@ export async function getApiUsageSummary(
   return { range, series };
 }
 
+export type ApiLogActor = {
+  id: number;
+  referenceId: string;
+  displayName: string;
+};
+
 export type ApiLogListItem = {
   id: number;
   createdAt: string;
   outcome: string;
+  level: ApiLogLevel;
+  success: boolean;
   method: string;
   path: string;
   statusCode: number;
@@ -137,6 +177,9 @@ export type ApiLogListItem = {
   apiKeyId: number | null;
   message: string | null;
   adminKey: boolean;
+  actor: ApiLogActor | null;
+  apiKeyOwner: ApiLogActor | null;
+  apiKeyPrefix: string | null;
 };
 
 export async function listApiRequestLogs(
@@ -145,7 +188,9 @@ export async function listApiRequestLogs(
     limit: number;
     offset: number;
     outcome?: ApiLogOutcome;
+    level?: ApiLogLevel;
     pathContains?: string;
+    q?: string;
     since?: Date;
     until?: Date;
   },
@@ -153,9 +198,20 @@ export async function listApiRequestLogs(
   const conditions = [];
   if (opts.outcome) {
     conditions.push(eq(schema.apiRequestLogs.outcome, opts.outcome));
+  } else if (opts.level) {
+    conditions.push(
+      inArray(schema.apiRequestLogs.outcome, outcomesForLevel(opts.level)),
+    );
   }
-  if (opts.pathContains) {
-    conditions.push(ilike(schema.apiRequestLogs.path, `%${opts.pathContains}%`));
+  const search = (opts.q ?? opts.pathContains)?.trim();
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        ilike(schema.apiRequestLogs.path, pattern),
+        ilike(schema.apiRequestLogs.message, pattern),
+      )!,
+    );
   }
   if (opts.since) {
     conditions.push(gte(schema.apiRequestLogs.createdAt, opts.since));
@@ -165,34 +221,91 @@ export async function listApiRequestLogs(
   }
   const where = conditions.length ? and(...conditions) : undefined;
 
+  const actorUser = schema.users;
+  // Alias owner via second join on api_keys.user_id
+  const keyOwner = schema.users;
+
   const [countRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.apiRequestLogs)
     .where(where);
 
   const rows = await db
-    .select()
+    .select({
+      log: schema.apiRequestLogs,
+      actorNumber: actorUser.number,
+      actorDisplayName: actorUser.displayName,
+      apiKeyPrefix: schema.apiKeys.prefix,
+      keyOwnerId: schema.apiKeys.userId,
+    })
     .from(schema.apiRequestLogs)
+    .leftJoin(actorUser, eq(schema.apiRequestLogs.userId, actorUser.id))
+    .leftJoin(schema.apiKeys, eq(schema.apiRequestLogs.apiKeyId, schema.apiKeys.id))
     .where(where)
     .orderBy(desc(schema.apiRequestLogs.createdAt))
     .limit(opts.limit)
     .offset(opts.offset);
 
+  // Resolve key owners in a second query when needed (avoids ambiguous dual users join).
+  const ownerIds = [
+    ...new Set(
+      rows
+        .map((r) => r.keyOwnerId)
+        .filter((id): id is number => typeof id === "number"),
+    ),
+  ];
+  const ownerById = new Map<number, ApiLogActor>();
+  if (ownerIds.length > 0) {
+    const owners = await db
+      .select({
+        id: keyOwner.id,
+        number: keyOwner.number,
+        displayName: keyOwner.displayName,
+      })
+      .from(keyOwner)
+      .where(inArray(keyOwner.id, ownerIds));
+    for (const o of owners) {
+      ownerById.set(o.id, {
+        id: o.id,
+        referenceId: formatUserNumber(o.number),
+        displayName: o.displayName,
+      });
+    }
+  }
+
   return {
     total: countRow?.count ?? 0,
-    data: rows.map((r) => ({
-      id: r.id,
-      createdAt: r.createdAt.toISOString(),
-      outcome: r.outcome,
-      method: r.method,
-      path: r.path,
-      statusCode: r.statusCode,
-      ip: r.ip,
-      userId: r.userId,
-      apiKeyId: r.apiKeyId,
-      message: r.message,
-      adminKey: r.adminKey,
-    })),
+    data: rows.map((r) => {
+      const outcome = r.log.outcome;
+      const actor =
+        r.log.userId != null && r.actorNumber != null && r.actorDisplayName != null
+          ? {
+              id: r.log.userId,
+              referenceId: formatUserNumber(r.actorNumber),
+              displayName: r.actorDisplayName,
+            }
+          : null;
+      const apiKeyOwner =
+        r.keyOwnerId != null ? (ownerById.get(r.keyOwnerId) ?? null) : null;
+      return {
+        id: r.log.id,
+        createdAt: r.log.createdAt.toISOString(),
+        outcome,
+        level: levelFromOutcome(outcome),
+        success: outcome === "success",
+        method: r.log.method,
+        path: r.log.path,
+        statusCode: r.log.statusCode,
+        ip: r.log.ip,
+        userId: r.log.userId,
+        apiKeyId: r.log.apiKeyId,
+        message: r.log.message,
+        adminKey: r.log.adminKey,
+        actor,
+        apiKeyOwner,
+        apiKeyPrefix: r.apiKeyPrefix ?? null,
+      };
+    }),
   };
 }
 

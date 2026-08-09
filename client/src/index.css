@@ -2229,6 +2229,31 @@ textarea.raw-md {
   border-color: color-mix(in srgb, #9b5de5 45%, var(--border));
 }
 
+.admin-badge--level-info {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.admin-badge--level-warn {
+  color: #f2cc8f;
+  border-color: color-mix(in srgb, #f2cc8f 45%, var(--border));
+}
+
+.admin-badge--level-error {
+  color: #e07a5f;
+  border-color: color-mix(in srgb, #e07a5f 45%, var(--border));
+}
+
+.admin-log-search {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+.admin-log-ts {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .admin-form-card {
   margin: 0.75rem 0 1rem;
   padding: 0.85rem 1rem;

@@ -1,0 +1,114 @@
+# T0061 — Log dashboard for system Administrator
+
+**Task:** T0061 — Log dashboard for system Administrator  
+**Branch (on approval):** `T0061-admin-system-logs`  
+**State:** implemented (awaiting finish-up)
+
+## Context
+
+T0064 already shipped `api_request_logs`, request middleware, `GET /api/v1/admin/api-logs` (with `outcome`, `path`, `since`, `until`), and Administration → **Logging**. Auth/key enforcement (real 401/403 volume, key owner on requests) remains **T0062/T0063**.
+
+This task upgrades Logging into a proper **System Logs** admin view: richer filters, GMT timestamps, and explicit audit rows for key lifecycle, system-property changes, backups, and system errors — all in the same Postgres store.
+
+## Decisions (interview)
+
+1. **UI:** Augment Administration **Logging** → rename **System Logs**; move nav item **above System Properties**.
+2. **Store:** Reuse `api_request_logs` with explicit `insertApiRequestLog` for non-HTTP audit events (synthetic paths / clear messages). No new table.
+3. **Levels:** Map outcomes → levels for filter/display (`success`→info, `api_failure`→warn, `auth_failure`/`access_violation`→error). No new `level` column.
+4. **Date:** Presets **Last hour** and **Last day** only for now (API already supports `since`/`until`).
+5. **Timestamps:** Display **UTC/GMT** (ISO-style, e.g. `2026-08-09 16:03:19Z`), not local/server locale.
+6. **API key owner:** Column present; blank until T0063 wires `userId`/`apiKeyId` on requests. Explicit audit inserts may set `userId` when known (admin actor).
+7. **Out of scope:** Login enforcement, API-key request auth, retention/purge, usage-graph redesign.
+
+## Goals
+
+- Rename admin section **Logging** → **System Logs**; reorder nav: … → Backups → **System Logs** → System Properties.
+- Deep links / Cmd+K: keep `/admin/logging` (and `logging` section id) for compatibility; label everywhere as System Logs. Optional alias `/admin/system-logs` redirecting/opening the same section if cheap.
+- System Logs UI filters:
+  - Level (All / info / warn / error) — maps to outcome set
+  - Date preset: All / Last hour / Last day
+  - Text field + button (and Enter): match text in **message** and **path**
+- Table columns: Timestamp (GMT), Level (or Success/Failure + level), Outcome, Request/API, IP, Actor/Key owner (blank OK), Message.
+- Enrich HTTP success/failure messages where cheap (e.g. short result/error already available on response).
+- Explicit audit inserts for:
+  - API key create / suspend / unsuspend / expire / revoke (actor user id when available; message like `API key created: …`)
+  - System property updates (old→new summary)
+  - Backup success and failure (HTTP-triggered and CLI `runBackup` path)
+  - Uncaught/system errors via Express error handler (and backup failure path)
+- Continue logging normal `/api/v1/*` traffic via existing middleware (API failures, and auth/access outcomes when status is 401/403).
+
+## Non-goals
+
+- New audit table or file/syslog sink.
+- Real auth/session or API-key middleware (T0062/T0063).
+- Custom date-range picker, last week, log levels as DB column, retention jobs.
+- Redesigning APIs usage charts panel.
+
+## Approach
+
+### 1. Nav / labels
+
+- `ADMIN_SECTIONS` order: `users`, `keys`, `apis`, `backups`, `logging`, `system-properties`.
+- `ADMIN_SECTION_LABELS.logging` → `"System Logs"`.
+- Command palette label → `Admin · System Logs`.
+- Panel copy updated accordingly.
+
+### 2. API list enhancements
+
+- Extend `listApiRequestLogs` + `GET /admin/api-logs`:
+  - `q` (or broaden existing search): `ilike` on **message OR path**.
+  - Optional `level=info|warn|error` → expand to outcome(s).
+  - Keep `since` / `until` / `outcome` / pagination.
+- Response: include joined key owner display name when `userId`/`apiKeyId` present (nullable); UI shows blank otherwise.
+
+### 3. Explicit audit writers
+
+Add a small helper (e.g. `recordSystemLog` wrapping `insertApiRequestLog`) used from:
+
+| Event | Synthetic path (example) | Outcome |
+|-------|--------------------------|---------|
+| Key create/suspend/… | `/system/api-keys` | success / api_failure |
+| System properties PATCH | `/system/properties` | success |
+| Backup OK/fail | `/system/backup` | success / api_failure |
+| Express 500 / uncaught | `/system/error` or real path | api_failure |
+
+Avoid double-logging where the HTTP middleware already records the same request: for admin key/property routes, either (a) rely on middleware for the HTTP row **and** add a clearer audit row only when message would otherwise be empty, or (b) set a richer `message` on the middleware path via `res.locals` / response hook. Prefer **one clear row with a good message** over duplicates — implement with `res.locals.logMessage` (or similar) consumed by `apiRequestLogger`, plus direct inserts only for **CLI backup** and any non-HTTP paths.
+
+### 4. UI (`AdminLoggingPanel`)
+
+- Filters: level select, date preset, search + Filter button.
+- Timestamp column: format as UTC (`YYYY-MM-DD HH:mm:ssZ`).
+- Show Success/Failure derived from outcome; level badge from mapping.
+- Actor/Key owner column (empty until populated).
+- Keep auto-refresh (~15s) and pagination.
+
+### 5. Schema
+
+- Prefer **no migration** if level is derived and search uses existing columns.
+- Only migrate if join/display needs a denormalized field (unlikely).
+
+## Implementation order
+
+1. Reorder/rename admin nav + palette labels.
+2. API: search `q`, `level` filter, optional actor fields in list payload.
+3. Middleware / `res.locals` message enrichment + audit writers (keys, properties, backup, error handler).
+4. Upgrade System Logs panel UI (filters, GMT, columns).
+5. Smoke-test admin flows generate expected rows.
+
+## QA checklist (draft)
+
+- [ ] Administration left nav: System Logs above System Properties; label is System Logs (not Logging).
+- [ ] Cmd+K “Admin · System Logs” opens the panel; `/admin/logging` still works.
+- [ ] Last hour / Last day / All presets filter rows by UTC time.
+- [ ] Level filter maps correctly (info≈success, warn≈api_failure, error≈auth/access).
+- [ ] Text finds text in message and path.
+- [ ] Timestamps display in GMT/UTC with `Z` (not browser local).
+- [ ] Key create/suspend/etc. produce a readable log message; actor blank or set when known.
+- [ ] System property save logs a clear change summary.
+- [ ] Manual backup success and forced failure (if testable) appear in System Logs; CLI backup also records.
+- [ ] A normal API 4xx appears as warn/api_failure; 401/403 (when forced) as auth/access.
+- [ ] Key owner column blank for ordinary SPA traffic (expected until T0063).
+
+## Finish-up (when user says “finish up”)
+
+Commit → merge ff-only to `main` → push → archive this plan to `.cursor/plans/executed/` → delete branch → `npm run deploy:prod` → PROD task comment + `state: complete` (leave `dueDate` unchanged).

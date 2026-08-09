@@ -56,6 +56,10 @@ app.use(
       }
     }
     console.error(err);
+    const detail = err instanceof Error ? err.message : "Unexpected server error";
+    if (!res.locals.logMessage) {
+      res.locals.logMessage = `System error: ${detail}`.slice(0, 500);
+    }
     sendError(res, 500, "internal_error", "Unexpected server error");
   },
 );

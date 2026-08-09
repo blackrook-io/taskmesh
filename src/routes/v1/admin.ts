@@ -19,6 +19,7 @@ import {
 import {
   getApiUsageSummary,
   listApiRequestLogs,
+  type ApiLogLevel,
   type ApiLogOutcome,
   type UsageRange,
 } from "../../services/apiRequestLogs.js";
@@ -129,14 +130,18 @@ const createKeyBody = z
 adminRouter.post("/api-keys", async (req, res) => {
   try {
     const parsed = createKeyBody.parse(req.body);
-    const ownerId =
-      parsed.userId ?? (await getCurrentUser(db)).id;
+    const actor = await getCurrentUser(db);
+    const ownerId = parsed.userId ?? actor.id;
     const { key, rawKey } = await createAdminApiKey(db, {
       userId: ownerId,
       name: parsed.name,
       access: parsed.access,
       expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : undefined,
     });
+    res.locals.logUserId = actor.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage =
+      `API key created: ${key.name} (${key.prefix}, ${key.access}) for ${key.owner.referenceId}`;
     res.status(201).json({ data: { ...key, rawKey } });
   } catch (err) {
     if (serviceError(res, err)) return;
@@ -151,7 +156,12 @@ adminRouter.post("/api-keys/:id/suspend", async (req, res) => {
       sendError(res, 400, "invalid_id", "Invalid key id");
       return;
     }
-    res.json({ data: await suspendApiKey(db, id) });
+    const actor = await getCurrentUser(db);
+    const key = await suspendApiKey(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key suspended: ${key.name} (${key.prefix})`;
+    res.json({ data: key });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
@@ -165,7 +175,12 @@ adminRouter.post("/api-keys/:id/unsuspend", async (req, res) => {
       sendError(res, 400, "invalid_id", "Invalid key id");
       return;
     }
-    res.json({ data: await unsuspendApiKey(db, id) });
+    const actor = await getCurrentUser(db);
+    const key = await unsuspendApiKey(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key unsuspended: ${key.name} (${key.prefix}) → ${key.status}`;
+    res.json({ data: key });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
@@ -179,7 +194,12 @@ adminRouter.post("/api-keys/:id/expire", async (req, res) => {
       sendError(res, 400, "invalid_id", "Invalid key id");
       return;
     }
-    res.json({ data: await expireApiKey(db, id) });
+    const actor = await getCurrentUser(db);
+    const key = await expireApiKey(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key expired: ${key.name} (${key.prefix})`;
+    res.json({ data: key });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
@@ -193,7 +213,12 @@ adminRouter.post("/api-keys/:id/revoke", async (req, res) => {
       sendError(res, 400, "invalid_id", "Invalid key id");
       return;
     }
-    res.json({ data: await revokeApiKey(db, id) });
+    const actor = await getCurrentUser(db);
+    const key = await revokeApiKey(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key revoked: ${key.name} (${key.prefix})`;
+    res.json({ data: key });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
@@ -227,7 +252,32 @@ adminRouter.patch("/system-properties", async (req, res) => {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
     }
-    res.json({ data: await patchSystemProperties(db, parsed) });
+    const before = await getSystemProperties(db);
+    const actor = await getCurrentUser(db);
+    const after = await patchSystemProperties(db, parsed);
+    const parts: string[] = [];
+    if (
+      parsed.apiRateLimitPerMinute !== undefined &&
+      before.apiRateLimitPerMinute !== after.apiRateLimitPerMinute
+    ) {
+      parts.push(
+        `api_rate_limit_per_minute ${before.apiRateLimitPerMinute}→${after.apiRateLimitPerMinute}`,
+      );
+    }
+    if (
+      parsed.loginFailureThreshold !== undefined &&
+      before.loginFailureThreshold !== after.loginFailureThreshold
+    ) {
+      parts.push(
+        `login_failure_threshold ${before.loginFailureThreshold}→${after.loginFailureThreshold}`,
+      );
+    }
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage =
+      parts.length > 0
+        ? `System properties updated: ${parts.join("; ")}`
+        : "System properties update (no value change)";
+    res.json({ data: after });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -263,9 +313,16 @@ adminRouter.get("/api-logs", async (req, res) => {
       sendError(res, 400, "invalid_outcome", "Invalid outcome filter");
       return;
     }
+    const levelRaw = req.query.level ? String(req.query.level) : undefined;
+    const levels: ApiLogLevel[] = ["info", "warn", "error"];
+    if (levelRaw && !levels.includes(levelRaw as ApiLogLevel)) {
+      sendError(res, 400, "invalid_level", "level must be info, warn, or error");
+      return;
+    }
     const pathContains = req.query.path
       ? String(req.query.path).slice(0, 200)
       : undefined;
+    const q = req.query.q ? String(req.query.q).slice(0, 200) : undefined;
     const since = req.query.since ? new Date(String(req.query.since)) : undefined;
     const until = req.query.until ? new Date(String(req.query.until)) : undefined;
     if (since && Number.isNaN(since.getTime())) {
@@ -281,7 +338,9 @@ adminRouter.get("/api-logs", async (req, res) => {
       limit,
       offset,
       outcome: outcomeRaw as ApiLogOutcome | undefined,
+      level: levelRaw as ApiLogLevel | undefined,
       pathContains,
+      q,
       since,
       until,
     });

@@ -9,6 +9,8 @@ import {
   getBackupSchedulePath,
   getUploadDir,
 } from "../lib/paths.js";
+import { db } from "../db/client.js";
+import { recordSystemLog } from "./apiRequestLogs.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -490,6 +492,16 @@ async function runBackupUnlocked(): Promise<BackupManifest> {
   const schedule = readSchedule();
   pruneOldBackups(schedule.retainDays);
 
+  const ok = pgDumpOk && uploadsOk;
+  recordSystemLog(db, {
+    outcome: ok ? "success" : "api_failure",
+    path: "/system/backup",
+    statusCode: ok ? 200 : 500,
+    message: ok
+      ? `Backup success: ${id}`
+      : `Backup failure: ${id}${error ? ` — ${error}` : ""}`,
+  });
+
   return manifest;
 }
 
@@ -522,5 +534,12 @@ async function tickScheduler() {
     console.log(`[backup] scheduled run finished id=${m.id} ok=${m.pgDumpOk}`);
   } catch (err) {
     console.error("[backup] scheduled run failed", err);
+    const detail = err instanceof Error ? err.message : "scheduled backup failed";
+    recordSystemLog(db, {
+      outcome: "api_failure",
+      path: "/system/backup",
+      statusCode: 500,
+      message: `Backup failure (scheduler): ${detail}`,
+    });
   }
 }

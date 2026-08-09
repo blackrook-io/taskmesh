@@ -12,6 +12,8 @@ function shouldSkip(path: string): boolean {
   // Avoid logging the log/usage endpoints themselves flooding the store.
   if (path.startsWith("/api/v1/admin/api-logs")) return true;
   if (path.startsWith("/api/v1/admin/api-usage")) return true;
+  // Backup run is audited inside runBackup (covers CLI + scheduler too).
+  if (path === "/api/v1/backups/run") return true;
   return false;
 }
 
@@ -37,10 +39,14 @@ export function apiRequestLogger(req: Request, res: Response, next: NextFunction
   const method = req.method;
 
   res.on("finish", () => {
+    if (res.locals.skipRequestLog) return;
+
     const status = res.statusCode;
     const outcome = outcomeFromStatus(status);
-    const message =
-      status >= 400
+    const custom = res.locals.logMessage?.trim();
+    const message = custom
+      ? custom.slice(0, 500)
+      : status >= 400
         ? `HTTP ${status}`
         : `${method} ${startedPath} OK`;
 
@@ -50,7 +56,10 @@ export function apiRequestLogger(req: Request, res: Response, next: NextFunction
       path: startedPath,
       statusCode: status,
       ip: clientIp(req),
+      userId: res.locals.logUserId ?? null,
+      apiKeyId: res.locals.logApiKeyId ?? null,
       message,
+      adminKey: res.locals.logAdminKey ?? false,
     }).catch((err) => {
       console.error("api_request_log insert failed", err);
     });

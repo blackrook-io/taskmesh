@@ -118,20 +118,20 @@ const STATIC_COMMANDS: PaletteItem[] = [
     adminSection: "apis",
   },
   {
-    id: "nav-admin-logging",
-    group: "Go to",
-    label: "Admin · Logging",
-    path: "/",
-    action: "open-admin",
-    adminSection: "logging",
-  },
-  {
     id: "nav-backups",
     group: "Go to",
     label: "Backups",
     path: "/",
     action: "open-admin",
     adminSection: "backups",
+  },
+  {
+    id: "nav-admin-logging",
+    group: "Go to",
+    label: "Admin · System Logs",
+    path: "/",
+    action: "open-admin",
+    adminSection: "logging",
   },
   {
     id: "nav-admin-props",
