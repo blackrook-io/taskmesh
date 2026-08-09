@@ -62,6 +62,17 @@ export const users = pgTable("users", {
   /** App-wide unique display number → U####. */
   number: integer("number").notNull().unique(),
   displayName: text("display_name").notNull(),
+  /** FK to uploads; ON DELETE SET NULL. Declared after uploads via lazy ref. */
+  avatarUploadId: integer("avatar_upload_id").references(
+    (): AnyPgColumn => uploads.id,
+    { onDelete: "set null" },
+  ),
+  /** Unique among non-null (Postgres UNIQUE allows multiple NULLs). */
+  email: text("email").unique(),
+  /** Last UI auth/access — written when auth exists. */
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  /** Last API-key usage — written when API keys exist. */
+  lastApiAt: timestamp("last_api_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -434,7 +445,11 @@ export const projectPhasesRelations = relations(projectPhases, ({ one, many }) =
   tasks: many(tasks),
 }));
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
+  avatarUpload: one(uploads, {
+    fields: [users.avatarUploadId],
+    references: [uploads.id],
+  }),
   createdTasks: many(tasks, { relationName: "task_created_by" }),
   updatedTasks: many(tasks, { relationName: "task_updated_by" }),
 }));

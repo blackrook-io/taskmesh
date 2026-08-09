@@ -1,0 +1,94 @@
+# T0044 — Users table remaining fields
+
+**Task:** T0044 — New Users table  
+**Branch (on approval):** `T0044-users-table-fields`  
+**State:** implementing
+
+## Context
+
+T0043 already shipped a minimal `users` table (`number` → `U####`, `displayName`), seed `U0001`, task actor FKs, and `GET`/`PATCH /api/v1/users/me`. This task completes the **data model** fields called out in the description (avatar, email, last-login / last-API timestamps). Deferred follow-ups stay out of scope: Profile avatar/email UI, email validation, API keys, LastLogin/LastAPI writers.
+
+## Decisions (interview)
+
+1. **Scope:** schema migration + API read/write exposure only; no new Profile UI, avatar upload UX, email verification, or API-key flows.
+2. **DisplayAvatar:** nullable `avatar_upload_id` FK → `uploads.id` (`onDelete: set null`).
+3. **Email:** nullable text; unique among non-null values; writable via `PATCH /users/me` (store only, no send/verify).
+4. **LastLogin / LastAPI:** nullable `timestamptz` columns only; not updated in this task (no auth / API keys yet).
+5. **Actor refs:** leave `createdBy`/`updatedBy` on tasks only; do not extend to other entities here.
+
+## Goals
+
+- Add remaining `users` columns from the task description.
+- Expose them on `GET /api/v1/users/me` (and allow safe PATCH for displayName, email, avatarUploadId).
+- Keep Reference ID immutable (`number` / `U####`); display name remains editable.
+- Preserve existing task actor embedding behavior.
+
+## Non-goals
+
+- Profile page/widget enhancements (avatar picker, email UX).
+- Avatar upload endpoint dedicated to profile (reuse existing `/uploads` later).
+- Email validation / confirmation process.
+- API key create/update/delete; writing `lastApi`.
+- Auth / session tracking that writes `lastLogin`.
+- Rolling user FKs onto ideas, projects, documents, etc.
+
+## Schema (`users` additions)
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `avatar_upload_id` | integer FK → uploads.id, nullable, ON DELETE SET NULL | DisplayAvatar |
+| `email` | text, nullable | Unique where not null (partial unique index) |
+| `last_login_at` | timestamptz, nullable | LastLogin — UI/auth later |
+| `last_api_at` | timestamptz, nullable | LastAPI — API keys later |
+
+Existing: `id`, `number`, `display_name`, `created_at`, `updated_at`.
+
+Migration: `npm run db:generate` after schema edit → review → `npm run db:migrate`.
+
+## API
+
+### `GET /api/v1/users/me`
+
+Extend payload beyond `UserRef` to a profile-shaped object, e.g.:
+
+```json
+{
+  "id": 1,
+  "referenceId": "U0001",
+  "displayName": "Local User",
+  "email": null,
+  "avatarUploadId": null,
+  "avatarUrl": null,
+  "lastLoginAt": null,
+  "lastApiAt": null
+}
+```
+
+`avatarUrl` derived when `avatar_upload_id` is set (same `/api/v1/files/{storedName}` pattern as uploads). Keep a shared `toUserRef` for task actor embeds (id / referenceId / displayName only).
+
+### `PATCH /api/v1/users/me`
+
+Accept optional fields (Zod):
+
+- `displayName` — trim, min 1, max 200 (existing)
+- `email` — null to clear, or trimmed email string (basic format check; no verification)
+- `avatarUploadId` — null to clear, or positive int that must exist in `uploads`
+
+Reject unknown fields that would write `lastLoginAt` / `lastApiAt` / `referenceId` / `number` (ignore or 400). Bump `updatedAt` on change.
+
+## Implementation notes
+
+- Update `src/db/schema.ts`, users service/route serialization, any client types that assume `UserRef`-only `/me` if Settings Profile already consumes it (ensure Profile still works with richer `/me`).
+- If Settings Profile PATCH only sends `displayName`, keep that compatible.
+- No UI for email/avatar in this pass unless a type-only client tweak is required for compile.
+
+## QA checklist (post-implement)
+
+1. Migrate cleanly on DEV; `users` has new columns; seed user unchanged.
+2. `GET /api/v1/users/me` returns new fields (null for seed user).
+3. `PATCH` displayName still works; response includes new fields.
+4. `PATCH` email set / clear; duplicate email on a second user row (if created in test) fails uniqueness.
+5. Upload an image via existing uploads API; `PATCH` `avatarUploadId` to that id → `avatarUrl` present; `null` clears.
+6. Invalid `avatarUploadId` → error; cannot PATCH lastLogin/lastApi/referenceId.
+7. Task create/update still stamps actors; task detail still shows `Local User (U0001)`.
+8. Existing Settings Profile display-name edit still works.

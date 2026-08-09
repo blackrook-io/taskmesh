@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "../api/client";
-import type { UserRef } from "../types";
+import type { UserProfile } from "../types";
 
 type Props = {
   embedded?: boolean;
@@ -15,7 +15,7 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
   const profileQuery = useQuery({
     queryKey: ["users", "me"],
     queryFn: async () => {
-      const res = await apiJson<{ data: UserRef }>("/api/v1/users/me");
+      const res = await apiJson<{ data: UserProfile }>("/api/v1/users/me");
       return res.data;
     },
   });
@@ -28,7 +28,7 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
 
   const saveMutation = useMutation({
     mutationFn: async (nextName: string) => {
-      const res = await apiJson<{ data: UserRef }>("/api/v1/users/me", {
+      const res = await apiJson<{ data: UserProfile }>("/api/v1/users/me", {
         method: "PATCH",
         body: JSON.stringify({ displayName: nextName }),
       });

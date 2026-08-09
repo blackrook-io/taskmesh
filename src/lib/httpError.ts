@@ -16,6 +16,20 @@ export function handleRouteError(res: Response, err: unknown): void {
     sendError(res, 400, "validation_error", msg || "Invalid input");
     return;
   }
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "23505"
+  ) {
+    const detail = "constraint" in err ? String((err as { constraint?: string }).constraint ?? "") : "";
+    if (detail.includes("email") || detail.includes("users_email")) {
+      sendError(res, 409, "email_taken", "Email is already in use");
+      return;
+    }
+    sendError(res, 409, "conflict", "Unique constraint violation");
+    return;
+  }
   console.error(err);
   sendError(res, 500, "internal_error", "Unexpected server error");
 }

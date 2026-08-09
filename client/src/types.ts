@@ -31,6 +31,15 @@ export type UserRef = {
   displayName: string;
 };
 
+/** Full profile from GET/PATCH /users/me (extends actor embed shape). */
+export type UserProfile = UserRef & {
+  email: string | null;
+  avatarUploadId: number | null;
+  avatarUrl: string | null;
+  lastLoginAt: string | null;
+  lastApiAt: string | null;
+};
+
 export type Task = {
   id: number;
   projectId: number | null;
