@@ -23,7 +23,21 @@ Then load by primary key:
 TASK_ID=…   # from previous .id
 curl -fsS "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}"
 curl -fsS "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/activity"
+curl -fsS "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/dependencies"
 ```
+
+## Dependencies (Depends on / Required by)
+
+```bash
+# List both directions
+curl -fsS "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/dependencies"
+# → { data: { dependsOn: [{id,number,title,state}], requiredBy: [...] } }
+
+# Search candidates (title OR number)
+curl -fsS "http://127.0.0.1:3000/api/v1/tasks/dependency-search?q=T0042&excludeTaskId=${TASK_ID}"
+```
+
+**Worktask Depends-on gate:** if any `dependsOn[].state` is not `complete` or `canceled`, alert and stop before planning/branch/In Progress.
 
 ## Update state
 
@@ -89,6 +103,8 @@ curl -fsS -X POST "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/activity" \
 From the task row: `id`, `number`, `title`, `description`, `state`, `priority`, `projectId`, `phaseId`, `parentId`.
 
 From activity: all `kind: "comment"` bodies (chronological); skim `kind: "change"` for prior state/priority edits.
+
+From dependencies: `dependsOn` / `requiredBy` summaries (`id`, `number`, `title`, `state`) — used for the Depends-on gate at sizing.
 
 ## Git ops (this host)
 

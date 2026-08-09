@@ -1,0 +1,115 @@
+# T0066 — Task dependency (Depends on / Required by)
+
+**Task:** T0066 — Task dependency (Depends on, Required by) relationships  
+**Branch (on approval):** `T0066-task-dependencies`  
+**State:** complete — finishing up  
+**PROD task id:** 75 · projectId 4 · priority high · state `in_progress`
+
+## Context
+
+Tasks need a directed **blocking** graph separate from existing `parentId` hierarchy (subtasks):
+
+- **Depends on** — this task should not proceed until listed tasks are done.
+- **Required by** — inverse: tasks that list this one as a dependency (same edges, other direction).
+
+Edit Task modal: two read-only mini lists (Number, Title, State) with search-to-add; double-click opens the related task **in-place** in the same editor. Placement: below Tags, above History, with padding.
+
+`/worktask` must stop at the **sizing assessment** when any Depends-on task is not `complete` or `canceled`.
+
+## Size / split
+
+One cohesive feature (schema + API + modal UI + list-view gate + skill). Suitable for a single worktask session. No split recommended.
+
+## Decisions (confirmed)
+
+1. **Cross-project** deps allowed (future sub-projects).
+2. **Hard gate on Complete:** UI warning modal + block in Edit modal and List view; API refuses state→`complete` while any Depends-on task is not `complete` or `canceled`.
+3. **Delete block:** refuse delete if this task is a dependency (**Required by**) for any task whose state is not `complete` or `canceled`. (Edges to finished/canceled dependents may remain / cascade as appropriate once no open dependents remain.)
+4. Picker search: match **title OR number** (`T0066` / `66`).
+5. **No recursive/cyclic deps:** first assignment wins; any add that would create a cycle (including A↔B or longer chains, or self) **fails** with a clear error; existing edges stay.
+6. **History:** log association and disassociation (`kind: "change"`).
+7. Double-click → **in-place** swap to that task in the same editor/modal.
+
+## Goals
+
+- Persist directed task↔task dependencies.
+- Expose Depends on / Required by on task detail API and Edit Task modal.
+- Mini lists: Number, Title, State only; add via search (title OR number); remove via row control; no inline edit of those fields.
+- Hard-block Complete (UI + API) when open Depends-on remain.
+- Hard-block Delete when this task blocks any open Required-by task.
+- Update `/worktask` skill with Depends-on gate at sizing.
+
+## Non-goals
+
+- Overloading or changing `parentId` subtask hierarchy.
+- Auto-scheduling / critical-path / Gantt.
+- Multi-user assignment or notifications.
+- Sub-project entity model (deps only pave the way).
+
+## Implementation
+
+### 1. Schema + migration
+
+New table `task_dependencies`:
+
+- `id` serial PK
+- `taskId` — the dependent (this task **Depends on** …)
+- `dependsOnTaskId` — the blocker
+- unique `(taskId, dependsOnTaskId)`
+- FKs → `tasks.id` (delete policy: app-level delete gate first; remaining edges cascade when delete allowed)
+- check `taskId <> dependsOnTaskId`
+- indexes on both FKs
+
+Generate via Drizzle; migrate.
+
+### 2. Service
+
+- `listDependsOn` / `listRequiredBy` → `{ id, number, title, state }[]`
+- `addDependency` — exists, not self, no cycle; activity log associate
+- `removeDependency` — activity log disassociate
+- `assertCanComplete(taskId)` — all Depends-on in `{complete, canceled}`
+- `assertCanDelete(taskId)` — no Required-by task outside `{complete, canceled}`
+- `wouldCreateDependencyCycle` — reject with clear error; first edge wins
+
+### 3. API
+
+- `GET /api/v1/tasks/:taskId/dependencies` → `{ dependsOn, requiredBy }`
+- `POST /api/v1/tasks/:taskId/dependencies` → `{ dependsOnTaskId }`
+- `DELETE /api/v1/tasks/:taskId/dependencies/:dependsOnTaskId`
+- `PATCH` task `state: complete` → 400 with structured error listing blockers when gate fails
+- `DELETE` task → 400 listing open Required-by tasks when gate fails
+- Picker: task search by title OR number
+
+### 4. UI
+
+- `TaskDependencyLists` between Tags and History in shared `TaskEditorFields`
+- Rows: `T####` · title · state; remove control; double-click → in-place open
+- Typeahead add (title OR number)
+- Complete attempts (modal select + list-view state change): **warning modal**, block apply
+- Delete: existing confirm flow surfaces API/block reason when open dependents exist
+- CSS padding; existing dark grey / light green tokens
+
+### 5. Worktask skill
+
+- After load: fetch Depends-on; if any not `complete`/`canceled` → alert, stop (no plan/branch/In Progress)
+- Document in `reference.md`
+
+### 6. Tests
+
+- CRUD deps + inverse; self reject; cycle reject (first wins); complete gate; delete gate; search title OR number; activity logs
+
+## QA checklist (after implement)
+
+- [ ] Depends on / Required by below tags, above History
+- [ ] Search-add by title or number; row shows Number, Title, State (read-only)
+- [ ] Edge appears on both sides; remove works; History logs associate/disassociate
+- [ ] Double-click opens related task in-place
+- [ ] Complete blocked (modal + list) with warning when open Depends-on exist; API 400
+- [ ] Delete blocked when Required by an open task; API 400
+- [ ] Cross-project pick works
+- [ ] Cycle behavior matches decision #5
+- [ ] `/worktask` skill documents Depends-on gate
+
+## Finish-up (on user “finish up”)
+
+Commit → merge `T0066-task-dependencies` → `main` → push → archive plan → `npm run deploy:prod` → PROD comment + state `complete` (leave `dueDate` unchanged).

@@ -35,6 +35,7 @@ Copy and track:
 Worktask:
 - [ ] 1. Load PROD task + activity
 - [ ] 2. Scope / size check (split recommendation if needed)
+- [ ] 2b. Depends-on gate (stop if open blockers)
 - [ ] 3. State alert if not `new` (wait for user)
 - [ ] 4. Interview + draft plan
 - [ ] 5. User approves plan → branch + In Progress + start comment
@@ -46,11 +47,13 @@ Worktask:
 
 1. Resolve task by **display number** (filter `GET /api/v1/tasks` where `number` matches).
 2. Fetch activity: `GET /api/v1/tasks/{id}/activity`.
-3. Treat as the prompt:
+3. Fetch dependencies: `GET /api/v1/tasks/{id}/dependencies` → `dependsOn` / `requiredBy`.
+4. Treat as the prompt:
    - **Title**
    - **Description**
    - **Comments** (`kind === "comment"`) and relevant `kind === "change"` rows for history
-4. Note `id`, `state`, `priority`, `projectId`, formatted number `T####`.
+   - **Depends on** (blocking tasks)
+5. Note `id`, `state`, `priority`, `projectId`, formatted number `T####`.
 
 If not found or PROD unhealthy → stop and report.
 
@@ -61,6 +64,17 @@ If the work looks too large for one session (many unrelated surfaces, multi-day 
 - **Alert** the user.
 - Recommend splitting into multiple Task records when possible.
 - Wait for their decision before planning full scope.
+
+### 2b. Depends-on gate
+
+After load (and as part of the sizing assessment):
+
+1. Inspect `dependsOn` from `GET /api/v1/tasks/{id}/dependencies`.
+2. If **any** Depends-on task has `state` other than `complete` or `canceled`:
+   - **Alert** the user with the open blockers (`T####`, title, state).
+   - **Stop** the workflow — do not interview/plan further, do not create a branch, do not mark In Progress.
+   - No cleanup is needed if nothing was started; if this gate is hit mid-flight somehow, do not leave the task In Progress from this skill.
+3. Terminal Depends-on (`complete` / `canceled`) are fine; empty Depends-on is fine.
 
 ### 3. State gate
 

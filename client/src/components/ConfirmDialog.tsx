@@ -6,6 +6,8 @@ type Props = {
   warning?: string;
   confirmLabel?: string;
   confirmDisabled?: boolean;
+  /** When true, only show the confirm button (dismiss / acknowledge). */
+  alertOnly?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -17,6 +19,7 @@ export function ConfirmDialog({
   warning,
   confirmLabel = "Delete",
   confirmDisabled = false,
+  alertOnly = false,
   onConfirm,
   onCancel,
 }: Props) {
@@ -38,12 +41,14 @@ export function ConfirmDialog({
           </p>
         ) : null}
         <div className="modal-actions">
-          <button type="button" className="btn ghost" onClick={onCancel}>
-            Cancel
-          </button>
+          {alertOnly ? null : (
+            <button type="button" className="btn ghost" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
           <button
             type="button"
-            className="btn danger"
+            className={alertOnly ? "btn primary" : "btn danger"}
             disabled={confirmDisabled}
             onClick={onConfirm}
           >

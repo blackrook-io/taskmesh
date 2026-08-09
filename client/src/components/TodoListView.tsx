@@ -490,6 +490,21 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
                 invalidate();
               }}
               onHeaderActions={setTaskHeaderActions}
+              onOpenTask={(id) => {
+                setOpenItem({
+                  id: -1,
+                  listId: openItem?.listId ?? 0,
+                  entityType: "task",
+                  entityId: id,
+                  sortOrder: 0,
+                  checked: false,
+                  createdAt: "",
+                  updatedAt: "",
+                  title: "",
+                  href: null,
+                  virtual: true,
+                });
+              }}
               onSavePatch={async (p) => {
                 const task = openTaskQuery.data!;
                 const updated = await patchTaskRecord(task.id, { ...p }, task.projectId);

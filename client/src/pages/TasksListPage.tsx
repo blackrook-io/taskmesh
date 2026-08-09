@@ -2,10 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
 import { RowTagChips } from "../components/shared/RowTagChips";
+import {
+  fetchOpenDependsOn,
+  formatCompleteBlockMessage,
+} from "../components/shared/TaskDependencyLists";
 import { TaskListSortHeaderBtn } from "../components/shared/TaskListSortHeaderBtn";
 import {
   TASK_PRIORITIES,
@@ -82,6 +87,7 @@ export function TasksListPage() {
   );
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
+  const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
   const sortStorageKey = storageKeyForGlobalTaskSort(filter);
   const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
     sortStorageKey,
@@ -345,12 +351,28 @@ export function TasksListPage() {
               </span>
               <StateCheckbox
                 state={task.state}
-                onCycle={() =>
+                onCycle={() => {
+                  const next = nextTaskState(task.state);
+                  if (next === "complete") {
+                    void (async () => {
+                      try {
+                        const blockers = await fetchOpenDependsOn(task.id);
+                        if (blockers.length > 0) {
+                          setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
+                          return;
+                        }
+                        await patchTask.mutateAsync({ id: task.id, patch: { state: next } });
+                      } catch (err) {
+                        setCompleteBlockMsg((err as Error).message);
+                      }
+                    })();
+                    return;
+                  }
                   void patchTask.mutateAsync({
                     id: task.id,
-                    patch: { state: nextTaskState(task.state) },
-                  })
-                }
+                    patch: { state: next },
+                  });
+                }}
               />
               <span className="task-list-row__num muted">
                 {task.parentId != null ? "↳ " : ""}
@@ -422,6 +444,10 @@ export function TasksListPage() {
             onRequestClose={closeModal}
             onDeleted={closeModal}
             onHeaderActions={setHeaderActions}
+            onOpenTask={(id) => {
+              setModalTaskHeld(null);
+              setModalTaskId(id);
+            }}
             onSavePatch={async (p) => {
               const updated = await patchTask.mutateAsync({ id: modalTask.id, patch: { ...p } });
               setModalTaskHeld(updated);
@@ -430,6 +456,16 @@ export function TasksListPage() {
           />
         </ElementShell>
       ) : null}
+
+      <ConfirmDialog
+        open={completeBlockMsg != null}
+        title="Cannot mark Complete"
+        message={completeBlockMsg ?? ""}
+        alertOnly
+        confirmLabel="OK"
+        onCancel={() => setCompleteBlockMsg(null)}
+        onConfirm={() => setCompleteBlockMsg(null)}
+      />
     </div>
   );
 }

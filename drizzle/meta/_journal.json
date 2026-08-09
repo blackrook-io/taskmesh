@@ -113,6 +113,13 @@
       "when": 1786290201455,
       "tag": "0015_daffy_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786293892597,
+      "tag": "0016_sturdy_may_parker",
+      "breakpoints": true
     }
   ]
 }

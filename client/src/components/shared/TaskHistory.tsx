@@ -14,6 +14,8 @@ const FIELD_LABELS: Record<string, string> = {
   phaseId: "Phase",
   parentId: "Parent",
   projectId: "Project",
+  dependsOn: "Depends on",
+  requiredBy: "Required by",
 };
 
 function formatTimestamp(ts: string): string {

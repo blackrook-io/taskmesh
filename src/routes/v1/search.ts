@@ -172,6 +172,8 @@ searchRouter.get("/", async (req, res) => {
                   ? or(
                       ilike(schema.tasks.title, pattern),
                       ilike(schema.tasks.description, pattern),
+                      sql`CAST(${schema.tasks.number} AS TEXT) ILIKE ${pattern}`,
+                      sql`('T' || LPAD(CAST(${schema.tasks.number} AS TEXT), 4, '0')) ILIKE ${pattern}`,
                     )
                   : sql`true`,
               ),

@@ -22,6 +22,10 @@ import {
   attachTaskActors,
   getCurrentUserId,
 } from "../../services/users.js";
+import {
+  rejectCompleteIfBlocked,
+  rejectDeleteIfBlocked,
+} from "./taskDependencies.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -229,6 +233,12 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       }
     }
 
+    const completeGate = await rejectCompleteIfBlocked(taskId, parsed.state);
+    if (completeGate.blocked) {
+      sendError(res, 400, "dependency_incomplete", completeGate.message);
+      return;
+    }
+
     const [row] = await db
       .update(schema.tasks)
       .set({
@@ -264,6 +274,11 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
 standaloneTasksRouter.delete("/:taskId", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
+    const deleteGate = await rejectDeleteIfBlocked(taskId);
+    if (deleteGate.blocked) {
+      sendError(res, 400, "dependency_required_by", deleteGate.message);
+      return;
+    }
     const deleted = await db
       .delete(schema.tasks)
       .where(eq(schema.tasks.id, taskId))

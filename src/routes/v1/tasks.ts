@@ -24,6 +24,10 @@ import {
   attachTaskActors,
   getCurrentUserId,
 } from "../../services/users.js";
+import {
+  rejectCompleteIfBlocked,
+  rejectDeleteIfBlocked,
+} from "./taskDependencies.js";
 
 const taskBody = z.object({
   title: z.string().min(1).max(2000),
@@ -312,6 +316,12 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       }
     }
 
+    const completeGate = await rejectCompleteIfBlocked(taskId, parsed.state);
+    if (completeGate.blocked) {
+      sendError(res, 400, "dependency_incomplete", completeGate.message);
+      return;
+    }
+
     const [row] = await db
       .update(schema.tasks)
       .set({
@@ -348,6 +358,16 @@ tasksRouter.delete("/:taskId", async (req, res) => {
   try {
     const projectId = parseRouteId(req, "projectId");
     const taskId = parseRouteId(req, "taskId");
+    const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
+    if (!existing || existing.projectId !== projectId) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    const deleteGate = await rejectDeleteIfBlocked(taskId);
+    if (deleteGate.blocked) {
+      sendError(res, 400, "dependency_required_by", deleteGate.message);
+      return;
+    }
     const deleted = await db
       .delete(schema.tasks)
       .where(eq(schema.tasks.id, taskId))

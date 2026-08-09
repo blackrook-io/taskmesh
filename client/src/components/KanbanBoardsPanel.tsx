@@ -1129,6 +1129,22 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
               invalidate();
             }}
             onHeaderActions={setTaskHeaderActions}
+            onOpenTask={(id) => {
+              setOpenCard({
+                id: -1,
+                boardId: openCard.boardId,
+                columnId: openCard.columnId,
+                laneId: openCard.laneId,
+                entityType: "task",
+                entityId: id,
+                sortOrder: 0,
+                createdAt: "",
+                updatedAt: "",
+                title: "",
+                color: null,
+                dueAt: null,
+              });
+            }}
             onSavePatch={async (p) => {
               return patchTask.mutateAsync({ taskId: openTaskQuery.data!.id, body: p });
             }}

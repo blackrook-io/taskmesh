@@ -208,6 +208,29 @@ export const taskActivity = pgTable("task_activity", {
     .defaultNow(),
 });
 
+/**
+ * Directed blocking edges: `taskId` Depends on `dependsOnTaskId`.
+ * Inverse view = Required by. Separate from parentId hierarchy.
+ */
+export const taskDependencies = pgTable(
+  "task_dependencies",
+  {
+    id: serial("id").primaryKey(),
+    taskId: integer("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    dependsOnTaskId: integer("depends_on_task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pairUniq: unique("task_dependencies_pair_uidx").on(t.taskId, t.dependsOnTaskId),
+  }),
+);
+
 export const projectDocuments = pgTable("project_documents", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id")
@@ -566,12 +589,27 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     relationName: "task_updated_by",
   }),
   activity: many(taskActivity),
+  dependencies: many(taskDependencies, { relationName: "task_depends_on" }),
+  requiredBy: many(taskDependencies, { relationName: "task_required_by" }),
 }));
 
 export const taskActivityRelations = relations(taskActivity, ({ one }) => ({
   task: one(tasks, {
     fields: [taskActivity.taskId],
     references: [tasks.id],
+  }),
+}));
+
+export const taskDependenciesRelations = relations(taskDependencies, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskDependencies.taskId],
+    references: [tasks.id],
+    relationName: "task_depends_on",
+  }),
+  dependsOn: one(tasks, {
+    fields: [taskDependencies.dependsOnTaskId],
+    references: [tasks.id],
+    relationName: "task_required_by",
   }),
 }));
 

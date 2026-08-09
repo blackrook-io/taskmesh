@@ -36,6 +36,11 @@ import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
+import {
+  fetchOpenDependsOn,
+  formatCompleteBlockMessage,
+  TaskDependencyLists,
+} from "./shared/TaskDependencyLists";
 import { TaskHistory } from "./shared/TaskHistory";
 import { TaskListSortHeaderBtn } from "./shared/TaskListSortHeaderBtn";
 import {
@@ -228,6 +233,7 @@ export function TaskEditorFields({
   onRequestClose,
   onDeleted,
   onHeaderActions,
+  onOpenTask,
 }: {
   task: Task;
   phases: ProjectPhase[];
@@ -238,6 +244,8 @@ export function TaskEditorFields({
   onDeleted?: () => void;
   /** Renders controls into the modal header (left of Close). */
   onHeaderActions?: (node: ReactNode) => void;
+  /** Open another task in-place (dependency double-click). */
+  onOpenTask?: (taskId: number) => void;
 }) {
   const qc = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -255,6 +263,7 @@ export function TaskEditorFields({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -527,6 +536,23 @@ export function TaskEditorFields({
             onChange={(e) => {
               const next = e.target.value as TaskState;
               const prev = { ...currentSnap(), state };
+              if (next === "complete") {
+                void (async () => {
+                  try {
+                    const blockers = await fetchOpenDependsOn(task.id);
+                    if (blockers.length > 0) {
+                      setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
+                      return;
+                    }
+                  } catch (err) {
+                    setSaveError((err as Error).message);
+                    return;
+                  }
+                  setState(next);
+                  void commit(prev, { state: next });
+                })();
+                return;
+              }
               setState(next);
               void commit(prev, { state: next });
             }}
@@ -632,6 +658,7 @@ export function TaskEditorFields({
         </span>
         <TagInput entityType="task" entityId={task.id} />
       </div>
+      <TaskDependencyLists taskId={task.id} onOpenTask={onOpenTask} />
       <TaskHistory taskId={task.id} />
       {children.length > 0 ? (
         <div className="field">
@@ -667,6 +694,15 @@ export function TaskEditorFields({
           {deleteError}
         </p>
       ) : null}
+      <ConfirmDialog
+        open={completeBlockMsg != null}
+        title="Cannot mark Complete"
+        message={completeBlockMsg ?? ""}
+        alertOnly
+        confirmLabel="OK"
+        onCancel={() => setCompleteBlockMsg(null)}
+        onConfirm={() => setCompleteBlockMsg(null)}
+      />
       <ConfirmDialog
         open={deleteOpen}
         title="Delete task?"
@@ -958,6 +994,7 @@ export function TaskBoard({
   );
   const [newPhaseName, setNewPhaseName] = useState("");
   const [pendingPhaseDelete, setPendingPhaseDelete] = useState<ProjectPhase | null>(null);
+  const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const boardSortCol: SortCol | null = sortCol === "project" ? null : sortCol;
@@ -1148,9 +1185,25 @@ export function TaskBoard({
                   task={row.task}
                   depth={row.depth}
                   onOpen={() => setModalTaskId(row.task.id)}
-                  onCycleState={() =>
-                    void onPatchTask(row.task.id, { state: nextTaskState(row.task.state) })
-                  }
+                  onCycleState={() => {
+                    const next = nextTaskState(row.task.state);
+                    if (next === "complete") {
+                      void (async () => {
+                        try {
+                          const blockers = await fetchOpenDependsOn(row.task.id);
+                          if (blockers.length > 0) {
+                            setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
+                            return;
+                          }
+                          await onPatchTask(row.task.id, { state: next });
+                        } catch (err) {
+                          setCompleteBlockMsg((err as Error).message);
+                        }
+                      })();
+                      return;
+                    }
+                    void onPatchTask(row.task.id, { state: next });
+                  }}
                   onPatch={(patch) => void onPatchTask(row.task.id, patch)}
                 />
               );
@@ -1211,6 +1264,10 @@ export function TaskBoard({
               setModalTaskHeld(null);
             }}
             onHeaderActions={setHeaderActions}
+            onOpenTask={(id) => {
+              setModalTaskHeld(null);
+              setModalTaskId(id);
+            }}
             onSavePatch={async (p) => {
               const updated = await onPatchTask(modalTask.id, { ...p });
               if (updated) setModalTaskHeld(updated);
@@ -1220,6 +1277,15 @@ export function TaskBoard({
         </ElementShell>
       ) : null}
 
+      <ConfirmDialog
+        open={completeBlockMsg != null}
+        title="Cannot mark Complete"
+        message={completeBlockMsg ?? ""}
+        alertOnly
+        confirmLabel="OK"
+        onCancel={() => setCompleteBlockMsg(null)}
+        onConfirm={() => setCompleteBlockMsg(null)}
+      />
       <ConfirmDialog
         open={pendingPhaseDelete != null}
         title="Delete phase?"
