@@ -16,6 +16,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "backup": "tsx src/scripts/runBackup.ts",
+    "docs:sync-schema": "tsx src/scripts/syncSchemaDocsToProject.ts",
     "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {

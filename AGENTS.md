@@ -2,6 +2,10 @@
 
 This repo is a **Node.js + TypeScript** API (**Express**, **PostgreSQL**, **Drizzle ORM**) plus a **Vite + React** SPA in `client/`. Authoritative Ubuntu install and `DATABASE_URL` setup live in [INSTALL.md](INSTALL.md); product overview and scripts in [README.md](README.md).
 
+## Schema documentation
+
+Human-readable database docs live under [docs/](docs/README.md) (start at [docs/database/overview.md](docs/database/overview.md)). Drizzle definitions remain in [`src/db/schema.ts`](src/db/schema.ts). When schema or migrations change, update `docs/database/` in the same change set, then run `npm run docs:sync-schema` to copy-replace the mirror into the **TaskMesh** project Documents (PROD). See [`.cursor/rules/schema-docs.mdc`](.cursor/rules/schema-docs.mdc).
+
 ## Cursor rules
 
 Persistent product and engineering context is under [.cursor/rules/](.cursor/rules/):
@@ -9,6 +13,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **platform-rules.mdc** — product vision, stack, UI, security (always applied).
 - **coding-rules.mdc** — code quality expectations when editing `**/*.ts`.
 - **development-rules.mdc** — plan files under `.cursor/plans/`, archive to `executed/`, feature git workflow (start/approve/merge), and QA checklists.
+- **schema-docs.mdc** — keep `docs/database/` in sync when `schema.ts` / migrations change.
 - **`/worktask` skill** — [.cursor/skills/worktask/SKILL.md](.cursor/skills/worktask/SKILL.md): explicit Task Number → plan → `T####-*` branch → PROD task In Progress / Complete bookkeeping.
 
 ## Shared conventions (Phase 0+)
@@ -31,7 +36,8 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 | Dev API only | `npm run dev` |
 | Production bundles | `npm run build:all` then `NODE_ENV=production npm start` |
 | DB migrations | `npm run db:migrate` |
-| After editing `src/db/schema.ts` | `npm run db:generate`, review `drizzle/`, then `npm run db:migrate` |
+| After editing `src/db/schema.ts` | `npm run db:generate`, review `drizzle/`, then `npm run db:migrate`; update [docs/database/](docs/database/overview.md); `npm run docs:sync-schema` |
+| Sync schema docs → TaskMesh Documents | `npm run docs:sync-schema` (PROD `:3000`, project id 4) |
 
 Health check when running locally: `GET /api/health`.
 

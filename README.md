@@ -63,6 +63,7 @@ npm run dev:web
 | `npm run db:generate` | SQL migrations from `src/db/schema.ts` |
 | `npm run db:migrate` | Apply `./drizzle` migrations |
 | `npm run db:studio` | Drizzle Studio |
+| `npm run docs:sync-schema` | Copy-replace `docs/` schema Markdown into TaskMesh project Documents (PROD) |
 
 After editing `src/db/schema.ts`: `npm run db:generate`, review `drizzle/`, then `npm run db:migrate`.
 
@@ -83,6 +84,14 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 
 Back up **Postgres** and the uploads directory together. Commands and scheduling notes are in [INSTALL.md § Backups](INSTALL.md#18-backups).
 
+## Schema documentation
+
+Human-readable Postgres schema reference (conceptual / logical Mermaid ERDs, physical column tables, glossary):
+
+→ **[docs/](docs/README.md)** · start at **[docs/database/overview.md](docs/database/overview.md)**
+
+Drizzle source of truth remains [`src/db/schema.ts`](src/db/schema.ts). Keep the docs in sync when the schema changes (see [`.cursor/rules/schema-docs.mdc`](.cursor/rules/schema-docs.mdc)), then mirror into the TaskMesh project Documents with `npm run docs:sync-schema`.
+
 ## Project layout
 
 ```
@@ -96,6 +105,7 @@ src/
     client.ts        # Pool + db
     migrate.ts       # Migration runner
 drizzle/             # Generated SQL migrations + meta
+docs/                # Admin/developer docs (database schema, …)
 data/uploads/        # Image uploads (runtime; tracked with .gitkeep)
 INSTALL.md           # Ubuntu bare-metal install guide
 ```

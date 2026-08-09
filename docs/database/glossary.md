@@ -1,0 +1,111 @@
+# Schema glossary
+
+Shared vocabulary for TaskMesh database docs. Prefer this page over repeating definitions on every domain page.
+
+## Source of truth
+
+| Concern | Location |
+|---------|----------|
+| Table / column definitions | [`src/db/schema.ts`](../../src/db/schema.ts) |
+| Polymorphic entity type strings | [`src/lib/entityType.ts`](../../src/lib/entityType.ts) (mirrored under `client/src/lib/entityType.ts`) |
+| Migrations | [`drizzle/`](../../drizzle/) |
+| Human-readable schema docs | [`docs/database/`](./) |
+
+## Display numbers
+
+Most user-facing entities store an app-wide unique integer `number` and format it with a letter prefix in the UI / APIs:
+
+| Prefix | Table | Example |
+|--------|-------|---------|
+| I | `ideas` | I0042 |
+| P | `projects` | P0007 |
+| U | `users` | U0001 |
+| T | `tasks` | T0065 |
+| D | `project_documents` | D0012 |
+| L | `todo_lists` | L0003 |
+| B | `boards` | B0001 |
+| W | `wiki_nodes` | W0008 |
+| C | `canvases` | C0004 |
+| M | `image_boards` | M0002 |
+
+Internal joins still use surrogate `id` primary keys. Display numbers are for humans and stable references in conversation (for example `/worktask T0065`).
+
+## Polymorphic entity links
+
+Several tables store **`entity_type`** (text) + **`entity_id`** (integer) instead of a typed foreign key:
+
+- `taggings`
+- `todo_list_items`
+- `board_cards`
+- `wiki_nodes`
+
+Canonical `entity_type` values (`EntityType`):
+
+`idea` · `project` · `task` · `document` · `todo_list` · `board` · `canvas` · `wiki_node` · `image_board`
+
+There is **no database FK** enforcing that `entity_id` exists in the target table; integrity is an application concern. Unique indexes usually prevent duplicate attachments of the same entity in the same parent (tag, list, board, or project wiki).
+
+## Task states
+
+Stored on `tasks.state` (text). API values and typical UI labels:
+
+| API value | UI label (approx.) |
+|-----------|-------------------|
+| `new` | Draft |
+| `ready` | Ready |
+| `in_progress` | In Progress |
+| `complete` | Complete |
+| `canceled` | Canceled |
+| `on_hold` | On Hold |
+
+Default for new rows: `new`.
+
+## Task priority
+
+`tasks.priority`: `none` (default) · `low` · `medium` · `high` · `urgent`.
+
+## Task activity kinds
+
+`task_activity.kind`:
+
+- **`comment`** — user Markdown in `body`; may set `edited_at`
+- **`change`** — field change with `field` / `old_value` / `new_value`; session summaries use `field = summary` with text in `body`
+
+`source`: `ui` when the SPA identifies itself; otherwise `api`.
+
+## Dependencies vs hierarchy
+
+- **`tasks.parent_id`** — subtask tree (hierarchy)
+- **`task_dependencies`** — blocking “Depends on” / “Required by” edges between tasks
+
+Do not conflate the two.
+
+## Foreign-key delete behaviors (summary)
+
+| Pattern | Typical meaning |
+|---------|-----------------|
+| **CASCADE** | Child rows disappear with the parent (project-owned content, board children, activity, …) |
+| **SET NULL** | Optional link cleared (phase, parent task, source idea, avatar, optional image-board project, …) |
+| **RESTRICT** | Prevent deleting a user who still authors tasks (`created_by` / `updated_by`) |
+
+Exact FK lists are on the domain pages.
+
+## JSON documents
+
+- **`canvases.document`** — Excalidraw scene JSON
+- **`image_boards.document`** — image-board scene JSON (camera, items, …)
+- **`system_properties.value`** — arbitrary jsonb config values
+
+## Uploads vs database
+
+`uploads` stores file metadata. Binary content lives on disk under `UPLOAD_DIR` (see `.env.example`). Back up Postgres dumps and the uploads directory together.
+
+## Timestamps and dates
+
+- `created_at` / `updated_at` — `timestamptz`
+- `tasks.due_date` — calendar date only
+- `tasks.due_at` — deprecated timestamp; prefer `due_date`
+
+## Indexes and uniqueness
+
+Beyond primary keys, most uniqueness is declared as named **UNIQUE** constraints in Drizzle (for example pair uniqueness on dependencies, polymorphic attachment uniqueness). There are few standalone non-unique indexes in `schema.ts`; if a migration adds indexes not reflected in the Drizzle table helpers, document them on the affected domain page when they matter operationally.

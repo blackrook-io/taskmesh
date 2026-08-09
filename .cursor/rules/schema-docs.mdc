@@ -1,0 +1,45 @@
+---
+description: Keep docs/database schema documentation in sync when the DB schema changes
+globs: "src/db/schema.ts,drizzle/**/*.sql,docs/database/**/*.md,docs/README.md"
+alwaysApply: false
+---
+
+# Schema documentation upkeep
+
+TaskMesh maintains human-readable database docs under [`docs/database/`](../../docs/database/) (index: [`docs/README.md`](../../docs/README.md)). Source of truth for structure is [`src/db/schema.ts`](../../src/db/schema.ts). **`/docs` is authoritative.**
+
+## When you must update docs
+
+In the **same change set** as any of the following, update the matching Markdown under `docs/database/` (and `docs/README.md` if the index changes):
+
+- Edits to `src/db/schema.ts` (tables, columns, FKs, uniques, defaults, comments that affect meaning)
+- New or revised SQL under `drizzle/` that alters live schema
+- Product/feature work that changes how tables relate or what columns mean in practice
+
+## Process flow (required order)
+
+1. **Update `/docs`** — keep main vs non-main classification, Mermaid diagrams, physical tables, and glossary aligned with `schema.ts`.
+2. **Copy-replace into TaskMesh Project Documents** — after the `/docs` files are written, sync the mirror into the **TaskMesh** project (PROD Documents) so in-app reading stays current:
+
+   ```bash
+   npm run docs:sync-schema
+   ```
+
+   Defaults: `TASKMESH_API_BASE=http://127.0.0.1:3000` (PROD), `TASKMESH_PROJECT_ID=4` (TaskMesh). Upserts by **exact Document title** (see `SCHEMA_DOC_SYNC_MAP` in [`src/scripts/syncSchemaDocsToProject.ts`](../../src/scripts/syncSchemaDocsToProject.ts)). Do **not** edit the mirrored Documents by hand as the source of truth — change `/docs` then re-run the sync.
+
+3. Commit `/docs` (and script/rule changes) with the schema work; the Document bodies live in the DB and are refreshed by the script (not git).
+
+## What to update in `/docs`
+
+- **Main domain tables** — full physical column tables, constraints, and logical Mermaid ERDs on the domain pages (`projects-and-ideas.md`, `tasks.md`, `content-and-modules.md`) plus the conceptual diagram in `overview.md` when relationships change.
+- **Non-main tables** (`users`, `api_keys`, `system_properties`, `api_request_logs`) — keep the inventory in `platform.md` accurate; show them only minimally on diagrams.
+- **Glossary** — display-number prefixes, entity types, enum-like text values, and polymorphic join conventions when those change.
+- Reclassify a table (main ↔ non-main) only when product intent clearly shifts; note the change in the PR/commit.
+- If you add/remove/rename a synced page, update `SCHEMA_DOC_SYNC_MAP` in the sync script in the same change.
+
+## Style
+
+- Wiki-suitable Markdown; Mermaid for ERDs; physical detail as Markdown tables.
+- No SQL DDL dumps — explain in human-readable language.
+- Prefer linking to `schema.ts` / this docs tree over inventing a second source of truth.
+- In-app mirrors may show Mermaid as fenced code until the Markdown editor supports Mermaid preview.

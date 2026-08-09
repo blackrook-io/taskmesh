@@ -1,0 +1,108 @@
+# T0065 — Create database schema documentation
+
+**Task:** T0065 (`id` 72) · **Branch (on approval):** `T0065-database-schema-docs`  
+**Source of truth:** `src/db/schema.ts` (+ applied migrations under `drizzle/`)
+
+## Goal
+
+Add git-tracked, wiki-suitable Markdown under `/docs` that documents TaskMesh’s Postgres schema for admins and developers: conceptual + logical Mermaid ERDs, physical column/index/constraint tables for **main domain** tables, a short inventory of **non-main** tables, a glossary, and an agent rule so docs stay accurate when the schema changes. Link from `README.md` and `AGENTS.md`.
+
+## Scope decisions (from interview)
+
+| Decision | Choice |
+|----------|--------|
+| Layout | Multiple Markdown files under `docs/` |
+| Diagrams | Mermaid ERDs |
+| Coverage | Full physical docs for **main domain** tables; **non-main** listed for reference and shown only minimally on diagrams |
+| Agent upkeep | New Cursor rule requiring docs update on schema changes |
+| Discoverability | Links from `README.md` and `AGENTS.md` |
+
+## Table classification
+
+**Main domain** (full docs: purpose, columns, PKs/FKs, indexes/uniques, notes):
+
+- Core: `ideas`, `projects`, `project_phases`
+- Tasks: `tasks`, `task_activity`, `task_dependencies`, `task_description_templates`
+- Project content: `project_documents`, `uploads`, `todo_lists`, `todo_list_items`, `project_modules`
+- Tagging: `tags`, `taggings`
+- Boards: `boards`, `board_columns`, `board_lanes`, `board_cards`
+- Wiki / canvas / images: `wiki_nodes`, `canvases`, `image_boards`
+
+**Non-main** (inventory + one-line purpose; appear on conceptual/logical diagrams as compact nodes only; no full column catalogs unless needed for FK clarity):
+
+- `users`, `api_keys`, `system_properties`, `api_request_logs`
+
+## Deliverables
+
+### 1. Docs tree
+
+```
+docs/
+  README.md                         # index + how to keep docs current
+  database/
+    overview.md                     # conceptual model, high-level Mermaid ERD, reading guide
+    projects-and-ideas.md           # ideas, projects, project_phases (+ FKs to users as stubs)
+    tasks.md                        # tasks, activity, dependencies, description templates
+    content-and-modules.md          # documents, uploads, todos, modules, tags, boards, wiki, canvases, image_boards
+    platform.md                     # non-main inventory (users, api_keys, system_properties, api_request_logs)
+    glossary.md                     # display numbers (T####/P####/…), entity types, states, polymorphic taggings, etc.
+```
+
+No SQL DDL dumps in the docs — human-readable explanation only.
+
+### 2. Diagram / model layers (per task rules)
+
+- **Conceptual** (`overview.md`): broad relationship map (Project → Tasks / Modules / Wiki / Boards / …; Idea → Project; Users as supporting).
+- **Logical** (domain pages + overview as needed): entities, attributes, PKs, exact FK relationships (Mermaid `erDiagram`).
+- **Physical** (main tables): Markdown tables for columns (name, type, nullability, default), indexes/uniques, FK delete behavior — derived from `schema.ts`.
+
+Non-main tables: box on diagrams with little or no attribute detail; detail only in `platform.md` inventory.
+
+### 3. Agent maintenance rule
+
+Add `.cursor/rules/schema-docs.mdc` (globs targeting `src/db/schema.ts` and/or always-applied note via AGENTS pointer):
+
+- When development changes the database (new features that alter tables, functionality that changes columns/constraints, or schema migrations), update the matching files under `docs/database/` in the same change set.
+- Keep classification (main vs non-main), Mermaid diagrams, physical tables, and glossary in sync with `src/db/schema.ts`.
+
+Also mention this obligation briefly in `docs/README.md` and `AGENTS.md`.
+
+### 4. Discoverability
+
+- `README.md` — short “Schema documentation” link → `docs/database/overview.md` (or `docs/README.md`).
+- `AGENTS.md` — link to `docs/` / database docs + pointer to the schema-docs rule.
+
+## Out of scope
+
+- Auto-generating docs from Drizzle (manual Markdown from schema is fine)
+- Changing `schema.ts` or migrations
+- Documenting every historical migration file line-by-line
+- Mermaid preview inside the in-app Markdown editor (mirrors may show fences until that exists)
+
+## Implementation steps
+
+1. After plan approval: branch from updated `main` → `T0065-database-schema-docs`; mark T0065 `in_progress`; post start comment.
+2. Author `docs/` tree from current `src/db/schema.ts` (and relations) using the structure above.
+3. Add `.cursor/rules/schema-docs.mdc`; wire links in `README.md` + `AGENTS.md`.
+4. QA checklist for human review of accuracy and navigation.
+
+## QA checklist (preview)
+
+- [ ] `docs/README.md` indexes all database pages
+- [ ] Conceptual Mermaid renders and matches product relationships
+- [ ] Logical ERDs show correct FKs for main domain (including cascade/set-null behavior called out in text)
+- [ ] Physical tables match `schema.ts` for every main table
+- [ ] Non-main tables listed in `platform.md` and only minimal on diagrams
+- [ ] Glossary covers display numbers, task states, entity types / polymorphic joins
+- [ ] Schema-docs Cursor rule present; README + AGENTS link to docs
+- [ ] No SQL statement dumps; language is wiki-suitable Markdown
+
+## QA follow-ups
+
+### In-app Documents mirror (process)
+
+- **`/docs` remains authoritative.**
+- After every `/docs` update, run `npm run docs:sync-schema` to copy-replace into the **TaskMesh** project (PROD, project id 4) Documents by stable titles (`DB Schema — …`).
+- Added `src/scripts/syncSchemaDocsToProject.ts` + npm script; wired into `.cursor/rules/schema-docs.mdc`, `docs/README.md`, `AGENTS.md`, and `README.md`.
+- Initial sync performed against PROD as part of this follow-up.
+- Mermaid may appear as code fences in-app until Markdown preview supports Mermaid.
