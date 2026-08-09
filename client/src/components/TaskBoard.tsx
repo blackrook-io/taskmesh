@@ -120,10 +120,11 @@ function sortRoots(roots: Task[], col: SortCol | null, dir: 1 | -1): Task[] {
   };
   const stateRank: Record<TaskState, number> = {
     new: 0,
-    in_progress: 1,
-    on_hold: 2,
-    complete: 3,
-    canceled: 4,
+    ready: 1,
+    in_progress: 2,
+    on_hold: 3,
+    complete: 4,
+    canceled: 5,
   };
   return [...roots].sort((a, b) => {
     let cmp = 0;
@@ -200,15 +201,17 @@ export function StateCheckbox({
   onCycle: () => void;
 }) {
   const glyph =
-    state === "in_progress"
-      ? "/"
-      : state === "complete"
-        ? "✓"
-        : state === "canceled"
-          ? "X"
-          : state === "on_hold"
-            ? "-"
-            : "";
+    state === "ready"
+      ? "○"
+      : state === "in_progress"
+        ? "/"
+        : state === "complete"
+          ? "✓"
+          : state === "canceled"
+            ? "X"
+            : state === "on_hold"
+              ? "-"
+              : "";
   return (
     <button
       type="button"

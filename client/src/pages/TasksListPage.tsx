@@ -46,10 +46,11 @@ function sortTasks(list: Task[], col: SortCol | null, dir: 1 | -1, projectName: 
   if (!col) return list;
   const stateRank: Record<Task["state"], number> = {
     new: 0,
-    in_progress: 1,
-    on_hold: 2,
-    complete: 3,
-    canceled: 4,
+    ready: 1,
+    in_progress: 2,
+    on_hold: 3,
+    complete: 4,
+    canceled: 5,
   };
   const priRank: Record<Task["priority"], number> = {
     none: 0,

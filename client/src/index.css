@@ -23,6 +23,8 @@
   --space-5: 0.65rem;
   --space-6: 0.8rem;
   --space-7: 1rem;
+  --task-state-draft: #4ea1ff;
+  --task-state-ready: #3ecf8e;
   --task-state-progress: #4ea1ff;
   --task-state-done: #3ecf8e;
   --task-state-canceled: #e55;
@@ -1508,6 +1510,16 @@ textarea.raw-md {
   justify-content: center;
 }
 
+.task-state-cb--draft {
+  color: var(--task-state-draft);
+  border-color: var(--task-state-draft);
+}
+
+.task-state-cb--ready {
+  color: var(--task-state-ready);
+  border-color: var(--task-state-ready);
+}
+
 .task-state-cb--progress {
   color: var(--task-state-progress);
   border-color: var(--task-state-progress);
@@ -1531,6 +1543,14 @@ textarea.raw-md {
 .task-list-row__state {
   color: var(--text);
   font-size: 0.85rem;
+}
+
+.task-list-row__state--draft {
+  color: var(--task-state-draft);
+}
+
+.task-list-row__state--ready {
+  color: var(--task-state-ready);
 }
 
 .task-list-row__state--progress {

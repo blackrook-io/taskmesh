@@ -80,7 +80,8 @@ export async function syncDescendantPhases(
 }
 
 const STATE_LABELS: Record<string, string> = {
-  new: "New",
+  new: "Draft",
+  ready: "Ready",
   in_progress: "In Progress",
   complete: "Complete",
   canceled: "Canceled",

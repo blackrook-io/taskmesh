@@ -9,6 +9,7 @@ import {
 describe("taskDependencies helpers", () => {
   it("treats complete and canceled as terminal", () => {
     assert.equal(isOpenTaskState("new"), true);
+    assert.equal(isOpenTaskState("ready"), true);
     assert.equal(isOpenTaskState("in_progress"), true);
     assert.equal(isOpenTaskState("on_hold"), true);
     assert.equal(isOpenTaskState("complete"), false);

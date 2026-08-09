@@ -23,7 +23,7 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 1. **PROD only for task I/O** — base URL `http://127.0.0.1:3000` (systemd PROD). Never use DEV `:3001` or Vite `:5173` for task reads/writes.
 2. Prefer the **HTTP API** (see [reference.md](reference.md)). Do not use raw SQL for task updates.
 3. Do **not** change `dueDate` (including on Complete).
-4. State values: `new` | `in_progress` | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”).
+4. State values: `new` (UI: Draft) | `ready` (UI: Ready) | `in_progress` | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`.
 5. Follow repo plan + git + finish-up rules; this skill **adds** task bookkeeping and **replaces** `phase-N-*` branch naming with `T####-*` for this workstream.
 6. **Never** update git config (`user.name` / `user.email`). If commit fails for missing identity, set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for that command only (see [reference.md](reference.md)).
 
@@ -36,7 +36,7 @@ Worktask:
 - [ ] 1. Load PROD task + activity
 - [ ] 2. Scope / size check (split recommendation if needed)
 - [ ] 2b. Depends-on gate (stop if open blockers)
-- [ ] 3. State alert if not `new` (wait for user)
+- [ ] 3. State gate (`ready` to start; Draft/`new` or other → alert & wait)
 - [ ] 4. Interview + draft plan
 - [ ] 5. User approves plan → branch + In Progress + start comment
 - [ ] 6. Implement + QA checklist
@@ -78,11 +78,12 @@ After load (and as part of the sizing assessment):
 
 ### 3. State gate
 
-If `state` is not `new`:
+Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still being written up; Ready = enough info to execute.
 
-- **Alert** with current state (and any existing worktask comments / branch hints).
-- Ask whether to continue, resume, or abort.
-- Do not mark In Progress or create a branch until they decide.
+- If `state` is `ready`: proceed (interview / plan).
+- If `state` is `in_progress`: **Resume** path — alert with current state / branch / plan hints; ask whether to continue, resume, or abort. Do not create a duplicate branch by default.
+- If `state` is `new` (Draft): **Alert** that the task is still Draft, not Ready. Ask whether to continue anyway, wait until they mark Ready, or abort. Do not mark In Progress or create a branch until they decide.
+- Any other state (`complete`, `canceled`, `on_hold`, …): **Alert** with current state (and any existing worktask comments / branch hints). Ask whether to continue, resume, or abort. Do not mark In Progress or create a branch until they decide.
 
 ### 4. Interview + plan
 

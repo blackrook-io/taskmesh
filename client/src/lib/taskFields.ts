@@ -2,6 +2,7 @@
 
 export const TASK_STATES = [
   "new",
+  "ready",
   "in_progress",
   "complete",
   "canceled",
@@ -21,7 +22,8 @@ export const TASK_PRIORITIES = [
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export const TASK_STATE_LABELS: Record<TaskState, string> = {
-  new: "New",
+  new: "Draft",
+  ready: "Ready",
   in_progress: "In Progress",
   complete: "Complete",
   canceled: "Canceled",
@@ -39,6 +41,7 @@ export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
 /** Checkbox cycle order matching feature_list. */
 export const TASK_STATE_CYCLE: TaskState[] = [
   "new",
+  "ready",
   "in_progress",
   "complete",
   "canceled",
@@ -55,10 +58,12 @@ export function formatTaskNumber(n: number): string {
 }
 
 /** CSS modifier shared by StateCheckbox and list State labels. */
-export type TaskStateTone = "new" | "progress" | "done" | "canceled" | "hold";
+export type TaskStateTone = "draft" | "ready" | "progress" | "done" | "canceled" | "hold";
 
 export function taskStateTone(state: TaskState): TaskStateTone {
   switch (state) {
+    case "ready":
+      return "ready";
     case "in_progress":
       return "progress";
     case "complete":
@@ -68,14 +73,14 @@ export function taskStateTone(state: TaskState): TaskStateTone {
     case "on_hold":
       return "hold";
     default:
-      return "new";
+      return "draft";
   }
 }
 
-/** e.g. `task-list-row__state task-list-row__state--progress` (no modifier for `new`). */
+/** e.g. `task-list-row__state task-list-row__state--progress`. */
 export function taskStateClass(base: string, state: TaskState): string {
   const tone = taskStateTone(state);
-  return tone === "new" ? base : `${base} ${base}--${tone}`;
+  return `${base} ${base}--${tone}`;
 }
 
 /** CSS modifier for list Priority selects. */

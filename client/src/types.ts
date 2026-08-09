@@ -50,7 +50,7 @@ export type Task = {
   number: number;
   title: string;
   description: string | null;
-  state: "new" | "in_progress" | "complete" | "canceled" | "on_hold";
+  state: "new" | "ready" | "in_progress" | "complete" | "canceled" | "on_hold";
   priority: "none" | "low" | "medium" | "high" | "urgent";
   dueDate: string | null;
   /** @deprecated Prefer dueDate */

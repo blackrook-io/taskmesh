@@ -92,11 +92,14 @@ curl -fsS -X POST "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/activity" \
 
 | API value | UI label |
 |-----------|----------|
-| `new` | New |
+| `new` | Draft |
+| `ready` | Ready |
 | `in_progress` | In Progress |
 | `complete` | Complete |
 | `canceled` | Canceled |
 | `on_hold` | On Hold |
+
+Fresh `/worktask` starts expect `ready`. Draft (`new`) triggers the state gate (alert and wait).
 
 ## Context fields to read
 

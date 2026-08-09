@@ -1,0 +1,46 @@
+# T0060 — New Task State: Ready
+
+## Context
+
+- **Task:** T0060 (`id` 67) — *New Task State: Ready* — state `new`, priority medium, project phase Enhancements
+- **Depends on:** none
+- **Goal:** Add `ready` (“enough info to start”). Rename display label of `new` → **Draft**. Wire `/worktask` to expect **Ready** for fresh starts.
+
+## Decisions (approved)
+
+| Topic | Decision |
+|-------|----------|
+| API / DB value | `ready` (label **Ready**); `new` stays the key, label **Draft** |
+| Create default | still `new` (Draft) |
+| Checkbox cycle | `new` → `ready` → `in_progress` → `complete` → `canceled` → `on_hold` |
+| Colors | Draft = blue; Ready = green |
+| Open vs terminal | `ready` is **open** |
+| Sort rank | Draft → Ready → In Progress → … |
+| `/worktask` | Fresh start expects `ready`; Draft (`new`) alerts and waits; `in_progress` resume unchanged |
+| Data migration | none |
+
+## Implementation
+
+### 1. Shared enums / labels
+
+- Server + client `TASK_STATES` include `ready` after `new`
+- Labels: `new` → Draft, `ready` → Ready
+- Cycle, tones, types, activity `STATE_LABELS`, schema comment
+
+### 2. UI / CSS
+
+- Sort ranks; StateCheckbox glyph for Ready
+- `--task-state-draft` (blue), `--task-state-ready` (green); modifiers on checkbox + list state
+
+### 3. `/worktask` skill
+
+- State list includes `ready`
+- State gate: start from `ready`; if `new` (Draft), alert and wait; resume `in_progress` as today
+
+### 4. Tests
+
+- `isOpenTaskState("ready") === true`
+
+### 5. Branch
+
+`T0060-task-state-ready`
