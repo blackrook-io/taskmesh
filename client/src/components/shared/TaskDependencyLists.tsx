@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "../../api/client";
 import {
   formatTaskNumber,
+  isDeletedTaskState,
   TASK_STATE_LABELS,
   taskStateClass,
   type TaskState,
@@ -124,14 +125,24 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
   const renderRow = (
     row: TaskDepSummary,
     side: "dependsOn" | "requiredBy",
-  ) => (
+  ) => {
+    const deleted = isDeletedTaskState(row.state);
+    return (
     <li
       key={`${side}-${row.id}`}
-      className="task-dep-list__row"
+      className={`task-dep-list__row${deleted ? " task-dep-list__row--deleted" : ""}`}
       onDoubleClick={() => onOpenTask?.(row.id)}
       title={onOpenTask ? "Double-click to open" : undefined}
     >
-      <span className="task-dep-list__num muted">{formatTaskNumber(row.number)}</span>
+      <span className={`task-dep-list__num${deleted ? "" : " muted"}`}>
+        {deleted ? (
+          <span className="task-ref__gone" aria-label="Deleted">
+            [X]
+          </span>
+        ) : null}
+        {deleted ? " " : null}
+        {formatTaskNumber(row.number)}
+      </span>
       <span className="task-dep-list__title">{row.title}</span>
       <span className={taskStateClass("task-dep-list__state", row.state as TaskState)}>
         {TASK_STATE_LABELS[row.state as TaskState] ?? row.state}
@@ -153,7 +164,8 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
         ×
       </button>
     </li>
-  );
+    );
+  };
 
   return (
     <div className="task-dep-lists" ref={rootRef}>
@@ -236,7 +248,9 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
 /** Fetch open Depends-on blockers for Complete gate (client-side pre-check). */
 export async function fetchOpenDependsOn(taskId: number): Promise<TaskDepSummary[]> {
   const res = await apiJson<{ data: DepPayload }>(`/api/v1/tasks/${taskId}/dependencies`);
-  return res.data.dependsOn.filter((d) => d.state !== "complete" && d.state !== "canceled");
+  return res.data.dependsOn.filter(
+    (d) => d.state !== "complete" && d.state !== "canceled" && d.state !== "deleted",
+  );
 }
 
 export function formatCompleteBlockMessage(blockers: TaskDepSummary[]): string {

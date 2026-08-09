@@ -59,6 +59,9 @@ export async function loadBoardDetail(db: Db, boardId: number) {
     let dueAt: string | null = null;
     if (card.entityType === "task") {
       const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, card.entityId));
+      if (task?.state === "deleted") {
+        continue;
+      }
       if (task) {
         title = task.title;
         color = task.color;

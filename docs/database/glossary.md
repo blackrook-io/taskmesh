@@ -57,8 +57,9 @@ Stored on `tasks.state` (text). API values and typical UI labels:
 | `complete` | Complete |
 | `canceled` | Canceled |
 | `on_hold` | On Hold |
+| `deleted` | Deleted (soft-delete; hidden from normal lists; not selectable in UI) |
 
-Default for new rows: `new`.
+Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the row (preserves Task numbers and references).
 
 ## Task priority
 

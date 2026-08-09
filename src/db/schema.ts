@@ -168,7 +168,7 @@ export const tasks = pgTable("tasks", {
   number: integer("number").notNull().unique(),
   title: text("title").notNull(),
   description: text("description"),
-  /** new (Draft) | ready | in_progress | complete | canceled | on_hold */
+  /** new (Draft) | ready | in_progress | complete | canceled | on_hold | deleted */
   state: text("state").notNull().default("new"),
   /** none | low | medium | high | urgent */
   priority: text("priority").notNull().default("none"),

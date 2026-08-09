@@ -30,6 +30,7 @@
   --task-state-done: #3ecf8e;
   --task-state-canceled: #e55;
   --task-state-hold: #e8a838;
+  --task-state-deleted: #e55;
   --task-priority-urgent: #e55;
   --task-priority-high: #f08a3a;
   --task-priority-medium: #e8c84a;
@@ -1841,6 +1842,11 @@ textarea.raw-md {
   border-color: var(--task-state-hold);
 }
 
+.task-state-cb--deleted {
+  color: var(--task-state-deleted);
+  border-color: var(--task-state-deleted);
+}
+
 .task-list-row__state {
   color: var(--text);
   font-size: 0.85rem;
@@ -1868,6 +1874,10 @@ textarea.raw-md {
 
 .task-list-row__state--hold {
   color: var(--task-state-hold);
+}
+
+.task-list-row__state--deleted {
+  color: var(--task-state-deleted);
 }
 
 .task-phase-header {
@@ -2085,6 +2095,10 @@ textarea.raw-md {
 .task-timeline__tone--hold,
 .task-timeline__seg--hold {
   color: var(--task-state-hold);
+}
+.task-timeline__tone--deleted,
+.task-timeline__seg--deleted {
+  color: var(--task-state-deleted);
 }
 .task-timeline__tone--low,
 .task-timeline__seg--low {
@@ -2414,6 +2428,17 @@ textarea.raw-md {
 
 .task-dep-list__row:hover {
   border-color: var(--accent);
+}
+
+.task-dep-list__row--deleted .task-dep-list__num,
+.task-dep-list__row--deleted .task-dep-list__title {
+  color: var(--task-state-deleted);
+}
+
+.task-ref--deleted,
+.task-ref__gone {
+  color: var(--task-state-deleted);
+  font-weight: 600;
 }
 
 .task-dep-list__num {

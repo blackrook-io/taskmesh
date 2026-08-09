@@ -26,7 +26,7 @@ import type { PatchTaskOptions } from "../lib/patchTask";
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
-  TASK_STATES,
+  SELECTABLE_TASK_STATES,
   TASK_STATE_LABELS,
   taskPriorityClass,
   taskStateClass,
@@ -122,6 +122,7 @@ function sortRoots(roots: Task[], col: SortCol | null, dir: 1 | -1): Task[] {
     on_hold: 3,
     complete: 4,
     canceled: 5,
+    deleted: 6,
   };
   return [...roots].sort((a, b) => {
     let cmp = 0;
@@ -595,7 +596,7 @@ export function TaskEditorFields({
               void commit(prev, { state: next });
             }}
           >
-            {TASK_STATES.map((s) => (
+            {SELECTABLE_TASK_STATES.map((s) => (
               <option key={s} value={s}>
                 {TASK_STATE_LABELS[s]}
               </option>
@@ -725,7 +726,7 @@ export function TaskEditorFields({
           Delete
         </button>
       </div>
-      {deleteError ? (
+      {deleteError && !deleteOpen ? (
         <p role="alert" className="tag-input__error">
           {deleteError}
         </p>
@@ -742,11 +743,13 @@ export function TaskEditorFields({
       <ConfirmDialog
         open={deleteOpen}
         title="Delete task?"
-        message="This cannot be undone."
+        message="The task will be hidden from lists and marked Deleted. It can be restored from Administration → Deleted Tasks."
         warning={
-          children.length > 0
-            ? `This task has ${children.length} child task${children.length === 1 ? "" : "s"}. They will be unlinked, not deleted.`
-            : undefined
+          deleteError
+            ? deleteError
+            : children.length > 0
+              ? `Cannot delete while this task has ${children.length} child task${children.length === 1 ? "" : "s"}. Reparent or delete them first.`
+              : undefined
         }
         confirmLabel={
           deleteOpen && allTasks === undefined && childrenQuery.isFetching
@@ -756,7 +759,9 @@ export function TaskEditorFields({
               : "Delete"
         }
         confirmDisabled={
-          deleting || (deleteOpen && allTasks === undefined && childrenQuery.isFetching)
+          deleting ||
+          children.length > 0 ||
+          (deleteOpen && allTasks === undefined && childrenQuery.isFetching)
         }
         onCancel={() => {
           if (deleting) return;
@@ -765,6 +770,7 @@ export function TaskEditorFields({
         }}
         onConfirm={() => {
           if (deleting) return;
+          if (children.length > 0) return;
           if (allTasks === undefined && childrenQuery.isFetching) return;
           void (async () => {
             setDeleting(true);

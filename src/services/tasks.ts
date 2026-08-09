@@ -49,6 +49,9 @@ export async function assertParentCompatible(
   if (!parent) {
     return { ok: false, message: "Parent task not found" };
   }
+  if (parent.state === "deleted") {
+    return { ok: false, message: "Cannot parent under a deleted task" };
+  }
   if (parent.projectId !== taskProjectId) {
     return { ok: false, message: "Parent task must share the same project (or both be unassigned)" };
   }
@@ -86,6 +89,7 @@ const STATE_LABELS: Record<string, string> = {
   complete: "Complete",
   canceled: "Canceled",
   on_hold: "On Hold",
+  deleted: "Deleted",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {

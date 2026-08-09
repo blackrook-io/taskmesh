@@ -7,9 +7,22 @@ export const TASK_STATES = [
   "complete",
   "canceled",
   "on_hold",
+  "deleted",
 ] as const;
 
 export type TaskState = (typeof TASK_STATES)[number];
+
+/** States shown in dropdowns / filters / cycle (excludes soft-delete). */
+export const SELECTABLE_TASK_STATES = [
+  "new",
+  "ready",
+  "in_progress",
+  "complete",
+  "canceled",
+  "on_hold",
+] as const;
+
+export type SelectableTaskState = (typeof SELECTABLE_TASK_STATES)[number];
 
 export const TASK_PRIORITIES = [
   "none",
@@ -28,7 +41,16 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   complete: "Complete",
   canceled: "Canceled",
   on_hold: "On Hold",
+  deleted: "Deleted",
 };
+
+export function isDeletedTaskState(state: string): boolean {
+  return state === "deleted";
+}
+
+export function isSelectableTaskState(state: string): state is SelectableTaskState {
+  return (SELECTABLE_TASK_STATES as readonly string[]).includes(state);
+}
 
 export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
   none: "None",
@@ -58,7 +80,14 @@ export function formatTaskNumber(n: number): string {
 }
 
 /** CSS modifier shared by StateCheckbox and list State labels. */
-export type TaskStateTone = "draft" | "ready" | "progress" | "done" | "canceled" | "hold";
+export type TaskStateTone =
+  | "draft"
+  | "ready"
+  | "progress"
+  | "done"
+  | "canceled"
+  | "hold"
+  | "deleted";
 
 export function taskStateTone(state: TaskState): TaskStateTone {
   switch (state) {
@@ -72,6 +101,8 @@ export function taskStateTone(state: TaskState): TaskStateTone {
       return "canceled";
     case "on_hold":
       return "hold";
+    case "deleted":
+      return "deleted";
     default:
       return "draft";
   }

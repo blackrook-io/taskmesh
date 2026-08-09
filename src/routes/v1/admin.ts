@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
+import * as schema from "../../db/schema.js";
+import {
+  activitySourceFromRequest,
+  shouldRecordHistory,
+} from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import {
   createAdminApiKey,
@@ -32,7 +38,12 @@ import {
   listAdminTemplates,
   patchAdminTemplate,
 } from "../../services/taskDescriptionTemplates.js";
-import { getCurrentUser } from "../../services/users.js";
+import { recordTaskChanges } from "../../services/tasks.js";
+import {
+  attachTaskActor,
+  getCurrentUser,
+  getCurrentUserId,
+} from "../../services/users.js";
 
 export const adminRouter = Router();
 
@@ -402,6 +413,71 @@ adminRouter.delete("/task-description-templates/:id", async (req, res) => {
     res.status(204).send();
   } catch (err) {
     if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+// ── Soft-deleted tasks ─────────────────────────────────────────────────────
+
+adminRouter.get("/deleted-tasks", async (_req, res) => {
+  try {
+    const rows = await db
+      .select({
+        id: schema.tasks.id,
+        number: schema.tasks.number,
+        title: schema.tasks.title,
+        projectId: schema.tasks.projectId,
+        projectTitle: schema.projects.name,
+        updatedAt: schema.tasks.updatedAt,
+        createdAt: schema.tasks.createdAt,
+      })
+      .from(schema.tasks)
+      .leftJoin(schema.projects, eq(schema.tasks.projectId, schema.projects.id))
+      .where(eq(schema.tasks.state, "deleted"))
+      .orderBy(desc(schema.tasks.updatedAt), desc(schema.tasks.id));
+    res.json({ data: rows });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.post("/deleted-tasks/:id/restore", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      sendError(res, 400, "invalid_id", "Invalid task id");
+      return;
+    }
+    const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
+    if (!existing) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    if (existing.state !== "deleted") {
+      sendError(res, 400, "not_deleted", "Task is not deleted");
+      return;
+    }
+    const actorId = await getCurrentUserId(db);
+    const [row] = await db
+      .update(schema.tasks)
+      .set({
+        state: "new",
+        updatedAt: new Date(),
+        updatedById: actorId,
+      })
+      .where(eq(schema.tasks.id, id))
+      .returning();
+    if (!row) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    await recordTaskChanges(db, id, existing, row, {
+      actorId,
+      source: activitySourceFromRequest(req),
+      recordHistory: shouldRecordHistory(req),
+    });
+    res.json({ data: await attachTaskActor(db, row) });
+  } catch (err) {
     handleRouteError(res, err);
   }
 });

@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import * as schema from "../db/schema.js";
@@ -118,13 +118,16 @@ export async function searchEntityReferences(
       })
       .from(schema.tasks)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.tasks.number,
-          titleCol: schema.tasks.title,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          ne(schema.tasks.state, "deleted"),
+          matchNumberOrTitle({
+            numberCol: schema.tasks.number,
+            titleCol: schema.tasks.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.tasks.number))
       .limit(limit);

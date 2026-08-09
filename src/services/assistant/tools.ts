@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
@@ -290,7 +290,12 @@ async function toolSearch(args: unknown): Promise<string> {
         projectId: schema.tasks.projectId,
       })
       .from(schema.tasks)
-      .where(or(ilike(schema.tasks.title, pattern), ilike(schema.tasks.description, pattern)))
+      .where(
+        and(
+          ne(schema.tasks.state, "deleted"),
+          or(ilike(schema.tasks.title, pattern), ilike(schema.tasks.description, pattern)),
+        ),
+      )
       .orderBy(desc(schema.tasks.updatedAt))
       .limit(8),
     db

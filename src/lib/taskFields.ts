@@ -7,9 +7,22 @@ export const TASK_STATES = [
   "complete",
   "canceled",
   "on_hold",
+  "deleted",
 ] as const;
 
 export type TaskState = (typeof TASK_STATES)[number];
+
+/** States users may set via create/PATCH (excludes soft-delete). */
+export const SELECTABLE_TASK_STATES = [
+  "new",
+  "ready",
+  "in_progress",
+  "complete",
+  "canceled",
+  "on_hold",
+] as const;
+
+export type SelectableTaskState = (typeof SELECTABLE_TASK_STATES)[number];
 
 export const TASK_PRIORITIES = [
   "none",
@@ -22,7 +35,12 @@ export const TASK_PRIORITIES = [
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export const taskStateSchema = z.enum(TASK_STATES);
+export const selectableTaskStateSchema = z.enum(SELECTABLE_TASK_STATES);
 export const taskPrioritySchema = z.enum(TASK_PRIORITIES);
+
+export function isDeletedTaskState(state: string): boolean {
+  return state === "deleted";
+}
 
 /** YYYY-MM-DD only. */
 export const dueDateSchema = z

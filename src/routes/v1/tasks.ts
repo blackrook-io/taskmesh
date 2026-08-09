@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -12,8 +12,8 @@ import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   dueDateSchema,
+  selectableTaskStateSchema,
   taskPrioritySchema,
-  taskStateSchema,
 } from "../../lib/taskFields.js";
 import {
   allocateTaskNumber,
@@ -31,6 +31,7 @@ import {
 import {
   rejectCompleteIfBlocked,
   rejectDeleteIfBlocked,
+  rejectDeleteIfHasChildren,
 } from "./taskDependencies.js";
 
 const taskBody = z.object({
@@ -42,7 +43,7 @@ const taskBody = z.object({
   color: z.string().max(64).optional().nullable(),
   phaseId: z.number().int().positive().optional().nullable(),
   parentId: z.number().int().positive().optional().nullable(),
-  state: taskStateSchema.optional(),
+  state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
 });
@@ -55,7 +56,7 @@ const taskPatch = z.object({
   color: z.string().max(64).optional().nullable(),
   phaseId: z.number().int().positive().optional().nullable(),
   parentId: z.number().int().positive().nullable().optional(),
-  state: taskStateSchema.optional(),
+  state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
 });
@@ -92,7 +93,7 @@ tasksRouter.get("/", async (req, res) => {
     const rows = await db
       .select()
       .from(schema.tasks)
-      .where(eq(schema.tasks.projectId, projectId))
+      .where(and(eq(schema.tasks.projectId, projectId), ne(schema.tasks.state, "deleted")))
       .orderBy(asc(schema.tasks.sortOrder), asc(schema.tasks.id));
     res.json({ data: await attachTaskActors(db, rows) });
   } catch (err) {
@@ -243,7 +244,7 @@ tasksRouter.patch("/reorder", async (req, res) => {
     const rows = await db
       .select()
       .from(schema.tasks)
-      .where(eq(schema.tasks.projectId, projectId))
+      .where(and(eq(schema.tasks.projectId, projectId), ne(schema.tasks.state, "deleted")))
       .orderBy(asc(schema.tasks.sortOrder), asc(schema.tasks.id));
     res.json({ data: await attachTaskActors(db, rows) });
   } catch (err) {
@@ -275,6 +276,15 @@ tasksRouter.patch("/:taskId", async (req, res) => {
     const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
     if (!existing || existing.projectId !== projectId) {
       sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    if (existing.state === "deleted") {
+      sendError(
+        res,
+        400,
+        "task_deleted",
+        "Cannot update a deleted task; restore it from Administration first",
+      );
       return;
     }
 
@@ -371,20 +381,39 @@ tasksRouter.delete("/:taskId", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
+    if (existing.state === "deleted") {
+      sendError(res, 400, "already_deleted", "Task is already deleted");
+      return;
+    }
     const deleteGate = await rejectDeleteIfBlocked(taskId);
     if (deleteGate.blocked) {
       sendError(res, 400, "dependency_required_by", deleteGate.message);
       return;
     }
-    const deleted = await db
-      .delete(schema.tasks)
+    const childGate = await rejectDeleteIfHasChildren(taskId);
+    if (childGate.blocked) {
+      sendError(res, 400, "has_children", childGate.message);
+      return;
+    }
+    const actorId = await getCurrentUserId(db);
+    const [row] = await db
+      .update(schema.tasks)
+      .set({
+        state: "deleted",
+        updatedAt: new Date(),
+        updatedById: actorId,
+      })
       .where(eq(schema.tasks.id, taskId))
-      .returning({ id: schema.tasks.id, projectId: schema.tasks.projectId });
-    const d = deleted[0];
-    if (!d || d.projectId !== projectId) {
+      .returning();
+    if (!row || row.projectId !== projectId) {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
+    await recordTaskChanges(db, taskId, existing, row, {
+      actorId,
+      source: activitySourceFromRequest(req),
+      recordHistory: shouldRecordHistory(req),
+    });
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);

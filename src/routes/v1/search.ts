@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -167,6 +167,7 @@ searchRouter.get("/", async (req, res) => {
             .from(schema.tasks)
             .where(
               and(
+                ne(schema.tasks.state, "deleted"),
                 taskIds != null ? inArray(schema.tasks.id, taskIds) : sql`true`,
                 pattern
                   ? or(

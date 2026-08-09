@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -11,6 +11,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import {
   dueDateSchema,
+  selectableTaskStateSchema,
   taskPrioritySchema,
   taskStateSchema,
 } from "../../lib/taskFields.js";
@@ -29,6 +30,7 @@ import {
 import {
   rejectCompleteIfBlocked,
   rejectDeleteIfBlocked,
+  rejectDeleteIfHasChildren,
 } from "./taskDependencies.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -38,7 +40,7 @@ const createBody = z.object({
   description: z.string().max(50_000).optional().nullable(),
   dueDate: dueDateSchema,
   color: z.string().max(64).optional().nullable(),
-  state: taskStateSchema.optional(),
+  state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   parentId: z.number().int().positive().optional().nullable(),
 });
@@ -48,7 +50,7 @@ const patchBody = z.object({
   description: z.string().max(50_000).optional().nullable(),
   dueDate: dueDateSchema,
   color: z.string().max(64).optional().nullable(),
-  state: taskStateSchema.optional(),
+  state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   parentId: z.number().int().positive().nullable().optional(),
   projectId: z.number().int().positive().nullable().optional(),
@@ -61,6 +63,10 @@ const listQuery = z.object({
     .union([z.literal("null"), z.coerce.number().int().positive()])
     .optional(),
   state: taskStateSchema.optional(),
+  /** When true (or when state=deleted), include soft-deleted tasks. */
+  includeDeleted: z
+    .union([z.literal("true"), z.literal("1"), z.literal("false"), z.literal("0")])
+    .optional(),
 });
 
 /** Top-level tasks (including projectId null). */
@@ -71,6 +77,7 @@ standaloneTasksRouter.get("/", async (req, res) => {
     const parsed = listQuery.parse({
       projectId: req.query.projectId as string | undefined,
       state: req.query.state as string | undefined,
+      includeDeleted: req.query.includeDeleted as string | undefined,
     });
     const filters = [];
     if (parsed.projectId === "null") {
@@ -80,6 +87,12 @@ standaloneTasksRouter.get("/", async (req, res) => {
     }
     if (parsed.state) {
       filters.push(eq(schema.tasks.state, parsed.state));
+    } else {
+      const includeDeleted =
+        parsed.includeDeleted === "true" || parsed.includeDeleted === "1";
+      if (!includeDeleted) {
+        filters.push(ne(schema.tasks.state, "deleted"));
+      }
     }
     const rows = await db
       .select()
@@ -154,6 +167,15 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
     const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
     if (!existing) {
       sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    if (existing.state === "deleted") {
+      sendError(
+        res,
+        400,
+        "task_deleted",
+        "Cannot update a deleted task; restore it from Administration first",
+      );
       return;
     }
 
@@ -282,19 +304,44 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
 standaloneTasksRouter.delete("/:taskId", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
+    const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
+    if (!existing) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    if (existing.state === "deleted") {
+      sendError(res, 400, "already_deleted", "Task is already deleted");
+      return;
+    }
     const deleteGate = await rejectDeleteIfBlocked(taskId);
     if (deleteGate.blocked) {
       sendError(res, 400, "dependency_required_by", deleteGate.message);
       return;
     }
-    const deleted = await db
-      .delete(schema.tasks)
+    const childGate = await rejectDeleteIfHasChildren(taskId);
+    if (childGate.blocked) {
+      sendError(res, 400, "has_children", childGate.message);
+      return;
+    }
+    const actorId = await getCurrentUserId(db);
+    const [row] = await db
+      .update(schema.tasks)
+      .set({
+        state: "deleted",
+        updatedAt: new Date(),
+        updatedById: actorId,
+      })
       .where(eq(schema.tasks.id, taskId))
-      .returning({ id: schema.tasks.id });
-    if (!deleted[0]) {
+      .returning();
+    if (!row) {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
+    await recordTaskChanges(db, taskId, existing, row, {
+      actorId,
+      source: activitySourceFromRequest(req),
+      recordHistory: shouldRecordHistory(req),
+    });
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);

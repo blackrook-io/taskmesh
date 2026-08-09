@@ -8,6 +8,8 @@ type Props = {
   confirmDisabled?: boolean;
   /** When true, only show the confirm button (dismiss / acknowledge). */
   alertOnly?: boolean;
+  /** Confirm button style; default danger (destructive) unless alertOnly. */
+  confirmTone?: "danger" | "primary";
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -20,10 +22,12 @@ export function ConfirmDialog({
   confirmLabel = "Delete",
   confirmDisabled = false,
   alertOnly = false,
+  confirmTone,
   onConfirm,
   onCancel,
 }: Props) {
   if (!open) return null;
+  const tone = confirmTone ?? (alertOnly ? "primary" : "danger");
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
       <div
@@ -48,7 +52,7 @@ export function ConfirmDialog({
           )}
           <button
             type="button"
-            className={alertOnly ? "btn primary" : "btn danger"}
+            className={tone === "primary" ? "btn primary" : "btn danger"}
             disabled={confirmDisabled}
             onClick={onConfirm}
           >

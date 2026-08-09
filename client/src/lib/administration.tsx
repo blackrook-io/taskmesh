@@ -16,6 +16,7 @@ export const ADMIN_SECTIONS = [
   "logging",
   "system-properties",
   "templates",
+  "deleted-tasks",
 ] as const;
 
 export type AdminSection = (typeof ADMIN_SECTIONS)[number];
@@ -28,6 +29,7 @@ export const ADMIN_SECTION_LABELS: Record<AdminSection, string> = {
   logging: "System Logs",
   "system-properties": "System Properties",
   templates: "Templates",
+  "deleted-tasks": "Deleted Tasks",
 };
 
 export function isAdminSection(value: string): value is AdminSection {
@@ -45,6 +47,7 @@ export function adminSectionFromPath(pathname: string): AdminSection | null {
   if (pathname === "/admin/backups") return "backups";
   if (pathname === "/admin/system-properties") return "system-properties";
   if (pathname === "/admin/templates") return "templates";
+  if (pathname === "/admin/deleted-tasks") return "deleted-tasks";
   return null;
 }
 

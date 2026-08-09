@@ -1,4 +1,4 @@
-import { and, asc, eq, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, ne, notInArray, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { formatTaskNumber } from "../lib/taskFields.js";
@@ -13,7 +13,7 @@ export type TaskDepSummary = {
 };
 
 /** States that no longer block Complete / Delete gates. */
-export const TERMINAL_TASK_STATES = new Set(["complete", "canceled"]);
+export const TERMINAL_TASK_STATES = new Set(["complete", "canceled", "deleted"]);
 
 export function isOpenTaskState(state: string): boolean {
   return !TERMINAL_TASK_STATES.has(state);
@@ -123,6 +123,13 @@ export async function addDependency(
     .where(eq(schema.tasks.id, dependsOnTaskId));
   if (!dependent || !blocker) {
     return { ok: false, code: "not_found", message: "Task not found" };
+  }
+  if (dependent.state === "deleted" || blocker.state === "deleted") {
+    return {
+      ok: false,
+      code: "task_deleted",
+      message: "Cannot link dependencies involving a deleted task",
+    };
   }
 
   if (await wouldCreateDependencyCycle(db, taskId, dependsOnTaskId)) {
@@ -283,6 +290,7 @@ export async function searchTasksForDependency(
   const displayNumberSql = sql`('T' || LPAD(CAST(${schema.tasks.number} AS TEXT), 4, '0'))`;
 
   const filters = [
+    ne(schema.tasks.state, "deleted"),
     or(
       sql`${schema.tasks.title} ILIKE ${pattern}`,
       sql`CAST(${schema.tasks.number} AS TEXT) ILIKE ${pattern}`,

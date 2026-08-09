@@ -1,0 +1,74 @@
+# T0055 — Soft-delete tasks (`deleted` state)
+
+## Context
+
+- **Task:** T0055 (id 62) — Restructure Deleted Tasks
+- **State at plan:** `ready`
+- **Branch (on approve):** `T0055-soft-delete-tasks`
+
+Hard `DELETE` leaves Task-number holes and breaks references. Replace with soft-delete via a non-selectable `deleted` state, hide from normal lists, mark remaining references, and allow Admin restore to Draft.
+
+## Decisions (interview)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Mechanism | Real `TaskState` value `deleted` (not a separate `deletedAt` column) |
+| 2 | Restore | Always restore to **Draft** (`new`) |
+| 3 | Hard purge | Out of scope — rows stay in DB; permanent delete is a future feature |
+| 4 | Required-by | **Block** soft-delete while open tasks Required-by this task; **surface a clear error** to the user (keep/adapt existing `rejectDeleteIfBlocked`) |
+| 5 | Children | Soft-delete **not allowed** while the task has child tasks; clear user-facing error (same strict gate spirit as #4 — no unlink-on-delete path) |
+| 6 | Red + `[X]` refs | Depends on / Required by lists, and any existing task-number chip/link that can still resolve a deleted task (parent label, dependency search results if shown). Not every historical activity string. **Approved.** |
+| 7 | Admin UI | New **Deleted Tasks** section under Administration modal |
+
+## Scope
+
+### Schema / API
+
+- Add `deleted` to `TASK_STATES` (server + client), Zod enums, labels, tones/CSS.
+- Exclude `deleted` from state dropdowns, cycle checkbox, filter chips, and any “selectable” state lists.
+- Treat `deleted` like terminal for dependency “open” checks (`isOpenTaskState` → false).
+- Change `DELETE /tasks/:id` (project + standalone) to soft-delete: set `state: "deleted"` (and activity/history), **not** row remove. Reuse delete gate(s):
+  - open Required-by → 400 + message (existing)
+  - has children → 400 + message (new)
+- Reject `PATCH` that sets `state: "deleted"` from normal clients **or** route all soft-deletes through DELETE only; Admin restore via dedicated endpoint or Admin-only PATCH (`deleted` → `new` only).
+- Default task list/board/search/dependency-search queries **exclude** `deleted` unless `includeDeleted=true` (Admin).
+- `GET` by id may still return a deleted task (for reference rendering / Admin).
+- Admin: `GET` deleted tasks (filter `state=deleted`); restore → `state: "new"` (Draft). Do not change `dueDate`.
+- Update `docs/database/` + `npm run docs:sync-schema` if schema docs mention task states.
+
+### UI
+
+- Confirm-delete dialog: keep confirmation; on failure show API error (required-by / children) in the dialog (already partially wired).
+- Remove “children will be unlinked” copy — replace with block behavior / error.
+- List / board / phase views: deleted tasks never appear.
+- Shared presentation for deleted references: red text + `[X]` (or icon) beside task number/title where refs still show.
+- Administration: **Deleted Tasks** panel — list deleted tasks (number, title, project), **Restore** → Draft with confirm.
+
+### Out of scope
+
+- Permanent purge / vacuum of deleted rows
+- Multi-user auth gates beyond existing Admin chrome (app remains single-user; Admin section is the home for restore)
+- Soft-delete for Ideas / Documents / other entities
+
+## Implementation outline
+
+1. Shared `TASK_STATES` + helpers (`isSelectableTaskState`, `isDeletedTaskState`, open-state for deps).
+2. Migration if DB check constraint / enum exists; else app-level enum only (verify `schema.ts`).
+3. Soft-delete in task delete routes + child gate; filter lists.
+4. Client: hide `deleted` from selectors; wire delete errors; reference styling component/helper.
+5. Admin Deleted Tasks panel + API.
+6. Schema docs sync if needed.
+
+## QA checklist (draft)
+
+- [ ] Delete task with no deps/children → disappears from lists; row still in DB with `state=deleted`; number unchanged
+- [ ] Delete blocked when open Required-by → user-visible error; task unchanged
+- [ ] Delete blocked when has children → user-visible error; task unchanged
+- [ ] `deleted` not in state dropdown / checkbox cycle / filter options
+- [ ] Dependency (or other) ref to deleted task shows red + `[X]`
+- [ ] Admin → Deleted Tasks lists soft-deleted tasks; Restore → Draft and task reappears in normal UI
+- [ ] No hard row delete from UI
+
+## Open confirm
+
+- **#6:** Approved (deps lists + resolved task-number links).

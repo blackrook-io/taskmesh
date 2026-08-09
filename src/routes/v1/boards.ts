@@ -660,7 +660,7 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
 
     if (entityType === "task") {
       const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, entityId));
-      if (!task || task.projectId !== projectId) {
+      if (!task || task.projectId !== projectId || task.state === "deleted") {
         sendError(res, 404, "not_found", "Task not found on this project");
         return;
       }

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from "react";
 import { NavIcon } from "./NavIcon";
 import { shellIcons } from "./shellIcons";
 import { AdminApisPanel } from "../admin/AdminApisPanel";
+import { AdminDeletedTasksPanel } from "../admin/AdminDeletedTasksPanel";
 import { AdminKeysPanel } from "../admin/AdminKeysPanel";
 import { AdminLoggingPanel } from "../admin/AdminLoggingPanel";
 import { AdminSystemPropertiesPanel } from "../admin/AdminSystemPropertiesPanel";
@@ -25,6 +26,7 @@ const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
   backups: shellIcons.documents,
   "system-properties": shellIcons.admin,
   templates: shellIcons.templates,
+  "deleted-tasks": shellIcons.tasks,
 };
 
 export function AdministrationModal() {
@@ -109,6 +111,7 @@ export function AdministrationModal() {
             {section === "backups" ? <BackupsPage embedded /> : null}
             {section === "system-properties" ? <AdminSystemPropertiesPanel /> : null}
             {section === "templates" ? <AdminTemplatesPanel /> : null}
+            {section === "deleted-tasks" ? <AdminDeletedTasksPanel /> : null}
           </div>
         </div>
       </div>

@@ -7,13 +7,14 @@ import {
 } from "../services/taskDependencies.js";
 
 describe("taskDependencies helpers", () => {
-  it("treats complete and canceled as terminal", () => {
+  it("treats complete, canceled, and deleted as terminal", () => {
     assert.equal(isOpenTaskState("new"), true);
     assert.equal(isOpenTaskState("ready"), true);
     assert.equal(isOpenTaskState("in_progress"), true);
     assert.equal(isOpenTaskState("on_hold"), true);
     assert.equal(isOpenTaskState("complete"), false);
     assert.equal(isOpenTaskState("canceled"), false);
+    assert.equal(isOpenTaskState("deleted"), false);
   });
 
   it("formats complete/delete blocker messages", () => {

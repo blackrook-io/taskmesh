@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -123,4 +123,19 @@ export async function rejectDeleteIfBlocked(
   const blockers = await openRequiredByBlockers(db, taskId);
   if (blockers.length === 0) return { blocked: false };
   return { blocked: true, message: formatBlockersMessage("delete", blockers) };
+}
+
+export async function rejectDeleteIfHasChildren(
+  taskId: number,
+): Promise<{ blocked: true; message: string } | { blocked: false }> {
+  const children = await db
+    .select({ id: schema.tasks.id })
+    .from(schema.tasks)
+    .where(and(eq(schema.tasks.parentId, taskId), ne(schema.tasks.state, "deleted")));
+  if (children.length === 0) return { blocked: false };
+  const n = children.length;
+  return {
+    blocked: true,
+    message: `Cannot delete: task has ${n} child task${n === 1 ? "" : "s"}. Reparent or delete them first.`,
+  };
 }

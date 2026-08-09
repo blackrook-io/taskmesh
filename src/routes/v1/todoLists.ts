@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -87,7 +87,7 @@ async function hydrateUnsortedItems(inboxListId: number) {
   const tasks = await db
     .select()
     .from(schema.tasks)
-    .where(isNull(schema.tasks.projectId))
+    .where(and(isNull(schema.tasks.projectId), ne(schema.tasks.state, "deleted")))
     .orderBy(asc(schema.tasks.id));
 
   const out = [];
