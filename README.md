@@ -1,6 +1,12 @@
 # TaskMesh
 
-Personal web app for **projects**, **ideas**, and **task lists** — with Markdown documents, tags, To Do lists, Kanban boards, a nested wiki, and freeform **Excalidraw** canvases.
+This is a personal web app that I have designed to manage my own **projects**, **ideas**, and **task lists** — with Markdown documents, tags, To Do lists, Kanban boards, a nested wiki, and freeform **Excalidraw** canvases. I got tired of having my "thought work" scattered between Github Projects, Issue boards, repositories, local markdown libraries and notes everywhere including dead-tree notebooks.
+
+I designed the app to consolidate all of that effort and knowledge into one place, where I can have my todo lists (which I am *always* searching for a good app for to fit *my* needs), all my thoughts and plans for aspirations that I have (which are many and varied), and all of the documents that I have produced toward those goals over time. 
+
+This app is not going to suit everyone's needs, nor shall it. I develop it for myself, and I provide zero support or warranty if you decide to use it.  Feel free to fork it, download it, install it and run it, develop on your version all you like.  **You are on your own.**
+
+---
 
 **Stack:** Node.js · TypeScript · Express · PostgreSQL · Drizzle ORM · Vite · React  
 
