@@ -1,0 +1,94 @@
+# T0068 — Collapsible left nav
+
+**Task:** T0068 — Collapsible left nav feature  
+**Branch (on approval):** `T0068-collapsible-left-nav`  
+**State:** in progress — implementing  
+**PROD task id:** 79 · projectId 4 · priority medium · state `in_progress`
+
+## Context
+
+Maximize focus by collapsing the left `AppNav` through three modes:
+
+| Mode | Layout |
+|------|--------|
+| **Full** | Current design (labels + project tree + full footer) |
+| **Less** | Icon rail; wordmark → MeshMark app icon; no nested project list |
+| **Hidden** | Nav off-canvas; a noticeable edge **handle** restores the last non-hidden mode |
+
+Context (middle) nav stays as-is. Mobile hamburger drawer stays Full when open; collapse modes are **desktop** only.
+
+## Size / split
+
+One UI/CSS + small client persistence module. Suitable for a single session. No split.
+
+## Decisions (confirmed)
+
+1. **Persist** nav mode in `localStorage` (same pattern as theme).
+2. **Control:** standard sidebar rail on the nav’s trailing edge — **expand (›)** and **collapse (‹)** buttons (large hit targets). Collapse: Full → Less → Hidden. Expand: Less → Full; Hidden handle → last non-hidden mode (`full` or `less`).
+3. **Less / Projects:** no expandable project list. Icon navigates to the **last-viewed project** (`/projects/:id`), persisted in `localStorage`; if none, fall back to `/projects`. Context nav remains the place for the full project list.
+4. **Less footer:** icon-only **⌘K** (command palette), **Administration**, and **Settings** (gear). Hide version, clock, and text labels. **Omit AI** from Less (still available via Full + Ctrl/⌘J).
+5. **Administration icon (recommendation):** keep existing `shellIcons.admin` = **`faShieldHalved`** (shield) — already used in Full nav and reads as “admin / security.” Alternative if preferred: `faUserShield`. Confirm or swap at implement time; default = shield-halved.
+6. **Context nav:** unchanged this task.
+7. **Mobile:** collapse density modes do not apply; existing Menu drawer behavior unchanged.
+
+## Goals
+
+- Three-mode left nav with smooth width transition and clear active-section affordance in Less.
+- Persist: `navMode` (`full` \| `less` \| `hidden`) + `lastExpandedMode` (`full` \| `less`) + `lastProjectId`.
+- Accessible controls (`aria-expanded` / labels); tooltips/`title` on icon-only items in Less.
+- Hidden mode leaves main + context usable; handle remains clickable and noticeable.
+
+## Non-goals
+
+- Collapsing or changing the middle context nav.
+- Server-side user prefs.
+- Changing mobile drawer UX beyond ignoring Less/Hidden on small breakpoints.
+- Redesigning nav IA or adding/removing primary destinations (except Less footer simplification).
+
+## Implementation
+
+### 1. Persistence helper
+
+`client/src/lib/appNavMode.ts` (or similar):
+
+- Keys: `taskmesh.appNav.mode`, `taskmesh.appNav.lastExpanded`, `taskmesh.appNav.lastProjectId`
+- Load/save with safe JSON/parse fallbacks
+- Hook or small context used by `AppShell` / `AppNav` so grid width and chrome stay in sync
+
+### 2. Shell layout
+
+- `AppShell`: set CSS vars / modifiers, e.g. `app-shell--nav-full|less|hidden`
+- Grid: Full uses `--app-nav-width` (13rem); Less uses a new `--app-nav-width-less` (~3.25–3.5rem); Hidden → `0` + overlay/edge handle outside the grid column
+- Edge toggle button sized for noticeability (min ~2rem hit target, accent-friendly hover)
+
+### 3. `AppNav` modes
+
+- **Full:** current markup; add rail toggle
+- **Less:** MeshMark link home; section `NavLink`s icon-only + `title`; Projects → last project path; footer icon buttons for palette / admin / settings; no project subtree, no version/clock/AI
+- **Hidden:** do not render full aside in flow; only the restore handle (in shell)
+
+### 4. CSS
+
+- Extend `index.css` shell/nav rules for Less (center glyphs, hide labels/chevrons) and Hidden handle
+- Respect existing `@media` mobile rules: force Full drawer behavior; don’t apply Less/Hidden strip
+
+### 5. Last project tracking
+
+- On successful navigate to `/projects/:id` (not `new`), write `lastProjectId`
+- Less Projects link uses that id when valid
+
+## QA checklist (post-implement)
+
+1. Desktop Full → Less → Hidden cycle via rail; handle restores last of Full/Less.
+2. Reload preserves mode and last project for Less → Projects.
+3. Less: icons only; tooltips; active state still visible; MeshMark replaces wordmark.
+4. Less footer: ⌘K, Admin (shield), Settings only.
+5. Context nav + main content layout remain correct in all three modes.
+6. Mobile: Menu still opens Full nav; no broken Less strip.
+7. Keyboard: focusable toggle/handle; icon buttons activatable.
+
+## Out of scope follow-ups
+
+- Persist prefs server-side / per-user settings page control
+- Collapse context nav similarly
+- Put AI back in Less if desired

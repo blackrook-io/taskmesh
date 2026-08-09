@@ -1,17 +1,38 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import type { AppNavMode } from "../../lib/appNavMode";
+import { useAppNavMode } from "../../lib/useAppNavMode";
 import { AppNav } from "./AppNav";
 import { ContextNav } from "./ContextNav";
+
+const MOBILE_NAV_MQ = "(max-width: 960px)";
 
 type Props = {
   onOpenPalette: () => void;
   onOpenAssistant: () => void;
 };
 
+function useIsMobileNav(): boolean {
+  const [mobile, setMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(MOBILE_NAV_MQ).matches : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_NAV_MQ);
+    const onChange = () => setMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return mobile;
+}
+
 export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
   const [navOpen, setNavOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const location = useLocation();
+  const { mode, collapse, expand, restoreFromHidden } = useAppNavMode();
+  const isMobileNav = useIsMobileNav();
+  const desktopMode: AppNavMode = isMobileNav ? "full" : mode;
 
   const closeDrawers = () => {
     setNavOpen(false);
@@ -22,8 +43,17 @@ export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
     closeDrawers();
   }, [location.pathname, location.search]);
 
+  const shellClass = [
+    "app-shell",
+    `app-shell--nav-${desktopMode}`,
+    navOpen ? "app-shell--nav-open" : "",
+    contextOpen ? "app-shell--context-open" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={`app-shell${navOpen ? " app-shell--nav-open" : ""}${contextOpen ? " app-shell--context-open" : ""}`}>
+    <div className={shellClass}>
       <header className="app-shell__mobile-bar">
         <button
           type="button"
@@ -60,8 +90,26 @@ export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
         />
       )}
 
+      {!isMobileNav && mode === "hidden" ? (
+        <button
+          type="button"
+          className="app-shell__nav-handle"
+          aria-label="Show navigation"
+          title="Show navigation"
+          onClick={restoreFromHidden}
+        >
+          <span className="app-shell__nav-handle-bar" aria-hidden />
+          <span className="app-shell__nav-handle-chevron" aria-hidden>
+            ›
+          </span>
+        </button>
+      ) : null}
+
       <div id="app-nav-drawer" className="app-shell__nav">
         <AppNav
+          mode={desktopMode}
+          onCollapse={collapse}
+          onExpand={expand}
           onOpenPalette={onOpenPalette}
           onOpenAssistant={onOpenAssistant}
           onNavigate={closeDrawers}

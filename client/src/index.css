@@ -12,6 +12,7 @@
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --content-max: 1100px;
   --app-nav-width: 13rem;
+  --app-nav-width-less: 3.5rem;
   --context-nav-width: 11.75rem;
   --touch-min: 2.25rem; /* denser; ~36px */
   --radius: 8px;
@@ -221,14 +222,24 @@ code {
 
 .app-shell {
   --app-nav-bg: color-mix(in srgb, var(--bg) 70%, #000);
+  --app-nav-col: var(--app-nav-width);
   display: grid;
-  grid-template-columns: var(--app-nav-width) var(--context-nav-width) minmax(0, 1fr);
+  grid-template-columns: var(--app-nav-col) var(--context-nav-width) minmax(0, 1fr);
   grid-template-rows: 1fr;
   height: 100vh;
   height: 100dvh;
   width: 100%;
   overflow: hidden;
   background: var(--bg);
+  transition: grid-template-columns 0.2s ease;
+}
+
+.app-shell--nav-less {
+  --app-nav-col: var(--app-nav-width-less);
+}
+
+.app-shell--nav-hidden {
+  --app-nav-col: 0px;
 }
 
 .app-shell__mobile-bar {
@@ -244,6 +255,57 @@ code {
   border-right: 1px solid var(--border);
   background: var(--app-nav-bg);
   overflow: hidden;
+  position: relative;
+  transition: opacity 0.15s ease;
+}
+
+.app-shell--nav-hidden .app-shell__nav {
+  border-right: none;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.app-shell__nav-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  position: fixed;
+  left: 0;
+  top: 50%;
+  z-index: 25;
+  transform: translateY(-50%);
+  width: 1.35rem;
+  min-height: 4.5rem;
+  padding: 0.65rem 0;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--app-nav-bg, var(--surface));
+  color: var(--accent);
+  cursor: pointer;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.28);
+}
+
+.app-shell__nav-handle:hover {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  width: 1.55rem;
+}
+
+.app-shell__nav-handle-bar {
+  width: 0.2rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.app-shell__nav-handle-chevron {
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 700;
 }
 
 .app-shell__context {
@@ -269,6 +331,43 @@ code {
   min-height: 0;
   padding: var(--space-5) var(--space-4) max(var(--space-5), env(safe-area-inset-bottom));
   gap: var(--space-5);
+  position: relative;
+}
+
+.app-nav__rail {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  transform: translate(50%, -50%);
+  pointer-events: auto;
+}
+
+.app-nav__rail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  min-height: 1.45rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.app-nav__rail-btn:hover {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
 .app-nav__top {
@@ -276,6 +375,98 @@ code {
   flex-direction: column;
   gap: var(--space-3);
   padding: 0 var(--space-1);
+}
+
+.app-nav__mark-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0.15rem 0;
+}
+
+.app-nav__mark-link:hover {
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.app-nav__mark {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.app-nav--less {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+  align-items: stretch;
+}
+
+.app-nav--less .app-nav__top {
+  padding: 0;
+  align-items: center;
+}
+
+.app-nav--less .app-nav__item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+  gap: 0;
+}
+
+.app-nav--less .app-nav__label,
+.app-nav--less .app-nav__chevron {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-nav--less .app-nav__glyph {
+  width: auto;
+}
+
+.app-nav--less .app-nav__footer {
+  align-items: center;
+  border-top-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.app-nav__tools--less {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  width: 100%;
+}
+
+.app-nav__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  min-height: 2.15rem;
+  padding: 0;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.app-nav__icon-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.app-nav__icon-btn.is-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .brand-wordmark {
@@ -4224,7 +4415,10 @@ a:focus-visible {
 /* —— Responsive (Phase 10c: ~412 phone / ~800–1030 tablet) —— */
 
 @media (max-width: 960px) {
-  .app-shell {
+  .app-shell,
+  .app-shell--nav-less,
+  .app-shell--nav-hidden {
+    --app-nav-col: 0px;
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
@@ -4259,6 +4453,20 @@ a:focus-visible {
     transform: translateX(-105%);
     transition: transform 0.2s ease;
     box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .app-shell--nav-hidden .app-shell__nav {
+    opacity: 1;
+    pointer-events: auto;
+    border-right: 1px solid var(--border);
+  }
+
+  .app-shell__nav-handle {
+    display: none;
+  }
+
+  .app-nav__rail {
+    display: none;
   }
 
   .app-shell__context {
