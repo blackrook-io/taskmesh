@@ -7,6 +7,7 @@ import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { PencilIcon } from "../components/shared/PencilIcon";
 import { TagInput } from "../components/shared/TagInput";
 import { TaskBoard } from "../components/TaskBoard";
+import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
@@ -20,6 +21,8 @@ import {
 } from "../lib/projectModules";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { patchTaskRecord } from "../lib/patchTask";
+import { evaluateTaskListFilter, storageKeyForProjectTasks } from "../lib/taskListFilter";
+import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TodoList } from "../types";
 
 type Tab = "overview" | "images" | "settings" | ProjectModuleKey;
@@ -179,6 +182,17 @@ export function ProjectDetailPage() {
   const phases = phasesQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
   const documents = documentsQuery.data ?? [];
+
+  const taskListFilterKey = storageKeyForProjectTasks(projectId);
+  const {
+    filter: taskListFilter,
+    applyFilter: applyTaskListFilter,
+    clearFilter: clearTaskListFilter,
+  } = usePersistedTaskListFilter(taskListFilterKey);
+  const filteredTasks = useMemo(
+    () => evaluateTaskListFilter(tasks, taskListFilter),
+    [tasks, taskListFilter],
+  );
 
   const selectedDoc = useMemo(
     () => documents.find((d) => d.id === selectedDocId) ?? null,
@@ -523,11 +537,16 @@ export function ProjectDetailPage() {
               </div>
             </div>
           </div>
-          <div style={{ marginTop: "1rem" }}>
+          <TaskListFilterBar
+            filter={taskListFilter}
+            onApply={applyTaskListFilter}
+            onClear={clearTaskListFilter}
+          />
+          <div style={{ marginTop: "0.5rem" }}>
             <TaskBoard
               projectId={projectId}
               phases={phases}
-              tasks={tasks}
+              tasks={filteredTasks}
               onReorder={async (payload) => {
                 await reorderTasks.mutateAsync(payload);
               }}

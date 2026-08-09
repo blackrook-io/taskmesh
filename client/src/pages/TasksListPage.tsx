@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
+import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
 import {
   TASK_PRIORITIES,
@@ -14,6 +15,12 @@ import {
   taskStateClass,
   type TaskPriority,
 } from "../lib/taskFields";
+import {
+  evaluateTaskListFilter,
+  isFilterActive,
+  storageKeyForGlobalTasks,
+} from "../lib/taskListFilter";
+import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import type { Project, ProjectPhase, Task } from "../types";
 
 type SortCol = "number" | "title" | "state" | "priority" | "dueDate" | "project";
@@ -103,10 +110,17 @@ export function TasksListPage() {
   const projectLabel = (id: number | null) =>
     id == null ? "—" : (projectNameById.get(id) ?? `Project #${id}`);
 
-  const tasks = useMemo(
-    () => sortTasks(tasksQuery.data ?? [], sortCol, sortDir, projectLabel),
-    [tasksQuery.data, sortCol, sortDir, projectNameById],
-  );
+  const taskListFilterKey = storageKeyForGlobalTasks(filter);
+  const {
+    filter: taskListFilter,
+    applyFilter: applyTaskListFilter,
+    clearFilter: clearTaskListFilter,
+  } = usePersistedTaskListFilter(taskListFilterKey);
+
+  const tasks = useMemo(() => {
+    const filtered = evaluateTaskListFilter(tasksQuery.data ?? [], taskListFilter);
+    return sortTasks(filtered, sortCol, sortDir, projectLabel);
+  }, [tasksQuery.data, sortCol, sortDir, projectNameById, taskListFilter]);
 
   const modalTaskFromList =
     modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
@@ -246,6 +260,12 @@ export function TasksListPage() {
         </button>
       </div>
 
+      <TaskListFilterBar
+        filter={taskListFilter}
+        onApply={applyTaskListFilter}
+        onClear={clearTaskListFilter}
+      />
+
       <div className="task-list task-list--global">
         <div className="task-list-header">
           <span className="task-list-header__stripe" />
@@ -273,7 +293,7 @@ export function TasksListPage() {
 
         {tasks.length === 0 ? (
           <p className="muted" style={{ padding: "0.75rem 0.5rem" }}>
-            No tasks yet.
+            {isFilterActive(taskListFilter) ? "No tasks match this filter." : "No tasks yet."}
           </p>
         ) : (
           tasks.map((task) => (

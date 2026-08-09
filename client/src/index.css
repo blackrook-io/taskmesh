@@ -2026,6 +2026,138 @@ a:focus-visible {
   margin-top: 0.8rem;
 }
 
+.task-list-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0.35rem 0 0.5rem;
+  min-height: 1.6rem;
+}
+
+.task-list-filter-bar__trail {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-list-filter-bar__btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.8rem;
+}
+
+.task-list-filter-bar__btn--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.task-list-filter-modal {
+  max-width: min(640px, 100%);
+}
+
+.task-list-filter-modal__hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.task-list-filter-modal__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.task-list-filter-modal__row {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(5.5rem, 1fr) minmax(5.5rem, 1fr) minmax(6rem, 1.4fr) auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.task-list-filter-modal__join-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  text-align: right;
+}
+
+.task-list-filter-modal__join-label--spacer {
+  visibility: hidden;
+}
+
+.task-list-filter-modal__row select,
+.task-list-filter-modal__row input {
+  width: 100%;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+.task-list-filter-modal__remove {
+  padding: 0.15rem 0.4rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.task-list-filter-modal__add {
+  margin-top: 0.65rem;
+}
+
+.task-list-filter-modal__actions {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.task-list-filter-modal__actions-right {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+@media (max-width: 560px) {
+  .task-list-filter-modal__row {
+    grid-template-columns: 3rem 1fr auto;
+    grid-template-areas:
+      "join field remove"
+      "join op remove"
+      "join value remove";
+  }
+
+  .task-list-filter-modal__join-label {
+    grid-area: join;
+    align-self: start;
+    padding-top: 0.45rem;
+  }
+
+  .task-list-filter-modal__row select:nth-of-type(1) {
+    grid-area: field;
+  }
+
+  .task-list-filter-modal__row select:nth-of-type(2) {
+    grid-area: op;
+  }
+
+  .task-list-filter-modal__row select:nth-of-type(3),
+  .task-list-filter-modal__row input {
+    grid-area: value;
+  }
+
+  .task-list-filter-modal__remove {
+    grid-area: remove;
+    align-self: start;
+  }
+}
+
 .confirm-dialog__warning {
   margin: 0.5rem 0 0;
   color: var(--danger);

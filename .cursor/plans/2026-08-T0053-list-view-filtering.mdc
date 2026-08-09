@@ -1,0 +1,105 @@
+# T0053 — List view filtering functionality
+
+## Goal
+
+Add compound client-side filtering to **task list views**: Field + Operator + Value clauses joined with AND/OR, a Filter modal, Clear filter, and a small right-aligned breadcrumb of the active filter next to a Filter icon.
+
+## Clarifications (answered)
+
+1. **Surfaces:** Filtering on any task list view — project Tasks tab (`TaskBoard`) **and** global `/tasks` (`TasksListPage`). Shared filter UI/logic; wire both.
+2. **Text matching:** All string compares are **case-insensitive**.
+3. **Operators:**
+   - `is` — exact match (case-insensitive for text)
+   - `is not` — inverse of `is`
+   - `contains` — substring match (case-insensitive)
+   - `starts with` — prefix match (case-insensitive)
+4. **Number field:** Match against display form (`T0053`) and/or raw digits; `contains` / `starts with` / `is` / `is not` all apply to the normalized string form (e.g. `T0053` and input `53` / `T53` / `T0053` as appropriate).
+5. **Per-list persistence:** Each list view keeps its own filter. Project 1’s task list ≠ Project 2’s ≠ global `/tasks`. Persist at **browser/user level** (`localStorage`), survive reload and navigation.
+
+## Scope
+
+**In scope**
+- Project Tasks tab (`ProjectDetailPage` + `TaskBoard`)
+- Global Tasks page (`TasksListPage`)
+- Filterable fields: State, Priority (dropdown values), Title, Number (text)
+- Operators: `is`, `is not`, `contains`, `starts with`
+- Compound clauses with AND / OR (left-to-right; no nested groups in v1)
+- Filter icon + active-filter breadcrumb strip (below New task / page-head controls, above the list; icon far right; breadcrumb left of icon, small font, right-aligned)
+- Clear filter in the modal
+- Client-side filter of the fetched task array before list render
+- **Per-list-view persistence** via `localStorage` keyed by list identity
+
+**Out of scope (unless requested)**
+- Ideas / Projects / To Do list pages (different schemas; follow-up task if needed)
+- Kanban / boards / search page
+- Server/API query params for filters
+- Cross-browser / server-synced user prefs (browser `localStorage` only for now)
+- Nested boolean groups / parentheses UI
+
+## Remaining defaults (say if you want different)
+
+- **Boolean:** left-to-right, e.g. `A AND B OR C` → `(A AND B) OR C`
+- **Apply:** Apply commits + writes to `localStorage`; Cancel/close without Apply leaves previous filter; Clear empties + persists empty
+- Dropdown fields (State/Priority): all four operators available; `contains` / `starts with` match against the **label** string (e.g. “In Progress”)
+
+## Approach
+
+### Shared filter model + evaluate + persistence
+
+`client/src/lib/taskListFilter.ts` (+ small storage helper if cleaner):
+
+- Types: `FilterField`, `FilterOperator` (`is` | `is_not` | `contains` | `starts_with`), `FilterClause`, `FilterJoin`, `TaskListFilter`
+- `evaluateTaskListFilter(tasks, filter) → Task[]`
+- String helpers: case-insensitive exact / contains / starts-with; number display normalize via `formatTaskNumber`
+- Breadcrumb label helper (`State is Complete AND Priority contains Urg`)
+- **Storage keys** (stable per list view), e.g.:
+  - `taskmesh.taskListFilter.project:{projectId}` — project Tasks tab
+  - `taskmesh.taskListFilter.global` — `/tasks` (All)
+  - `taskmesh.taskListFilter.global:unassigned` — `/tasks?filter=unassigned` (separate from All, since it is a distinct list context)
+- Load on mount; save on Apply / Clear; ignore corrupt JSON (treat as no filter)
+
+### Shared UI
+
+- `TaskListFilterBar` — breadcrumb + Filter icon
+- `TaskListFilterModal` — Field → Operator → Value; AND/OR append; remove clause; Clear / Apply / Cancel
+- Reuse `modal-backdrop` / `modal` patterns; value control switches select vs text by field
+- Hook or props: `storageKey` so each host page supplies its list identity
+
+### Wiring
+
+- `ProjectDetailPage` tasks tab: `storageKey = project:{id}` → filtered tasks into `TaskBoard`
+- `TasksListPage`: key by All vs Unassigned → filter in existing `useMemo` alongside sort
+
+### Styling
+
+- Compact bar in `index.css`; dark grey / light green tokens
+
+## Files likely touched
+
+- `client/src/lib/taskListFilter.ts` (new)
+- `client/src/lib/taskListFilterStorage.ts` (new, if split)
+- `client/src/components/TaskListFilterBar.tsx` / `TaskListFilterModal.tsx` (new)
+- `client/src/pages/ProjectDetailPage.tsx`
+- `client/src/pages/TasksListPage.tsx`
+- `client/src/index.css`
+
+## QA checklist (post-implement)
+
+1. Filter bar on project Tasks and global `/tasks`; no breadcrumb when inactive.
+2. `State is Complete` — only Complete; breadcrumb updates.
+3. `State is not Complete` — Complete hidden.
+4. Title `contains` / `starts with` / `is` — case-insensitive as specified.
+5. Number with `T0053` / `53` and operators.
+6. Compound AND and OR (left-to-right).
+7. Clear restores list; Cancel without Apply preserves prior filter.
+8. Unassigned global filter still works with list filter applied on top.
+9. **Persistence:** set filter on Project A, different filter on Project B; navigate away and back — each keeps its own; reload preserves both.
+10. **Global All vs Unassigned** keep independent stored filters.
+11. Mobile: strip + modal usable.
+12. DnD / sort / task edit still work on visible rows.
+
+## Branch / bookkeeping (after plan approval)
+
+- Branch: `T0053-list-view-filtering`
+- Plan: `.cursor/plans/2026-08-T0053-list-view-filtering.mdc`
+- PROD task `id=56` → `in_progress` + start comment
