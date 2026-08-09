@@ -6,6 +6,7 @@ import { StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
 import { RowTagChips } from "../components/shared/RowTagChips";
+import { TaskListSortHeaderBtn } from "../components/shared/TaskListSortHeaderBtn";
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
@@ -272,24 +273,48 @@ export function TasksListPage() {
           <span className="task-list-header__stripe" />
           <span />
           <span />
-          <button type="button" className="task-list-header__btn" onClick={() => headerSort("number")}>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "number"}
+            dir={sortDir}
+            onClick={() => headerSort("number")}
+          >
             Number
-          </button>
-          <button type="button" className="task-list-header__btn" onClick={() => headerSort("title")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "title"}
+            dir={sortDir}
+            onClick={() => headerSort("title")}
+          >
             Title
-          </button>
-          <button type="button" className="task-list-header__btn" onClick={() => headerSort("state")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "state"}
+            dir={sortDir}
+            onClick={() => headerSort("state")}
+          >
             State
-          </button>
-          <button type="button" className="task-list-header__btn" onClick={() => headerSort("priority")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "priority"}
+            dir={sortDir}
+            onClick={() => headerSort("priority")}
+          >
             Priority
-          </button>
-          <button type="button" className="task-list-header__btn" onClick={() => headerSort("dueDate")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "dueDate"}
+            dir={sortDir}
+            onClick={() => headerSort("dueDate")}
+          >
             Due date
-          </button>
-          <button type="button" className="task-list-header__btn" onClick={() => headerSort("project")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "project"}
+            dir={sortDir}
+            onClick={() => headerSort("project")}
+          >
             Project
-          </button>
+          </TaskListSortHeaderBtn>
         </div>
 
         {tasks.length === 0 ? (

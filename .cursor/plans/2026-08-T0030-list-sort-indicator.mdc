@@ -1,0 +1,43 @@
+# T0030 — Sorted columns in list view should show indicator
+
+## Goal
+
+In task List View, when a column is actively sorted, show a clear sort indicator on that column header (direction + active accent), on both the global Tasks list and the project TaskBoard list.
+
+## Decisions (confirmed)
+
+1. **Surfaces:** global `/tasks` (`TasksListPage`) **and** project TaskBoard list headers.
+2. **Indicator:** compact **double caret** glyph, oriented by direction (up = ascending, down = descending), colored with the theme main accent (`var(--accent)`). Show only on the active sorted column.
+3. **No sort:** when `sortCol === null` (TaskBoard default / manual order), show **no** indicators on any header.
+4. **a11y:** set `aria-sort="ascending" | "descending"` on the active header button; `aria-sort="none"` (or omit) on inactive sortable headers.
+
+## Current state
+
+- Headers already toggle sort via `headerSort` in both surfaces (`TasksListPage`: click; `TaskBoard`: double-click).
+- No visual cue for which column / direction is active.
+- Shared header styles: `.task-list-header__btn` in `client/src/index.css`.
+
+## Approach
+
+1. Add a tiny shared helper or component (e.g. under `client/src/components/shared/` or next to task list CSS) that renders a header label + optional double-caret indicator given `{ active, dir }`. Prefer one shared piece so both lists stay in sync.
+2. Glyph: compact double-caret (Unicode or inline SVG). Rotate or swap for descending. Active color: `var(--accent)`. Inactive headers: label only, muted as today.
+3. Wire into:
+   - `client/src/pages/TasksListPage.tsx` header buttons (Number, Title, State, Priority, Due date, Project)
+   - `client/src/components/TaskBoard.tsx` header buttons (Number, Title, State, Priority, Due date)
+4. CSS: small gap between label and caret; caret sized to match uppercase header text (~0.75rem); no layout shift beyond the caret on the active column (acceptable).
+5. Set `aria-sort` on each sortable header button from `sortCol` / `sortDir`.
+
+## Out of scope
+
+- Changing click vs double-click sort activation on TaskBoard.
+- Persisting sort column/direction.
+- Ideas / Projects / other non-task list surfaces.
+- Clearing sort back to `null` via a third click (keep current toggle: same column flips dir only).
+
+## Branch
+
+`T0030-list-sort-indicator`
+
+## Plan file
+
+`.cursor/plans/2026-08-T0030-list-sort-indicator.mdc`

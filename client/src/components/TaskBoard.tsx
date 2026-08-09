@@ -37,6 +37,7 @@ import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
 import { TaskHistory } from "./shared/TaskHistory";
+import { TaskListSortHeaderBtn } from "./shared/TaskListSortHeaderBtn";
 
 export type TaskReorderPayload = {
   orderedTaskIds: number[];
@@ -1048,21 +1049,41 @@ export function TaskBoard({
           <span className="task-list-header__stripe" />
           <span />
           <span />
-          <button type="button" className="task-list-header__btn" onDoubleClick={() => headerSort("number")}>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "number"}
+            dir={sortDir}
+            onDoubleClick={() => headerSort("number")}
+          >
             Number
-          </button>
-          <button type="button" className="task-list-header__btn" onDoubleClick={() => headerSort("title")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "title"}
+            dir={sortDir}
+            onDoubleClick={() => headerSort("title")}
+          >
             Title
-          </button>
-          <button type="button" className="task-list-header__btn" onDoubleClick={() => headerSort("state")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "state"}
+            dir={sortDir}
+            onDoubleClick={() => headerSort("state")}
+          >
             State
-          </button>
-          <button type="button" className="task-list-header__btn" onDoubleClick={() => headerSort("priority")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "priority"}
+            dir={sortDir}
+            onDoubleClick={() => headerSort("priority")}
+          >
             Priority
-          </button>
-          <button type="button" className="task-list-header__btn" onDoubleClick={() => headerSort("dueDate")}>
+          </TaskListSortHeaderBtn>
+          <TaskListSortHeaderBtn
+            sorted={sortCol === "dueDate"}
+            dir={sortDir}
+            onDoubleClick={() => headerSort("dueDate")}
+          >
             Due date
-          </button>
+          </TaskListSortHeaderBtn>
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>

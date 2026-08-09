@@ -1357,6 +1357,9 @@ textarea.raw-md {
 }
 
 .task-list-header__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
   background: none;
   border: none;
   color: inherit;
@@ -1368,6 +1371,19 @@ textarea.raw-md {
 
 .task-list-header__btn:hover {
   color: var(--accent);
+}
+
+.task-list-header__btn--sorted {
+  color: var(--accent);
+}
+
+.task-list-header__sort-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.task-list-header__sort-icon--desc {
+  transform: rotate(180deg);
 }
 
 .task-list-row {
