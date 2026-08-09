@@ -34,6 +34,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
+import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
 import { TaskHistory } from "./shared/TaskHistory";
 
@@ -749,7 +750,10 @@ function SortableTaskRow({
         {depth > 0 ? "↳ " : ""}
         {formatTaskNumber(task.number)}
       </span>
-      <span className="task-list-row__title">{task.title}</span>
+      <span className="task-list-row__title">
+        <span className="task-list-row__title-text">{task.title}</span>
+        <RowTagChips entityType="task" entityId={task.id} />
+      </span>
       <span className={taskStateClass("task-list-row__state", task.state)}>
         {TASK_STATE_LABELS[task.state]}
       </span>

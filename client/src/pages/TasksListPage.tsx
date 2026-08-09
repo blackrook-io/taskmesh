@@ -5,6 +5,7 @@ import { apiJson } from "../api/client";
 import { StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
+import { RowTagChips } from "../components/shared/RowTagChips";
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
@@ -323,7 +324,10 @@ export function TasksListPage() {
                 {task.parentId != null ? "↳ " : ""}
                 {formatTaskNumber(task.number)}
               </span>
-              <span className="task-list-row__title">{task.title}</span>
+              <span className="task-list-row__title">
+                <span className="task-list-row__title-text">{task.title}</span>
+                <RowTagChips entityType="task" entityId={task.id} />
+              </span>
               <span className={taskStateClass("task-list-row__state", task.state)}>
                 {TASK_STATE_LABELS[task.state]}
               </span>

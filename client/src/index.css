@@ -1401,8 +1401,42 @@ textarea.raw-md {
 }
 
 .task-list-row__title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.task-list-row__title-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-tag-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  max-width: 55%;
+  overflow: hidden;
+  padding-right: 20px;
+}
+
+.row-tag-chips__chip.tag-chip {
+  max-width: 5.5rem;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.row-tag-chips__more {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  line-height: 1;
   white-space: nowrap;
 }
 

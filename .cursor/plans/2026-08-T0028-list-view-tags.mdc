@@ -1,0 +1,58 @@
+# T0028 — List View should show Tags
+
+**Task:** T0028 (id 28) · **Branch:** `T0028-list-view-tags`  
+**Status:** Approved — implementing on `T0028-list-view-tags`
+
+## Goal
+
+Show tags applied to tasks in task List View title cells, far-right aligned. Read-only; editing remains in the task modal. Cap visible chips at 3; overflow as `+N` in small font.
+
+## Scope
+
+**In**
+- Project task list: `client/src/components/TaskBoard.tsx` (`SortableTaskRow`)
+- Global tasks list: `client/src/pages/TasksListPage.tsx`
+- Shared CSS for title + trailing tags (`.task-list-row__title` and helpers in `client/src/index.css`)
+- Small shared display helper if useful (e.g. `EntityTagChips` or inline row tags) using existing `TagChip`
+
+**Out**
+- Ideas list (already has a Tags column)
+- In-row add/remove/color of tags
+- New bulk taggings API (N+1 per-row fetch is OK for first pass; reuse `["taggings","task",id]` so modal edits stay in sync)
+- Kanban / TodoList / other surfaces
+
+## Approach
+
+1. **Title cell layout** — Make the title cell a flex row:
+   - Left: truncated title text (`min-width: 0; flex: 1; ellipsis`)
+   - Right: tag strip (`flex-shrink: 0`, far right)
+2. **Chips** — Render up to 3 read-only `TagChip`s (`removable={false}`, no color handler). If `tags.length > 3`, append a muted `+N` span (`N = tags.length - 3`) in smaller font; `title` tooltip can list remaining names.
+3. **Data** — Per-task `GET /api/v1/taggings?entityType=task&entityId={id}` via React Query key `["taggings","task",id]` (same as `TagInput`). Empty / loading → no chips (no spinner clutter).
+4. **Shared helper** — Prefer a tiny presentational component (e.g. `RowTagChips`) used by both list surfaces to keep overflow logic in one place.
+5. **No API/schema changes.**
+
+## Files likely touched
+
+- `client/src/components/TaskBoard.tsx`
+- `client/src/pages/TasksListPage.tsx`
+- `client/src/components/shared/` (new small chips helper, optional)
+- `client/src/index.css`
+
+## Acceptance
+
+- [ ] Project TaskBoard list rows show tags far-right in Title when tagged
+- [ ] Global `/tasks` list rows show the same
+- [ ] Max 3 chips; 4+ shows `+N`
+- [ ] Chips are not editable in-row; open task to change tags
+- [ ] After tagging/untagging in the modal, list chips update without full page reload
+- [ ] Long titles still ellipsize; chips remain visible on the right
+- [ ] Rows with no tags look unchanged aside from layout flex
+
+## QA checklist (post-implement)
+
+1. Open a project → Tasks list; confirm untagged rows look normal.
+2. Open a tagged task → confirm ≤3 chips far-right in Title.
+3. Tag a task with 4+ tags → confirm 3 chips + `+N`.
+4. Edit tags in the task modal → close → list chips refresh.
+5. Repeat on global Tasks page.
+6. Narrow the viewport / long title → title truncates; chips stay right.
