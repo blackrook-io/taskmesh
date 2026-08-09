@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { ThemeProvider } from "../lib/ThemeProvider";
+import { AdministrationProvider } from "../lib/administration";
 import { SettingsProvider } from "../lib/settings";
 import { AssistantAttachProvider } from "../lib/assistantAttach";
 import { AssistantPanel } from "./AssistantPanel";
 import { CommandPalette } from "./CommandPalette";
 import { AppShell } from "./shell/AppShell";
+import { AdministrationModal } from "./shell/AdministrationModal";
 import { SettingsModal } from "./shell/SettingsModal";
 
 export function Layout() {
@@ -35,15 +37,18 @@ export function Layout() {
   return (
     <ThemeProvider>
       <SettingsProvider>
-        <AssistantAttachProvider>
-          <AppShell
-            onOpenPalette={() => setPaletteOpen(true)}
-            onOpenAssistant={() => setAssistantOpen(true)}
-          />
-          <SettingsModal />
-          <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-          <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
-        </AssistantAttachProvider>
+        <AdministrationProvider>
+          <AssistantAttachProvider>
+            <AppShell
+              onOpenPalette={() => setPaletteOpen(true)}
+              onOpenAssistant={() => setAssistantOpen(true)}
+            />
+            <SettingsModal />
+            <AdministrationModal />
+            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+            <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+          </AssistantAttachProvider>
+        </AdministrationProvider>
       </SettingsProvider>
     </ThemeProvider>
   );

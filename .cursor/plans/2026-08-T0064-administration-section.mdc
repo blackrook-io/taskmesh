@@ -1,0 +1,190 @@
+# T0064 — Administrator system parameters section
+
+**Task:** T0064 — Administrator system parameters section  
+**Branch (on approval):** `T0064-administration-section`  
+**State:** complete
+
+## Context
+
+Settings today is a single ungated modal (`SettingsModal` + `SETTINGS_SECTIONS`) with Profile, Appearance, Tags, Import/Export, Backups, Assistant. There is no Administration nav entry, no roles/auth, no API keys, no rate-limit or login-failure store, and no API usage logging/graphs. Related open tasks: **T0061** (API usage dashboard), **T0062** (Profile password/email UX), **T0063** (full API key lifecycle + enforcement).
+
+This workstream ships the **Administration** surface as a full feature: shell, data model, APIs, and usable admin UIs — with intentional bridges where T0062/T0063 will later deepen Profile UX and key enforcement.
+
+## Decisions (interview)
+
+1. **Scope:** Full epic — not shell-only. Implement Administration + real backends for Users / Keys (bridge) / APIs / System Properties; Logging as a first-cut viewer; move Backups.
+2. **Admin gate:** No Role framework yet. Sole existing user (U0001) is Admin by definition. Show Administration to the current app user without role checks. Later auth/access tasks add Roles.
+3. **Settings leftovers:** Tags, Import/Export, Assistant **stay in Settings**. Future multi-user work may reframe them as user preferences. Only **Backups** moves to Administration.
+4. **System Properties:** Real persisted store, editable in Admin UI **now**, even though enforcement (rate limits, lockout) lands with auth/keys later.
+5. **Users / Keys:** Minimal but real list UIs. Seed/work with U0001. Implement schema + admin actions needed to bridge until T0063 (keys) / T0062 (Profile password UX).
+
+## Goals
+
+- Left-nav **Administration** entry above the footer separator / Settings (same modal pattern as Settings).
+- Administration sections: **Users**, **Keys**, **APIs**, **Logging**, **Backups**, **System Properties**.
+- Move **Backups** out of Settings (routes, command palette, deep links).
+- Users admin: list users; reset password; deactivate (blocks future login + immediately deactivates that user’s API keys).
+- Keys admin: list all API keys in all states; expire / suspend / unsuspend (bridge schema + APIs until T0063 Profile create UX and request enforcement).
+- APIs: usage graphs (1h / 1d / 1w) for successes, API failures, auth failures, access violations — backed by server-side request logging (overlaps T0061).
+- Logging: first-cut log browser over the same store (T0061 said “UI later”; ship a practical viewer here).
+- System Properties: editable thresholds for API rate limits and login-failure lockout.
+
+## Non-goals
+
+- Full authentication / sessions / login UI (later).
+- Role-Based Access Control / multi-admin membership.
+- Moving Tags, Import/Export, or Assistant out of Settings.
+- Full T0063 enforcement (Bearer/X-API-KEY middleware on all routes, RO/RW checks, TLS policy, query-string ban) — schema + admin list/actions only; optional create-key for testing.
+- Full T0062 Profile password/email UX polish (guidelines help text, match-validation chrome) — Admin reset-password is enough here; Profile keeps current fields until T0062.
+- Soft-deleted Tasks admin screen (T0055).
+
+## Architecture
+
+```
+AppNav footer
+  [Administration]  → AdministrationModal (mirror SettingsModal)
+  ─────────────
+  [Settings]        → SettingsModal (no Backups)
+```
+
+Shared patterns: provider + deep-link routes (`/admin/*`), command-palette entries, CSS reuse from `.settings-modal*`.
+
+### Schema
+
+**`users` additions**
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `password_hash` | text, nullable | Admin reset + future login; store scrypt/argon2id hash only |
+| `deactivated_at` | timestamptz, nullable | Null = active; set = deactivated |
+| `failed_login_count` | integer, not null, default 0 | For future lockout; writable by auth later |
+| `locked_at` | timestamptz, nullable | Set when failure threshold hit (future writer) |
+
+No `role` / `is_admin` column in this task (sole user is admin by convention).
+
+**`api_keys` (new)**
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `id` | serial PK | |
+| `user_id` | FK → users.id ON DELETE CASCADE | Owner |
+| `name` | text | Label |
+| `prefix` | text | Public prefix for display (`taskmesh_ro_` / `taskmesh_rw_` + short id) |
+| `key_hash` | text | Hash of secret; never return raw after create |
+| `access` | `readonly` \| `readwrite` | |
+| `status` | `active` \| `suspended` \| `expired` \| `revoked` | |
+| `expires_at` | timestamptz | Default create+60d when created |
+| `last_used_at` | timestamptz, nullable | |
+| `created_at` / `updated_at` | timestamptz | |
+| `suspended_at` / `revoked_at` | timestamptz, nullable | |
+
+**`system_properties` (new)** — key/value (or typed columns). Prefer a small keyed table:
+
+| key | value (jsonb) | defaults |
+|-----|---------------|----------|
+| `api_rate_limit_per_minute` | number | e.g. 60 |
+| `login_failure_threshold` | number | e.g. 5 |
+
+Seed defaults on migrate / first read.
+
+**`api_request_logs` (new)** — append-only usage/audit store for APIs + Logging tabs:
+
+| Column | Notes |
+|--------|--------|
+| `id`, `created_at` | |
+| `outcome` | `success` \| `api_failure` \| `auth_failure` \| `access_violation` |
+| `method`, `path` | Request target |
+| `status_code` | HTTP status |
+| `ip` | Remote address when available |
+| `user_id` | Nullable |
+| `api_key_id` | Nullable |
+| `message` | Short success/error summary |
+| `admin_key` | boolean — true when owner is the sole admin user (audit flag for later) |
+
+Lightweight Express middleware records rows for `/api/v1/*` (skip health/static). Until keys/auth exist, most rows will be unauthenticated browser traffic — still useful for graphs and Logging.
+
+### API (admin-oriented; no role gate yet)
+
+**Users**
+
+- `GET /api/v1/admin/users` — list (id, referenceId, displayName, email, deactivatedAt, lastLoginAt, lastApiAt, lockedAt)
+- `POST /api/v1/admin/users/:id/reset-password` — `{ password }` with shared password rules (min 12, upper/lower/digit/symbol); sets `password_hash`
+- `POST /api/v1/admin/users/:id/deactivate` — confirm-required on client; sets `deactivated_at`; bulk-set that user’s keys to `revoked` (or `suspended` — prefer **revoked** for deactivate) and bump `updated_at`
+- `POST /api/v1/admin/users/:id/reactivate` — clears `deactivated_at` (keys stay revoked; admin re-issues later)
+
+**Keys**
+
+- `GET /api/v1/admin/api-keys` — all keys, all statuses (never `key_hash`; show prefix, access, status, owner ref, dates)
+- `POST /api/v1/admin/api-keys` — optional bridge create (name, access, expiresAt); return **one-time** raw key
+- `POST /api/v1/admin/api-keys/:id/suspend` | `unsuspend` | `expire` (force expired) | `revoke`
+
+**System properties**
+
+- `GET /api/v1/admin/system-properties`
+- `PATCH /api/v1/admin/system-properties` — partial update with Zod bounds (positive ints, sensible max)
+
+**APIs / Logging**
+
+- `GET /api/v1/admin/api-usage/summary?range=1h|1d|1w` — bucketed series for the four outcome classes
+- `GET /api/v1/admin/api-logs?…` — paginated/filterable log list (outcome, path contains, since/until)
+
+**Backups** — existing `/api/v1/backups*`; UI only moves.
+
+### UI
+
+| Section | Behavior |
+|---------|----------|
+| **Users** | Table of users; actions: Reset password (modal + confirm), Deactivate / Reactivate (confirm). Show deactivated badge. |
+| **Keys** | Table of all keys; status chips; Suspend / Unsuspend / Expire / Revoke with confirm. Optional “Create key” for bridge testing (one-time copy). |
+| **APIs** | Chart(s) + range toggle (1h / 1d / 1w) for the four series. Empty-state when no logs. |
+| **Logging** | Filterable table over `api_request_logs` (newest first). |
+| **Backups** | Reuse `BackupsPage` inside Admin modal. |
+| **System Properties** | Form for rate-limit + login-failure threshold; Save; show last-saved. Note in UI that enforcement is forthcoming. |
+
+**Nav / Settings**
+
+- `AppNav`: Administration button above Settings (visual separator between admin and user settings).
+- Remove `backups` from `SETTINGS_SECTIONS`; redirect `/settings/backups` → `/admin/backups`.
+- Add `administration.tsx` provider mirroring `settings.tsx`; routes `/admin`, `/admin/users`, etc.
+- Command palette: Administration sections; Backups entry opens Admin.
+
+### Password hashing
+
+Use Node `crypto.scrypt` (or argon2 if already a dep — prefer no new dep). Shared validator module for Admin reset and future T0062 Profile.
+
+### Overlap with sibling tasks
+
+| Task | This epic ships | Left for sibling |
+|------|-----------------|------------------|
+| T0061 | Logging store, usage summary API, APIs + Logging admin tabs | Optional polish if anything remains after QA |
+| T0062 | `password_hash` + server validation rules | Profile Settings password/email UX |
+| T0063 | `api_keys` table, admin list/actions, one-time create | Profile key CRUD, request middleware, RO/RW enforcement, rate-limit writers |
+
+On finish-up, note in T0064 completion comment that T0061 may be largely satisfied; do **not** auto-complete sibling tasks unless user asks.
+
+## Implementation order
+
+1. Schema + migrate (`users` cols, `api_keys`, `system_properties`, `api_request_logs`) + seed property defaults.
+2. Admin API routes + password helper + request-log middleware.
+3. `administration` client lib + `AdministrationModal` + AppNav + route/palette/deep-link wiring; move Backups.
+4. Users panel → Keys panel → System Properties panel.
+5. APIs graphs + Logging panel.
+6. QA pass.
+
+## QA checklist (preview)
+
+- [ ] Administration opens from left nav above Settings; Settings no longer lists Backups.
+- [ ] Backups works from Administration (list/run/restore/schedule).
+- [ ] Users lists U0001; reset password persists hash; deactivate sets badge and revokes keys; reactivate clears deactivated.
+- [ ] Keys list reflects create/suspend/unsuspend/expire/revoke; raw secret shown only once on create.
+- [ ] System Properties load defaults, save, reload persist.
+- [ ] Hitting APIs generates log rows; APIs graphs respond to 1h/1d/1w; Logging filters work.
+- [ ] Tags / Import-Export / Assistant still only under Settings.
+- [ ] Mobile: Admin modal usable; confirms on destructive actions.
+
+## Open points resolved
+
+- Role column: **deferred** (convention: sole user is admin).
+- Tags/Import/Assistant: **remain in Settings**.
+- Properties: **real store, UI-editable before enforcement**.
+- Keys: **minimal admin CRUD/list bridge**, not full T0063 middleware.

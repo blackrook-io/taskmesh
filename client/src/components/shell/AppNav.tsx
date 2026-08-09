@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { apiJson } from "../../api/client";
 import { APP_VERSION } from "../../lib/appVersion";
+import { useAdministration } from "../../lib/administration";
 import { useSettings } from "../../lib/settings";
 import { useActiveProjectId, useShellSection } from "../../lib/useShellNav";
 import type { Project } from "../../types";
@@ -22,6 +23,7 @@ export function AppNav({ onOpenPalette, onOpenAssistant, onNavigate }: Props) {
   const section = useShellSection();
   const activeProjectId = useActiveProjectId();
   const { open: settingsOpen, openSettings } = useSettings();
+  const { open: adminOpen, openAdmin } = useAdministration();
   const [projectsOpen, setProjectsOpen] = useState(section === "projects");
 
   useEffect(() => {
@@ -165,6 +167,20 @@ export function AppNav({ onOpenPalette, onOpenAssistant, onNavigate }: Props) {
             ⌘K
           </button>
         </div>
+        <button
+          type="button"
+          className={`app-nav__item${adminOpen ? " is-active" : ""}`}
+          onClick={() => {
+            openAdmin("users");
+            onNavigate?.();
+          }}
+        >
+          <span className="app-nav__glyph" aria-hidden>
+            <NavIcon icon={shellIcons.admin} />
+          </span>
+          <span className="app-nav__label">Administration</span>
+        </button>
+        <div className="app-nav__footer-sep" aria-hidden />
         <button
           type="button"
           className={`app-nav__item${settingsOpen ? " is-active" : ""}`}

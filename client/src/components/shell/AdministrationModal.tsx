@@ -1,41 +1,32 @@
 import { useEffect, useId, useRef } from "react";
 import { NavIcon } from "./NavIcon";
 import { shellIcons } from "./shellIcons";
-import { ThemeSwitcher } from "./ThemeSwitcher";
-import { AssistantSettingsPage } from "../../pages/AssistantSettingsPage";
-import { ImportExportPage } from "../../pages/ImportExportPage";
-import { ProfileSettingsPage } from "../../pages/ProfileSettingsPage";
-import { TagsSettingsPanel } from "../settings/TagsSettingsPanel";
+import { AdminApisPanel } from "../admin/AdminApisPanel";
+import { AdminKeysPanel } from "../admin/AdminKeysPanel";
+import { AdminLoggingPanel } from "../admin/AdminLoggingPanel";
+import { AdminSystemPropertiesPanel } from "../admin/AdminSystemPropertiesPanel";
+import { AdminUsersPanel } from "../admin/AdminUsersPanel";
+import { BackupsPage } from "../../pages/BackupsPage";
 import { useModalScrollbarGutter } from "../../lib/useModalScrollbarGutter";
 import {
-  SETTINGS_SECTION_LABELS,
-  SETTINGS_SECTIONS,
-  type SettingsSection,
-  useSettings,
-} from "../../lib/settings";
+  ADMIN_SECTION_LABELS,
+  ADMIN_SECTIONS,
+  type AdminSection,
+  useAdministration,
+} from "../../lib/administration";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 
-const SECTION_ICONS: Record<SettingsSection, IconDefinition> = {
-  profile: shellIcons.profile,
-  appearance: shellIcons.imageBoard,
-  tags: shellIcons.tags,
-  "import-export": shellIcons.filesystem,
-  assistant: shellIcons.assistant,
+const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
+  users: shellIcons.profile,
+  keys: shellIcons.keys,
+  apis: shellIcons.chart,
+  logging: shellIcons.logging,
+  backups: shellIcons.documents,
+  "system-properties": shellIcons.admin,
 };
 
-function AppearancePanel() {
-  return (
-    <div className="settings-panel">
-      <p className="muted" style={{ marginTop: 0 }}>
-        Dark themes with different accent colors. Preference is saved on this device.
-      </p>
-      <ThemeSwitcher />
-    </div>
-  );
-}
-
-export function SettingsModal() {
-  const { open, section, setSection, closeSettings } = useSettings();
+export function AdministrationModal() {
+  const { open, section, setSection, closeAdmin } = useAdministration();
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -57,12 +48,12 @@ export function SettingsModal() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        closeSettings();
+        closeAdmin();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, closeSettings]);
+  }, [open, closeAdmin]);
 
   if (!open) return null;
 
@@ -71,31 +62,31 @@ export function SettingsModal() {
       className="settings-modal-backdrop"
       role="presentation"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) closeSettings();
+        if (e.target === e.currentTarget) closeAdmin();
       }}
     >
       <div
-        className="settings-modal"
+        className="settings-modal settings-modal--admin"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className="settings-modal__head">
-          <h2 id={titleId}>Settings</h2>
+          <h2 id={titleId}>Administration</h2>
           <button
             ref={closeRef}
             type="button"
             className="btn ghost small"
-            onClick={closeSettings}
-            aria-label="Close settings"
+            onClick={closeAdmin}
+            aria-label="Close administration"
           >
             Close
           </button>
         </header>
         <div className="settings-modal__body">
-          <nav className="settings-modal__nav" aria-label="Settings sections">
-            {SETTINGS_SECTIONS.map((id) => (
+          <nav className="settings-modal__nav" aria-label="Administration sections">
+            {ADMIN_SECTIONS.map((id) => (
               <button
                 key={id}
                 type="button"
@@ -103,17 +94,18 @@ export function SettingsModal() {
                 onClick={() => setSection(id)}
               >
                 <NavIcon icon={SECTION_ICONS[id]} className="settings-modal__nav-icon" />
-                {SETTINGS_SECTION_LABELS[id]}
+                {ADMIN_SECTION_LABELS[id]}
               </button>
             ))}
           </nav>
           <div className="settings-modal__content" ref={contentRef}>
-            <h3 className="settings-modal__section-title">{SETTINGS_SECTION_LABELS[section]}</h3>
-            {section === "profile" ? <ProfileSettingsPage embedded /> : null}
-            {section === "appearance" ? <AppearancePanel /> : null}
-            {section === "tags" ? <TagsSettingsPanel /> : null}
-            {section === "import-export" ? <ImportExportPage embedded /> : null}
-            {section === "assistant" ? <AssistantSettingsPage embedded /> : null}
+            <h3 className="settings-modal__section-title">{ADMIN_SECTION_LABELS[section]}</h3>
+            {section === "users" ? <AdminUsersPanel /> : null}
+            {section === "keys" ? <AdminKeysPanel /> : null}
+            {section === "apis" ? <AdminApisPanel /> : null}
+            {section === "logging" ? <AdminLoggingPanel /> : null}
+            {section === "backups" ? <BackupsPage embedded /> : null}
+            {section === "system-properties" ? <AdminSystemPropertiesPanel /> : null}
           </div>
         </div>
       </div>

@@ -69,6 +69,14 @@ export const users = pgTable("users", {
   ),
   /** Unique among non-null (Postgres UNIQUE allows multiple NULLs). */
   email: text("email").unique(),
+  /** scrypt hash; set via admin reset / future Profile (T0062). */
+  passwordHash: text("password_hash"),
+  /** Null = active; set when admin deactivates the user. */
+  deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+  /** Failed login attempts; written when auth exists. */
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  /** Set when login-failure threshold is hit (future auth). */
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
   /** Last UI auth/access — written when auth exists. */
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   /** Last API-key usage — written when API keys exist. */
@@ -79,6 +87,65 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+/** API keys (admin bridge; Profile CRUD + enforcement in T0063). */
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  /** Public display prefix, e.g. taskmesh_rw_ab12. */
+  prefix: text("prefix").notNull(),
+  /** Hash of the full secret key; never returned after create. */
+  keyHash: text("key_hash").notNull(),
+  /** readonly | readwrite */
+  access: text("access").notNull().default("readwrite"),
+  /** active | suspended | expired | revoked */
+  status: text("status").notNull().default("active"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** System-wide editable properties (enforcement later). */
+export const systemProperties = pgTable("system_properties", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Append-only API request / auth audit log for Admin APIs + Logging. */
+export const apiRequestLogs = pgTable("api_request_logs", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  /** success | api_failure | auth_failure | access_violation */
+  outcome: text("outcome").notNull(),
+  method: text("method").notNull(),
+  path: text("path").notNull(),
+  statusCode: integer("status_code").notNull(),
+  ip: text("ip"),
+  userId: integer("user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  apiKeyId: integer("api_key_id").references(() => apiKeys.id, {
+    onDelete: "set null",
+  }),
+  message: text("message"),
+  /** True when request used an admin-owned key (audit flag). */
+  adminKey: boolean("admin_key").notNull().default(false),
 });
 
 export const tasks = pgTable("tasks", {
@@ -452,6 +519,25 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   createdTasks: many(tasks, { relationName: "task_created_by" }),
   updatedTasks: many(tasks, { relationName: "task_updated_by" }),
+  apiKeys: many(apiKeys),
+}));
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  user: one(users, {
+    fields: [apiKeys.userId],
+    references: [users.id],
+  }),
+}));
+
+export const apiRequestLogsRelations = relations(apiRequestLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [apiRequestLogs.userId],
+    references: [users.id],
+  }),
+  apiKey: one(apiKeys, {
+    fields: [apiRequestLogs.apiKeyId],
+    references: [apiKeys.id],
+  }),
 }));
 
 export const tasksRelations = relations(tasks, ({ one, many }) => ({

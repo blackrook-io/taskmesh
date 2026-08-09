@@ -16,8 +16,15 @@ type PaletteItem = {
   hint?: string;
   path: string;
   /** Special client action instead of navigation */
-  action?: "open-assistant" | "open-settings";
-  settingsSection?: "profile" | "appearance" | "import-export" | "backups" | "assistant";
+  action?: "open-assistant" | "open-settings" | "open-admin";
+  settingsSection?: "profile" | "appearance" | "import-export" | "assistant";
+  adminSection?:
+    | "users"
+    | "keys"
+    | "apis"
+    | "logging"
+    | "backups"
+    | "system-properties";
 };
 
 const STATIC_COMMANDS: PaletteItem[] = [
@@ -79,12 +86,60 @@ const STATIC_COMMANDS: PaletteItem[] = [
     settingsSection: "import-export",
   },
   {
+    id: "nav-admin",
+    group: "Go to",
+    label: "Administration",
+    path: "/",
+    action: "open-admin",
+    adminSection: "users",
+  },
+  {
+    id: "nav-admin-users",
+    group: "Go to",
+    label: "Admin · Users",
+    path: "/",
+    action: "open-admin",
+    adminSection: "users",
+  },
+  {
+    id: "nav-admin-keys",
+    group: "Go to",
+    label: "Admin · API keys",
+    path: "/",
+    action: "open-admin",
+    adminSection: "keys",
+  },
+  {
+    id: "nav-admin-apis",
+    group: "Go to",
+    label: "Admin · API usage",
+    path: "/",
+    action: "open-admin",
+    adminSection: "apis",
+  },
+  {
+    id: "nav-admin-logging",
+    group: "Go to",
+    label: "Admin · Logging",
+    path: "/",
+    action: "open-admin",
+    adminSection: "logging",
+  },
+  {
     id: "nav-backups",
     group: "Go to",
     label: "Backups",
     path: "/",
-    action: "open-settings",
-    settingsSection: "backups",
+    action: "open-admin",
+    adminSection: "backups",
+  },
+  {
+    id: "nav-admin-props",
+    group: "Go to",
+    label: "Admin · System properties",
+    path: "/",
+    action: "open-admin",
+    adminSection: "system-properties",
   },
   { id: "new-idea", group: "Create", label: "New idea", path: "/ideas/new" },
   { id: "new-task", group: "Create", label: "New task", path: "/tasks?new=1" },
@@ -259,6 +314,15 @@ export function CommandPalette({ open, onClose }: Props) {
         window.dispatchEvent(
           new CustomEvent("taskmesh:open-settings", {
             detail: { section: item.settingsSection ?? "appearance" },
+          }),
+        );
+        return;
+      }
+      if (item.action === "open-admin") {
+        onClose();
+        window.dispatchEvent(
+          new CustomEvent("taskmesh:open-admin", {
+            detail: { section: item.adminSection ?? "users" },
           }),
         );
         return;

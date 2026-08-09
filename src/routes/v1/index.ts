@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { adminRouter } from "./admin.js";
 import { assistantRouter } from "./assistant.js";
 import { backupsRouter } from "./backups.js";
 import { ideasRouter } from "./ideas.js";
@@ -14,12 +15,15 @@ import { todoListsRouter } from "./todoLists.js";
 import { uploadsRouter } from "./uploads.js";
 import { usersRouter } from "./users.js";
 import { sendError } from "../../lib/httpError.js";
+import { apiRequestLogger } from "../../middleware/apiRequestLogger.js";
 import { rejectImmutableBody } from "../../middleware/rejectImmutableBody.js";
 
 export const v1Router = Router();
 
 v1Router.use(rejectImmutableBody);
+v1Router.use(apiRequestLogger);
 
+v1Router.use("/admin", adminRouter);
 v1Router.use("/ideas", ideasRouter);
 v1Router.use("/projects", projectsRouter);
 v1Router.use("/tasks", taskActivityRouter);

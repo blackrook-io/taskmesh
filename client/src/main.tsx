@@ -16,6 +16,7 @@ import { FilesystemPage } from "./pages/FilesystemPage.tsx";
 import { ImageBoardPage } from "./pages/ImageBoardPage.tsx";
 import { ImageBoardEditorPage } from "./pages/ImageBoardEditorPage.tsx";
 import { CalendarPage } from "./pages/CalendarPage.tsx";
+import { AdminHubPage } from "./pages/AdminHubPage.tsx";
 import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
 import { TasksListPage } from "./pages/TasksListPage.tsx";
 
@@ -45,8 +46,15 @@ createRoot(document.getElementById("root")!).render(
             <Route path="settings/profile" element={<SettingsHubPage />} />
             <Route path="settings/tags" element={<SettingsHubPage />} />
             <Route path="settings/import-export" element={<SettingsHubPage />} />
-            <Route path="settings/backups" element={<SettingsHubPage />} />
+            <Route path="settings/backups" element={<AdminHubPage />} />
             <Route path="settings/assistant" element={<SettingsHubPage />} />
+            <Route path="admin" element={<AdminHubPage />} />
+            <Route path="admin/users" element={<AdminHubPage />} />
+            <Route path="admin/keys" element={<AdminHubPage />} />
+            <Route path="admin/apis" element={<AdminHubPage />} />
+            <Route path="admin/logging" element={<AdminHubPage />} />
+            <Route path="admin/backups" element={<AdminHubPage />} />
+            <Route path="admin/system-properties" element={<AdminHubPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
