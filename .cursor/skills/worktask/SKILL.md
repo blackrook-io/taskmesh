@@ -4,7 +4,8 @@ description: >-
   Orchestrates TaskMesh development from a Task Number (e.g. /worktask T0036):
   loads the PROD task (title, description, comments), plans and interviews,
   creates a T#### git branch, marks the task In Progress with a plan comment,
-  implements, then on finish-up marks Complete with a completion comment.
+  implements, records QA follow-ups in plan + Task comments + commits, then on
+  finish-up marks Complete with a completion comment.
   Use only when the user explicitly invokes /worktask or names this skill.
 disable-model-invocation: true
 ---
@@ -40,6 +41,7 @@ Worktask:
 - [ ] 4. Interview + draft plan
 - [ ] 5. User approves plan → branch + In Progress + start comment
 - [ ] 6. Implement + QA checklist
+- [ ] 6b. QA follow-ups → update plan + Task comment + commit message
 - [ ] 7. User “finish up” → merge/deploy + Complete + finish comment
 ```
 
@@ -101,16 +103,25 @@ Only after the user approves the plan:
 4. PROD: post a comment summarizing branch + plan (path + short summary). Template in [reference.md](reference.md).
 5. Implement as usual. End the implementation pass with a **QA checklist**. Do not finish-up until asked.
 
+### 5b. QA follow-ups (during review)
+
+When the user requests **new functionality or corrections** during QA:
+
+1. **Update the plan** — append a “QA follow-ups” section (what changed / why). Keep the plan file current before the next checklist or finish-up.
+2. **PROD Task comment** — post a progress comment summarizing the QA changes (template in [reference.md](reference.md)). Do this when the follow-up pass lands, not only at Complete.
+3. **Commit message** — when committing that work (or on finish-up), name the QA additions/fixes explicitly alongside any original scope.
+4. Re-issue an updated **QA checklist** for the new/changed behavior.
+
 ### 6. Finish up (user says “finish up”)
 
 Do **all** of the following in order (same as development-rules, with Task bookkeeping last):
 
-1. **Commit** remaining work on the feature branch (HEREDOC message; author env vars if needed).
+1. **Commit** remaining work on the feature branch (HEREDOC message; author env vars if needed). If QA follow-ups shipped, mention them in the message.
 2. **Merge** into `main` (ff-only when possible); delete local (and remote if exists) `T####-*` branch after merge.
 3. **Publish** — push `main` (SSH URL if HTTPS origin fails: `git push git@github.com:blackrook-io/taskmesh.git main`).
-4. **Archive** the plan — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/`, commit on `main`, push again.
+4. **Archive** the plan — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/`, commit on `main`, push again. Archived plan must include any QA follow-up notes.
 5. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed.
-6. **PROD Task** — completion comment, then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
+6. **PROD Task** — completion comment (include original scope **and** QA follow-ups), then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
 
 If the user wants finish-up **without** closing the Task (follow-ups remain), ask once and skip the Complete transition / still add a progress comment if useful.
 

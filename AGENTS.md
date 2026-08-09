@@ -20,7 +20,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Design tokens** — see `client/src/index.css` (`--canvas-bg`, `--radius-chip`, `--focus-ring`, etc.).
 - **Canvases** — Excalidraw (`@excalidraw/excalidraw`, MIT) in `CanvasEditor`; scene JSON in `canvases.document`. Fonts copied on client `postinstall` to `public/excalidraw-assets/`.
 - **Command palette** — Ctrl/Cmd+K (Phase 9a); see `client/src/components/CommandPalette.tsx`.
-- **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks).
+- **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks). **QA follow-ups** (new work or corrections during review): update the active plan, mention them in the commit message, and for `/worktask` post a PROD Task comment (also include them in the completion comment).
 - **Feature git** — on start: branch `T####-short-slug` (worktask) or `phase-N-short-slug` (ad-hoc) from updated `main`. **Finish up** (user approval to close): commit → merge into `main` → push `main` → archive the plan under `.cursor/plans/executed/` (commit + push) → delete local/remote feature branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks) → for `/worktask`, mark the PROD Task `complete` and add a completion comment.
 
 ## Common commands

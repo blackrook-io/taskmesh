@@ -76,6 +76,18 @@ curl -fsS -X POST "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/activity" \
 <summary of approach in a few bullets>
 ```
 
+### QA follow-up comment template
+
+Post when implementing new functionality or corrections during QA (not only at Complete):
+
+```markdown
+**QA follow-up**
+
+- Plan updated: `.cursor/plans/2026-08-T0036-example-slug.mdc` (QA follow-ups section)
+
+<summary of additions / corrections from QA>
+```
+
 ### Finish comment template
 
 ```markdown
@@ -86,6 +98,10 @@ curl -fsS -X POST "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/activity" \
 - Deployed to PROD (health checks OK)
 
 <summary of what shipped>
+
+**QA follow-ups** (omit section if none)
+
+- <each addition or correction from QA>
 ```
 
 ## States
