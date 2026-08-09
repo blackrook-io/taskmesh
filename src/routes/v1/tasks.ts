@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   dueDateSchema,
@@ -269,6 +270,25 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       return;
     }
 
+    const dueDate = resolveDueDate(parsed);
+    const hasFieldChange =
+      hasDefinedKeys(parsed, [
+        "title",
+        "description",
+        "dueDate",
+        "dueAt",
+        "color",
+        "phaseId",
+        "parentId",
+        "state",
+        "priority",
+        "sortOrder",
+      ]) || dueDate !== undefined;
+    if (!hasFieldChange) {
+      sendError(res, 400, "empty_patch", "No updatable fields provided");
+      return;
+    }
+
     if (parsed.phaseId != null) {
       const [ph] = await db
         .select()
@@ -291,8 +311,6 @@ tasksRouter.patch("/:taskId", async (req, res) => {
         return;
       }
     }
-
-    const dueDate = resolveDueDate(parsed);
 
     const [row] = await db
       .update(schema.tasks)

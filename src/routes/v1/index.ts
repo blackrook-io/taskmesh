@@ -14,8 +14,11 @@ import { todoListsRouter } from "./todoLists.js";
 import { uploadsRouter } from "./uploads.js";
 import { usersRouter } from "./users.js";
 import { sendError } from "../../lib/httpError.js";
+import { rejectImmutableBody } from "../../middleware/rejectImmutableBody.js";
 
 export const v1Router = Router();
+
+v1Router.use(rejectImmutableBody);
 
 v1Router.use("/ideas", ideasRouter);
 v1Router.use("/projects", projectsRouter);

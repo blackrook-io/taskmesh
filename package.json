@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
-    "backup": "tsx src/scripts/runBackup.ts"
+    "backup": "tsx src/scripts/runBackup.ts",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

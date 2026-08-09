@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import { ZodError } from "zod";
+import { ImmutableFieldError } from "./immutableFields.js";
 
 export function sendError(
   res: Response,
@@ -11,6 +12,10 @@ export function sendError(
 }
 
 export function handleRouteError(res: Response, err: unknown): void {
+  if (err instanceof ImmutableFieldError) {
+    sendError(res, err.status, err.code, err.message);
+    return;
+  }
   if (err instanceof ZodError) {
     const msg = err.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ");
     sendError(res, 400, "validation_error", msg || "Invalid input");

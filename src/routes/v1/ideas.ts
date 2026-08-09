@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 
 const ideaBody = z.object({
   title: z.string().min(1).max(500),
@@ -66,6 +67,10 @@ ideasRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const parsed = ideaPatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["title", "body"])) {
+      sendError(res, 400, "empty_patch", "Provide title and/or body");
+      return;
+    }
     const [existing] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, id));
     if (!existing) {
       sendError(res, 404, "not_found", "Idea not found");
@@ -74,7 +79,8 @@ ideasRouter.patch("/:id", async (req, res) => {
     const [row] = await db
       .update(schema.ideas)
       .set({
-        ...parsed,
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.body !== undefined ? { body: parsed.body } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.ideas.id, id))

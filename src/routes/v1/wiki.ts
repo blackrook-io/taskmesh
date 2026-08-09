@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   breadcrumbFor,
@@ -293,6 +294,10 @@ wikiRouter.patch("/nodes/:nodeId", async (req, res) => {
       return;
     }
     const parsed = nodePatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["title", "pinned"])) {
+      sendError(res, 400, "empty_patch", "Provide title and/or pinned");
+      return;
+    }
     const [row] = await db
       .update(schema.wikiNodes)
       .set({

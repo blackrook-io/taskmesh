@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 
 const docBody = z.object({
@@ -94,6 +95,10 @@ documentsRouter.patch("/:docId", async (req, res) => {
     const projectId = parseRouteId(req, "projectId");
     const docId = parseRouteId(req, "docId");
     const parsed = docPatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["title", "body", "position"])) {
+      sendError(res, 400, "empty_patch", "Provide title, body, and/or position");
+      return;
+    }
     const [existing] = await db
       .select()
       .from(schema.projectDocuments)
@@ -105,7 +110,9 @@ documentsRouter.patch("/:docId", async (req, res) => {
     const [row] = await db
       .update(schema.projectDocuments)
       .set({
-        ...parsed,
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.body !== undefined ? { body: parsed.body } : {}),
+        ...(parsed.position !== undefined ? { position: parsed.position } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.projectDocuments.id, docId))

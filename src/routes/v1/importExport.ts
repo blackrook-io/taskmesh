@@ -5,6 +5,10 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import {
+  findImmutableFieldsWithValues,
+  ImmutableFieldError,
+} from "../../lib/immutableFields.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -36,8 +40,6 @@ function projectExportRow(p: typeof schema.projects.$inferSelect): Record<string
     description: p.description ?? "",
     status: p.status,
     sourceIdeaId: p.sourceIdeaId ?? "",
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
   };
 }
 
@@ -47,7 +49,6 @@ function taskExportRow(t: typeof schema.tasks.$inferSelect): Record<string, unkn
     projectId: t.projectId ?? "",
     phaseId: t.phaseId ?? "",
     parentId: t.parentId ?? "",
-    number: t.number,
     title: t.title,
     description: t.description ?? "",
     state: t.state,
@@ -56,8 +57,16 @@ function taskExportRow(t: typeof schema.tasks.$inferSelect): Record<string, unkn
     dueAt: t.dueAt ? t.dueAt.toISOString() : "",
     color: t.color ?? "",
     sortOrder: t.sortOrder,
-    createdAt: t.createdAt.toISOString(),
-    updatedAt: t.updatedAt.toISOString(),
+  };
+}
+
+function discardIfImmutable(raw: Record<string, unknown>, rowNum: number): DiscardRow | null {
+  const fields = findImmutableFieldsWithValues(raw);
+  if (fields.length === 0) return null;
+  return {
+    row: rowNum,
+    code: "immutable_field",
+    reason: new ImmutableFieldError(fields).message,
   };
 }
 
@@ -176,6 +185,11 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
   for (let i = 0; i < rows.length; i++) {
     const rowNum = i + 2; // header = 1
     const raw = rows[i]!;
+    const immutableDiscard = discardIfImmutable(raw, rowNum);
+    if (immutableDiscard) {
+      discarded.push(immutableDiscard);
+      continue;
+    }
     const idCheck = optionalPositiveInt(raw.id);
     if (idCheck === "invalid") {
       discarded.push({
@@ -310,6 +324,11 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
   for (let i = 0; i < rows.length; i++) {
     const rowNum = i + 2;
     const raw = rows[i]!;
+    const immutableDiscard = discardIfImmutable(raw, rowNum);
+    if (immutableDiscard) {
+      discarded.push(immutableDiscard);
+      continue;
+    }
 
     const idCheck = optionalPositiveInt(raw.id);
     if (idCheck === "invalid") {

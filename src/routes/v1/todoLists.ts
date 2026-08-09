@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -242,6 +243,10 @@ todoListsRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const parsed = listPatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["title"])) {
+      sendError(res, 400, "empty_patch", "Provide title");
+      return;
+    }
     const list = await loadList(id);
     if (!list) {
       sendError(res, 404, "not_found", "List not found");
@@ -252,7 +257,10 @@ todoListsRouter.patch("/:id", async (req, res) => {
     }
     const [row] = await db
       .update(schema.todoLists)
-      .set({ ...parsed, updatedAt: new Date() })
+      .set({
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(schema.todoLists.id, id))
       .returning();
     res.json({ data: row });
@@ -494,6 +502,10 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
     const listId = idParam.parse(req.params.id);
     const itemId = idParam.parse(req.params.itemId);
     const parsed = itemPatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["checked", "sortOrder"])) {
+      sendError(res, 400, "empty_patch", "Provide checked and/or sortOrder");
+      return;
+    }
     const [existing] = await db
       .select()
       .from(schema.todoListItems)

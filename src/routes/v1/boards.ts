@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
@@ -203,9 +204,17 @@ boardsRouter.patch("/:boardId", async (req, res) => {
       return;
     }
     const parsed = boardPatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["name", "sortOrder"])) {
+      sendError(res, 400, "empty_patch", "Provide name and/or sortOrder");
+      return;
+    }
     const [row] = await db
       .update(schema.boards)
-      .set({ ...parsed, updatedAt: new Date() })
+      .set({
+        ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+        ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(schema.boards.id, boardId))
       .returning();
     res.json({ data: row });
@@ -355,6 +364,10 @@ boardsRouter.patch("/:boardId/columns/:columnId", async (req, res) => {
       return;
     }
     const parsed = columnPatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["name", "wipLimit", "sortOrder"])) {
+      sendError(res, 400, "empty_patch", "Provide name, wipLimit, and/or sortOrder");
+      return;
+    }
     const [row] = await db
       .update(schema.boardColumns)
       .set({
@@ -517,6 +530,10 @@ boardsRouter.patch("/:boardId/lanes/:laneId", async (req, res) => {
       return;
     }
     const parsed = lanePatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["name", "sortOrder"])) {
+      sendError(res, 400, "empty_patch", "Provide name and/or sortOrder");
+      return;
+    }
     const [row] = await db
       .update(schema.boardLanes)
       .set({

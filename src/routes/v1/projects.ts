@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
@@ -80,6 +81,10 @@ projectsRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const parsed = projectPatch.parse(req.body);
+    if (!hasDefinedKeys(parsed, ["name", "description", "status"])) {
+      sendError(res, 400, "empty_patch", "Provide name, description, and/or status");
+      return;
+    }
     const [existing] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
     if (!existing) {
       sendError(res, 404, "not_found", "Project not found");
@@ -88,7 +93,9 @@ projectsRouter.patch("/:id", async (req, res) => {
     const [row] = await db
       .update(schema.projects)
       .set({
-        ...parsed,
+        ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+        ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+        ...(parsed.status !== undefined ? { status: parsed.status } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.projects.id, id))

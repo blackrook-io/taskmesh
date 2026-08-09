@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import {
   dueDateSchema,
   taskPrioritySchema,
@@ -145,6 +146,23 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
     const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
     if (!existing) {
       sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+
+    if (
+      !hasDefinedKeys(parsed, [
+        "title",
+        "description",
+        "dueDate",
+        "color",
+        "state",
+        "priority",
+        "parentId",
+        "projectId",
+        "phaseId",
+      ])
+    ) {
+      sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
     }
 

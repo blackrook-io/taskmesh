@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 
-export type DiscardCode = "invalid_data" | "id_collision" | "db_reject";
+export type DiscardCode = "invalid_data" | "id_collision" | "db_reject" | "immutable_field";
 
 export type DiscardRow = {
   row: number;

@@ -1,0 +1,91 @@
+# T0057 — Verify immutable fields on tables
+
+**Task:** T0057 — Verify functionality of Immutable fields on tables  
+**Branch (on approval):** `T0057-immutable-fields`  
+**State:** implementing
+
+## Context
+
+Immutable fields must be writable **only by the system**, never by UI or API clients:
+
+- Created date (`createdAt`)
+- Created by (`createdById`)
+- Modified date (`updatedAt`)
+- Modified by (`updatedById`)
+- Number / reference (`number` → `T####`, `U####`)
+
+**Audit findings (pre-work):**
+
+- No route Zod schema currently accepts these keys; unknown keys are **stripped** (not rejected), except `PATCH /users/me` which uses `.strict()`.
+- Tasks assign `number` via `allocateTaskNumber` and actors via `getCurrentUserId`; UI audit/number displays are already read-only.
+- Gaps: no shared policy helper, silent ignore of forbidden keys, `...parsed` update spreads could become unsafe if schemas grow, no regression tests.
+
+## Decisions (confirmed)
+
+1. **Enforcement:** **Reject** requests that include immutable keys with **400** (not silent strip).
+2. **Empty PATCH:** Only bump `updatedAt` / `updatedById` when a real allowed field changes.
+3. **No user write path:** Immutable fields must never be writable by a user in any way (API, UI, import). User-supplied values in import payloads are **rejected** (400), not applied. System writers only: DB defaults, server stamps, `allocateTaskNumber` / user `number` allocation. Backup restore remains a **system/ops** path (full DB replace), not a user entity-write API.
+4. **UI:** Confirm read-only surfaces; no new chrome unless a writable control is found.
+5. **Actors on other entities:** Out of scope — `createdById` / `updatedById` remain tasks-only; timestamp immutability still applies everywhere those columns exist.
+
+## Goals
+
+- Codify an immutable-field policy in one shared module.
+- Enforce it on all user-facing mutating APIs (including import) so clients cannot set/overwrite the listed fields.
+- Keep system writers intact.
+- Fix empty/unknown-only PATCH `updatedAt` bumps.
+- Add API tests that lock the behavior against schema/route drift.
+
+## Non-goals
+
+- Auth / multi-user enforcement beyond current actor helpers.
+- Adding `createdBy`/`updatedBy` columns to non-task tables.
+- Changing backup restore semantics (ops full restore).
+- New UI chrome for audit fields.
+
+## Implementation
+
+### 1. Shared module — `src/lib/immutableFields.ts`
+
+- Export canonical key sets (camelCase + snake_case aliases).
+- `rejectImmutableFields(body: unknown): void` — if any forbidden key is present, throw → **400** `immutable_field` with offending key names.
+- Optional helper for update stamps: `{ updatedAt: new Date(), updatedById?: number }` for task paths.
+
+### 2. Wire into mutating routes
+
+Call reject on raw request bodies (before Zod strip) for POST/PATCH (and equivalent) on:
+
+- tasks, standaloneTasks, users, ideas, projects, phases, documents, todoLists, boards, wiki, canvases, imageBoards, tags, modules, taskActivity, **import** entity objects
+
+Prefer **explicit field picks** over `...parsed` on updates where cheap.
+
+### 3. Preserve system writes
+
+- Create tasks: `allocateTaskNumber` + actors from `getCurrentUserId`.
+- Update tasks: server stamps only when applying real changes.
+- Users: `number` never patchable; `updatedAt` server-only on real changes.
+- Other entities: `createdAt` insert/default only; `updatedAt` server-only on real patches.
+- Import: reject entity objects that include immutable keys; otherwise allocate numbers/stamps server-side as today.
+
+### 4. Tests
+
+- POST/PATCH task with forbidden fields → 400; row unchanged for PATCH.
+- PATCH user with `number` / `createdAt` → 400.
+- PATCH idea (and one other entity) with `createdAt`/`updatedAt` → 400; legitimate patch still bumps `updatedAt`; empty `{}` PATCH does **not** bump.
+- Create task without client audit fields → system assigns number + actors.
+- Import with `number`/`createdAt` on a task → 400.
+
+### 5. Spot-check UI
+
+Confirm Task audit block, profile Reference ID, and list numbers remain non-editable.
+
+## QA checklist (post-implement)
+
+1. PATCH task with `number` / `createdAt` / `createdById` → 400; unchanged.
+2. PATCH task with only `title` → succeeds; audit stamps update; created*/number unchanged.
+3. PATCH task with `{}` → no `updatedAt` bump (or 400 if treated as no-op — document actual).
+4. Create task → next `T####`; actors = current user.
+5. PATCH `/users/me` with `number` → 400; displayName-only works.
+6. PATCH idea/project with `updatedAt` → 400; normal edit works.
+7. Import payload including task `number` → 400.
+8. UI audit / Reference ID still read-only.
