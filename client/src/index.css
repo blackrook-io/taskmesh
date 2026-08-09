@@ -1915,6 +1915,11 @@ textarea.raw-md {
     max(0.8rem, env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
 }
 
+/* Nested confirm/merge dialogs above the settings chrome */
+.settings-modal .modal-backdrop {
+  z-index: 70;
+}
+
 .settings-modal {
   display: flex;
   flex-direction: column;
@@ -2006,6 +2011,76 @@ textarea.raw-md {
 
 .settings-panel .card {
   margin-top: 0.8rem;
+}
+
+.tags-settings__create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tags-settings__create .input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.tags-settings__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.tags-settings__toolbar .input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.tags-settings__count {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.tags-settings__table {
+  margin-top: 0.35rem;
+}
+
+.tags-settings__name-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tags-settings__rename {
+  flex: 1 1 8rem;
+  min-width: 0;
+  max-width: 16rem;
+}
+
+.tags-settings__rename-btn {
+  opacity: 0.75;
+}
+
+.tags-settings__col-usage {
+  width: 4.5rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tags-settings__col-actions {
+  width: 9rem;
+  white-space: nowrap;
+}
+
+.tags-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  justify-content: flex-end;
 }
 
 .settings-route-placeholder {

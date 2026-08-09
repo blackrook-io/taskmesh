@@ -43,6 +43,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="settings" element={<SettingsHubPage />} />
             <Route path="settings/profile" element={<SettingsHubPage />} />
+            <Route path="settings/tags" element={<SettingsHubPage />} />
             <Route path="settings/import-export" element={<SettingsHubPage />} />
             <Route path="settings/backups" element={<SettingsHubPage />} />
             <Route path="settings/assistant" element={<SettingsHubPage />} />

@@ -14,6 +14,7 @@ import {
   faPlus,
   faRobot,
   faTableCells,
+  faTags,
   faUser,
 } from "@fortawesome/free-solid-svg-icons";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
@@ -36,4 +37,5 @@ export const shellIcons = {
   search: faMagnifyingGlass,
   add: faPlus,
   profile: faUser,
+  tags: faTags,
 } as const satisfies Record<string, IconDefinition>;

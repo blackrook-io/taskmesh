@@ -92,6 +92,8 @@ export type Tag = {
   name: string;
   color: string | null;
   createdAt: string;
+  /** Present on system list / merge responses; optional for older call sites. */
+  usageCount?: number;
 };
 
 export type SearchResults = {

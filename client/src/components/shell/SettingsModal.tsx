@@ -6,6 +6,7 @@ import { AssistantSettingsPage } from "../../pages/AssistantSettingsPage";
 import { BackupsPage } from "../../pages/BackupsPage";
 import { ImportExportPage } from "../../pages/ImportExportPage";
 import { ProfileSettingsPage } from "../../pages/ProfileSettingsPage";
+import { TagsSettingsPanel } from "../settings/TagsSettingsPanel";
 import {
   SETTINGS_SECTION_LABELS,
   SETTINGS_SECTIONS,
@@ -17,6 +18,7 @@ import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 const SECTION_ICONS: Record<SettingsSection, IconDefinition> = {
   profile: shellIcons.profile,
   appearance: shellIcons.imageBoard,
+  tags: shellIcons.tags,
   "import-export": shellIcons.filesystem,
   backups: shellIcons.documents,
   assistant: shellIcons.assistant,
@@ -108,6 +110,7 @@ export function SettingsModal() {
             <h3 className="settings-modal__section-title">{SETTINGS_SECTION_LABELS[section]}</h3>
             {section === "profile" ? <ProfileSettingsPage embedded /> : null}
             {section === "appearance" ? <AppearancePanel /> : null}
+            {section === "tags" ? <TagsSettingsPanel /> : null}
             {section === "import-export" ? <ImportExportPage embedded /> : null}
             {section === "backups" ? <BackupsPage embedded /> : null}
             {section === "assistant" ? <AssistantSettingsPage embedded /> : null}

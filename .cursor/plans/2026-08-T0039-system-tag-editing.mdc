@@ -1,0 +1,80 @@
+# T0039 — Tag editing at a system level
+
+**Task:** T0039 (id 39) · **Branch:** `T0039-system-tag-editing`  
+**Status:** Complete — merged / finishing up
+
+## Goal
+
+Add a whole-system Tags manager under **Settings → Tags** so tags can be listed, created, renamed, recolored, deleted, and merged without opening individual entities.
+
+## Decisions (from interview)
+
+1. **Host:** System Settings (new `tags` section).
+2. **Ops:** list + usage count, create, rename, recolor, delete (confirmed), **merge**.
+3. **Out:** Fixing API `TAGGABLE_ENTITY_TYPES` parity for board/canvas/todo_list — deferred to a later task.
+
+## Scope
+
+**In**
+- Settings nav + deep link `/settings/tags`
+- Tags panel UI: searchable/sortable table of all tags
+- Usage counts (total taggings; optional per-type breakdown in delete/merge copy)
+- Create, rename (inline or dialog), recolor (`ColorPopover` / palette)
+- Delete with `ConfirmDialog` showing usage
+- Merge: pick source → target; reassign taggings; delete source; handle unique collisions
+- API: usage on list (or dedicated endpoint); merge endpoint
+
+**Out**
+- Expanding `TAGGABLE_ENTITY_TYPES` / `entityExists` for board/canvas/todo_list
+- Soft-delete / aliases table
+- Changing entity-scoped `TagInput` attach UX (recolor there stays as today)
+
+## Approach
+
+### API
+
+1. **Usage on list** — Extend `GET /api/v1/tags` (no `q`) to include `usageCount` via `leftJoin` + `count(taggings)` grouped by tag. Keep suggest-with-`q` response shape unchanged (or include count there too if cheap). Optionally `GET /api/v1/tags/:id` includes the same.
+2. **Merge** — `POST /api/v1/tags/merge` body `{ sourceTagId, targetTagId }`:
+   - Reject if same id / missing tags
+   - In a transaction: for each source tagging, insert onto target if not already present (unique on `tag_id, entity_type, entity_id`), then delete source tag (CASCADE cleans remaining source taggings)
+   - Return the surviving target tag (+ usageCount)
+3. Existing `POST` / `PATCH` / `DELETE` remain as-is; delete already cascades taggings.
+
+### UI
+
+1. Add `"tags"` to `SETTINGS_SECTIONS` + label + `sectionFromPath` (`/settings/tags`).
+2. New panel (e.g. `TagsSettingsPanel`) rendered from `SettingsModal` when `section === "tags"`.
+3. Table/list rows: color swatch chip, editable name, usage count, actions (recolor, merge, delete).
+4. Header: “New tag” (name + optional color) via existing create API.
+5. Delete / merge use shared `ConfirmDialog`; merge picker lists other tags as target.
+6. After mutations, invalidate `["tags"]` / taggings query keys so entity chips refresh.
+
+### Files likely touched
+
+- `src/routes/v1/tags.ts` — usageCount, merge route
+- `client/src/lib/settings.tsx` — section registry
+- `client/src/components/shell/SettingsModal.tsx` — mount panel
+- `client/src/pages/SettingsHubPage.tsx` — if path wiring needed
+- `client/src/components/settings/TagsSettingsPanel.tsx` (new) or similar
+- `client/src/types.ts` — Tag type + usageCount
+- `client/src/index.css` — settings tags table styles (match existing settings chrome)
+
+## Acceptance
+
+- [ ] Settings shows **Tags**; `/settings/tags` opens it
+- [ ] All tags listed with name, color, usage count
+- [ ] Create tag without attaching to an entity
+- [ ] Rename and recolor update globally (chips elsewhere reflect after refresh/invalidation)
+- [ ] Delete confirms with usage; removes tag + all taggings
+- [ ] Merge moves unique taggings to target, drops source, no dup rows
+- [ ] No change to board/canvas/todo_list taggable API gate
+
+## QA checklist (post-implement)
+
+1. Open Settings → Tags; confirm list loads with counts.
+2. Create a tag; confirm it appears with usage 0.
+3. Rename a tag used on an idea/task; open that entity — name updated.
+4. Recolor from Settings; chips elsewhere show new color.
+5. Delete a used tag (confirm shows count); taggings gone from entities.
+6. Merge two tags that share an entity and ones that don’t; verify single chip and counts.
+7. Deep link `/settings/tags` and mobile-width Settings layout still usable.
