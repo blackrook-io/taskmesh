@@ -60,6 +60,7 @@ export async function syncDescendantPhases(
   db: Db,
   parentId: number,
   phaseId: number | null,
+  updatedById?: number,
 ): Promise<void> {
   const children = await db
     .select({ id: schema.tasks.id })
@@ -68,9 +69,13 @@ export async function syncDescendantPhases(
   for (const child of children) {
     await db
       .update(schema.tasks)
-      .set({ phaseId, updatedAt: new Date() })
+      .set({
+        phaseId,
+        updatedAt: new Date(),
+        ...(updatedById !== undefined ? { updatedById } : {}),
+      })
       .where(eq(schema.tasks.id, child.id));
-    await syncDescendantPhases(db, child.id, phaseId);
+    await syncDescendantPhases(db, child.id, phaseId, updatedById);
   }
 }
 

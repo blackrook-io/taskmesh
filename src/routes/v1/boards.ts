@@ -7,6 +7,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const boardBody = z.object({
   name: z.string().min(1).max(500),
@@ -594,6 +595,7 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
     if (parsed.title?.trim()) {
       if (entityType === "task") {
         const number = await allocateTaskNumber(db);
+        const actorId = await getCurrentUserId(db);
         const [task] = await db
           .insert(schema.tasks)
           .values({
@@ -602,6 +604,8 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
             number,
             title: parsed.title.trim(),
             sortOrder: 0,
+            createdById: actorId,
+            updatedById: actorId,
           })
           .returning();
         if (!task) {

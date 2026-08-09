@@ -6,6 +6,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const listBody = z.object({
   title: z.string().min(1).max(500),
@@ -391,6 +392,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
         }
       }
       const number = await allocateTaskNumber(db);
+      const actorId = await getCurrentUserId(db);
       const [task] = await db
         .insert(schema.tasks)
         .values({
@@ -399,6 +401,8 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
           number,
           title,
           sortOrder: 0,
+          createdById: actorId,
+          updatedById: actorId,
         })
         .returning();
       if (!task) {
@@ -571,6 +575,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       return;
     }
     const number = await allocateTaskNumber(db);
+    const actorId = await getCurrentUserId(db);
     const [task] = await db
       .insert(schema.tasks)
       .values({
@@ -580,6 +585,8 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
         title: parsed.title?.trim() || idea.title,
         description: idea.body,
         sortOrder: 0,
+        createdById: actorId,
+        updatedById: actorId,
       })
       .returning();
     if (!task) {

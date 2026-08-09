@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const phaseBody = z.object({
   name: z.string().min(1).max(200),
@@ -139,9 +140,10 @@ phasesRouter.delete("/:phaseId", async (req, res) => {
       sendError(res, 404, "not_found", "Phase not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
     await db
       .update(schema.tasks)
-      .set({ phaseId: null, updatedAt: new Date() })
+      .set({ phaseId: null, updatedAt: new Date(), updatedById: actorId })
       .where(eq(schema.tasks.phaseId, phaseId));
     await db.delete(schema.projectPhases).where(eq(schema.projectPhases.id, phaseId));
     res.status(204).end();

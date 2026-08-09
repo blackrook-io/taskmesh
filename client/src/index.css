@@ -1580,6 +1580,34 @@ textarea.raw-md {
   min-width: 0;
 }
 
+.task-audit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.35rem 1rem;
+  font-size: 0.85rem;
+  padding: 0.15rem 0 0.35rem;
+}
+
+.task-audit__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.task-audit__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.profile-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 28rem;
+}
+
 .task-color-swatch {
   display: inline-flex;
   align-items: center;

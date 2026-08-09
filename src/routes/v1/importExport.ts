@@ -7,6 +7,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
+import { getCurrentUserId } from "../../services/users.js";
 import {
   objectsToCsv,
   objectsToXlsxBuffer,
@@ -466,6 +467,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
 
     try {
       const number = await allocateTaskNumber(db);
+      const actorId = await getCurrentUserId(db);
       const [row] = await db
         .insert(schema.tasks)
         .values({
@@ -478,6 +480,8 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
           dueAt: dueAt instanceof Date ? dueAt : null,
           color,
           sortOrder,
+          createdById: actorId,
+          updatedById: actorId,
         })
         .returning();
       if (!row) {

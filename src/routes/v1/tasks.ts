@@ -18,6 +18,11 @@ import {
   syncDescendantPhases,
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
+import {
+  attachTaskActor,
+  attachTaskActors,
+  getCurrentUserId,
+} from "../../services/users.js";
 
 const taskBody = z.object({
   title: z.string().min(1).max(2000),
@@ -80,7 +85,7 @@ tasksRouter.get("/", async (req, res) => {
       .from(schema.tasks)
       .where(eq(schema.tasks.projectId, projectId))
       .orderBy(asc(schema.tasks.sortOrder), asc(schema.tasks.id));
-    res.json({ data: rows });
+    res.json({ data: await attachTaskActors(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -95,6 +100,7 @@ tasksRouter.post("/", async (req, res) => {
       return;
     }
     const parsed = taskBody.parse(req.body);
+    const actorId = await getCurrentUserId(db);
 
     let phaseId: number | null = parsed.phaseId ?? null;
     if (parsed.phaseId != null) {
@@ -142,13 +148,15 @@ tasksRouter.post("/", async (req, res) => {
         dueDate,
         color: parsed.color ?? null,
         sortOrder: nextSort,
+        createdById: actorId,
+        updatedById: actorId,
       })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create task");
       return;
     }
-    res.status(201).json({ data: row });
+    res.status(201).json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -163,6 +171,7 @@ tasksRouter.patch("/reorder", async (req, res) => {
       return;
     }
     const parsed = reorderBody.parse(req.body);
+    const actorId = await getCurrentUserId(db);
 
     if (parsed.orderedTaskIds.length === 0) {
       sendError(res, 400, "invalid_reorder", "orderedTaskIds required");
@@ -206,9 +215,10 @@ tasksRouter.patch("/reorder", async (req, res) => {
       const set: {
         sortOrder: number;
         updatedAt: Date;
+        updatedById: number;
         phaseId?: number | null;
         parentId?: number | null;
-      } = { sortOrder: i, updatedAt: new Date() };
+      } = { sortOrder: i, updatedAt: new Date(), updatedById: actorId };
       if (parsed.parentId !== undefined) {
         set.parentId = parsed.parentId;
       }
@@ -217,7 +227,7 @@ tasksRouter.patch("/reorder", async (req, res) => {
       }
       await db.update(schema.tasks).set(set).where(eq(schema.tasks.id, tid));
       if (parsed.phaseId !== undefined) {
-        await syncDescendantPhases(db, tid, parsed.phaseId);
+        await syncDescendantPhases(db, tid, parsed.phaseId, actorId);
       }
     }
 
@@ -226,7 +236,7 @@ tasksRouter.patch("/reorder", async (req, res) => {
       .from(schema.tasks)
       .where(eq(schema.tasks.projectId, projectId))
       .orderBy(asc(schema.tasks.sortOrder), asc(schema.tasks.id));
-    res.json({ data: rows });
+    res.json({ data: await attachTaskActors(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -241,7 +251,7 @@ tasksRouter.get("/:taskId", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
-    res.json({ data: row });
+    res.json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -252,6 +262,7 @@ tasksRouter.patch("/:taskId", async (req, res) => {
     const projectId = parseRouteId(req, "projectId");
     const taskId = parseRouteId(req, "taskId");
     const parsed = taskPatch.parse(req.body);
+    const actorId = await getCurrentUserId(db);
     const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
     if (!existing || existing.projectId !== projectId) {
       sendError(res, 404, "not_found", "Task not found");
@@ -296,19 +307,20 @@ tasksRouter.patch("/:taskId", async (req, res) => {
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
         updatedAt: new Date(),
+        updatedById: actorId,
       })
       .where(eq(schema.tasks.id, taskId))
       .returning();
 
     if (row && parsed.phaseId !== undefined) {
-      await syncDescendantPhases(db, taskId, parsed.phaseId);
+      await syncDescendantPhases(db, taskId, parsed.phaseId, actorId);
     }
 
     if (row) {
       await recordTaskChanges(db, taskId, existing, row);
     }
 
-    res.json({ data: row });
+    res.json({ data: row ? await attachTaskActor(db, row) : row });
   } catch (err) {
     handleRouteError(res, err);
   }

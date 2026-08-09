@@ -17,7 +17,7 @@ type PaletteItem = {
   path: string;
   /** Special client action instead of navigation */
   action?: "open-assistant" | "open-settings";
-  settingsSection?: "appearance" | "import-export" | "backups" | "assistant";
+  settingsSection?: "profile" | "appearance" | "import-export" | "backups" | "assistant";
 };
 
 const STATIC_COMMANDS: PaletteItem[] = [
@@ -37,6 +37,14 @@ const STATIC_COMMANDS: PaletteItem[] = [
     hint: "Chat",
     path: "/",
     action: "open-assistant",
+  },
+  {
+    id: "nav-profile",
+    group: "Go to",
+    label: "Profile",
+    path: "/",
+    action: "open-settings",
+    settingsSection: "profile",
   },
   {
     id: "nav-settings",

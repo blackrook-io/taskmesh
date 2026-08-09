@@ -16,6 +16,11 @@ import {
   recordTaskChanges,
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
+import {
+  attachTaskActor,
+  attachTaskActors,
+  getCurrentUserId,
+} from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -72,7 +77,7 @@ standaloneTasksRouter.get("/", async (req, res) => {
       .from(schema.tasks)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(schema.tasks.updatedAt), desc(schema.tasks.id));
-    res.json({ data: rows });
+    res.json({ data: await attachTaskActors(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -86,7 +91,7 @@ standaloneTasksRouter.get("/:taskId", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
-    res.json({ data: row });
+    res.json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -95,6 +100,7 @@ standaloneTasksRouter.get("/:taskId", async (req, res) => {
 standaloneTasksRouter.post("/", async (req, res) => {
   try {
     const parsed = createBody.parse(req.body);
+    const actorId = await getCurrentUserId(db);
     const parentId = parsed.parentId ?? null;
     const parentOk = await assertParentCompatible(db, null, parentId);
     if (!parentOk.ok) {
@@ -117,13 +123,15 @@ standaloneTasksRouter.post("/", async (req, res) => {
         dueDate: parsed.dueDate ?? null,
         color: parsed.color ?? null,
         sortOrder,
+        createdById: actorId,
+        updatedById: actorId,
       })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create task");
       return;
     }
-    res.status(201).json({ data: row });
+    res.status(201).json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -133,6 +141,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
     const parsed = patchBody.parse(req.body);
+    const actorId = await getCurrentUserId(db);
     const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
     if (!existing) {
       sendError(res, 404, "not_found", "Task not found");
@@ -221,13 +230,14 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
           ? { parentId: nextParentId }
           : {}),
         updatedAt: new Date(),
+        updatedById: actorId,
       })
       .where(eq(schema.tasks.id, taskId))
       .returning();
     if (row) {
       await recordTaskChanges(db, taskId, existing, row);
     }
-    res.json({ data: row });
+    res.json({ data: row ? await attachTaskActor(db, row) : row });
   } catch (err) {
     handleRouteError(res, err);
   }

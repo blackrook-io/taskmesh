@@ -1,0 +1,112 @@
+# T0043 — Task audit fields + minimal Users
+
+**Task:** T0043 — New Task fields: Created, Updated, et al  
+**Branch (on approval):** `T0043-task-audit-fields`  
+**State:** awaiting implement approval
+
+## Decisions (from interview)
+
+1. Rename UI **"Date"** → **"Due date"** (API stays `dueDate`).
+2. Show **Created** / **Updated** as **read-only** on Task **detail** only (not list columns).
+3. Add a minimal **Users** table; stamp tasks with Created by / Updated by.
+4. List-view configuration of audit columns is **out of scope** (later tasks).
+
+## Goals
+
+- Persist and display task creation/update timestamps (already in DB; expose in UI).
+- Introduce a single-user-ready `users` model with `U####` reference ids and editable display name.
+- Set Created by / Updated by on all Task creates/updates via API (project tasks + standalone).
+- Small Profile surface in Settings to edit Display Name.
+
+## Non-goals
+
+- Auth / login / multi-user sessions.
+- Configurable task list columns.
+- Backfilling historical “who” beyond seeding a default user and assigning existing rows to them.
+- Tracking Created by / Updated by in the task activity change log (timestamps already bump; actor is audit metadata).
+
+## Schema
+
+### `users`
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `id` | serial PK | Internal FK target |
+| `number` | integer unique not null | Display → `U####` (same padding rules as tasks) |
+| `display_name` | text not null | Editable in Profile |
+| `created_at` / `updated_at` | timestamptz | Standard |
+
+Helpers: `allocateUserNumber`, `formatUserNumber` → `U` + zero-pad ≥4.
+
+**Seed:** migration inserts default user `number=1` → `U0001`, display name `"Local User"` (or current machine owner nickname if preferred at implement time).
+
+### `tasks` additions
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `created_by_id` | integer FK → users.id, nullable → not null after backfill | Set on insert |
+| `updated_by_id` | integer FK → users.id, nullable → not null after backfill | Set on every update |
+
+Existing `created_at` / `updated_at` remain the source of truth for Created / Updated timestamps (already maintained by API).
+
+Migration steps: add users → seed default → add nullable FKs → backfill both FKs to default user → set NOT NULL (preferred) or leave nullable with API always setting them going forward.
+
+## API
+
+### Users / Profile
+
+- `GET /api/v1/users/me` — current (only) user until auth exists: the seeded default / sole row.
+- `PATCH /api/v1/users/me` — `{ displayName }` only (Reference ID read-only).
+
+### Tasks
+
+- Create (project + standalone): set `createdById` + `updatedById` to current user; keep `createdAt`/`updatedAt` defaults / bumps.
+- Patch / reorder / any mutating path that already sets `updatedAt`: also set `updatedById`.
+- Responses include audit fields. Prefer embedding:
+
+```json
+"createdAt": "...",
+"updatedAt": "...",
+"createdBy": { "id": 1, "referenceId": "U0001", "displayName": "…" },
+"updatedBy": { "id": 1, "referenceId": "U0001", "displayName": "…" }
+```
+
+Clients must not send Created/Updated/Created-by/Updated-by as writable task fields (ignore or reject if present).
+
+## UI
+
+1. **Task detail** (`TaskBoard` expand/editor): rename Date → Due date; add read-only row/block for Created, Updated, Created by, Updated by (use `referenceId` + display name, e.g. `Local User (U0001)`).
+2. **Task list header:** rename Date → Due date.
+3. **Settings:** new **Profile** section — show read-only Reference ID (`U0001`), editable Display Name with save (PATCH `/users/me`). Wire into `SETTINGS_SECTIONS` + Settings modal + command palette entry.
+
+## Files (expected touch list)
+
+- `src/db/schema.ts` + new Drizzle migration
+- `src/lib/userFields.ts` (format/allocate) + `src/services/users.ts` (current user helper)
+- `src/routes/v1/users.ts` (or profile) + mount in app router
+- `src/routes/v1/tasks.ts`, `standaloneTasks.ts`, related task mutators — stamp actors; serialize `createdBy`/`updatedBy`
+- `client/src/types.ts`, Task editor/list labels, Settings Profile panel, `settings.tsx` sections
+
+## Implementation order
+
+1. Schema + migration + seed default user + backfill task FKs.
+2. Users service + `/users/me` routes.
+3. Task create/update paths stamp + serialize audit actors.
+4. Task UI: Due date label + read-only audit fields.
+5. Settings Profile section.
+6. Smoke QA on DEV (`:5173` / API `:3001`); leave PROD finish-up for user “finish up”.
+
+## QA checklist (draft)
+
+- [ ] Open a task: labels show **Due date**; Created / Updated timestamps present and read-only.
+- [ ] Created by / Updated by show default user (`U0001` + display name).
+- [ ] Create a task via UI → Created/Updated ≈ now; both actors = current user.
+- [ ] Edit title/state/due date → Updated bumps; Updated by stays current user.
+- [ ] Create/patch via API (`curl` to DEV or PROD after deploy) stamps the same fields.
+- [ ] Settings → Profile: Reference ID read-only; change Display Name → saves; task detail reflects new name.
+- [ ] Existing tasks after migrate: FKs backfilled; timestamps unchanged.
+- [ ] List header says Due date (no new audit columns).
+
+## Status
+
+Implemented on branch `T0043-task-audit-fields`. Awaiting QA + “finish up”.

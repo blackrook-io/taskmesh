@@ -29,7 +29,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
-import type { Project, ProjectPhase, Task } from "../types";
+import type { Project, ProjectPhase, Task, UserRef } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
@@ -70,6 +70,17 @@ type TaskSnapshot = {
 
 function taskDue(task: Task): string | null {
   return task.dueDate ?? (task.dueAt ? task.dueAt.slice(0, 10) : null);
+}
+
+function formatAuditTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+}
+
+function formatUserLabel(user: UserRef | null | undefined): string {
+  if (!user) return "—";
+  return `${user.displayName} (${user.referenceId})`;
 }
 
 function snapshotFromTask(task: Task): TaskSnapshot {
@@ -539,7 +550,7 @@ export function TaskEditorFields({
           </select>
         </div>
         <div className="field task-editor-date-color">
-          <label htmlFor={`t-due-${task.id}`}>Date</label>
+          <label htmlFor={`t-due-${task.id}`}>Due date</label>
           <div className="task-editor-date-color__row">
             <input
               id={`t-due-${task.id}`}
@@ -588,6 +599,24 @@ export function TaskEditorFields({
             }
           }}
         />
+      </div>
+      <div className="task-audit muted" aria-label="Task audit fields">
+        <div className="task-audit__row">
+          <span className="task-audit__label">Created</span>
+          <span>{formatAuditTimestamp(task.createdAt)}</span>
+        </div>
+        <div className="task-audit__row">
+          <span className="task-audit__label">Created by</span>
+          <span>{formatUserLabel(task.createdBy)}</span>
+        </div>
+        <div className="task-audit__row">
+          <span className="task-audit__label">Updated</span>
+          <span>{formatAuditTimestamp(task.updatedAt)}</span>
+        </div>
+        <div className="task-audit__row">
+          <span className="task-audit__label">Updated by</span>
+          <span>{formatUserLabel(task.updatedBy)}</span>
+        </div>
       </div>
       <div className="field field--tags-below task-editor-tags-row">
         <span className="task-editor-hint muted">
@@ -1028,7 +1057,7 @@ export function TaskBoard({
             Priority
           </button>
           <button type="button" className="task-list-header__btn" onDoubleClick={() => headerSort("dueDate")}>
-            Date
+            Due date
           </button>
         </div>
 

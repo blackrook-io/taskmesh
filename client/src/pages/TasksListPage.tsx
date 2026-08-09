@@ -264,7 +264,7 @@ export function TasksListPage() {
             Priority
           </button>
           <button type="button" className="task-list-header__btn" onClick={() => headerSort("dueDate")}>
-            Date
+            Due date
           </button>
           <button type="button" className="task-list-header__btn" onClick={() => headerSort("project")}>
             Project

@@ -56,6 +56,20 @@ export const projectPhases = pgTable("project_phases", {
     .defaultNow(),
 });
 
+/** App users (single-user now; auth later). Display → U####. */
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  /** App-wide unique display number → U####. */
+  number: integer("number").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   /** Null when task lives only in Lists / Unsorted (not project-scoped). */
@@ -82,6 +96,12 @@ export const tasks = pgTable("tasks", {
   dueAt: timestamp("due_at", { withTimezone: true }),
   color: text("color"),
   sortOrder: integer("sort_order").notNull().default(0),
+  createdById: integer("created_by_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  updatedById: integer("updated_by_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -414,6 +434,11 @@ export const projectPhasesRelations = relations(projectPhases, ({ one, many }) =
   tasks: many(tasks),
 }));
 
+export const usersRelations = relations(users, ({ many }) => ({
+  createdTasks: many(tasks, { relationName: "task_created_by" }),
+  updatedTasks: many(tasks, { relationName: "task_updated_by" }),
+}));
+
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, {
     fields: [tasks.projectId],
@@ -429,6 +454,16 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     relationName: "task_hierarchy",
   }),
   children: many(tasks, { relationName: "task_hierarchy" }),
+  createdBy: one(users, {
+    fields: [tasks.createdById],
+    references: [users.id],
+    relationName: "task_created_by",
+  }),
+  updatedBy: one(users, {
+    fields: [tasks.updatedById],
+    references: [users.id],
+    relationName: "task_updated_by",
+  }),
   activity: many(taskActivity),
 }));
 

@@ -25,6 +25,12 @@ export type ProjectPhase = {
   updatedAt: string;
 };
 
+export type UserRef = {
+  id: number;
+  referenceId: string;
+  displayName: string;
+};
+
 export type Task = {
   id: number;
   projectId: number | null;
@@ -40,6 +46,10 @@ export type Task = {
   dueAt?: string | null;
   color: string | null;
   sortOrder: number;
+  createdById?: number;
+  updatedById?: number;
+  createdBy?: UserRef | null;
+  updatedBy?: UserRef | null;
   createdAt: string;
   updatedAt: string;
 };
