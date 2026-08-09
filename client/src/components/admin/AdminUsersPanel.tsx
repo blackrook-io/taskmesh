@@ -163,7 +163,8 @@ export function AdminUsersPanel() {
         <div className="admin-form-card" role="dialog" aria-label="Reset password">
           <h3 className="admin-form-card__title">Reset password</h3>
           <p className="muted small">
-            Min 12 characters with upper, lower, digit, and symbol.
+            Min 12 characters with upper, lower, digit, and symbol. Avoid common words,
+            sequences, repeats, and keyboard runs.
           </p>
           <label className="field">
             <span>New password</span>

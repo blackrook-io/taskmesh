@@ -1,13 +1,9 @@
-import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+/**
+ * Client-side password checks mirroring server `src/lib/password.ts`.
+ * Server remains authoritative; this is for immediate Profile UX only.
+ * Never log or display the plaintext password value in errors.
+ */
 
-const SCRYPT_N = 16384;
-const SCRYPT_R = 8;
-const SCRYPT_P = 1;
-const KEY_LEN = 64;
-const SALT_LEN = 16;
-const MAXMEM = 64 * 1024 * 1024;
-
-/** Cheap denylist — common words / patterns (normalized), not a full dictionary. */
 const COMMON_WORDS = [
   "password",
   "passwd",
@@ -47,22 +43,10 @@ const KEYBOARD_RUNS = [
   "abcdefghijklmnopqrstuvwxyz",
 ] as const;
 
-function scryptAsync(
-  password: string,
-  salt: Buffer,
-  keylen: number,
-  opts: { N: number; r: number; p: number; maxmem: number },
-): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    scryptCb(password, salt, keylen, opts, (err, derived) => {
-      if (err) reject(err);
-      else resolve(derived as Buffer);
-    });
-  });
-}
+export const PASSWORD_GUIDELINES =
+  "Min 12 characters with upper, lower, digit, and symbol. Avoid common words, sequences (abcd, 1234), repeats (aaa), and keyboard runs (qwerty).";
 
-/** Lowercase + light leetspeak fold for pattern checks only. */
-export function normalizeForPasswordCheck(password: string): string {
+function normalizeForPasswordCheck(password: string): string {
   return password
     .toLowerCase()
     .replace(/0/g, "o")
@@ -113,12 +97,8 @@ function hasCommonWord(normalized: string): boolean {
   return COMMON_WORDS.some((word) => normalized.includes(word));
 }
 
-/**
- * Password rules shared by Admin reset and Profile (T0062).
- * Returns an error message, or null when acceptable.
- * Never logs or echoes the password value.
- */
-export function validatePassword(password: string): string | null {
+/** Returns an error message, or null when acceptable. */
+export function validatePasswordClient(password: string): string | null {
   if (password.length < 12) {
     return "Password must be at least 12 characters";
   }
@@ -150,36 +130,14 @@ export function validatePassword(password: string): string | null {
   return null;
 }
 
-/** Format: scrypt$N$r$p$saltB64$hashB64 */
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(SALT_LEN);
-  const derived = await scryptAsync(password, salt, KEY_LEN, {
-    N: SCRYPT_N,
-    r: SCRYPT_R,
-    p: SCRYPT_P,
-    maxmem: MAXMEM,
-  });
-  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("base64")}$${derived.toString("base64")}`;
-}
-
-export async function verifyPassword(
-  password: string,
-  stored: string | null | undefined,
-): Promise<boolean> {
-  if (!stored) return false;
-  const parts = stored.split("$");
-  if (parts.length !== 6 || parts[0] !== "scrypt") return false;
-  const N = Number(parts[1]);
-  const r = Number(parts[2]);
-  const p = Number(parts[3]);
-  const salt = Buffer.from(parts[4]!, "base64");
-  const expected = Buffer.from(parts[5]!, "base64");
-  const derived = await scryptAsync(password, salt, expected.length, {
-    N,
-    r,
-    p,
-    maxmem: MAXMEM,
-  });
-  if (derived.length !== expected.length) return false;
-  return timingSafeEqual(derived, expected);
+/** Practical email shape check; server Zod `.email()` is authoritative. */
+export function validateEmailClient(email: string): string | null {
+  const trimmed = email.trim();
+  if (!trimmed) return "Email is required";
+  if (trimmed.length > 320) return "Email is too long";
+  // Basic RFC-ish local@domain.tld — rejects spaces and missing TLD.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return "Enter a valid email address";
+  }
+  return null;
 }

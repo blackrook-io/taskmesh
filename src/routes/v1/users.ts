@@ -5,19 +5,39 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { toUserProfile } from "../../lib/userFields.js";
-import { getCurrentUser } from "../../services/users.js";
+import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
 
-const emailSchema = z
-  .union([z.string().trim().email().max(320), z.null()])
-  .optional();
+/** Required valid email when provided — null/empty not allowed (T0062). */
+const emailSchema = z.string().trim().email().max(320);
 
 const patchBody = z
   .object({
     displayName: z.string().trim().min(1).max(200).optional(),
-    email: emailSchema,
+    email: emailSchema.optional(),
     avatarUploadId: z.union([z.number().int().positive(), z.null()]).optional(),
   })
   .strict();
+
+const passwordBody = z
+  .object({
+    password: z.string().min(1).max(200),
+  })
+  .strict();
+
+function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boolean {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "status" in err &&
+    "code" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    const e = err as { status: number; code: string; message: string };
+    sendError(res, e.status, e.code, e.message);
+    return true;
+  }
+  return false;
+}
 
 async function resolveAvatarStoredName(
   avatarUploadId: number | null,
@@ -63,7 +83,7 @@ usersRouter.patch("/me", async (req, res) => {
     const current = await getCurrentUser(db);
     const patch: {
       displayName?: string;
-      email?: string | null;
+      email?: string;
       avatarUploadId?: number | null;
       updatedAt: Date;
     } = { updatedAt: new Date() };
@@ -100,6 +120,18 @@ usersRouter.patch("/me", async (req, res) => {
     }
     res.json({ data: await profilePayload(row) });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+/** Set or change password for the current user. Never returns the secret. */
+usersRouter.post("/me/password", async (req, res) => {
+  try {
+    const { password } = passwordBody.parse(req.body);
+    const row = await setCurrentUserPassword(db, password);
+    res.json({ data: await profilePayload(row) });
+  } catch (err) {
+    if (serviceError(res, err)) return;
     handleRouteError(res, err);
   }
 });

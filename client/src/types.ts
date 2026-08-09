@@ -38,6 +38,8 @@ export type UserProfile = UserRef & {
   avatarUrl: string | null;
   lastLoginAt: string | null;
   lastApiAt: string | null;
+  /** True when a password hash is stored; never exposes the secret. */
+  hasPassword: boolean;
 };
 
 export type Task = {

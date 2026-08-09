@@ -1665,6 +1665,40 @@ textarea.raw-md {
   max-width: 28rem;
 }
 
+.profile-settings__ref {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.profile-settings__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.profile-settings__heading {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.profile-settings__help {
+  margin: 0;
+  color: #e07a5f;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.profile-settings__actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .task-color-swatch {
   display: inline-flex;
   align-items: center;

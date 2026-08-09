@@ -15,6 +15,8 @@ export type UserProfile = UserRef & {
   avatarUrl: string | null;
   lastLoginAt: string | null;
   lastApiAt: string | null;
+  /** True when a password hash is stored; never exposes the secret. */
+  hasPassword: boolean;
 };
 
 export function toUserRef(user: {
@@ -43,6 +45,7 @@ export function toUserProfile(
     avatarUploadId: number | null;
     lastLoginAt: Date | null;
     lastApiAt: Date | null;
+    passwordHash?: string | null;
   },
   avatarStoredName?: string | null,
 ): UserProfile {
@@ -53,5 +56,6 @@ export function toUserProfile(
     avatarUrl: avatarUrlFromStoredName(avatarStoredName),
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     lastApiAt: user.lastApiAt?.toISOString() ?? null,
+    hasPassword: Boolean(user.passwordHash),
   };
 }

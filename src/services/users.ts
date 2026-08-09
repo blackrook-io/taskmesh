@@ -1,6 +1,7 @@
 import { asc, eq, max } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { hashPassword, validatePassword } from "../lib/password.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -46,6 +47,34 @@ export async function getCurrentUserId(db: Db): Promise<number> {
 
 export async function getCurrentUserRef(db: Db): Promise<UserRef> {
   return toUserRef(await getCurrentUser(db));
+}
+
+/**
+ * Set or replace the current user's password hash.
+ * Plaintext is never stored or returned — only a scrypt hash is written.
+ */
+export async function setCurrentUserPassword(
+  db: Db,
+  password: string,
+): Promise<typeof schema.users.$inferSelect> {
+  const err = validatePassword(password);
+  if (err) {
+    throw Object.assign(new Error(err), { status: 400, code: "invalid_password" });
+  }
+  const current = await getCurrentUser(db);
+  const passwordHash = await hashPassword(password);
+  const [row] = await db
+    .update(schema.users)
+    .set({ passwordHash, updatedAt: new Date() })
+    .where(eq(schema.users.id, current.id))
+    .returning();
+  if (!row) {
+    throw Object.assign(new Error("Could not update password"), {
+      status: 500,
+      code: "update_failed",
+    });
+  }
+  return row;
 }
 
 export async function loadUserMap(
