@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import { allocateCanvasNumber } from "../../services/entityNumbers.js";
 
 const createBody = z.object({
   title: z.string().min(1).max(500).optional(),
@@ -72,9 +73,11 @@ canvasesRouter.post("/", async (req, res) => {
       .from(schema.canvases)
       .where(eq(schema.canvases.projectId, projectId));
     const nextSort = existing.length ? Math.max(...existing.map((r) => r.m)) + 1 : 0;
+    const number = await allocateCanvasNumber(db);
     const [row] = await db
       .insert(schema.canvases)
       .values({
+        number,
         projectId,
         title: parsed.title?.trim() || "Untitled canvas",
         sortOrder: nextSort,

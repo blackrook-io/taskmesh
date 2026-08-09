@@ -1,0 +1,141 @@
+# T0058 — Referencing records within records
+
+**Task:** T0058 — Referencing records within records  
+**Branch (on approval):** `T0058-record-references`  
+**State:** shipped — finish-up  
+**PROD task id:** 65 · projectId 4 · priority medium · state `in_progress`
+
+## QA follow-ups
+
+- Suggestion popup: use rectangular corners (not `--radius-chip` pill/oval).
+
+## Context
+
+Users need to mention other TaskMesh records from the **Markdown editor** via shorthand typeahead (same UX spirit as Depends-on search), then land a clickable markdown link. Also `@` for user display-name mentions (no notifications this phase).
+
+## Size / split
+
+Large but cohesive: display-number schema for many entity types + search API + TipTap suggestion UI + deep-link navigation. **Recommend shipping as one worktask** with ordered milestones below. Split only if implementation stalls mid-flight (e.g. schema/API first as a follow-up task).
+
+## Decisions (confirmed)
+
+1. **Stable display IDs** for all referenceable types (not title-only search for non-task types).
+2. **Insert both** bracket-style label **and** a markdown link (clickable).
+3. **`#` trigger:** treat line-start `#` as heading territory; mid-line `#` as reference. Implementation nuance (proposed): still allow reference when `#` is followed by a **known type letter** even at line start (so intentional `#T00…` works); suppress when `#` + space / non-type text at line start (Heading1).
+4. **Click-through** in preview (and edit when clicking the link).
+5. **`@` users:** insert **display name**; notifications later.
+6. **Entity coverage:** idea, project, task, document, board, canvas, wiki_node, todo_list, image_board, plus users via `@`.
+7. **Suggest threshold:** match Depends-on (`q.length >= 1` after the type letter / after `@`).
+
+## Proposed prefix map
+
+| Prefix | Entity | Display |
+|--------|--------|---------|
+| `T` | task | `T####` (exists) |
+| `I` | idea | `I####` |
+| `P` | project | `P####` |
+| `D` | document | `D####` |
+| `B` | board | `B####` |
+| `C` | canvas | `C####` |
+| `W` | wiki_node | `W####` |
+| `L` | todo_list | `L####` |
+| `M` | image_board | `M####` |
+| `U` | user | `U####` (exists; `@` mentions by name, not `#U`) |
+
+Adjust letters on request before implement.
+
+## Goals
+
+- App-wide unique `number` per entity type (same pattern as tasks/users); backfill existing rows; allocate on create.
+- Show reference IDs in list/detail chrome where titles already appear (at least ElementShell / common headers) so users learn the codes.
+- `GET` reference search API filtered by prefix/type, matching number **or** title (Depends-on logic).
+- TipTap `#` / `@` suggestion popovers in `MarkdownEditor` (edit mode only).
+- On select: insert markdown link whose **label** is `[T0010] Title` (or `@DisplayName` for users) and **href** is a stable client path.
+- Resolve clicks to the right screen (idea page, project tab + entity, task open, image board editor, etc.).
+- User `@` mention: plain linked or styled display name; no notification side effects.
+
+## Non-goals
+
+- Notifications / inbox for `@` mentions.
+- Autocomplete outside MarkdownEditor (Excalidraw, plain inputs).
+- Changing Depends-on search (reuse patterns only).
+- Public/share links or cross-instance refs.
+
+## Implementation
+
+### 1. Schema + migration
+
+Add `number integer not null unique` to: `ideas`, `projects`, `project_documents`, `boards`, `canvases`, `wiki_nodes`, `todo_lists`, `image_boards`.
+
+- Backfill each table: assign sequential numbers (by `id` order) starting at 1.
+- Create helpers `allocate*Number` (max+1) mirroring `allocateTaskNumber`.
+- Wire creates in existing services/routes to allocate numbers.
+- Shared formatters: `formatEntityRef(prefix, n)` → `T0010`; client + server `lib` modules.
+
+### 2. Reference search API
+
+`GET /api/v1/references/search?q=…&type=task|idea|…` (or parse type from `q` like `T003` / `003` when `type` set).
+
+- Response: `{ data: [{ entityType, id, number, title, href, projectId? }] }` (limit ~20).
+- Number matching: digits, padded display (`T0031`), partial (`003`, `T00`).
+- Title `ILIKE` like Depends-on.
+- Users: separate path or `type=user` for `@` (search `displayName`; return `referenceId` + name). Prefer a non-admin route so Markdown editor does not need admin APIs.
+
+### 3. Deep links (`href`)
+
+Stable app paths (extend query params where selection is local state today):
+
+| Type | Target |
+|------|--------|
+| task | `/tasks?open=<id>` (or project tasks tab + open) — open modal/editor |
+| idea | `/ideas/:id` |
+| project | `/projects/:id` |
+| document | `/projects/:pid?tab=documents&doc=:id` |
+| board | `/projects/:pid?tab=boards&board=:id` |
+| canvas | `/projects/:pid?tab=canvases&canvas=:id` |
+| wiki_node | `/projects/:pid?tab=wiki&node=:id` |
+| todo_list | `/todos/:id` |
+| image_board | `/image-board/:id` |
+| user | `/settings/profile` if self, else no-op / admin users later — label only is fine |
+
+Wire ProjectDetailPage (and panels) to honor `doc` / `board` / `canvas` / `node` query params on load.
+
+### 4. MarkdownEditor — `#` and `@` suggestions
+
+- TipTap Suggestion (or lightweight mirror of Depends-on dropdown) for:
+  - **`#` + type letter + query** (mid-line, or line-start only when type letter follows).
+  - **`@` + name query**.
+- Dropdown: small list — **Number + title** (match Depends-on row style); keyboard nav + click.
+- On pick entity: replace the trigger text with  
+  `[T0010] Title` as a **link** → e.g. `[\[T0010\] Title](/projects/4?tab=documents&doc=12)`  
+  (literal visible label includes brackets + number + title).
+- On pick user: insert `@DisplayName` (optionally linked); no notification.
+- Preview/readOnly: links clickable (existing Link extension); SPA navigation via click handler intercepting internal hrefs when needed.
+- Do **not** steal Heading1: line-start `#` + space remains heading.
+
+### 5. Display numbers in UI
+
+Surface `I####` / `P####` / etc. in primary chrome for each entity (list rows / ElementShell `titleLeading`) so the shorthand is discoverable—not a full redesign.
+
+### 6. Tests
+
+- Allocate/backfill uniqueness.
+- Search by number token + title.
+- Optional: parser for trigger (line-start vs mid-line).
+
+## Out of scope / later
+
+- `@` notifications and activity feed.
+- Command-palette parity for the same refs (already has global search).
+- Import/export rewriting of refs.
+
+## QA checklist (preview)
+
+After implement, user should verify:
+
+1. Mid-line `#T` / `#I` / … opens typeahead; selecting inserts `[T####] Title` as a working link.
+2. Line-start `# ` still creates Heading1; reference does not fire incorrectly.
+3. `@` suggests users by name; inserts display name only.
+4. Preview click navigates to idea / project / doc / board / canvas / wiki / todo / image board / task.
+5. New records get the next number; existing records show stable IDs after migrate.
+6. Mobile: suggestion list usable; editor still resizes normally.

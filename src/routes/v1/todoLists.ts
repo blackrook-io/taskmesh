@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { allocateIdeaNumber, allocateTodoListNumber } from "../../services/entityNumbers.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -206,9 +207,11 @@ todoListsRouter.post("/", async (req, res) => {
         return;
       }
     }
+    const number = await allocateTodoListNumber(db);
     const [row] = await db
       .insert(schema.todoLists)
       .values({
+        number,
         title: parsed.title,
         projectId: parsed.projectId ?? null,
         kind: "list",
@@ -383,7 +386,11 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
     let entityId: number;
 
     if (entityType === "idea") {
-      const [idea] = await db.insert(schema.ideas).values({ title, body: null }).returning();
+      const ideaNumber = await allocateIdeaNumber(db);
+      const [idea] = await db
+        .insert(schema.ideas)
+        .values({ number: ideaNumber, title, body: null })
+        .returning();
       if (!idea) {
         sendError(res, 500, "insert_failed", "Could not create idea");
         return;

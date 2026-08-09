@@ -1338,9 +1338,58 @@ textarea.raw-md {
 }
 
 .md-editor__surface {
+  position: relative;
   background: var(--bg);
   overflow: auto;
   min-height: 0;
+}
+
+.md-ref-suggest {
+  z-index: 80;
+  min-width: 14rem;
+  max-width: min(24rem, 90vw);
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 35%, transparent);
+}
+
+.md-ref-suggest__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.md-ref-suggest__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.md-ref-suggest__item:hover,
+.md-ref-suggest__item.is-active,
+.md-ref-suggest__item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  outline: none;
+}
+
+.md-ref-suggest__empty {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
 }
 
 .md-editor__surface:focus {

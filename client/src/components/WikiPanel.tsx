@@ -9,8 +9,9 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "../api/client";
+import { formatEntityRef } from "../lib/entityRef";
 import type { Canvas, ProjectDocument, WikiNode, WikiTreeNode, WikiTreeResponse } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CanvasEditor } from "./CanvasEditor";
@@ -103,6 +104,7 @@ function SortableTocRow({
       <button type="button" className="wiki-toc__title" onClick={onSelect}>
         {row.node.pinned ? "📌 " : ""}
         {row.node.entityType === "canvas" ? "◫ " : ""}
+        <span className="muted">{formatEntityRef("wiki_node", row.node.number)} </span>
         {row.node.title}
       </button>
       {structureEdit ? (
@@ -127,9 +129,17 @@ function SortableTocRow({
   );
 }
 
-type Props = { projectId: number };
+type Props = {
+  projectId: number;
+  initialNodeId?: number | null;
+  onInitialNodeConsumed?: () => void;
+};
 
-export function WikiPanel({ projectId }: Props) {
+export function WikiPanel({
+  projectId,
+  initialNodeId = null,
+  onInitialNodeConsumed,
+}: Props) {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
@@ -139,6 +149,7 @@ export function WikiPanel({ projectId }: Props) {
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const initialNodeApplied = useRef(false);
 
   const treeQuery = useQuery({
     queryKey: ["wiki", projectId],
@@ -164,6 +175,14 @@ export function WikiPanel({ projectId }: Props) {
   }, [tree]);
 
   const activeId = selectedId ?? flat[0]?.node.id ?? null;
+
+  useEffect(() => {
+    if (initialNodeApplied.current || initialNodeId == null) return;
+    if (!byId.has(initialNodeId)) return;
+    initialNodeApplied.current = true;
+    setSelectedId(initialNodeId);
+    onInitialNodeConsumed?.();
+  }, [initialNodeId, byId, onInitialNodeConsumed]);
 
   const detailQuery = useQuery({
     queryKey: ["wiki-node", projectId, activeId],
@@ -551,7 +570,14 @@ export function WikiPanel({ projectId }: Props) {
               </>
             ) : (
               <>
-                <h1 className="wiki-page-title">{displayTitle}</h1>
+                <h1 className="wiki-page-title">
+                  {detailQuery.data?.node ? (
+                    <span className="muted">
+                      {formatEntityRef("wiki_node", detailQuery.data.node.number)}{" "}
+                    </span>
+                  ) : null}
+                  {displayTitle}
+                </h1>
                 <div className="field field--tags-below">
                   <TagInput entityType="document" entityId={detailQuery.data.document.id} readOnly />
                 </div>
@@ -636,7 +662,14 @@ export function WikiPanel({ projectId }: Props) {
                 />
               </div>
             ) : (
-              <h1 className="wiki-page-title">{displayTitle}</h1>
+              <h1 className="wiki-page-title">
+                {detailQuery.data?.node ? (
+                  <span className="muted">
+                    {formatEntityRef("wiki_node", detailQuery.data.node.number)}{" "}
+                  </span>
+                ) : null}
+                {displayTitle}
+              </h1>
             )}
             <div className="field field--tags-below">
               <TagInput

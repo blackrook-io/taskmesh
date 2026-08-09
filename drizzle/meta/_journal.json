@@ -134,6 +134,13 @@
       "when": 1786300673073,
       "tag": "0018_even_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786301821501,
+      "tag": "0019_nebulous_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import { allocateImageBoardNumber } from "../../services/entityNumbers.js";
 
 const emptyDocument = {
   camera: { x: 0, y: 0, zoom: 1 },
@@ -114,9 +115,11 @@ imageBoardsRouter.post("/", async (req, res) => {
       return;
     }
     const sortOrder = await nextSortOrder(projectId);
+    const number = await allocateImageBoardNumber(db);
     const [row] = await db
       .insert(schema.imageBoards)
       .values({
+        number,
         projectId,
         title: parsed.title?.trim() || "Untitled image board",
         sortOrder,

@@ -10,6 +10,7 @@ import {
   ImmutableFieldError,
 } from "../../lib/immutableFields.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
+import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { getCurrentUserId } from "../../services/users.js";
 import {
@@ -274,9 +275,11 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
     }
 
     try {
+      const number = await allocateProjectNumber(db);
       const [row] = await db
         .insert(schema.projects)
         .values({
+          number,
           name,
           description,
           status,

@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { allocateTodoListNumber } from "./entityNumbers.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -21,9 +22,11 @@ export async function ensureInboxList(db: Db): Promise<number> {
     return existing[0].id;
   }
 
+  const number = await allocateTodoListNumber(db);
   const [row] = await db
     .insert(schema.todoLists)
     .values({
+      number,
       title: "Unsorted",
       projectId: null,
       kind: "inbox",

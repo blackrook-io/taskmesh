@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { allocateIdeaNumber, allocateProjectNumber } from "../../services/entityNumbers.js";
 
 const ideaBody = z.object({
   title: z.string().min(1).max(500),
@@ -32,9 +33,11 @@ ideasRouter.get("/", async (_req, res) => {
 ideasRouter.post("/", async (req, res) => {
   try {
     const parsed = ideaBody.parse(req.body);
+    const number = await allocateIdeaNumber(db);
     const [row] = await db
       .insert(schema.ideas)
       .values({
+        number,
         title: parsed.title,
         body: parsed.body ?? null,
       })
@@ -114,9 +117,11 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
       return;
     }
 
+    const number = await allocateProjectNumber(db);
     const [project] = await db
       .insert(schema.projects)
       .values({
+        number,
         name: idea.title,
         description: idea.body,
         status: "idea",

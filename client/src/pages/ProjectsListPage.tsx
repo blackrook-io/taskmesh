@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { formatEntityRef } from "../lib/entityRef";
 import type { Project } from "../types";
 
 export function ProjectsListPage() {
@@ -26,7 +27,10 @@ export function ProjectsListPage() {
       <div className="grid">
         {(data ?? []).map((p) => (
           <Link key={p.id} to={`/projects/${p.id}`} className="card" style={{ textDecoration: "none" }}>
-            <h3>{p.name}</h3>
+            <h3>
+              <span className="muted">{formatEntityRef("project", p.number)} </span>
+              {p.name}
+            </h3>
             <p className="muted">
               {p.status} · updated {new Date(p.updatedAt).toLocaleString()}
             </p>

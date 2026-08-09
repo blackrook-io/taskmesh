@@ -145,6 +145,21 @@ export function TasksListPage() {
   useEffect(() => {
     if (modalTaskFromList) setModalTaskHeld(modalTaskFromList);
   }, [modalTaskFromList]);
+
+  useEffect(() => {
+    if (!openParam || !modalTaskFromList) return;
+    if (Number(openParam) !== modalTaskFromList.id) return;
+    setSearchParams(
+      (prev) => {
+        if (!prev.has("open")) return prev;
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [openParam, modalTaskFromList, setSearchParams]);
+
   const modalTask = modalTaskFromList ?? (modalTaskId != null ? modalTaskHeld : null);
 
   const phasesQuery = useQuery({
@@ -209,12 +224,15 @@ export function TasksListPage() {
       });
       invalidate();
       setModalTaskId(row.id);
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("new");
-        next.set("open", String(row.id));
-        return next;
-      });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("new");
+          next.set("open", String(row.id));
+          return next;
+        },
+        { replace: true },
+      );
     },
   });
 
@@ -244,22 +262,28 @@ export function TasksListPage() {
 
   const openModal = (id: number) => {
     setModalTaskId(id);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("open", String(id));
-      return next;
-    });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("open", String(id));
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const closeModal = () => {
     setModalTaskId(null);
     setModalTaskHeld(null);
     setHeaderActions(null);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("open");
-      return next;
-    });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const startNewTask = () => {
@@ -457,6 +481,14 @@ export function TasksListPage() {
             onOpenTask={(id) => {
               setModalTaskHeld(null);
               setModalTaskId(id);
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("open", String(id));
+                  return next;
+                },
+                { replace: true },
+              );
             }}
             onSavePatch={async (p, opts) => {
               const updated = await patchTask.mutateAsync({

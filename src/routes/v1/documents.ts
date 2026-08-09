@@ -6,6 +6,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import { allocateDocumentNumber } from "../../services/entityNumbers.js";
 
 const docBody = z.object({
   title: z.string().min(1).max(500),
@@ -56,9 +57,11 @@ documentsRouter.post("/", async (req, res) => {
     const nextPos =
       parsed.position ?? (maxPos.length ? Math.max(...maxPos.map((r) => r.p)) + 1 : 0);
 
+    const number = await allocateDocumentNumber(db);
     const [row] = await db
       .insert(schema.projectDocuments)
       .values({
+        number,
         projectId,
         title: parsed.title,
         body: parsed.body ?? null,

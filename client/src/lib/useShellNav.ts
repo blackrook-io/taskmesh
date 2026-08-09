@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { matchPath, useLocation, useSearchParams } from "react-router-dom";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { apiJson } from "../api/client";
+import { formatEntityRef } from "./entityRef";
 import {
   isProjectModuleKey,
   type ProjectModuleKey,
@@ -257,7 +258,10 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
         items: [
           ...(listsQuery.data ?? []).map((l) => ({
             id: `list-${l.id}`,
-            label: l.kind === "inbox" ? "Unsorted" : l.title,
+            label:
+              l.kind === "inbox"
+                ? "Unsorted"
+                : `${formatEntityRef("todo_list", l.number)} ${l.title}`,
             path: `/todos/${l.id}`,
             active: activeListId === l.id || (activeListId == null && l.kind === "inbox" && location.pathname === "/todos"),
             icon: shellIcons.lists,
@@ -295,7 +299,7 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
           },
           ...boards.map((b) => ({
             id: `ib-${b.id}`,
-            label: b.title,
+            label: `${formatEntityRef("image_board", b.number)} ${b.title}`,
             path: `/image-board/${b.id}`,
             active: activeId === b.id,
             icon: shellIcons.imageBoard,

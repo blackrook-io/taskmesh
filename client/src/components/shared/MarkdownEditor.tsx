@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import { useNavigate } from "react-router-dom";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import Link from "@tiptap/extension-link";
@@ -31,6 +32,7 @@ import {
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { uploadFile } from "../../api/client";
 import { NavIcon } from "../shell/NavIcon";
+import { MarkdownReferenceSuggest } from "./MarkdownReferenceSuggest";
 import { ResizableMarkdownImage } from "./ResizableMarkdownImage";
 
 const DEFAULT_MIN_HEIGHT = 120;
@@ -133,6 +135,7 @@ export function MarkdownEditor({
   readOnly = false,
   className,
 }: Props) {
+  const navigate = useNavigate();
   const minHeight = Math.min(minHeightProp ?? DEFAULT_MIN_HEIGHT, height);
   const maxHeight = Math.max(maxHeightProp, height);
   const [mode, setMode] = useState<Mode>("preview");
@@ -151,9 +154,11 @@ export function MarkdownEditor({
   const modeRef = useRef(mode);
   const onChangeRef = useRef(onChange);
   const onBlurRef = useRef(onBlur);
+  const navigateRef = useRef(navigate);
   modeRef.current = mode;
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
+  navigateRef.current = navigate;
 
   useEffect(() => {
     if (heightLocked) return;
@@ -191,7 +196,13 @@ export function MarkdownEditor({
       Underline,
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
+        autolink: true,
+        HTMLAttributes: { rel: "noopener noreferrer" },
+        isAllowedUri: (url, ctx) => {
+          if (!url) return false;
+          if (url.startsWith("/") && !url.startsWith("//")) return true;
+          return ctx.defaultValidate(url);
+        },
       }),
       ResizableMarkdownImage,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -212,6 +223,21 @@ export function MarkdownEditor({
     editorProps: {
       attributes: {
         class: "md-prose",
+      },
+      handleClick: (_view, _pos, event) => {
+        const t = event.target;
+        if (!(t instanceof Element)) return false;
+        const a = t.closest("a");
+        if (!a) return false;
+        const href = a.getAttribute("href");
+        if (!href) return false;
+        event.preventDefault();
+        if (href.startsWith("/") && !href.startsWith("//")) {
+          navigateRef.current(href);
+          return true;
+        }
+        window.open(href, "_blank", "noopener,noreferrer");
+        return true;
       },
       handlePaste: (_view, event) => {
         if (!enableImageUpload || modeRef.current !== "edit") return false;
@@ -374,6 +400,7 @@ export function MarkdownEditor({
         }}
       >
         <EditorContent editor={editor} />
+        <MarkdownReferenceSuggest editor={editor} enabled={!readOnly && mode === "edit"} />
       </div>
       {canResize ? (
         <div

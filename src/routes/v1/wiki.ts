@@ -7,6 +7,11 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
+  allocateCanvasNumber,
+  allocateDocumentNumber,
+  allocateWikiNodeNumber,
+} from "../../services/entityNumbers.js";
+import {
   breadcrumbFor,
   buildWikiTree,
   listWikiNodes,
@@ -93,9 +98,11 @@ wikiRouter.post("/pages", async (req, res) => {
       .from(schema.projectDocuments)
       .where(eq(schema.projectDocuments.projectId, projectId));
     const nextPos = docs.length ? Math.max(...docs.map((d) => d.m)) + 1 : 0;
+    const docNumber = await allocateDocumentNumber(db);
     const [doc] = await db
       .insert(schema.projectDocuments)
       .values({
+        number: docNumber,
         projectId,
         title: parsed.title,
         body: parsed.body ?? "",
@@ -108,9 +115,11 @@ wikiRouter.post("/pages", async (req, res) => {
     }
 
     const sortOrder = await nextWikiSort(db, projectId, parentId);
+    const nodeNumber = await allocateWikiNodeNumber(db);
     const [node] = await db
       .insert(schema.wikiNodes)
       .values({
+        number: nodeNumber,
         projectId,
         parentId,
         entityType: "document",
@@ -146,9 +155,11 @@ wikiRouter.post("/canvases", async (req, res) => {
       }
     }
 
+    const canvasNumber = await allocateCanvasNumber(db);
     const [canvas] = await db
       .insert(schema.canvases)
       .values({
+        number: canvasNumber,
         projectId,
         title: parsed.title,
         document: {},
@@ -160,9 +171,11 @@ wikiRouter.post("/canvases", async (req, res) => {
     }
 
     const sortOrder = await nextWikiSort(db, projectId, parentId);
+    const nodeNumber = await allocateWikiNodeNumber(db);
     const [node] = await db
       .insert(schema.wikiNodes)
       .values({
+        number: nodeNumber,
         projectId,
         parentId,
         entityType: "canvas",
@@ -223,10 +236,12 @@ wikiRouter.post("/nodes", async (req, res) => {
     }
 
     const sortOrder = await nextWikiSort(db, projectId, parentId);
+    const nodeNumber = await allocateWikiNodeNumber(db);
     try {
       const [node] = await db
         .insert(schema.wikiNodes)
         .values({
+          number: nodeNumber,
           projectId,
           parentId,
           entityType: parsed.entityType,

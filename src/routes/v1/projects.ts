@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
@@ -44,9 +45,11 @@ projectsRouter.get("/", async (_req, res) => {
 projectsRouter.post("/", async (req, res) => {
   try {
     const parsed = projectBody.parse(req.body);
+    const number = await allocateProjectNumber(db);
     const [row] = await db
       .insert(schema.projects)
       .values({
+        number,
         name: parsed.name,
         description: parsed.description ?? null,
         status: parsed.status ?? "idea",

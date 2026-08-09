@@ -7,6 +7,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
+import { allocateBoardNumber, allocateIdeaNumber } from "../../services/entityNumbers.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { getCurrentUserId } from "../../services/users.js";
 
@@ -125,9 +126,10 @@ boardsRouter.post("/", async (req, res) => {
       .from(schema.boards)
       .where(eq(schema.boards.projectId, projectId));
     const nextSort = existing.length ? Math.max(...existing.map((r) => r.m)) + 1 : 0;
+    const number = await allocateBoardNumber(db);
     const [row] = await db
       .insert(schema.boards)
-      .values({ projectId, name: parsed.name, sortOrder: nextSort })
+      .values({ number, projectId, name: parsed.name, sortOrder: nextSort })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create board");
@@ -631,9 +633,10 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
         }
         entityId = task.id;
       } else if (entityType === "idea") {
+        const ideaNumber = await allocateIdeaNumber(db);
         const [idea] = await db
           .insert(schema.ideas)
-          .values({ title: parsed.title.trim() })
+          .values({ number: ideaNumber, title: parsed.title.trim() })
           .returning();
         if (!idea) {
           sendError(res, 500, "insert_failed", "Could not create idea");

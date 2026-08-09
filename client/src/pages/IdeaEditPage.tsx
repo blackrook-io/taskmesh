@@ -6,6 +6,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { TagInput } from "../components/shared/TagInput";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
+import { formatEntityRef } from "../lib/entityRef";
 import type { Idea, Project } from "../types";
 
 export function IdeaEditPage() {
@@ -102,7 +103,12 @@ export function IdeaEditPage() {
   return (
     <div>
       <div className="page-head">
-        <h1>{isNew ? "New idea" : "Edit idea"}</h1>
+        <h1>
+          {!isNew && idea ? (
+            <span className="muted">{formatEntityRef("idea", idea.number)} </span>
+          ) : null}
+          {isNew ? "New idea" : "Edit idea"}
+        </h1>
         <div className="btn-row">
           <Link to="/ideas" className="btn ghost">
             Back

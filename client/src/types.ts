@@ -1,5 +1,6 @@
 export type Idea = {
   id: number;
+  number: number;
   title: string;
   body: string | null;
   createdAt: string;
@@ -8,6 +9,7 @@ export type Idea = {
 
 export type Project = {
   id: number;
+  number: number;
   name: string;
   description: string | null;
   status: string;
@@ -84,6 +86,7 @@ export type TaskActivityEntry = {
 
 export type ProjectDocument = {
   id: number;
+  number: number;
   projectId: number;
   title: string;
   body: string | null;
@@ -115,6 +118,7 @@ export type SearchResults = {
 
 export type TodoList = {
   id: number;
+  number: number;
   projectId: number | null;
   title: string;
   kind: string;
@@ -152,6 +156,7 @@ export type ProjectModule = {
 
 export type Board = {
   id: number;
+  number: number;
   projectId: number;
   name: string;
   sortOrder: number;
@@ -203,6 +208,7 @@ export type BoardDetail = Board & {
 
 export type WikiNode = {
   id: number;
+  number: number;
   projectId: number;
   parentId: number | null;
   entityType: string;
@@ -223,6 +229,7 @@ export type WikiTreeResponse = {
 
 export type CanvasSummary = {
   id: number;
+  number: number;
   projectId: number;
   title: string;
   sortOrder: number;
@@ -236,6 +243,7 @@ export type Canvas = CanvasSummary & {
 
 export type ImageBoardSummary = {
   id: number;
+  number: number;
   projectId: number | null;
   projectName: string | null;
   title: string;

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { formatEntityRef } from "../lib/entityRef";
 import type { Idea, Tag } from "../types";
 
 type IdeaWithTags = Idea & { tags: Tag[] };
@@ -79,7 +80,10 @@ export function IdeasListPage() {
       onDoubleClick={() => navigate(`/ideas/${idea.id}`)}
       onClick={() => setPendingOpen(idea.id)}
     >
-      <span className="ideas-list-row__title">{idea.title}</span>
+      <span className="ideas-list-row__title">
+        <span className="muted">{formatEntityRef("idea", idea.number)} </span>
+        {idea.title}
+      </span>
       <span className="ideas-list-row__tags">
         {idea.tags.map((t) => (
           <span key={t.id} className="chip" style={{ background: t.color ?? undefined }}>

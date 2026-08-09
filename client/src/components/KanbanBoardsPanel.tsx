@@ -22,6 +22,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { formatEntityRef } from "../lib/entityRef";
 import { formatTaskNumber } from "../lib/taskFields";
 import { patchTaskRecord } from "../lib/patchTask";
 import type {
@@ -169,6 +170,7 @@ function SortableBoardTab({
             setEditing(true);
           }}
         >
+          <span className="muted">{formatEntityRef("board", board.number)} </span>
           {board.name}
         </button>
       )}
@@ -476,9 +478,16 @@ function LaneHead({
 type Props = {
   projectId: number;
   phases: ProjectPhase[];
+  initialBoardId?: number | null;
+  onInitialBoardConsumed?: () => void;
 };
 
-export function KanbanBoardsPanel({ projectId, phases }: Props) {
+export function KanbanBoardsPanel({
+  projectId,
+  phases,
+  initialBoardId = null,
+  onInitialBoardConsumed,
+}: Props) {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newBoardName, setNewBoardName] = useState("");
@@ -493,6 +502,7 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   const [cellsState, setCellsState] = useState<Record<string, number[]>>({});
   const cellsRef = useRef(cellsState);
   cellsRef.current = cellsState;
+  const initialBoardApplied = useRef(false);
 
   const boardsQuery = useQuery({
     queryKey: ["boards", projectId],
@@ -516,6 +526,14 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   useEffect(() => {
     setBoardOrder(boards.map((b) => b.id));
   }, [boards]);
+
+  useEffect(() => {
+    if (initialBoardApplied.current || initialBoardId == null) return;
+    if (!boards.some((b) => b.id === initialBoardId)) return;
+    initialBoardApplied.current = true;
+    setSelectedId(initialBoardId);
+    onInitialBoardConsumed?.();
+  }, [initialBoardId, boards, onInitialBoardConsumed]);
 
   const detailQuery = useQuery({
     queryKey: ["board", projectId, activeBoardId],

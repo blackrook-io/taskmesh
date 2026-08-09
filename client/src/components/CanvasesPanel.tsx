@@ -14,14 +14,19 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "../api/client";
+import { formatEntityRef } from "../lib/entityRef";
 import type { Canvas, CanvasSummary } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CanvasEditor } from "./CanvasEditor";
 import { TagInput } from "./shared/TagInput";
 
-type Props = { projectId: number };
+type Props = {
+  projectId: number;
+  initialCanvasId?: number | null;
+  onInitialCanvasConsumed?: () => void;
+};
 
 function SortableCanvasTab({
   canvas,
@@ -96,6 +101,7 @@ function SortableCanvasTab({
             setEditing(true);
           }}
         >
+          <span className="muted">{formatEntityRef("canvas", canvas.number)} </span>
           {canvas.title}
         </button>
       )}
@@ -116,13 +122,18 @@ function SortableCanvasTab({
   );
 }
 
-export function CanvasesPanel({ projectId }: Props) {
+export function CanvasesPanel({
+  projectId,
+  initialCanvasId = null,
+  onInitialCanvasConsumed,
+}: Props) {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CanvasSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [tabOrder, setTabOrder] = useState<number[]>([]);
+  const initialCanvasApplied = useRef(false);
 
   const listQuery = useQuery({
     queryKey: ["canvases", projectId],
@@ -138,6 +149,14 @@ export function CanvasesPanel({ projectId }: Props) {
     if (!listQuery.data) return;
     setTabOrder(listQuery.data.map((c) => c.id));
   }, [listQuery.data]);
+
+  useEffect(() => {
+    if (initialCanvasApplied.current || initialCanvasId == null) return;
+    if (!canvases.some((c) => c.id === initialCanvasId)) return;
+    initialCanvasApplied.current = true;
+    setSelectedId(initialCanvasId);
+    onInitialCanvasConsumed?.();
+  }, [initialCanvasId, canvases, onInitialCanvasConsumed]);
 
   const orderedCanvases = useMemo(() => {
     const byId = new Map(canvases.map((c) => [c.id, c]));

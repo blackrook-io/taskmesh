@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
@@ -21,6 +21,7 @@ import {
 } from "../lib/projectModules";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { patchTaskRecord } from "../lib/patchTask";
+import { formatEntityRef } from "../lib/entityRef";
 import { evaluateTaskListFilter, storageKeyForProjectTasks } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TodoList } from "../types";
@@ -45,6 +46,12 @@ function parseTab(raw: string | null): Tab {
   return TAB_ALIASES[raw] ?? "overview";
 }
 
+function parseIdParam(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function ProjectDetailPage() {
   const { id } = useParams();
   const projectId = Number(id);
@@ -53,6 +60,23 @@ export function ProjectDetailPage() {
   const qc = useQueryClient();
 
   const tab = parseTab(searchParams.get("tab"));
+  const initialDocId = parseIdParam(searchParams.get("doc"));
+  const initialBoardId = parseIdParam(searchParams.get("board"));
+  const initialCanvasId = parseIdParam(searchParams.get("canvas"));
+  const initialNodeId = parseIdParam(searchParams.get("node"));
+  const openTaskId = parseIdParam(searchParams.get("open"));
+
+  const clearSearchParam = (key: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const setTab = (next: Tab) => {
     if (next === "overview") {
       setSearchParams({}, { replace: true });
@@ -74,6 +98,8 @@ export function ProjectDetailPage() {
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [pendingDocDelete, setPendingDocDelete] = useState<number | null>(null);
   const [overviewEdit, setOverviewEdit] = useState(false);
+  const initialDocApplied = useRef(false);
+  const initialOpenTaskApplied = useRef(false);
 
   const invalidId = Number.isNaN(projectId);
 
@@ -215,6 +241,23 @@ export function ProjectDetailPage() {
     if (!mod?.enabled) setTab("overview");
   }, [modules, modulesQuery.isSuccess, tab]);
 
+  useEffect(() => {
+    if (initialDocApplied.current || tab !== "documents" || initialDocId == null) return;
+    if (!documents.some((d) => d.id === initialDocId)) return;
+    initialDocApplied.current = true;
+    setSelectedDocId(initialDocId);
+    clearSearchParam("doc");
+  }, [tab, initialDocId, documents]);
+
+  useEffect(() => {
+    if (initialOpenTaskApplied.current || tab !== "tasks" || openTaskId == null) return;
+    const task = tasks.find((t) => t.id === openTaskId);
+    if (!task) return;
+    initialOpenTaskApplied.current = true;
+    setRequestOpenTask(task);
+    clearSearchParam("open");
+  }, [tab, openTaskId, tasks]);
+
   const cancelOverviewEdit = () => {
     if (project) {
       setName(project.name);
@@ -352,7 +395,10 @@ export function ProjectDetailPage() {
   return (
     <div>
       <div className="page-head">
-        <h1>{project.name}</h1>
+        <h1>
+          <span className="muted">{formatEntityRef("project", project.number)} </span>
+          {project.name}
+        </h1>
       </div>
 
       {tab === "images" ? (
@@ -418,7 +464,10 @@ export function ProjectDetailPage() {
               </>
             ) : (
               <>
-                <h1 className="wiki-page-title">{project.name}</h1>
+                <h1 className="wiki-page-title">
+                  <span className="muted">{formatEntityRef("project", project.number)} </span>
+                  {project.name}
+                </h1>
                 <p className="muted" style={{ marginTop: "-0.35rem", marginBottom: "0.75rem" }}>
                   {project.status}
                 </p>
@@ -621,6 +670,7 @@ export function ProjectDetailPage() {
                   className={`btn small${(projectListId ?? todoListsQuery.data?.[0]?.id) === l.id ? " primary" : " ghost"}`}
                   onClick={() => setProjectListId(l.id)}
                 >
+                  <span className="muted">{formatEntityRef("todo_list", l.number)} </span>
                   {l.title}
                 </button>
               ))}
@@ -684,6 +734,7 @@ export function ProjectDetailPage() {
                     style={{ width: "100%", justifyContent: "flex-start" }}
                     onClick={() => setSelectedDocId(d.id)}
                   >
+                    <span className="muted">{formatEntityRef("document", d.number)} </span>
                     {d.title}
                   </button>
                 </li>
@@ -706,11 +757,30 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
 
-      {tab === "boards" ? <KanbanBoardsPanel projectId={projectId} phases={phases} /> : null}
+      {tab === "boards" ? (
+        <KanbanBoardsPanel
+          projectId={projectId}
+          phases={phases}
+          initialBoardId={initialBoardId}
+          onInitialBoardConsumed={() => clearSearchParam("board")}
+        />
+      ) : null}
 
-      {tab === "wiki" ? <WikiPanel projectId={projectId} /> : null}
+      {tab === "wiki" ? (
+        <WikiPanel
+          projectId={projectId}
+          initialNodeId={initialNodeId}
+          onInitialNodeConsumed={() => clearSearchParam("node")}
+        />
+      ) : null}
 
-      {tab === "canvases" ? <CanvasesPanel projectId={projectId} /> : null}
+      {tab === "canvases" ? (
+        <CanvasesPanel
+          projectId={projectId}
+          initialCanvasId={initialCanvasId}
+          onInitialCanvasConsumed={() => clearSearchParam("canvas")}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={deleteProjectOpen}
@@ -767,7 +837,10 @@ function DocumentEditor({
   return (
     <div>
       <div className="page-head">
-        <h2 style={{ margin: 0 }}>Edit document</h2>
+        <h2 style={{ margin: 0 }}>
+          <span className="muted">{formatEntityRef("document", doc.number)} </span>
+          Edit document
+        </h2>
         <button type="button" className="btn danger small" onClick={onDelete}>
           Delete
         </button>

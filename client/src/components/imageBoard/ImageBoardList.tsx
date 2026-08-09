@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiJson } from "../../api/client";
+import { formatEntityRef } from "../../lib/entityRef";
 import type { ImageBoard, ImageBoardSummary, Project } from "../../types";
 import { ConfirmDialog } from "../ConfirmDialog";
 
@@ -151,7 +152,10 @@ export function ImageBoardList({ projectId, heading = "Image boards" }: Props) {
             ) : (
               <>
                 <Link to={`/image-board/${board.id}`} className="image-board-list__title-link">
-                  <h3>{board.title}</h3>
+                  <h3>
+                    <span className="muted">{formatEntityRef("image_board", board.number)} </span>
+                    {board.title}
+                  </h3>
                 </Link>
                 <p className="muted">
                   {board.projectName ? (

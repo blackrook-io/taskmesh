@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { TodoListView } from "../components/TodoListView";
+import { formatEntityRef } from "../lib/entityRef";
 import type { TodoList } from "../types";
 
 export function TodoListsPage() {
@@ -68,7 +69,12 @@ export function TodoListsPage() {
   return (
     <div>
       <div className="page-head">
-        <h1>{active?.kind === "inbox" ? "Unsorted" : (active?.title ?? "Lists")}</h1>
+        <h1>
+          {active && active.kind !== "inbox" ? (
+            <span className="muted">{formatEntityRef("todo_list", active.number)} </span>
+          ) : null}
+          {active?.kind === "inbox" ? "Unsorted" : (active?.title ?? "Lists")}
+        </h1>
         {active && active.kind !== "inbox" ? (
           <button type="button" className="btn ghost small" onClick={() => setPendingDelete(active)}>
             Delete list

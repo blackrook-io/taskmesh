@@ -14,6 +14,8 @@ import {
 
 export const ideas = pgTable("ideas", {
   id: serial("id").primaryKey(),
+  /** App-wide unique display number → I####. */
+  number: integer("number").notNull().unique(),
   title: text("title").notNull(),
   body: text("body"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -26,6 +28,8 @@ export const ideas = pgTable("ideas", {
 
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
+  /** App-wide unique display number → P####. */
+  number: integer("number").notNull().unique(),
   name: text("name").notNull(),
   description: text("description"),
   status: text("status").notNull().default("idea"),
@@ -267,6 +271,8 @@ export const taskDependencies = pgTable(
 
 export const projectDocuments = pgTable("project_documents", {
   id: serial("id").primaryKey(),
+  /** App-wide unique display number → D####. */
+  number: integer("number").notNull().unique(),
   projectId: integer("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
@@ -325,6 +331,8 @@ export const taggings = pgTable(
 /** Standalone or project-scoped checklist containers. */
 export const todoLists = pgTable("todo_lists", {
   id: serial("id").primaryKey(),
+  /** App-wide unique display number → L####. */
+  number: integer("number").notNull().unique(),
   projectId: integer("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
@@ -392,6 +400,8 @@ export const projectModules = pgTable(
 /** Kanban planning boards (multiple per project). */
 export const boards = pgTable("boards", {
   id: serial("id").primaryKey(),
+  /** App-wide unique display number → B####. */
+  number: integer("number").notNull().unique(),
   projectId: integer("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
@@ -472,6 +482,8 @@ export const wikiNodes = pgTable(
   "wiki_nodes",
   {
     id: serial("id").primaryKey(),
+    /** App-wide unique display number → W####. */
+    number: integer("number").notNull().unique(),
     projectId: integer("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
@@ -502,6 +514,8 @@ export const wikiNodes = pgTable(
 /** Freeform Excalidraw documents scoped to a project. */
 export const canvases = pgTable("canvases", {
   id: serial("id").primaryKey(),
+  /** App-wide unique display number → C####. */
+  number: integer("number").notNull().unique(),
   projectId: integer("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
@@ -523,6 +537,8 @@ export const canvases = pgTable("canvases", {
 /** PureRef-style image boards; optional project association. */
 export const imageBoards = pgTable("image_boards", {
   id: serial("id").primaryKey(),
+  /** App-wide unique display number → M####. */
+  number: integer("number").notNull().unique(),
   projectId: integer("project_id").references(() => projects.id, {
     onDelete: "set null",
   }),
