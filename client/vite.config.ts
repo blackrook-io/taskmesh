@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
       "process.env.IS_PREACT": JSON.stringify("false"),
     },
     server: {
+      host: true, // 0.0.0.0 — LAN hosts can reach :5173
       port: 5173,
       strictPort: true,
       proxy: {
