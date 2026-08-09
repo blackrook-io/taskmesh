@@ -8,9 +8,11 @@ This app is not going to suit everyone's needs, nor shall it. I develop it for m
 
 ---
 
-**Stack:** Node.js · TypeScript · Express · PostgreSQL · Drizzle ORM · Vite · React  
+This app is designed as a bare-metal Ubuntu server application (it is not Dockerized). I run this on a small minipc webserver in my home, but it could be also run from a Ubuntu Linux VM. 
 
-Single-user, private-network oriented (no auth in this build). Deletions require confirmation in the UI.
+**Tech Stack:** Node.js · TypeScript · Express · PostgreSQL · Drizzle ORM · Vite · React  
+
+---
 
 ## Install
 
@@ -100,4 +102,4 @@ INSTALL.md           # Ubuntu bare-metal install guide
 
 ## License
 
-Private / unspecified — add a `LICENSE` when you decide.
+GNU General Public Licens v3
