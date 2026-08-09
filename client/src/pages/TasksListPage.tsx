@@ -10,6 +10,7 @@ import {
   TASK_STATE_LABELS,
   formatTaskNumber,
   nextTaskState,
+  taskStateClass,
   type TaskPriority,
 } from "../lib/taskFields";
 import type { Project, ProjectPhase, Task } from "../types";
@@ -302,7 +303,9 @@ export function TasksListPage() {
                 {formatTaskNumber(task.number)}
               </span>
               <span className="task-list-row__title">{task.title}</span>
-              <span className="task-list-row__state muted">{TASK_STATE_LABELS[task.state]}</span>
+              <span className={taskStateClass("task-list-row__state", task.state)}>
+                {TASK_STATE_LABELS[task.state]}
+              </span>
               <select
                 className="task-list-row__priority"
                 value={task.priority}

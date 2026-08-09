@@ -23,6 +23,10 @@
   --space-5: 0.65rem;
   --space-6: 0.8rem;
   --space-7: 1rem;
+  --task-state-progress: #4ea1ff;
+  --task-state-done: #3ecf8e;
+  --task-state-canceled: #e55;
+  --task-state-hold: #e8a838;
   /* Canvas surfaces are intentionally darker than the app chrome */
   --canvas-bg: #12131a;
   --canvas-grid: #1a1b22;
@@ -1404,6 +1408,7 @@ textarea.raw-md {
   max-width: 100%;
 }
 
+/* Shared task-state accents (checkbox + list State column). */
 .task-state-cb {
   width: 1.5rem;
   height: 1.5rem;
@@ -1421,23 +1426,44 @@ textarea.raw-md {
 }
 
 .task-state-cb--progress {
-  color: #4ea1ff;
-  border-color: #4ea1ff;
+  color: var(--task-state-progress);
+  border-color: var(--task-state-progress);
 }
 
 .task-state-cb--done {
-  color: #3ecf8e;
-  border-color: #3ecf8e;
+  color: var(--task-state-done);
+  border-color: var(--task-state-done);
 }
 
 .task-state-cb--canceled {
-  color: #e55;
-  border-color: #e55;
+  color: var(--task-state-canceled);
+  border-color: var(--task-state-canceled);
 }
 
 .task-state-cb--hold {
-  color: #e8a838;
-  border-color: #e8a838;
+  color: var(--task-state-hold);
+  border-color: var(--task-state-hold);
+}
+
+.task-list-row__state {
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.task-list-row__state--progress {
+  color: var(--task-state-progress);
+}
+
+.task-list-row__state--done {
+  color: var(--task-state-done);
+}
+
+.task-list-row__state--canceled {
+  color: var(--task-state-canceled);
+}
+
+.task-list-row__state--hold {
+  color: var(--task-state-hold);
 }
 
 .task-phase-header {

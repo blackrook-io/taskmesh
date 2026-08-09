@@ -1,0 +1,48 @@
+# T0020 — State in List View has coloring or icons
+
+## Goal
+
+Make task **State** easy to scan in list views by coloring the State column label to match the existing `StateCheckbox` palette, on both the global Tasks list and the project TaskBoard list.
+
+## Decisions (confirmed)
+
+1. Surfaces: global `/tasks` list **and** project TaskBoard list rows.
+2. Treatment: color the state **label text** (option A), not chips/badges.
+3. Keep the clickable `StateCheckbox`; State column colors must **match** the checkbox styles.
+
+## Current state
+
+- `StateCheckbox` already uses per-state glyphs and CSS modifiers (`--progress`, `--done`, `--canceled`, `--hold`).
+- List State column is plain muted text: `task-list-row__state muted` in `TasksListPage.tsx` and `TaskBoard.tsx`.
+
+## Approach
+
+1. Add shared state color helpers (or CSS classes) keyed by `TaskState`, aligned with existing checkbox colors:
+   - `new` — default text (no special accent, or subtle default)
+   - `in_progress` — `#4ea1ff`
+   - `complete` — `#3ecf8e`
+   - `canceled` — `#e55`
+   - `on_hold` — `#e8a838`
+2. Apply a state-specific class (e.g. `task-list-row__state--progress`) on the State column `<span>` in:
+   - `client/src/pages/TasksListPage.tsx`
+   - `client/src/components/TaskBoard.tsx` (list row)
+3. Remove the blanket `muted` class from the State label when a state accent applies (keep readable contrast on dark UI).
+4. Prefer extracting a tiny shared component or className helper next to `TASK_STATE_LABELS` / `StateCheckbox` so both list surfaces stay in sync — no API/schema changes.
+
+## Out of scope
+
+- Changing state cycle order, checkbox glyphs, or editor State `<select>` styling (unless a one-line shared class reuse is trivial).
+- Icons beyond what the checkbox already shows.
+- Kanban / other non-list surfaces.
+
+## Branch
+
+`T0020-list-state-color`
+
+## QA checklist (post-implement)
+
+- [ ] Global Tasks list: each state shows matching color on checkbox + State column.
+- [ ] Project task list: same.
+- [ ] Cycle state via checkbox; label color updates immediately.
+- [ ] New / empty accent still readable.
+- [ ] Mobile / narrow width: State column still legible.

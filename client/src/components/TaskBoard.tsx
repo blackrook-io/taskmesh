@@ -22,6 +22,7 @@ import {
   TASK_PRIORITY_LABELS,
   TASK_STATES,
   TASK_STATE_LABELS,
+  taskStateClass,
   formatTaskNumber,
   nextTaskState,
   type TaskPriority,
@@ -183,20 +184,10 @@ export function StateCheckbox({
           : state === "on_hold"
             ? "-"
             : "";
-  const cls =
-    state === "in_progress"
-      ? "task-state-cb task-state-cb--progress"
-      : state === "complete"
-        ? "task-state-cb task-state-cb--done"
-        : state === "canceled"
-          ? "task-state-cb task-state-cb--canceled"
-          : state === "on_hold"
-            ? "task-state-cb task-state-cb--hold"
-            : "task-state-cb";
   return (
     <button
       type="button"
-      className={cls}
+      className={taskStateClass("task-state-cb", state)}
       title={`${TASK_STATE_LABELS[state]} — click to cycle`}
       aria-label={`State ${TASK_STATE_LABELS[state]}`}
       onClick={(e) => {
@@ -729,7 +720,9 @@ function SortableTaskRow({
         {formatTaskNumber(task.number)}
       </span>
       <span className="task-list-row__title">{task.title}</span>
-      <span className="task-list-row__state muted">{TASK_STATE_LABELS[task.state]}</span>
+      <span className={taskStateClass("task-list-row__state", task.state)}>
+        {TASK_STATE_LABELS[task.state]}
+      </span>
       <select
         className="task-list-row__priority"
         value={task.priority}

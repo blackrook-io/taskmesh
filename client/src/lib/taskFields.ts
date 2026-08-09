@@ -53,3 +53,27 @@ export function nextTaskState(current: TaskState): TaskState {
 export function formatTaskNumber(n: number): string {
   return `T${String(n).padStart(4, "0")}`;
 }
+
+/** CSS modifier shared by StateCheckbox and list State labels. */
+export type TaskStateTone = "new" | "progress" | "done" | "canceled" | "hold";
+
+export function taskStateTone(state: TaskState): TaskStateTone {
+  switch (state) {
+    case "in_progress":
+      return "progress";
+    case "complete":
+      return "done";
+    case "canceled":
+      return "canceled";
+    case "on_hold":
+      return "hold";
+    default:
+      return "new";
+  }
+}
+
+/** e.g. `task-list-row__state task-list-row__state--progress` (no modifier for `new`). */
+export function taskStateClass(base: string, state: TaskState): string {
+  const tone = taskStateTone(state);
+  return tone === "new" ? base : `${base} ${base}--${tone}`;
+}
