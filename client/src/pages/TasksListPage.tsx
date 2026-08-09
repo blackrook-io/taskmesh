@@ -22,10 +22,16 @@ import {
   isFilterActive,
   storageKeyForGlobalTasks,
 } from "../lib/taskListFilter";
+import {
+  DEFAULT_GLOBAL_TASK_LIST_SORT,
+  storageKeyForGlobalTaskSort,
+  type TaskListSortCol,
+} from "../lib/taskListSort";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
+import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
 import type { Project, ProjectPhase, Task } from "../types";
 
-type SortCol = "number" | "title" | "state" | "priority" | "dueDate" | "project";
+type SortCol = TaskListSortCol;
 
 function taskDue(task: Task): string | null {
   return task.dueDate ?? (task.dueAt ? task.dueAt.slice(0, 10) : null);
@@ -76,8 +82,11 @@ export function TasksListPage() {
   );
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
-  const [sortCol, setSortCol] = useState<SortCol | null>("number");
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const sortStorageKey = storageKeyForGlobalTaskSort(filter);
+  const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
+    sortStorageKey,
+    DEFAULT_GLOBAL_TASK_LIST_SORT,
+  );
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -212,11 +221,9 @@ export function TasksListPage() {
   }, [wantNew, creating, createTask, setSearchParams]);
 
   const headerSort = (col: SortCol) => {
-    if (sortCol === col) setSortDir((d) => (d === 1 ? -1 : 1));
-    else {
-      setSortCol(col);
-      setSortDir(1);
-    }
+    setSort((prev) =>
+      prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: 1 },
+    );
   };
 
   const openModal = (id: number) => {

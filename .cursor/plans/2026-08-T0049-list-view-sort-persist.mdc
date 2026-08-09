@@ -1,0 +1,64 @@
+# T0049 — Persist List View sorting
+
+**Task:** T0049 — List View Sorting is not persistent  
+**Branch (proposed):** `T0049-list-view-sort-persist`  
+**State at plan:** `new` · priority `high` · projectId `4`
+
+## Problem
+
+Column sort on Task List Views (`sortCol` / `sortDir`) lives in React `useState` only. Navigating away or reloading resets it. Filters already persist per view via localStorage (T0053); sort should match that behavior.
+
+**Expected (from task):**
+- Sort survives sessions and in-app navigation
+- Different List Views keep independent sort options
+
+## Scope
+
+**In scope**
+- Project Tasks list (`TaskBoard` on project detail)
+- Global Tasks list (`TasksListPage` — `/tasks` and `/tasks?filter=unassigned`)
+
+**Out of scope (unless you say otherwise)**
+- Ideas list URL sort (`/ideas?sort=&order=`) — already URL-based
+- Server-side user preferences API
+- Changing click vs double-click activation (project = dblclick, global = click)
+- Changing default sort semantics (project: manual/`null`; global: `number` asc)
+
+## Approach
+
+Mirror the filter persistence pattern:
+
+1. **`client/src/lib/taskListSort.ts`**
+   - Type: `{ col: SortCol | null; dir: 1 | -1 }`
+   - Keys (parallel to filters):
+     - `taskmesh.taskListSort.project:{id}`
+     - `taskmesh.taskListSort.global`
+     - `taskmesh.taskListSort.global:unassigned`
+   - `load` / `save` with parse validation; remove key when equal to view default (optional cleanup)
+   - Defaults: project → `{ col: null, dir: 1 }`; global → `{ col: "number", dir: 1 }`
+
+2. **`client/src/lib/usePersistedTaskListSort.ts`**
+   - Same shape as `usePersistedTaskListFilter`: init from storage, reload on key change, `setSort` writes through
+
+3. **Wire-up**
+   - `TaskBoard.tsx` — replace local `useState` sort with hook + `storageKeyForProjectTasks`-style key
+   - `TasksListPage.tsx` — same for global / unassigned keys
+   - Keep existing sort toggle / DnD-when-unsorted behavior
+
+No API, schema, or migration work.
+
+## Acceptance
+
+- [ ] Sort a project task list → leave project → return → same column + direction
+- [ ] Sort global `/tasks` → navigate elsewhere → return → same sort
+- [ ] Unassigned global view can differ from all-tasks sort
+- [ ] Project A sort ≠ Project B sort
+- [ ] Project list: clearing back to unsorted (`col: null`) restores manual DnD order and persists that choice
+- [ ] Reload browser: sort still applied
+- [ ] Filters continue to work independently of sort
+
+## Decisions (approved)
+
+1. localStorage only — same mechanism as filters
+2. Ideas `/ideas` sort out of scope
+3. Restored column sort on project board keeps DnD disabled until sort cleared (current behavior)

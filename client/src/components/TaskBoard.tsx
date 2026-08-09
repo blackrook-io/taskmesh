@@ -38,6 +38,12 @@ import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
 import { TaskHistory } from "./shared/TaskHistory";
 import { TaskListSortHeaderBtn } from "./shared/TaskListSortHeaderBtn";
+import {
+  DEFAULT_PROJECT_TASK_LIST_SORT,
+  storageKeyForProjectTaskSort,
+  type TaskListSortCol,
+} from "../lib/taskListSort";
+import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
 
 export type TaskReorderPayload = {
   orderedTaskIds: number[];
@@ -45,7 +51,7 @@ export type TaskReorderPayload = {
   phaseId?: number | null;
 };
 
-type SortCol = "number" | "title" | "state" | "priority" | "dueDate";
+type SortCol = Exclude<TaskListSortCol, "project">;
 
 type TaskPatch = {
   title?: string;
@@ -929,6 +935,7 @@ type Props = {
 };
 
 export function TaskBoard({
+  projectId,
   phases,
   tasks,
   requestOpenTask = null,
@@ -944,8 +951,11 @@ export function TaskBoard({
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [collapsed, setCollapsed] = useState<Set<number | "none">>(() => new Set());
-  const [sortCol, setSortCol] = useState<SortCol | null>(null);
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const sortStorageKey = storageKeyForProjectTaskSort(projectId);
+  const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
+    sortStorageKey,
+    DEFAULT_PROJECT_TASK_LIST_SORT,
+  );
   const [newPhaseName, setNewPhaseName] = useState("");
   const [pendingPhaseDelete, setPendingPhaseDelete] = useState<ProjectPhase | null>(null);
 
@@ -982,11 +992,9 @@ export function TaskBoard({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const headerSort = (col: SortCol) => {
-    if (sortCol === col) setSortDir((d) => (d === 1 ? -1 : 1));
-    else {
-      setSortCol(col);
-      setSortDir(1);
-    }
+    setSort((prev) =>
+      prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: 1 },
+    );
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
