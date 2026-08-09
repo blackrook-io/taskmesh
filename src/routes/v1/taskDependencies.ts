@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import {
   addDependency,
@@ -14,6 +15,7 @@ import {
   removeDependency,
   searchTasksForDependency,
 } from "../../services/taskDependencies.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -65,7 +67,11 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
     const parsed = addBody.parse(req.body);
-    const result = await addDependency(db, taskId, parsed.dependsOnTaskId);
+    const actorId = await getCurrentUserId(db);
+    const result = await addDependency(db, taskId, parsed.dependsOnTaskId, {
+      actorId,
+      source: activitySourceFromRequest(req),
+    });
     if (!result.ok) {
       const status = result.code === "not_found" ? 404 : 400;
       sendError(res, status, result.code, result.message);
@@ -83,7 +89,11 @@ taskDependenciesRouter.delete(
     try {
       const taskId = idParam.parse(req.params.taskId);
       const dependsOnTaskId = idParam.parse(req.params.dependsOnTaskId);
-      const result = await removeDependency(db, taskId, dependsOnTaskId);
+      const actorId = await getCurrentUserId(db);
+      const result = await removeDependency(db, taskId, dependsOnTaskId, {
+        actorId,
+        source: activitySourceFromRequest(req),
+      });
       if (!result.ok) {
         const status = result.code === "not_found" ? 404 : 400;
         sendError(res, status, result.code, result.message);

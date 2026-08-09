@@ -163,10 +163,19 @@ export function TasksListPage() {
   };
 
   const patchTask = useMutation({
-    mutationFn: async ({ id, patch }: { id: number; patch: Record<string, unknown> }) => {
+    mutationFn: async ({
+      id,
+      patch,
+      deferHistory,
+    }: {
+      id: number;
+      patch: Record<string, unknown>;
+      deferHistory?: boolean;
+    }) => {
       const res = await apiJson<{ data: Task }>(`/api/v1/tasks/${id}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
+        headers: deferHistory ? { "X-TaskMesh-History": "defer" } : undefined,
       });
       return res.data;
     },
@@ -449,8 +458,12 @@ export function TasksListPage() {
               setModalTaskHeld(null);
               setModalTaskId(id);
             }}
-            onSavePatch={async (p) => {
-              const updated = await patchTask.mutateAsync({ id: modalTask.id, patch: { ...p } });
+            onSavePatch={async (p, opts) => {
+              const updated = await patchTask.mutateAsync({
+                id: modalTask.id,
+                patch: { ...p },
+                deferHistory: opts?.deferHistory,
+              });
               setModalTaskHeld(updated);
               return updated;
             }}

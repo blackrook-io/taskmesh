@@ -505,9 +505,9 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
                   virtual: true,
                 });
               }}
-              onSavePatch={async (p) => {
+              onSavePatch={async (p, opts) => {
                 const task = openTaskQuery.data!;
-                const updated = await patchTaskRecord(task.id, { ...p }, task.projectId);
+                const updated = await patchTaskRecord(task.id, { ...p }, task.projectId, opts);
                 invalidate();
                 void qc.invalidateQueries({ queryKey: ["task-solo", task.id] });
                 return updated;

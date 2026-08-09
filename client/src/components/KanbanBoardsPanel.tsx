@@ -789,9 +789,17 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
   });
 
   const patchTask = useMutation({
-    mutationFn: async ({ taskId, body }: { taskId: number; body: Record<string, unknown> }) => {
+    mutationFn: async ({
+      taskId,
+      body,
+      deferHistory,
+    }: {
+      taskId: number;
+      body: Record<string, unknown>;
+      deferHistory?: boolean;
+    }) => {
       const currentProjectId = openTaskQuery.data?.projectId ?? projectId;
-      return patchTaskRecord(taskId, body, currentProjectId);
+      return patchTaskRecord(taskId, body, currentProjectId, { deferHistory });
     },
     onSuccess: () => {
       invalidate();
@@ -1145,8 +1153,12 @@ export function KanbanBoardsPanel({ projectId, phases }: Props) {
                 dueAt: null,
               });
             }}
-            onSavePatch={async (p) => {
-              return patchTask.mutateAsync({ taskId: openTaskQuery.data!.id, body: p });
+            onSavePatch={async (p, opts) => {
+              return patchTask.mutateAsync({
+                taskId: openTaskQuery.data!.id,
+                body: p,
+                deferHistory: opts?.deferHistory,
+              });
             }}
           />
         </ElementShell>

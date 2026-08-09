@@ -199,10 +199,19 @@ export const taskActivity = pgTable("task_activity", {
   /** Comment rows: Markdown body and last-edit timestamp. */
   body: text("body"),
   editedAt: timestamp("edited_at", { withTimezone: true }),
-  /** Change rows: which field and its before/after display values. */
+  /**
+   * Change rows: which field and its before/after display values.
+   * Session summaries use field=`summary` with the concise text in `body`.
+   */
   field: text("field"),
   oldValue: text("old_value"),
   newValue: text("new_value"),
+  /** Actor who authored the comment / change (nullable for legacy rows). */
+  createdById: integer("created_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  /** `ui` = SPA (`X-TaskMesh-Client: ui`); otherwise `api`. */
+  source: text("source").notNull().default("api"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -597,6 +606,10 @@ export const taskActivityRelations = relations(taskActivity, ({ one }) => ({
   task: one(tasks, {
     fields: [taskActivity.taskId],
     references: [tasks.id],
+  }),
+  createdBy: one(users, {
+    fields: [taskActivity.createdById],
+    references: [users.id],
   }),
 }));
 

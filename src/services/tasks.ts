@@ -111,10 +111,26 @@ const TRACKED_FIELDS = [
 
 type TrackedField = (typeof TRACKED_FIELDS)[number];
 
-type TaskLike = Pick<
-  typeof schema.tasks.$inferSelect,
-  TrackedField
->;
+const FIELD_LABELS: Record<TrackedField, string> = {
+  title: "Title",
+  description: "Description",
+  state: "State",
+  priority: "Priority",
+  dueDate: "Due date",
+  color: "Color",
+  phaseId: "Phase",
+  parentId: "Parent",
+  projectId: "Project",
+};
+
+export type TaskLike = Pick<typeof schema.tasks.$inferSelect, TrackedField>;
+
+export type RecordTaskChangesOpts = {
+  actorId?: number | null;
+  source?: "ui" | "api";
+  /** When false, persist nothing to History (modal autosave defer). */
+  recordHistory?: boolean;
+};
 
 function clipText(value: string, max = 140): string {
   return value.length <= max ? value : `${value.slice(0, max)}…`;
@@ -161,31 +177,56 @@ async function formatChangeValue(
   }
 }
 
+/** Build a single concise summary line for all changed tracked fields. */
+export async function buildTaskChangeSummary(
+  db: Db,
+  before: TaskLike,
+  after: TaskLike,
+): Promise<string | null> {
+  const parts: string[] = [];
+  for (const field of TRACKED_FIELDS) {
+    const bv = before[field] ?? null;
+    const av = after[field] ?? null;
+    if (bv === av) continue;
+    if (field === "description") {
+      parts.push("Description updated.");
+      continue;
+    }
+    const oldValue = await formatChangeValue(db, field, bv);
+    const newValue = await formatChangeValue(db, field, av);
+    parts.push(`${FIELD_LABELS[field]}: ${oldValue} → ${newValue}`);
+  }
+  return parts.length > 0 ? parts.join("; ") : null;
+}
+
 /**
  * Diff a task's tracked fields before/after an update and append one
- * `kind:"change"` row per changed field to the task history timeline.
+ * concise summary `kind:"change"` row (`field: "summary"`) to History.
  */
 export async function recordTaskChanges(
   db: Db,
   taskId: number,
   before: TaskLike,
   after: TaskLike,
-): Promise<void> {
-  const rows: (typeof schema.taskActivity.$inferInsert)[] = [];
-  for (const field of TRACKED_FIELDS) {
-    const bv = before[field] ?? null;
-    const av = after[field] ?? null;
-    if (bv === av) continue;
-    rows.push({
+  opts: RecordTaskChangesOpts = {},
+): Promise<typeof schema.taskActivity.$inferSelect | null> {
+  if (opts.recordHistory === false) return null;
+  const summary = await buildTaskChangeSummary(db, before, after);
+  if (!summary) return null;
+  const [row] = await db
+    .insert(schema.taskActivity)
+    .values({
       taskId,
       kind: "change",
-      field,
-      oldValue: await formatChangeValue(db, field, bv),
-      newValue: await formatChangeValue(db, field, av),
-    });
-  }
-  if (rows.length === 0) return;
-  await db.insert(schema.taskActivity).values(rows);
+      field: "summary",
+      body: summary,
+      oldValue: null,
+      newValue: null,
+      createdById: opts.actorId ?? null,
+      source: opts.source ?? "api",
+    })
+    .returning();
+  return row ?? null;
 }
 
 /** Next sortOrder among siblings (same project + parent). */

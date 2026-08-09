@@ -18,6 +18,12 @@ import { CSS } from "@dnd-kit/utilities";
 import { apiJson } from "../api/client";
 import { useUndoStack } from "../hooks/useUndoStack";
 import {
+  discardTaskEditSession,
+  ensureTaskEditSession,
+  flushTaskEditSession,
+} from "../lib/taskEditSession";
+import type { PatchTaskOptions } from "../lib/patchTask";
+import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
   TASK_STATES,
@@ -241,7 +247,10 @@ export function TaskEditorFields({
   task: Task;
   phases: ProjectPhase[];
   allTasks?: Task[];
-  onSavePatch: (patch: TaskPatch) => Promise<Task | void> | Task | void;
+  onSavePatch: (
+    patch: TaskPatch,
+    opts?: PatchTaskOptions,
+  ) => Promise<Task | void> | Task | void;
   onRequestClose?: () => void;
   /** Called after the task is deleted successfully (close modal / invalidate). */
   onDeleted?: () => void;
@@ -267,6 +276,30 @@ export function TaskEditorFields({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
+
+  // One History line for the whole time this task editor is open (survives remounts).
+  ensureTaskEditSession(task.id, {
+    title: task.title,
+    description: task.description ?? null,
+    state: task.state,
+    priority: task.priority,
+    dueDate: taskDue(task),
+    color: task.color,
+    phaseId: task.phaseId,
+    parentId: task.parentId,
+    projectId: task.projectId,
+  });
+
+  const flushSessionHistory = async () => {
+    try {
+      await flushTaskEditSession(task.id);
+      void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
+    } catch {
+      // Closing should still succeed if History flush fails.
+    }
+  };
+  const flushSessionHistoryRef = useRef(flushSessionHistory);
+  flushSessionHistoryRef.current = flushSessionHistory;
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -358,10 +391,9 @@ export function TaskEditorFields({
   const commit = async (previous: TaskSnapshot, patch: TaskPatch) => {
     push(previous);
     try {
-      const updated = await onSavePatch(patch);
+      const updated = await onSavePatch(patch, { deferHistory: true });
       if (updated) applyServerTask(updated);
       setSaveError(null);
-      void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
       if (patch.projectId !== undefined) {
         void qc.invalidateQueries({ queryKey: ["phases", patch.projectId] });
         void qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -376,19 +408,21 @@ export function TaskEditorFields({
     const restored = undo();
     applySnap(restored);
     try {
-      const updated = await onSavePatch({
-        title: restored.title,
-        description: restored.description.trim() ? restored.description : null,
-        dueDate: restored.dueDate,
-        color: restored.color,
-        phaseId: restored.phaseId,
-        projectId: restored.projectId,
-        state: restored.state,
-        priority: restored.priority,
-      });
+      const updated = await onSavePatch(
+        {
+          title: restored.title,
+          description: restored.description.trim() ? restored.description : null,
+          dueDate: restored.dueDate,
+          color: restored.color,
+          phaseId: restored.phaseId,
+          projectId: restored.projectId,
+          state: restored.state,
+          priority: restored.priority,
+        },
+        { deferHistory: true },
+      );
       if (updated) applyServerTask(updated);
       setSaveError(null);
-      void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
     } catch (err) {
       setSaveError((err as Error).message);
     }
@@ -400,7 +434,10 @@ export function TaskEditorFields({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onRequestClose?.();
+        void (async () => {
+          await flushSessionHistoryRef.current();
+          onRequestClose?.();
+        })();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
@@ -413,6 +450,13 @@ export function TaskEditorFields({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onRequestClose]);
+
+  // Flush session History when the modal unmounts (Close / backdrop / navigate).
+  useEffect(() => {
+    return () => {
+      void flushSessionHistoryRef.current();
+    };
+  }, []);
 
   // When the editor body overflows vertically, widen the modal by the
   // scrollbar width + 10px so the scrollbar doesn't cover content on the right.
@@ -657,7 +701,7 @@ export function TaskEditorFields({
       </div>
       <div className="field field--tags-below task-editor-tags-row">
         <span className="task-editor-hint muted">
-          Autosaves on blur · Esc closes · Ctrl+Z undoes
+          Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes
         </span>
         <TagInput entityType="task" entityId={task.id} />
       </div>
@@ -738,6 +782,7 @@ export function TaskEditorFields({
             setDeleteError(null);
             try {
               await apiJson(`/api/v1/tasks/${task.id}`, { method: "DELETE" });
+              discardTaskEditSession(task.id);
               setDeleteOpen(false);
               void qc.invalidateQueries({ queryKey: ["tasks"] });
               onDeleted?.();
@@ -970,7 +1015,11 @@ type Props = {
   onRenamePhase: (phaseId: number, name: string) => Promise<void>;
   onCreatePhase: (name: string) => Promise<void>;
   onDeletePhase: (phaseId: number) => Promise<void>;
-  onPatchTask: (taskId: number, patch: Record<string, unknown>) => Promise<Task | void>;
+  onPatchTask: (
+    taskId: number,
+    patch: Record<string, unknown>,
+    opts?: PatchTaskOptions,
+  ) => Promise<Task | void>;
 };
 
 export function TaskBoard({
@@ -1271,8 +1320,8 @@ export function TaskBoard({
               setModalTaskHeld(null);
               setModalTaskId(id);
             }}
-            onSavePatch={async (p) => {
-              const updated = await onPatchTask(modalTask.id, { ...p });
+            onSavePatch={async (p, opts) => {
+              const updated = await onPatchTask(modalTask.id, { ...p }, opts);
               if (updated) setModalTaskHeld(updated);
               return updated;
             }}

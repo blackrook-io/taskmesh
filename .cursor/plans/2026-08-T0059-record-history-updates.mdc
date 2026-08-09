@@ -1,0 +1,77 @@
+# T0059 — Record history updates
+
+## Goal
+
+Make task History show **one concise summary line per edit session** (modal Close, or a single list/board control change), instead of one spammy row per field. Description changes never dump body text. Timestamps show `MM/DD HH:MM - Username`, with a small blue **API** flag when the change did not come from the SPA.
+
+## Context
+
+- History today is **tasks-only** (`task_activity`): each PATCH → `recordTaskChanges` inserts **one `kind:"change"` row per field**.
+- Task edit modal (`TaskEditorFields`) **autosaves per field** (blur/change), which multiplies rows.
+- No actor / source columns on `task_activity`; UI uses `toLocaleString()` with no username.
+- Depends-on: none. State: Ready.
+
+## Assumptions (confirm in interview)
+
+1. **Scope:** Task History only (no new history for ideas/projects/docs).
+2. **Modal persistence:** Keep **autosave** for data safety; **suppress History** during the open modal and write **one summary entry on Close** (Esc / Close). If the user never closes cleanly, flush summary on unmount.
+3. **List/board quick edits** (dropdowns, inline): remain immediate — one PATCH = one History summary (possibly multi-field if a single PATCH carries more than one field).
+4. **Summary format:** e.g. `Phase: Backlog → Ready; State: Draft → In Progress; Priority: Medium → High; Description updated.` (description never includes old/new body). Title still shows short old → new when changed.
+5. **Storage:** Prefer **one activity row per session** with a summary in `body` (or a dedicated summary field), rather than N field rows. Legacy per-field rows keep rendering as today.
+6. **API flag:** SPA sends `X-TaskMesh-Client: ui`; absence (or non-`ui`) marks the entry as API → blue badge.
+7. **Actor:** Stamp `createdById` from `getCurrentUserId()`; display that user’s `displayName`.
+8. **Dependencies** (`dependsOn` / `requiredBy`): still their own change lines for now (separate from modal field session), unless we fold them later.
+
+## Approach
+
+### Schema / API
+
+- Migrate `task_activity`: add `created_by_id` (nullable FK → users), `source` (`ui` | `api`, default `api` for safety on unknown callers).
+- Extend activity list payload with `createdBy` ref + `source`.
+- Change `recordTaskChanges` to accept options `{ source, actorId }` and write **a single summary change** when multiple fields (or always one summary row listing all changed fields in that PATCH).
+- Description contribution to summary: literal `Description updated.` (no old/new body).
+- Other fields: `Label: old → new` using existing `formatChangeValue` (title still clipped).
+- Routes (`PATCH` task + project-scoped PATCH): detect client header → pass `source`; pass actor id.
+- Dependency history: same actor/source stamping; leave as field-level lines for this task.
+
+### Client
+
+- `apiJson`: always set `X-TaskMesh-Client: ui`.
+- **Modal session:** on open, snapshot baseline; per-field commits keep saving with a query/header flag `history: false` (or `X-TaskMesh-History: defer`) so DB stays current without activity rows; on Close/unmount, if dirty vs baseline, one PATCH (or dedicated finalize) with history enabled that records the full session summary once. Simpler variant if defer header is awkward: accumulate patches locally and save once on Close — **prefer defer-header + autosave** per assumption 2.
+- **List/board:** unchanged timing; server already emits one summary per PATCH.
+- `TaskHistory.tsx`:
+  - Timestamp: `MM/DD HH:MM - {displayName}` (local time; pad month/day/hours/minutes).
+  - Blue `API` chip when `source === "api"`.
+  - Render summary rows (new shape) as one line; keep legacy per-field rendering for old rows.
+- Soften/remove “Autosaves on blur” copy if Close becomes the History boundary (optional microcopy: still autosaves; History updates on close).
+
+### Out of scope
+
+- Relative “10m ago” timestamps (noted as future preference).
+- History for non-task entities.
+- Rewriting/migrating existing spammy rows into summaries.
+- Auth model changes beyond the client header convention.
+
+## Implementation steps
+
+1. Migration + schema types for `createdById` / `source`.
+2. Server: summary `recordTaskChanges`, header detection, actor/source on inserts; activity GET joins user.
+3. Client API header + modal defer-history / flush-on-close.
+4. `TaskHistory` formatting (timestamp, username, API badge, summary line).
+5. Manual QA on modal multi-field edit, list dropdown, API PATCH, description-only.
+
+## QA checklist (for after implement)
+
+- [ ] Open task modal; change Phase, State, Priority, Due; Close → **one** History line summarizing all.
+- [ ] Description edit in modal → summary says `Description updated.` with no body snippet.
+- [ ] List/board state/priority dropdown → single History entry immediately.
+- [ ] Timestamp looks like `08/09 13:18 - Rook` (local).
+- [ ] `curl` PATCH without UI header → blue **API** flag on that entry.
+- [ ] SPA edits → no API flag.
+- [ ] Comments still work; legacy change rows still readable.
+- [ ] Esc / Close both flush History; no duplicate summary on double-close.
+
+## Branch / plan names
+
+- Branch: `T0059-record-history-updates`
+- Plan: `.cursor/plans/2026-08-T0059-record-history-updates.mdc`

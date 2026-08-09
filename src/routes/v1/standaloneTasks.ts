@@ -3,6 +3,10 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import {
+  activitySourceFromRequest,
+  shouldRecordHistory,
+} from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import {
@@ -263,7 +267,11 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       .where(eq(schema.tasks.id, taskId))
       .returning();
     if (row) {
-      await recordTaskChanges(db, taskId, existing, row);
+      await recordTaskChanges(db, taskId, existing, row, {
+        actorId,
+        source: activitySourceFromRequest(req),
+        recordHistory: shouldRecordHistory(req),
+      });
     }
     res.json({ data: row ? await attachTaskActor(db, row) : row });
   } catch (err) {

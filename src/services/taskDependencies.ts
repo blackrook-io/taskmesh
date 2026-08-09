@@ -83,6 +83,8 @@ async function recordDepChange(
     field: "dependsOn" | "requiredBy";
     oldValue: string | null;
     newValue: string | null;
+    actorId?: number | null;
+    source?: "ui" | "api";
   },
 ): Promise<void> {
   await db.insert(schema.taskActivity).values({
@@ -91,6 +93,8 @@ async function recordDepChange(
     field: args.field,
     oldValue: args.oldValue ?? "none",
     newValue: args.newValue ?? "none",
+    createdById: args.actorId ?? null,
+    source: args.source ?? "api",
   });
 }
 
@@ -102,6 +106,7 @@ export async function addDependency(
   db: Db,
   taskId: number,
   dependsOnTaskId: number,
+  opts: { actorId?: number | null; source?: "ui" | "api" } = {},
 ): Promise<AddDependencyResult> {
   if (taskId === dependsOnTaskId) {
     return {
@@ -155,12 +160,16 @@ export async function addDependency(
     field: "dependsOn",
     oldValue: null,
     newValue: labelBlocker,
+    actorId: opts.actorId,
+    source: opts.source,
   });
   await recordDepChange(db, {
     taskId: dependsOnTaskId,
     field: "requiredBy",
     oldValue: null,
     newValue: labelDependent,
+    actorId: opts.actorId,
+    source: opts.source,
   });
 
   return {
@@ -178,6 +187,7 @@ export async function removeDependency(
   db: Db,
   taskId: number,
   dependsOnTaskId: number,
+  opts: { actorId?: number | null; source?: "ui" | "api" } = {},
 ): Promise<RemoveDependencyResult> {
   const [dependent] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
   const [blocker] = await db
@@ -206,12 +216,16 @@ export async function removeDependency(
       field: "dependsOn",
       oldValue: labelBlocker,
       newValue: null,
+      actorId: opts.actorId,
+      source: opts.source,
     });
     await recordDepChange(db, {
       taskId: dependsOnTaskId,
       field: "requiredBy",
       oldValue: labelDependent,
       newValue: null,
+      actorId: opts.actorId,
+      source: opts.source,
     });
   }
 

@@ -287,8 +287,16 @@ export function ProjectDetailPage() {
   });
 
   const patchTask = useMutation({
-    mutationFn: async ({ taskId, body }: { taskId: number; body: Record<string, unknown> }) => {
-      return patchTaskRecord(taskId, body, projectId);
+    mutationFn: async ({
+      taskId,
+      body,
+      deferHistory,
+    }: {
+      taskId: number;
+      body: Record<string, unknown>;
+      deferHistory?: boolean;
+    }) => {
+      return patchTaskRecord(taskId, body, projectId, { deferHistory });
     },
     onSuccess: (row) => {
       void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
@@ -588,8 +596,12 @@ export function ProjectDetailPage() {
                 void qc.invalidateQueries({ queryKey: ["phases", projectId] });
                 void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
               }}
-              onPatchTask={async (taskId, patch) => {
-                return patchTask.mutateAsync({ taskId, body: patch });
+              onPatchTask={async (taskId, patch, opts) => {
+                return patchTask.mutateAsync({
+                  taskId,
+                  body: patch,
+                  deferHistory: opts?.deferHistory,
+                });
               }}
             />
           </div>

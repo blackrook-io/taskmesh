@@ -69,13 +69,16 @@ export type TaskActivityEntry = {
   id: number;
   taskId: number;
   kind: "comment" | "change";
-  /** Comment rows */
+  /** Comment rows; also session summary text when field === "summary" */
   body: string | null;
   editedAt: string | null;
-  /** Change rows */
+  /** Change rows: field name, or "summary" for a session/PATCH summary */
   field: string | null;
   oldValue: string | null;
   newValue: string | null;
+  source?: "ui" | "api";
+  createdById?: number | null;
+  createdBy?: UserRef | null;
   createdAt: string;
 };
 
