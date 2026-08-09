@@ -959,10 +959,10 @@ export function TaskBoard({
   const [newPhaseName, setNewPhaseName] = useState("");
   const [pendingPhaseDelete, setPendingPhaseDelete] = useState<ProjectPhase | null>(null);
 
-  const rows = useMemo(
-    () => buildRows(phases, tasks, collapsed, sortCol, sortDir),
-    [phases, tasks, collapsed, sortCol, sortDir],
-  );
+  const rows = useMemo(() => {
+    const boardSortCol: SortCol | null = sortCol === "project" ? null : sortCol;
+    return buildRows(phases, tasks, collapsed, boardSortCol, sortDir);
+  }, [phases, tasks, collapsed, sortCol, sortDir]);
 
   const onRequestOpenTaskConsumedRef = useRef(onRequestOpenTaskConsumed);
   onRequestOpenTaskConsumedRef.current = onRequestOpenTaskConsumed;
