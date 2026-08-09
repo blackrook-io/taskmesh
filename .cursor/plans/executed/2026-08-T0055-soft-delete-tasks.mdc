@@ -69,6 +69,6 @@ Hard `DELETE` leaves Task-number holes and breaks references. Replace with soft-
 - [ ] Admin → Deleted Tasks lists soft-deleted tasks; Restore → Draft and task reappears in normal UI
 - [ ] No hard row delete from UI
 
-## Open confirm
+## Finish-up notes
 
-- **#6:** Approved (deps lists + resolved task-number links).
+- Deploy build fix: `TasksListPage` `stateRank` required `deleted` key (`829be51`).
