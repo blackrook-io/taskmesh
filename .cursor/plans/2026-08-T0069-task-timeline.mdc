@@ -1,0 +1,92 @@
+# T0069 — Timeline of Tasks
+
+**Task:** T0069 — Timeline of Tasks  
+**Branch (on approval):** `T0069-task-timeline`  
+**State:** ready to archive — shipped  
+**PROD task id:** 81 · projectId 4 · priority high · state `in_progress`
+
+## Context
+
+Task expand/edit UI currently shows a four-row audit block (Created, Created by, Updated, Updated by). Replace that with two simple full-width timelines derived from task activity history:
+
+1. **State** — diamond nodes + color segments matching list-view state colors  
+2. **Priority** — same treatment with priority colors; **ignore** priority changes that occurred before the task first reached Ready
+
+Hover on a node shows a cursor-adjacent tooltip: who, when, what (old → new), elapsed since previous node.
+
+## Size / split
+
+One cohesive UI feature (reuse existing activity feed; light client parsing + shared component). Suitable for a single worktask session. No split recommended.
+
+## Decisions (confirmed)
+
+1. **Spacing:** somewhat **time-proportional**, with a **minimum gap** so very short intervals stay readable.  
+2. **Priority line:** same diamond + colored-segment UX as State; colors from existing priority tokens. If **no** post-Ready priority changes → still show a **single current-priority** node.  
+3. **Ignore pre-Ready priority:** drop priority changes while still Draft; Priority timeline starts at the Ready transition (or first priority change at/after Ready).  
+4. **Hover:** small **cursor-adjacent tooltip** (not a blocking modal); same content shape for Priority nodes.  
+5. **Creation node:** always first State node = initial state at `createdAt` / `createdBy` (typically Draft), even with no activity row.  
+6. **Surface:** Task **edit/expand panel only** (where the audit block lives today). Not list rows or other surfaces.
+
+## Goals
+
+- Replace `.task-audit` in Task edit panel with State + Priority timelines.  
+- Nodes: Creation (State) → each relevant change → rightmost reflects current value at view time.  
+- Segment between nodes colored by the value the record **was in** during that interval (list-view state / priority colors).  
+- Tooltip: who, when, what (`In Progress → Complete`), elapsed from previous node.  
+- Filter Priority history per decision 3.
+
+## Non-goals
+
+- Full Gantt / scheduling / multi-entity timelines.  
+- Showing these timelines on list view or other entity types.  
+- Changing how History comments/changes are stored for general History UI (may lightly reuse parse helpers).  
+- Auth / multi-user UX beyond existing `createdBy` display names.
+
+## Implementation
+
+### 1. Derive timeline events from activity + task row
+
+Reuse `GET /api/v1/tasks/:id/activity` (already loaded patterns in `TaskHistory`).
+
+- Parse `kind: "change"` rows whose `body` / field summary includes `State: … → …` and/or `Priority: … → …` (session summaries from T0059 use `field: "summary"`). Also accept legacy per-field rows if present.  
+- Map display labels ↔ API values via existing `TASK_STATE_LABELS` / `TASK_PRIORITY_LABELS`.  
+- **State nodes:**  
+  - Leftmost synthetic **Creation** from `task.createdAt` + `task.createdBy`; initial state = old value of first State change if available, else `new` (Draft).  
+  - One node per subsequent State transition (new value + actor + timestamp).  
+  - Rightmost = current `task.state` at view time (synthetic “now” only if needed so the end always reflects current).  
+- **Priority nodes:**  
+  - Find first time task entered `ready` (from State history).  
+  - Ignore Priority parts of changes with `createdAt` before that Ready moment.  
+  - Build nodes from remaining priority transitions; if none, single node = current `task.priority`.  
+  - Prefer anchoring leftmost post-filter node at Ready (priority at that moment) when possible so the line has a clear start.  
+- **Elapsed:** delta between consecutive nodes on that line (humanized, e.g. `2h 14m` / `3d`).
+
+No schema migration expected unless parsing proves too fragile; prefer client-side derivation first. If needed as follow-up: structured `field`/`oldValue`/`newValue` on change rows — out of initial scope unless blocked.
+
+### 2. UI component
+
+New shared component, e.g. `client/src/components/shared/TaskTimeline.tsx` (+ CSS in `index.css`):
+
+- Two labeled rows (State / Priority), full width aligned with edit-panel gutters.  
+- Horizontal line with **diamond** nodes; segments use `--task-state-*` / `--task-priority-*`.  
+- Layout: map timestamps to x-position with time-proportional scale + **min gap** clamp (and optional soft max so ancient+recent mix doesn’t crush the right side).  
+- Hover/focus: tooltip near cursor (fixed/absolute, not modal); keyboard-focusable nodes for a11y.  
+- Wire into `TaskBoard` expand editor: **remove** `.task-audit` block; mount `TaskTimeline` in its place. Pass `task` + activity query (share `["task-activity", taskId]` with History to avoid duplicate fetches).
+
+### 3. Polish
+
+- Empty / brand-new task: State Creation → current only; Priority single node.  
+- Canceled / On Hold colors included.  
+- Priority `none`: muted / neutral segment (match list tone).  
+- Do not change History panel behavior.
+
+## QA checklist (for implement pass)
+
+1. Open a task with several State changes — State line shows Creation + changes; segment colors match list State colors; rightmost = current.  
+2. Hover nodes — tooltip shows who, when, old→new, elapsed; follows cursor area.  
+3. Priority changes while Draft then Ready — only post-Ready priority history appears; pre-Ready ignored.  
+4. Task with no post-Ready priority edits — Priority line shows one current-priority node.  
+5. Brand-new / Draft-only task — Creation + current State; Priority single node; no crash.  
+6. Confirm Created / Created by / Updated / Updated by audit rows are **gone** from edit panel only; list view unchanged.  
+7. History still loads/comments as before; activity invalidation after save refreshes timeline.  
+8. Mobile / narrow edit panel — timelines remain usable (scroll or compress with min gaps).

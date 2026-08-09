@@ -1848,25 +1848,149 @@ textarea.raw-md {
   min-width: 0;
 }
 
-.task-audit {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.35rem 1rem;
-  font-size: 0.85rem;
-  padding: 0.15rem 0 0.35rem;
-}
-
-.task-audit__row {
+.task-timeline {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.55rem;
+  padding: 0.25rem 0 0.45rem;
+  position: relative;
 }
 
-.task-audit__label {
-  font-size: 0.75rem;
+.task-timeline__row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.task-timeline__label {
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  opacity: 0.85;
+}
+
+.task-timeline__track {
+  position: relative;
+  height: 1.35rem;
+  min-width: 0;
+}
+
+.task-timeline__seg {
+  position: absolute;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: color-mix(in srgb, currentColor 75%, transparent);
+  pointer-events: none;
+}
+
+.task-timeline__seg--none {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  color: var(--text-muted);
+}
+
+.task-timeline__node {
+  position: absolute;
+  top: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  padding: 0;
+  margin: 0;
+  border: 2px solid currentColor;
+  background: var(--canvas-bg, #1e2226);
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-radius: 1px;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.task-timeline__node:hover,
+.task-timeline__node:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  z-index: 2;
+}
+
+.task-timeline__tone--none {
+  color: var(--text-muted);
+}
+
+.task-timeline__loading {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.task-timeline__tooltip {
+  position: fixed;
+  z-index: 80;
+  min-width: 11rem;
+  max-width: 16rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--accent, #3ecf8e) 35%, #444);
+  border-radius: 6px;
+  background: color-mix(in srgb, #1a1e22 92%, #3ecf8e);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-size: 0.8rem;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.task-timeline__tooltip-row {
+  display: grid;
+  grid-template-columns: 3.6rem 1fr;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.task-timeline__tooltip-row .muted {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Reuse list state/priority color tokens on timeline segments + diamonds. */
+.task-timeline__tone--draft,
+.task-timeline__seg--draft {
+  color: var(--task-state-draft);
+}
+.task-timeline__tone--ready,
+.task-timeline__seg--ready {
+  color: var(--task-state-ready);
+}
+.task-timeline__tone--progress,
+.task-timeline__seg--progress {
+  color: var(--task-state-progress);
+}
+.task-timeline__tone--done,
+.task-timeline__seg--done {
+  color: var(--task-state-done);
+}
+.task-timeline__tone--canceled,
+.task-timeline__seg--canceled {
+  color: var(--task-state-canceled);
+}
+.task-timeline__tone--hold,
+.task-timeline__seg--hold {
+  color: var(--task-state-hold);
+}
+.task-timeline__tone--low,
+.task-timeline__seg--low {
+  color: var(--task-priority-low);
+}
+.task-timeline__tone--medium,
+.task-timeline__seg--medium {
+  color: var(--task-priority-medium);
+}
+.task-timeline__tone--high,
+.task-timeline__seg--high {
+  color: var(--task-priority-high);
+}
+.task-timeline__tone--urgent,
+.task-timeline__seg--urgent {
+  color: var(--task-priority-urgent);
 }
 
 .profile-settings {

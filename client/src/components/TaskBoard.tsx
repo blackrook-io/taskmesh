@@ -35,7 +35,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
-import type { Project, ProjectPhase, Task, UserRef } from "../types";
+import type { Project, ProjectPhase, Task } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
@@ -48,6 +48,7 @@ import {
   TaskDependencyLists,
 } from "./shared/TaskDependencyLists";
 import { TaskHistory } from "./shared/TaskHistory";
+import { TaskTimeline } from "./shared/TaskTimeline";
 import { TaskListSortHeaderBtn } from "./shared/TaskListSortHeaderBtn";
 import {
   DEFAULT_PROJECT_TASK_LIST_SORT,
@@ -89,17 +90,6 @@ type TaskSnapshot = {
 
 function taskDue(task: Task): string | null {
   return task.dueDate ?? (task.dueAt ? task.dueAt.slice(0, 10) : null);
-}
-
-function formatAuditTimestamp(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString();
-}
-
-function formatUserLabel(user: UserRef | null | undefined): string {
-  if (!user) return "—";
-  return `${user.displayName} (${user.referenceId})`;
 }
 
 function snapshotFromTask(task: Task): TaskSnapshot {
@@ -681,24 +671,7 @@ export function TaskEditorFields({
           }}
         />
       </div>
-      <div className="task-audit muted" aria-label="Task audit fields">
-        <div className="task-audit__row">
-          <span className="task-audit__label">Created</span>
-          <span>{formatAuditTimestamp(task.createdAt)}</span>
-        </div>
-        <div className="task-audit__row">
-          <span className="task-audit__label">Created by</span>
-          <span>{formatUserLabel(task.createdBy)}</span>
-        </div>
-        <div className="task-audit__row">
-          <span className="task-audit__label">Updated</span>
-          <span>{formatAuditTimestamp(task.updatedAt)}</span>
-        </div>
-        <div className="task-audit__row">
-          <span className="task-audit__label">Updated by</span>
-          <span>{formatUserLabel(task.updatedBy)}</span>
-        </div>
-      </div>
+      <TaskTimeline task={task} />
       <div className="field field--tags-below task-editor-tags-row">
         <span className="task-editor-hint muted">
           Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes
