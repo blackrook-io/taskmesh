@@ -65,6 +65,7 @@ export function ProjectDetailPage() {
   const [status, setStatus] = useState("idea");
   const [description, setDescription] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [requestOpenTask, setRequestOpenTask] = useState<Task | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [newDocTitle, setNewDocTitle] = useState("");
   const [projectListId, setProjectListId] = useState<number | null>(null);
@@ -256,8 +257,14 @@ export function ProjectDetailPage() {
       });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (row) => {
       setNewTaskTitle("");
+      setRequestOpenTask(row);
+      qc.setQueryData<Task[]>(["tasks", projectId], (prev) => {
+        if (!prev) return [row];
+        if (prev.some((t) => t.id === row.id)) return prev;
+        return [...prev, row];
+      });
       void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
     },
   });
@@ -547,6 +554,8 @@ export function ProjectDetailPage() {
               projectId={projectId}
               phases={phases}
               tasks={filteredTasks}
+              requestOpenTask={requestOpenTask}
+              onRequestOpenTaskConsumed={() => setRequestOpenTask(null)}
               onReorder={async (payload) => {
                 await reorderTasks.mutateAsync(payload);
               }}

@@ -917,6 +917,9 @@ type Props = {
   projectId: number;
   phases: ProjectPhase[];
   tasks: Task[];
+  /** When set, open the Edit Task modal for this task (e.g. after create). */
+  requestOpenTask?: Task | null;
+  onRequestOpenTaskConsumed?: () => void;
   onReorder: (payload: TaskReorderPayload) => Promise<void>;
   onReorderPhases: (orderedPhaseIds: number[]) => Promise<void>;
   onRenamePhase: (phaseId: number, name: string) => Promise<void>;
@@ -928,6 +931,8 @@ type Props = {
 export function TaskBoard({
   phases,
   tasks,
+  requestOpenTask = null,
+  onRequestOpenTaskConsumed,
   onReorder,
   onReorderPhases,
   onRenamePhase,
@@ -948,6 +953,16 @@ export function TaskBoard({
     () => buildRows(phases, tasks, collapsed, sortCol, sortDir),
     [phases, tasks, collapsed, sortCol, sortDir],
   );
+
+  const onRequestOpenTaskConsumedRef = useRef(onRequestOpenTaskConsumed);
+  onRequestOpenTaskConsumedRef.current = onRequestOpenTaskConsumed;
+
+  useEffect(() => {
+    if (requestOpenTask == null) return;
+    setModalTaskId(requestOpenTask.id);
+    setModalTaskHeld(requestOpenTask);
+    onRequestOpenTaskConsumedRef.current?.();
+  }, [requestOpenTask]);
 
   const fromList = modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
   useEffect(() => {

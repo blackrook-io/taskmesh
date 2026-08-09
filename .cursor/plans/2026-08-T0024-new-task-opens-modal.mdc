@@ -1,0 +1,30 @@
+# T0024 — New Task add opens Edit Task modal
+
+## Context
+
+- **Task:** T0024 (`id` 24) — "New Task add action opens new task in modal"
+- **State:** `new` → In Progress on implement approval
+- **Branch (on approval):** `T0024-new-task-opens-modal`
+- **Surface:** Project detail → Tasks tab → "New task" title field (Enter / Add). Today the task is created (default Main phase) and the list refreshes; the Edit Task modal (same as double-click on a row) does not open. Global Tasks list already opens the modal after create.
+
+## Goal
+
+After a successful create from the project New task input, open the same Edit Task modal TaskBoard uses for double-click, so the user can set phase, priority, due date, notes, etc. without an extra step.
+
+## Approach
+
+1. **Wire create → open modal on Project detail**
+   - In `ProjectDetailPage`, on `createTask` success: clear the input, optimistically add the task to the query cache, and request opening that task in the board modal (Enter and Add).
+2. **Expose open-from-parent on `TaskBoard`**
+   - Optional `requestOpenTask` + `onRequestOpenTaskConsumed`: parent passes the created `Task` so the modal can open immediately (seeds held state even if filters hide the row).
+   - Keep double-click / existing close behavior unchanged.
+3. **Out of scope**
+   - Changing default phase from Main
+   - Reworking global Tasks `window.prompt` create UX (already opens modal)
+   - Create-before-modal vs draft-in-modal (create-then-open)
+
+## Decisions
+
+1. Scope: project Tasks “New task” only — yes
+2. Add button same as Enter — yes
+3. Create-then-open — yes (default)
