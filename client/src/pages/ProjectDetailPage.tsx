@@ -324,11 +324,6 @@ export function ProjectDetailPage() {
     <div>
       <div className="page-head">
         <h1>{project.name}</h1>
-        <div className="btn-row">
-          <button type="button" className="btn danger" onClick={() => setDeleteProjectOpen(true)}>
-            Delete project
-          </button>
-        </div>
       </div>
 
       {tab === "images" ? (
@@ -436,6 +431,7 @@ export function ProjectDetailPage() {
       ) : null}
 
       {tab === "settings" ? (
+        <>
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Project modules</h2>
           <p className="muted" style={{ marginTop: 0 }}>
@@ -484,6 +480,17 @@ export function ProjectDetailPage() {
               })}
           </div>
         </div>
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <h2 style={{ marginTop: 0 }}>Danger zone</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Deleting this project permanently removes its tasks, documents, phases, and other project
+            content. This cannot be undone.
+          </p>
+          <button type="button" className="btn danger" onClick={() => setDeleteProjectOpen(true)}>
+            Delete project
+          </button>
+        </div>
+        </>
       ) : null}
 
       {tab === "tasks" ? (

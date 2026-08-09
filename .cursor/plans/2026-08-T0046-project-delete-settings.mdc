@@ -1,0 +1,57 @@
+# T0046 — Remove Delete Project from Task List / casual UI
+
+**Task:** T0046 (`id` 46) — Remove Delete Project button from Task List View  
+**State at plan:** `new` · priority `high` · projectId 4  
+**Branch (on approval):** `T0046-project-delete-settings`
+
+## Problem
+
+`ProjectDetailPage` shows a **Delete project** button in the shared `page-head` for every project tab (Tasks, Overview, Documents, etc.). That puts a destructive action next to day-to-day work, especially the Task List view.
+
+Project **Settings** (`?tab=settings`) currently only manages module enable/disable — no danger zone.
+
+## Goal
+
+Safeguard project deletion: only available under the project’s **Settings** tab, behind the same confirmation dialog. Remove it from the global page header so it is not visible on Tasks or other module views.
+
+## Scope
+
+**In**
+
+- Remove the `Delete project` button (and its `btn-row` wrapper if empty) from the project page header in `client/src/pages/ProjectDetailPage.tsx`.
+- Add a clearly labeled danger / delete section on the project **Settings** tab (below module hub), with the same button + existing `ConfirmDialog` + `deleteProject` mutation.
+- Keep confirmation copy and behavior (navigate to `/projects` after success).
+
+**Out**
+
+- API / schema changes
+- App-wide Settings modal
+- Soft-delete, trash, or extra confirm steps (unless requested)
+- Changing delete behavior for documents, tasks, or other entities
+
+## Decisions (user)
+
+- Settings: **Danger zone** card with short warning copy.
+- Keep existing confirm dialog copy.
+- Delete must **not** appear on Overview, Tasks, Todo lists, Documents, Kanban, Images, Wiki, Canvases, or any other project sub-page — **only** project Settings.
+
+## Approach
+
+1. In `ProjectDetailPage.tsx`, drop the header danger button so `page-head` is title-only (shared across all tabs).
+2. On `tab === "settings"`, after the modules card, add a **Danger zone** card with warning copy and the Delete button that opens the existing confirm dialog.
+3. Leave mutation + `ConfirmDialog` wiring as-is; only relocate the trigger.
+
+## Acceptance
+
+- [ ] Opening a project on **Tasks** (or Overview / any non-Settings tab) shows **no** Delete project control in the header.
+- [ ] Project **Settings** tab shows Delete project with clear destructive framing.
+- [ ] Confirm still required; cancel aborts; confirm deletes and returns to Projects list.
+- [ ] No other delete flows regressed.
+
+## QA checklist (post-implement)
+
+1. Open a project → Tasks: confirm Delete is gone from header.
+2. Switch Overview / Documents / etc.: still no header Delete.
+3. Open Settings: Delete project is present and labeled as destructive.
+4. Cancel confirm → project remains.
+5. Confirm delete → project gone, land on `/projects`.
