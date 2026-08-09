@@ -77,3 +77,16 @@ export function taskStateClass(base: string, state: TaskState): string {
   const tone = taskStateTone(state);
   return tone === "new" ? base : `${base} ${base}--${tone}`;
 }
+
+/** CSS modifier for list Priority selects. */
+export type TaskPriorityTone = "none" | "low" | "medium" | "high" | "urgent";
+
+export function taskPriorityTone(priority: TaskPriority): TaskPriorityTone {
+  return priority;
+}
+
+/** e.g. `task-list-row__priority task-list-row__priority--urgent` (no modifier for `none`). */
+export function taskPriorityClass(base: string, priority: TaskPriority): string {
+  const tone = taskPriorityTone(priority);
+  return tone === "none" ? base : `${base} ${base}--${tone}`;
+}

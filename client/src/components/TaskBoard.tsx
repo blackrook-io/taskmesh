@@ -22,6 +22,7 @@ import {
   TASK_PRIORITY_LABELS,
   TASK_STATES,
   TASK_STATE_LABELS,
+  taskPriorityClass,
   taskStateClass,
   formatTaskNumber,
   nextTaskState,
@@ -724,7 +725,7 @@ function SortableTaskRow({
         {TASK_STATE_LABELS[task.state]}
       </span>
       <select
-        className="task-list-row__priority"
+        className={taskPriorityClass("task-list-row__priority", task.priority)}
         value={task.priority}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => onPatch({ priority: e.target.value as TaskPriority })}

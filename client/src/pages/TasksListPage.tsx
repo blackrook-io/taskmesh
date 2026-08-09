@@ -10,6 +10,7 @@ import {
   TASK_STATE_LABELS,
   formatTaskNumber,
   nextTaskState,
+  taskPriorityClass,
   taskStateClass,
   type TaskPriority,
 } from "../lib/taskFields";
@@ -307,7 +308,7 @@ export function TasksListPage() {
                 {TASK_STATE_LABELS[task.state]}
               </span>
               <select
-                className="task-list-row__priority"
+                className={taskPriorityClass("task-list-row__priority", task.priority)}
                 value={task.priority}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) =>

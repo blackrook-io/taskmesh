@@ -1,0 +1,56 @@
+# T0019 — Priority field colors in List View
+
+## Goal
+
+Color the Priority field in task list views so priority is scannable at a glance, using the palette from the task description.
+
+## Decisions (confirmed)
+
+1. Surfaces: global `/tasks` list **and** project TaskBoard list rows.
+2. Color the Priority `<select>` text via shared CSS tokens / modifiers (same pattern as T0020 state colors).
+3. `none` → default `--text` (no accent), like State “New”.
+
+## Color map
+
+| Priority | Color |
+|----------|--------|
+| Urgent | Red |
+| High | Orange |
+| Medium | Yellow |
+| Low | Green |
+| None | Default text |
+
+Concrete tokens (aligned with existing dark UI accents where sensible):
+
+- `--task-priority-urgent`: `#e55` (match canceled / danger red)
+- `--task-priority-high`: `#e8a838` or a clearer orange (e.g. `#f08a3a`)
+- `--task-priority-medium`: `#e8c84a` (yellow)
+- `--task-priority-low`: `#3ecf8e` or accent green (`#7dd87d` / `#3ecf8e`)
+
+## Approach
+
+1. Add `taskPriorityTone` / `taskPriorityClass` helpers in `client/src/lib/taskFields.ts` (mirror `taskStateTone` / `taskStateClass`).
+2. CSS variables on theme `:root` + modifiers:
+   - `.task-list-row__priority--urgent|high|medium|low`
+3. Apply `taskPriorityClass("task-list-row__priority", task.priority)` on the Priority `<select>` in:
+   - `client/src/pages/TasksListPage.tsx`
+   - `client/src/components/TaskBoard.tsx` (list row)
+4. Ensure the closed select’s text color updates when priority changes (className driven by current value). Dropdown option list can stay native/default.
+
+## Out of scope
+
+- Editor modal Priority select styling (unless trivial reuse).
+- Kanban or non-list surfaces.
+- Changing priority values or sort order.
+
+## Branch
+
+`T0019-list-priority-color`
+
+## QA checklist (post-implement)
+
+- [ ] Global Tasks: None / Low / Medium / High / Urgent show expected colors on the Priority select.
+- [ ] Project task list: same.
+- [ ] Changing priority updates color immediately.
+- [ ] Select remains usable (click / change works).
+- [ ] Readable on dark theme / narrow viewport.

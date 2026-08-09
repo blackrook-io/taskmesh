@@ -27,6 +27,10 @@
   --task-state-done: #3ecf8e;
   --task-state-canceled: #e55;
   --task-state-hold: #e8a838;
+  --task-priority-urgent: #e55;
+  --task-priority-high: #f08a3a;
+  --task-priority-medium: #e8c84a;
+  --task-priority-low: #3ecf8e;
   /* Canvas surfaces are intentionally darker than the app chrome */
   --canvas-bg: #12131a;
   --canvas-grid: #1a1b22;
@@ -1406,6 +1410,28 @@ textarea.raw-md {
 .task-list-row__date {
   font-size: 0.8rem;
   max-width: 100%;
+}
+
+.task-list-row__priority {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border);
+}
+
+.task-list-row__priority--low {
+  color: var(--task-priority-low);
+}
+
+.task-list-row__priority--medium {
+  color: var(--task-priority-medium);
+}
+
+.task-list-row__priority--high {
+  color: var(--task-priority-high);
+}
+
+.task-list-row__priority--urgent {
+  color: var(--task-priority-urgent);
 }
 
 /* Shared task-state accents (checkbox + list State column). */
