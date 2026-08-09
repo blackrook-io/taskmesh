@@ -51,6 +51,7 @@ function sortTasks(list: Task[], col: SortCol | null, dir: 1 | -1, projectName: 
     on_hold: 3,
     complete: 4,
     canceled: 5,
+    deleted: 6,
   };
   const priRank: Record<Task["priority"], number> = {
     none: 0,
