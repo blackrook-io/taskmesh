@@ -658,6 +658,7 @@ export function TaskEditorFields({
           value={description}
           onChange={setDescription}
           fill
+          height={280}
           placeholder="Task description…"
           onBlur={(v) => {
             setDescription(v);

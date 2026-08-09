@@ -1,0 +1,19 @@
+# Resizable Markdown editor (vertical)
+
+## Goal
+Make the shared `MarkdownEditor` vertically resizable in all form contexts, with reasonable min/max clamps.
+
+## Approach
+1. Track editor surface height in `MarkdownEditor` (initialized from `height` prop).
+2. Add a bottom-edge drag handle (between surface and toolbar) with pointer events; clamp to min/max.
+3. Defaults: min ~120px (or the prop height if smaller), max ~min(720px, 75vh).
+4. Disable resize in focus mode (`md-editor--focus`); keep `fill` working until the user resizes, then lock height.
+5. Use fixed `height` + `overflow: auto` on the surface (window model) instead of unbounded `minHeight` growth.
+6. Soften `.task-expand__notes` CSS so it does not override surface height with flex fill.
+
+## Branch
+`phase-10-resizable-markdown-editor`
+
+## Out of scope
+- Persisting height across reloads (`localStorage`)
+- Horizontal resize

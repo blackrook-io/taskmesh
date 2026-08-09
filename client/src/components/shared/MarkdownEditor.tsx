@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
@@ -33,12 +33,25 @@ import { uploadFile } from "../../api/client";
 import { NavIcon } from "../shell/NavIcon";
 import { ResizableMarkdownImage } from "./ResizableMarkdownImage";
 
+const DEFAULT_MIN_HEIGHT = 120;
+const DEFAULT_MAX_HEIGHT = 720;
+
+function clampEditorHeight(value: number, minHeight: number, maxHeight: number): number {
+  const viewportCap = typeof window !== "undefined" ? Math.floor(window.innerHeight * 0.75) : maxHeight;
+  const max = Math.max(minHeight, Math.min(maxHeight, viewportCap));
+  return Math.min(max, Math.max(minHeight, Math.round(value)));
+}
+
 type Props = {
   value: string;
   onChange: (v: string) => void;
   onBlur?: (v: string) => void;
   height?: number;
-  /** Grow to fill a flex parent instead of a fixed min-height. */
+  /** Lower clamp for vertical resize (defaults to 120, or `height` when smaller). */
+  minHeight?: number;
+  /** Upper clamp for vertical resize (defaults to 720, also capped at 75vh). */
+  maxHeight?: number;
+  /** Grow to fill a flex parent instead of a fixed height (until the user resizes). */
   fill?: boolean;
   enableImageUpload?: boolean;
   placeholder?: string;
@@ -112,16 +125,27 @@ export function MarkdownEditor({
   onChange,
   onBlur,
   height = 280,
+  minHeight: minHeightProp,
+  maxHeight: maxHeightProp = DEFAULT_MAX_HEIGHT,
   fill = false,
   enableImageUpload = true,
   placeholder = "Write Markdown…",
   readOnly = false,
   className,
 }: Props) {
+  const minHeight = Math.min(minHeightProp ?? DEFAULT_MIN_HEIGHT, height);
+  const maxHeight = Math.max(maxHeightProp, height);
   const [mode, setMode] = useState<Mode>("preview");
   const [focusMode, setFocusMode] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [surfaceHeight, setSurfaceHeight] = useState(() =>
+    clampEditorHeight(height, Math.min(minHeightProp ?? DEFAULT_MIN_HEIGHT, height), Math.max(maxHeightProp, height)),
+  );
+  /** After the user drags, prefer explicit height over flex `fill`. */
+  const [heightLocked, setHeightLocked] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const lastEmitted = useRef(value);
   const editorRef = useRef<Editor | null>(null);
   const modeRef = useRef(mode);
@@ -130,6 +154,14 @@ export function MarkdownEditor({
   modeRef.current = mode;
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
+
+  useEffect(() => {
+    if (heightLocked) return;
+    setSurfaceHeight(clampEditorHeight(height, minHeight, maxHeight));
+  }, [height, heightLocked, maxHeight, minHeight]);
+
+  const useFixedHeight = !focusMode && (!fill || heightLocked);
+  const canResize = !focusMode;
 
   const activateEdit = () => {
     if (readOnly) return;
@@ -283,6 +315,32 @@ export function MarkdownEditor({
     editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   }
 
+  function onResizePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!canResize) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget;
+    const startY = e.clientY;
+    const startHeight = surfaceRef.current?.offsetHeight ?? surfaceHeight;
+    setHeightLocked(true);
+    setDragging(true);
+    handle.setPointerCapture(e.pointerId);
+
+    const onMove = (ev: PointerEvent) => {
+      setSurfaceHeight(clampEditorHeight(startHeight + (ev.clientY - startY), minHeight, maxHeight));
+    };
+    const onUp = (ev: PointerEvent) => {
+      handle.releasePointerCapture(ev.pointerId);
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      setDragging(false);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  }
+
   const disabled = readOnly || !editor || mode !== "edit";
 
   return (
@@ -292,7 +350,9 @@ export function MarkdownEditor({
         "md-editor",
         focusMode ? "md-editor--focus" : null,
         readOnly ? "md-editor--readonly" : null,
-        fill ? "md-editor--fill" : null,
+        fill && !heightLocked ? "md-editor--fill" : null,
+        heightLocked ? "md-editor--height-locked" : null,
+        dragging ? "md-editor--resizing" : null,
         mode === "preview" && !readOnly ? "md-editor--previewing" : null,
         className,
       ]
@@ -300,8 +360,9 @@ export function MarkdownEditor({
         .join(" ")}
     >
       <div
+        ref={surfaceRef}
         className="md-editor__surface"
-        style={fill ? undefined : { minHeight: height }}
+        style={useFixedHeight ? { height: surfaceHeight } : undefined}
         tabIndex={readOnly || mode === "edit" ? undefined : 0}
         onFocus={(e) => {
           if (readOnly || mode === "edit") return;
@@ -314,6 +375,27 @@ export function MarkdownEditor({
       >
         <EditorContent editor={editor} />
       </div>
+      {canResize ? (
+        <div
+          className="md-editor__resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize editor"
+          aria-valuenow={surfaceHeight}
+          aria-valuemin={minHeight}
+          aria-valuemax={maxHeight}
+          tabIndex={0}
+          onPointerDown={onResizePointerDown}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+            e.preventDefault();
+            const delta = e.key === "ArrowUp" ? -24 : 24;
+            const base = surfaceRef.current?.offsetHeight ?? surfaceHeight;
+            setHeightLocked(true);
+            setSurfaceHeight(clampEditorHeight(base + delta, minHeight, maxHeight));
+          }}
+        />
+      ) : null}
       {!readOnly ? (
         <div className="md-toolbar" role="toolbar" aria-label="Markdown formatting">
           <div className="md-toolbar__group">

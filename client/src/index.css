@@ -1258,6 +1258,12 @@ textarea.raw-md {
   overflow: auto;
 }
 
+.md-editor--height-locked .md-editor__surface {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
 .md-editor--focus {
   position: fixed;
   inset: max(0.35rem, env(safe-area-inset-top)) max(0.35rem, env(safe-area-inset-right))
@@ -1272,7 +1278,12 @@ textarea.raw-md {
 .md-editor--focus .md-editor__surface {
   flex: 1;
   min-height: 0 !important;
+  height: auto !important;
   overflow: auto;
+}
+
+.md-editor--focus .md-editor__resize {
+  display: none;
 }
 
 .md-toolbar {
@@ -1328,6 +1339,8 @@ textarea.raw-md {
 
 .md-editor__surface {
   background: var(--bg);
+  overflow: auto;
+  min-height: 0;
 }
 
 .md-editor__surface:focus {
@@ -1342,9 +1355,57 @@ textarea.raw-md {
   cursor: text;
 }
 
+.md-editor__resize {
+  flex-shrink: 0;
+  height: 0.5rem;
+  cursor: ns-resize;
+  touch-action: none;
+  position: relative;
+  background: color-mix(in srgb, var(--bg) 75%, var(--surface));
+  border-top: 1px solid var(--border);
+}
+
+.md-editor__resize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2rem;
+  height: 0.16rem;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 55%, var(--border));
+}
+
+.md-editor__resize:hover::after,
+.md-editor__resize:focus-visible::after,
+.md-editor--resizing .md-editor__resize::after {
+  background: var(--accent);
+}
+
+.md-editor__resize:focus {
+  outline: none;
+}
+
+.md-editor__resize:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.md-editor__resize + .md-toolbar {
+  border-top: none;
+}
+
+.md-editor--resizing {
+  user-select: none;
+}
+
+.md-editor--resizing .md-editor__surface {
+  pointer-events: none;
+}
+
 .md-editor .tiptap,
 .md-editor .ProseMirror {
-  min-height: inherit;
+  min-height: 100%;
   padding: 0.65rem 0.7rem;
   outline: none;
   color: var(--text);
@@ -2126,9 +2187,18 @@ textarea.raw-md {
   flex-direction: column;
 }
 
-.task-expand__notes .md-editor__surface {
+.task-expand__notes .md-editor.md-editor--height-locked {
+  flex: 0 0 auto;
+}
+
+.task-expand__notes .md-editor--fill .md-editor__surface {
   flex: 1 1 0;
-  min-height: 0 !important;
+  min-height: 0;
+  overflow: auto;
+}
+
+.task-expand__notes .md-editor.md-editor--height-locked .md-editor__surface {
+  flex: 0 0 auto;
   overflow: auto;
 }
 
