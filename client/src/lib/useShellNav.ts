@@ -166,7 +166,7 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
         ];
       });
 
-      return { title: "Project", items };
+      return { title: "Project Menu", items };
     }
 
     if (section === "projects") {
