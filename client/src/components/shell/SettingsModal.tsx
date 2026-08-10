@@ -49,7 +49,8 @@ function AppearancePanel() {
   return (
     <div className="settings-panel">
       <p className="muted" style={{ marginTop: 0 }}>
-        Dark themes with different accent colors. Preference is saved on this device.
+        Dark themes with different accent colors. Choosing a platform theme saves a personal
+        preference on this device and overrides the system default.
       </p>
       <ThemeSwitcher
         label="Platform theme"

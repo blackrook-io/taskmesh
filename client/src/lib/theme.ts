@@ -26,6 +26,7 @@ export const THEME_SWATCHES: Record<ThemeId, string> = {
   red: "#f07178",
 };
 
+/** Hardcoded fallback when system default is unavailable. */
 export const DEFAULT_THEME: ThemeId = "green";
 
 export type ProjectThemesMap = Record<string, ThemeId>;
@@ -39,14 +40,30 @@ export function isThemeId(value: string | null | undefined): value is ThemeId {
   return value != null && (THEME_IDS as readonly string[]).includes(value);
 }
 
-export function readStoredTheme(): ThemeId {
+/** Personal platform theme from localStorage, or null if following system default. */
+export function readPersonalTheme(): ThemeId | null {
   try {
     const raw = localStorage.getItem(THEME_STORAGE_KEY);
     if (isThemeId(raw)) return raw;
   } catch {
     /* ignore */
   }
-  return DEFAULT_THEME;
+  return null;
+}
+
+/**
+ * @deprecated Prefer `readPersonalTheme` + system default. Returns personal theme
+ * or hardcoded green when unset (does not read system property).
+ */
+export function readStoredTheme(): ThemeId {
+  return readPersonalTheme() ?? DEFAULT_THEME;
+}
+
+export function resolvePlatformTheme(
+  personal: ThemeId | null,
+  systemDefault: ThemeId = DEFAULT_THEME,
+): ThemeId {
+  return personal ?? systemDefault;
 }
 
 export function applyTheme(theme: ThemeId): void {

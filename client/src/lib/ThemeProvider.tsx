@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { matchPath, useLocation } from "react-router-dom";
+import { apiJson } from "../api/client";
 import {
   applyTheme,
   DEFAULT_THEME,
   getProjectThemeFromMap,
+  isThemeId,
   persistProjectThemes,
   persistSeparateProjectThemes,
   persistStickyProjectTheme,
+  readPersonalTheme,
   readProjectThemes,
   readSeparateProjectThemes,
   readStickyProjectTheme,
-  readStoredTheme,
   resolveAppliedTheme,
+  resolvePlatformTheme,
   THEME_STORAGE_KEY,
   type ProjectThemesMap,
   type StickyProjectTheme,
@@ -30,9 +33,11 @@ function useRouteProjectId(): number | null {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const routeProjectId = useRouteProjectId();
 
+  const [systemDefaultTheme, setSystemDefaultTheme] = useState<ThemeId>(DEFAULT_THEME);
+
   const [platformTheme, setPlatformThemeState] = useState<ThemeId>(() => {
     if (typeof document === "undefined") return DEFAULT_THEME;
-    return readStoredTheme();
+    return resolvePlatformTheme(readPersonalTheme(), DEFAULT_THEME);
   });
 
   const [separateProjectThemes, setSeparateState] = useState(() => {
@@ -53,7 +58,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const [theme, setThemeState] = useState<ThemeId>(() => {
     if (typeof document === "undefined") return DEFAULT_THEME;
-    const platform = readStoredTheme();
+    const platform = resolvePlatformTheme(readPersonalTheme(), DEFAULT_THEME);
     const separate = readSeparateProjectThemes();
     const stickyVal = separate ? readStickyProjectTheme() : null;
     const applied = resolveAppliedTheme(separate, stickyVal, platform);
@@ -74,6 +79,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Load system default when no personal preference is stored.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await apiJson<{ data: { defaultTheme: string } }>("/api/v1/config");
+        const next = isThemeId(res.data.defaultTheme) ? res.data.defaultTheme : DEFAULT_THEME;
+        if (cancelled) return;
+        setSystemDefaultTheme(next);
+        if (readPersonalTheme() != null) return;
+        const platform = resolvePlatformTheme(null, next);
+        setPlatformThemeState(platform);
+        const separate = readSeparateProjectThemes();
+        const stickyVal = separate ? readStickyProjectTheme() : null;
+        setApplied(resolveAppliedTheme(separate, stickyVal, platform));
+      } catch {
+        /* keep hardcoded green fallback */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setApplied]);
 
   // Sticky apply when entering a project that has an explicit override.
   useEffect(() => {
@@ -175,6 +204,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setTheme,
       platformTheme,
       setPlatformTheme,
+      systemDefaultTheme,
       separateProjectThemes,
       setSeparateProjectThemes,
       getProjectTheme,
@@ -185,6 +215,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setTheme,
       platformTheme,
       setPlatformTheme,
+      systemDefaultTheme,
       separateProjectThemes,
       setSeparateProjectThemes,
       getProjectTheme,

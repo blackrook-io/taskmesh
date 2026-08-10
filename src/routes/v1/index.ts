@@ -2,6 +2,7 @@ import { Router } from "express";
 import { adminRouter } from "./admin.js";
 import { assistantRouter } from "./assistant.js";
 import { backupsRouter } from "./backups.js";
+import { configRouter } from "./config.js";
 import { ideasRouter } from "./ideas.js";
 import { imageBoardsRouter } from "./imageBoards.js";
 import { importExportRouter } from "./importExport.js";
@@ -27,6 +28,7 @@ v1Router.use(rejectImmutableBody);
 v1Router.use(apiRequestLogger);
 
 v1Router.use("/admin", adminRouter);
+v1Router.use("/config", configRouter);
 v1Router.use("/ideas", ideasRouter);
 v1Router.use("/projects", projectsRouter);
 v1Router.use("/task-description-templates", taskDescriptionTemplatesRouter);

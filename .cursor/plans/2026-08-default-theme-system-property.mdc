@@ -1,0 +1,100 @@
+# System default theme (Green)
+
+## Goal
+
+Add a **System Property** that sets the app-wide default accent theme (seeded to **Green**). That default applies for any browser that has **not** chosen a personal theme. Once the user picks a theme in Settings (or the nav ThemeSwitcher), their choice is stored locally and wins over the system default until they clear it (or clear site data).
+
+## Branch
+
+- `phase-11-default-theme-sysprop` from updated `main`
+
+## Current behavior (baseline)
+
+- Accent themes: `green` | `blue` | `orange` | `yellow` | `purple` | `red` (`client/src/lib/theme.ts`).
+- Platform theme lives in `localStorage` key `taskmesh.theme`.
+- Hardcoded `DEFAULT_THEME = "green"` when the key is missing.
+- Choosing any swatch calls `setPlatformTheme` → **writes** `taskmesh.theme`.
+- Per-project / sticky themes (Separate Project Themes) stay as today; they resolve against the **platform** theme (personal or system-resolved).
+- System Properties today are numeric only (`api_rate_limit_per_minute`, `login_failure_threshold`) via Admin → System Properties (`src/services/systemProperties.ts`, `AdminSystemPropertiesPanel`).
+
+## Decisions (locked for implementation)
+
+### Precedence
+
+1. **Personal preference** — `localStorage.taskmesh.theme` is present and a valid `ThemeId` → use it.
+2. **System default** — property `default_theme` (jsonb string) → use it when personal key is absent.
+3. **Hardcoded fallback** — `"green"` if the property is missing/invalid (same as today).
+
+### Personal vs system
+
+- **Do not write** `taskmesh.theme` on first load when following the system default (absence of the key means “follow system”).
+- **Any explicit user pick** of a platform theme (Settings Appearance or nav ThemeSwitcher) writes `taskmesh.theme` and is thereafter a personal preference.
+- Changing the System Property updates the effective theme only for clients **without** a personal key (on next fetch / load). Clients with a stored preference are unchanged.
+
+### Storage shape
+
+| Layer | Key / field | Value |
+|-------|-------------|--------|
+| DB `system_properties` | `default_theme` | jsonb string, e.g. `"green"` |
+| localStorage | `taskmesh.theme` | personal `ThemeId` only when user has chosen |
+
+API camelCase field: `defaultTheme: ThemeId`.
+
+### Public read (required)
+
+Admin routes are fine for editing, but the SPA must read the default **without** treating it as a privileged admin action (and without exposing rate-limit / lockout settings).
+
+- Add a small public endpoint, e.g. `GET /api/v1/config` (or equivalent), returning only safe values: `{ defaultTheme }`.
+- Admin `GET`/`PATCH /api/v1/admin/system-properties` gain `defaultTheme` alongside existing fields.
+
+### FOUC / first paint
+
+- Keep synchronous bootstrap: if `taskmesh.theme` exists, apply it immediately (unchanged).
+- If absent, apply hardcoded `green` until the public config fetch returns; then apply system default if different. With seed **Green**, the common path has no visible flash.
+
+### Out of scope
+
+- Server-side user preferences / multi-user accounts.
+- Clearing personal preference via UI (“Reset to system default”) — nice-to-have; optional if cheap (remove `taskmesh.theme` and re-resolve). Include only if it fits naturally in Appearance.
+- Changing per-project theme storage model.
+
+## Implementation outline
+
+### Backend
+
+1. Extend `SYSTEM_PROPERTY_KEYS` / `DEFAULTS` / get+patch in `src/services/systemProperties.ts` for `default_theme` → `defaultTheme` (validate with shared `ThemeId` list or inline enum).
+2. Extend Zod `patchPropsBody` + audit log parts in `src/routes/v1/admin.ts`.
+3. Seed via upsert-on-read (existing pattern) **and** a small Drizzle SQL migration `INSERT … ON CONFLICT DO NOTHING` for `default_theme` = `"green"`.
+4. New public `GET` config route wired in `src/routes/v1/index.ts`.
+5. Docs: note known keys / meaning under `docs/database/platform.md` (and glossary if enum-like values are listed); run `npm run docs:sync-schema` after docs update.
+
+### Frontend — Admin
+
+6. `AdminSystemPropertiesPanel`: ThemeSwitcher (or select) for **Default theme**, saved with the existing Save action; copy clarifying it applies until a user sets a personal preference.
+
+### Frontend — Theme resolution
+
+7. `theme.ts`: distinguish `readStoredTheme()` (personal only → `ThemeId | null`) vs `resolvePlatformTheme(personal, systemDefault)`.
+8. `ThemeProvider`: on mount, if no personal key, fetch public config and set platform/applied theme from `defaultTheme`; keep personal path synchronous.
+9. `setPlatformTheme`: continue to persist personal key (explicit choice).
+10. Settings copy (optional one-liner): platform theme is personal once chosen; system default otherwise.
+
+## Files (expected)
+
+- `src/services/systemProperties.ts`
+- `src/routes/v1/admin.ts`, new config route + `index.ts`
+- `drizzle/` migration
+- `docs/database/platform.md` (+ glossary if needed)
+- `client/src/components/admin/AdminSystemPropertiesPanel.tsx`
+- `client/src/lib/theme.ts`, `ThemeProvider.tsx` (and `themeContext` only if API surface changes)
+- Possibly `SettingsModal.tsx` for short help text
+
+## QA checklist (after implementation)
+
+1. Fresh browser / cleared site data → UI loads **Green**; no `taskmesh.theme` in localStorage until a swatch is clicked.
+2. Admin → System Properties → set Default theme to e.g. Blue → Save → in a **fresh** profile/incognito with no personal key, app uses Blue after load.
+3. In that same session, pick Orange in Settings → `taskmesh.theme` = `orange`; reload still Orange after admin changes default back to Green.
+4. Device that already had a personal theme is unaffected by admin default changes.
+5. Separate Project Themes + sticky behavior still works relative to the resolved platform theme.
+6. Invalid/missing DB value falls back to Green without breaking Admin save of other properties.
+7. Public config endpoint does **not** expose rate-limit / login-failure values.

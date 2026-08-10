@@ -1,12 +1,14 @@
 import { eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { DEFAULT_THEME, isThemeId, type ThemeId } from "../lib/theme.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
 export const SYSTEM_PROPERTY_KEYS = [
   "api_rate_limit_per_minute",
   "login_failure_threshold",
+  "default_theme",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -14,12 +16,23 @@ export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
 export type SystemProperties = {
   apiRateLimitPerMinute: number;
   loginFailureThreshold: number;
+  defaultTheme: ThemeId;
   updatedAt: string | null;
 };
 
-const DEFAULTS: Record<SystemPropertyKey, number> = {
+/** Public subset safe to expose without admin auth. */
+export type PublicSystemConfig = {
+  defaultTheme: ThemeId;
+};
+
+const DEFAULTS: {
+  api_rate_limit_per_minute: number;
+  login_failure_threshold: number;
+  default_theme: ThemeId;
+} = {
   api_rate_limit_per_minute: 60,
   login_failure_threshold: 5,
+  default_theme: DEFAULT_THEME,
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -27,6 +40,11 @@ function asNumber(value: unknown, fallback: number): number {
   if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
     return Number(value);
   }
+  return fallback;
+}
+
+function asThemeId(value: unknown, fallback: ThemeId): ThemeId {
+  if (isThemeId(value)) return value;
   return fallback;
 }
 
@@ -69,13 +87,23 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
       map.get("login_failure_threshold")?.value,
       DEFAULTS.login_failure_threshold,
     ),
+    defaultTheme: asThemeId(map.get("default_theme")?.value, DEFAULTS.default_theme),
     updatedAt: latest?.toISOString() ?? null,
   };
 }
 
+export async function getPublicSystemConfig(db: Db): Promise<PublicSystemConfig> {
+  const props = await getSystemProperties(db);
+  return { defaultTheme: props.defaultTheme };
+}
+
 export async function patchSystemProperties(
   db: Db,
-  patch: { apiRateLimitPerMinute?: number; loginFailureThreshold?: number },
+  patch: {
+    apiRateLimitPerMinute?: number;
+    loginFailureThreshold?: number;
+    defaultTheme?: ThemeId;
+  },
 ): Promise<SystemProperties> {
   const now = new Date();
   if (patch.apiRateLimitPerMinute !== undefined) {
@@ -102,6 +130,19 @@ export async function patchSystemProperties(
       .onConflictDoUpdate({
         target: schema.systemProperties.key,
         set: { value: patch.loginFailureThreshold, updatedAt: now },
+      });
+  }
+  if (patch.defaultTheme !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "default_theme",
+        value: patch.defaultTheme,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.defaultTheme, updatedAt: now },
       });
   }
   return getSystemProperties(db);

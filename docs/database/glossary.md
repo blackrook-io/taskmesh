@@ -96,6 +96,10 @@ Exact FK lists are on the domain pages.
 - **`canvases.document`** — Excalidraw scene JSON
 - **`image_boards.document`** — image-board scene JSON (camera, items, …)
 - **`system_properties.value`** — arbitrary jsonb config values
+- **`system_properties` keys (current app)** —
+  - `api_rate_limit_per_minute` — number
+  - `login_failure_threshold` — number
+  - `default_theme` — accent theme string: `green` \| `blue` \| `orange` \| `yellow` \| `purple` \| `red` (default `green`). Personal UI preference in the browser overrides this until cleared.
 
 ## Uploads vs database
 

@@ -8,6 +8,8 @@ export type ThemeContextValue = {
   setTheme: (theme: ThemeId) => void;
   platformTheme: ThemeId;
   setPlatformTheme: (theme: ThemeId) => void;
+  /** System-wide default when no personal `taskmesh.theme` is set. */
+  systemDefaultTheme: ThemeId;
   separateProjectThemes: boolean;
   setSeparateProjectThemes: (enabled: boolean) => void;
   getProjectTheme: (projectId: number) => ThemeId | null;

@@ -10,7 +10,7 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 |-------|---------|------------------------|
 | `users` | App users (single-user now; auth later). Display → **U####**. Holds display name, optional email, password hash, avatar upload, lockout / last-login fields. | Avatar → `uploads` (`ON DELETE SET NULL`). Referenced by tasks (`created_by` / `updated_by`, **RESTRICT**), activity, templates, API keys, request logs. |
 | `api_keys` | API keys for admin / programmatic access (prefix + hashed secret, access level, status, expiry). | FK `user_id` → `users` · **CASCADE**. Referenced by `api_request_logs`. |
-| `system_properties` | System-wide key/value settings (`key` text PK, `value` jsonb). | Standalone; no FKs. |
+| `system_properties` | System-wide key/value settings (`key` text PK, `value` jsonb). Known keys include `api_rate_limit_per_minute`, `login_failure_threshold`, and `default_theme` (accent theme id string, seeded `green`). | Standalone; no FKs. |
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
 
 ## Minimal relationship sketch

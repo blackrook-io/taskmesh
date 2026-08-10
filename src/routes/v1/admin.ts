@@ -29,6 +29,7 @@ import {
   type ApiLogOutcome,
   type UsageRange,
 } from "../../services/apiRequestLogs.js";
+import { THEME_IDS } from "../../lib/theme.js";
 import {
   getSystemProperties,
   patchSystemProperties,
@@ -255,6 +256,7 @@ const patchPropsBody = z
   .object({
     apiRateLimitPerMinute: z.number().int().min(1).max(100_000).optional(),
     loginFailureThreshold: z.number().int().min(1).max(1000).optional(),
+    defaultTheme: z.enum(THEME_IDS).optional(),
   })
   .strict();
 
@@ -263,7 +265,8 @@ adminRouter.patch("/system-properties", async (req, res) => {
     const parsed = patchPropsBody.parse(req.body);
     if (
       parsed.apiRateLimitPerMinute === undefined &&
-      parsed.loginFailureThreshold === undefined
+      parsed.loginFailureThreshold === undefined &&
+      parsed.defaultTheme === undefined
     ) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
@@ -287,6 +290,12 @@ adminRouter.patch("/system-properties", async (req, res) => {
       parts.push(
         `login_failure_threshold ${before.loginFailureThreshold}→${after.loginFailureThreshold}`,
       );
+    }
+    if (
+      parsed.defaultTheme !== undefined &&
+      before.defaultTheme !== after.defaultTheme
+    ) {
+      parts.push(`default_theme ${before.defaultTheme}→${after.defaultTheme}`);
     }
     res.locals.logUserId = actor.id;
     res.locals.logMessage =

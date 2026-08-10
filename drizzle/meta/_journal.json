@@ -148,6 +148,13 @@
       "when": 1786321610407,
       "tag": "0020_aspiring_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786325000000,
+      "tag": "0021_default_theme",
+      "breakpoints": true
     }
   ]
 }
