@@ -90,7 +90,7 @@ export function readProjectThemes(): ProjectThemesMap {
     if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     const out: ProjectThemesMap = {};
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (isThemeId(typeof value === "string" ? value : null)) {
+      if (typeof value === "string" && isThemeId(value)) {
         out[key] = value;
       }
     }
@@ -124,8 +124,8 @@ export function readStickyProjectTheme(): StickyProjectTheme | null {
     if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const obj = parsed as Record<string, unknown>;
     const projectId = Number(obj.projectId);
-    const theme = obj.theme;
-    if (!Number.isFinite(projectId) || projectId <= 0 || !isThemeId(typeof theme === "string" ? theme : null)) {
+    const theme = typeof obj.theme === "string" ? obj.theme : null;
+    if (!Number.isFinite(projectId) || projectId <= 0 || !isThemeId(theme)) {
       return null;
     }
     return { projectId, theme };
