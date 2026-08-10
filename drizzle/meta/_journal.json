@@ -141,6 +141,13 @@
       "when": 1786301821501,
       "tag": "0019_nebulous_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786321610407,
+      "tag": "0020_aspiring_impossible_man",
+      "breakpoints": true
     }
   ]
 }

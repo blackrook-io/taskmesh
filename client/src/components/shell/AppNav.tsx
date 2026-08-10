@@ -1,5 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { apiJson } from "../../api/client";
 import { APP_VERSION } from "../../lib/appVersion";
@@ -23,6 +38,41 @@ type Props = {
   onNavigate?: () => void;
 };
 
+function SortableProjectNavItem({
+  project,
+  onNavigate,
+}: {
+  project: Project;
+  onNavigate?: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: project.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <li ref={setNodeRef} style={style} className={isDragging ? "is-dragging" : undefined}>
+      <NavLink
+        to={`/projects/${project.id}`}
+        className={({ isActive }) =>
+          `app-nav__project${isActive ? " is-active" : ""}${isDragging ? " is-dragging" : ""}`
+        }
+        onClick={onNavigate}
+        title="Drag to reorder"
+        {...attributes}
+        {...listeners}
+      >
+        <span className="app-nav__dot" aria-hidden />
+        <span className="app-nav__project-name">{project.name}</span>
+      </NavLink>
+    </li>
+  );
+}
+
 export function AppNav({
   mode,
   onCollapse,
@@ -37,6 +87,7 @@ export function AppNav({
   const { open: settingsOpen, openSettings } = useSettings();
   const { open: adminOpen, openAdmin } = useAdministration();
   const [projectsOpen, setProjectsOpen] = useState(section === "projects");
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (section === "projects") setProjectsOpen(true);
@@ -50,6 +101,38 @@ export function AppNav({
     },
     enabled: projectsOpen && !less,
   });
+
+  const projects = projectsQuery.data ?? [];
+  const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
+
+  const reorderProjects = useMutation({
+    mutationFn: async (orderedProjectIds: number[]) => {
+      const res = await apiJson<{ data: Project[] }>("/api/v1/projects/reorder", {
+        method: "PATCH",
+        body: JSON.stringify({ orderedProjectIds }),
+      });
+      return res.data;
+    },
+    onSuccess: (rows) => {
+      qc.setQueryData(["projects"], rows);
+    },
+    onError: () => {
+      void qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const handleProjectDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = projectIds.indexOf(Number(active.id));
+    const newIndex = projectIds.indexOf(Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(projects, oldIndex, newIndex);
+    qc.setQueryData(["projects"], next);
+    void reorderProjects.mutateAsync(next.map((p) => p.id));
+  };
 
   const itemClass = ({ isActive }: { isActive: boolean }) =>
     `app-nav__item${isActive ? " is-active" : ""}`;
@@ -125,44 +208,43 @@ export function AppNav({
               </span>
             </button>
             {projectsOpen ? (
-              <ul className="app-nav__projects">
-                <li>
-                  <NavLink
-                    to="/projects"
-                    end
-                    className={({ isActive }) =>
-                      `app-nav__project${isActive && activeProjectId == null ? " is-active" : ""}`
-                    }
-                    onClick={onNavigate}
-                  >
-                    All projects
-                  </NavLink>
-                </li>
-                {(projectsQuery.data ?? []).map((p) => (
-                  <li key={p.id}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleProjectDragEnd}
+              >
+                <ul className="app-nav__projects">
+                  <li>
                     <NavLink
-                      to={`/projects/${p.id}`}
-                      className={({ isActive }) => `app-nav__project${isActive ? " is-active" : ""}`}
+                      to="/projects"
+                      end
+                      className={({ isActive }) =>
+                        `app-nav__project${isActive && activeProjectId == null ? " is-active" : ""}`
+                      }
                       onClick={onNavigate}
                     >
-                      <span className="app-nav__dot" aria-hidden />
-                      <span className="app-nav__project-name">{p.name}</span>
+                      All projects
                     </NavLink>
                   </li>
-                ))}
-                {projectsQuery.isLoading ? (
-                  <li className="app-nav__hint muted">Loading…</li>
-                ) : null}
-                {projectsQuery.isSuccess && (projectsQuery.data?.length ?? 0) === 0 ? (
-                  <li className="app-nav__hint muted">No projects yet</li>
-                ) : null}
-                <li>
-                  <Link to="/projects/new" className="app-nav__project" onClick={onNavigate}>
-                    <NavIcon icon={shellIcons.add} className="app-nav__inline-icon" />
-                    New project
-                  </Link>
-                </li>
-              </ul>
+                  <SortableContext items={projectIds} strategy={verticalListSortingStrategy}>
+                    {projects.map((p) => (
+                      <SortableProjectNavItem key={p.id} project={p} onNavigate={onNavigate} />
+                    ))}
+                  </SortableContext>
+                  {projectsQuery.isLoading ? (
+                    <li className="app-nav__hint muted">Loading…</li>
+                  ) : null}
+                  {projectsQuery.isSuccess && projects.length === 0 ? (
+                    <li className="app-nav__hint muted">No projects yet</li>
+                  ) : null}
+                  <li>
+                    <Link to="/projects/new" className="app-nav__project" onClick={onNavigate}>
+                      <NavIcon icon={shellIcons.add} className="app-nav__inline-icon" />
+                      New project
+                    </Link>
+                  </li>
+                </ul>
+              </DndContext>
             ) : null}
           </div>
         )}

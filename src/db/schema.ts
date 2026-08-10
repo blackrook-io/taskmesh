@@ -33,6 +33,8 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   description: text("description"),
   status: text("status").notNull().default("idea"),
+  /** Manual list order (left nav / project list). */
+  sortOrder: integer("sort_order").notNull().default(0),
   /** Set when an idea was converted into this project. */
   sourceIdeaId: integer("source_idea_id").references(() => ideas.id, {
     onDelete: "set null",

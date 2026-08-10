@@ -616,6 +616,19 @@ a.app-nav__item.active {
   font-size: 0.85rem;
 }
 
+.app-nav__projects .app-nav__project:has(.app-nav__dot) {
+  cursor: grab;
+  touch-action: none;
+}
+
+.app-nav__projects .app-nav__project.is-dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  z-index: 1;
+}
+
 .app-nav__project:hover {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 10%, transparent);

@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -6,6 +6,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
+import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
@@ -29,13 +30,20 @@ const projectPatch = z.object({
   status: projectStatus.optional(),
 });
 
+const reorderBody = z.object({
+  orderedProjectIds: z.array(z.number().int().positive()),
+});
+
 const idParam = z.coerce.number().int().positive();
 
 export const projectsRouter = Router();
 
 projectsRouter.get("/", async (_req, res) => {
   try {
-    const rows = await db.select().from(schema.projects).orderBy(desc(schema.projects.updatedAt));
+    const rows = await db
+      .select()
+      .from(schema.projects)
+      .orderBy(asc(schema.projects.sortOrder), asc(schema.projects.id));
     res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
@@ -46,6 +54,7 @@ projectsRouter.post("/", async (req, res) => {
   try {
     const parsed = projectBody.parse(req.body);
     const number = await allocateProjectNumber(db);
+    const sortOrder = await nextProjectSortOrder(db);
     const [row] = await db
       .insert(schema.projects)
       .values({
@@ -53,6 +62,7 @@ projectsRouter.post("/", async (req, res) => {
         name: parsed.name,
         description: parsed.description ?? null,
         status: parsed.status ?? "idea",
+        sortOrder,
       })
       .returning();
     if (!row) {
@@ -61,6 +71,35 @@ projectsRouter.post("/", async (req, res) => {
     }
     await ensureProjectModules(db, row.id);
     res.status(201).json({ data: row });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+projectsRouter.patch("/reorder", async (req, res) => {
+  try {
+    const { orderedProjectIds } = reorderBody.parse(req.body);
+    const existing = await db.select({ id: schema.projects.id }).from(schema.projects);
+    const allowed = new Set(existing.map((r) => r.id));
+    if (
+      orderedProjectIds.length !== allowed.size ||
+      orderedProjectIds.some((id) => !allowed.has(id))
+    ) {
+      sendError(res, 400, "invalid_reorder", "orderedProjectIds must list every project exactly once");
+      return;
+    }
+    for (let i = 0; i < orderedProjectIds.length; i++) {
+      const id = orderedProjectIds[i]!;
+      await db
+        .update(schema.projects)
+        .set({ sortOrder: i, updatedAt: new Date() })
+        .where(eq(schema.projects.id, id));
+    }
+    const rows = await db
+      .select()
+      .from(schema.projects)
+      .orderBy(asc(schema.projects.sortOrder), asc(schema.projects.id));
+    res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
   }

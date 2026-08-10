@@ -1,0 +1,30 @@
+# Project left-nav drag reorder
+
+## Goal
+
+Users can reorder Projects by dragging in the expanded left-most nav (`AppNav`). DnD UI exists **only** there. Order is persisted and returned by `GET /api/v1/projects`.
+
+## Branch
+
+`phase-project-nav-reorder`
+
+## Backend
+
+1. Add `projects.sort_order` (not null, default 0).
+2. Migration backfills existing rows to `0..n-1` by current `updated_at DESC`.
+3. `GET /` orders by `sortOrder`, `id`.
+4. `POST /` appends with `max(sortOrder) + 1`.
+5. `PATCH /reorder` with `{ orderedProjectIds }` before `/:id` routes.
+6. Update `docs/database/`; sync schema docs after migrate.
+
+## Frontend
+
+1. `@dnd-kit` sortable project rows in expanded AppNav only.
+2. “All projects” / “New project” stay outside the sortable set.
+3. Optimistic React Query cache update + PATCH reorder; invalidate on failure.
+
+## Out of scope
+
+- DnD on All projects grid or other nav sections.
+- Status grouping / pinning.
+- Single-entity PATCH `sortOrder`.

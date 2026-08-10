@@ -11,6 +11,7 @@ import {
 } from "../../lib/immutableFields.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
+import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { getCurrentUserId } from "../../services/users.js";
 import {
@@ -276,6 +277,7 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
 
     try {
       const number = await allocateProjectNumber(db);
+      const sortOrder = await nextProjectSortOrder(db);
       const [row] = await db
         .insert(schema.projects)
         .values({
@@ -284,6 +286,7 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
           description,
           status,
           sourceIdeaId: typeof sourceIdeaId === "number" ? sourceIdeaId : null,
+          sortOrder,
         })
         .returning();
       if (!row) {

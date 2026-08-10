@@ -23,6 +23,7 @@ erDiagram
     text name
     text description
     text status
+    int sort_order
     int source_idea_id FK
   }
   project_phases {
@@ -79,6 +80,7 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 | `name` | text | no | — | |
 | `description` | text | yes | — | |
 | `status` | text | no | `'idea'` | Lifecycle / status string used by the app |
+| `sort_order` | integer | no | `0` | Manual list order (left nav / project list) |
 | `source_idea_id` | integer | yes | — | FK → `ideas.id` |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |

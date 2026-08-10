@@ -13,6 +13,7 @@ export type Project = {
   name: string;
   description: string | null;
   status: string;
+  sortOrder: number;
   sourceIdeaId: number | null;
   createdAt: string;
   updatedAt: string;
