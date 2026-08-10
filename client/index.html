@@ -8,8 +8,17 @@
     <script>
       window.EXCALIDRAW_ASSET_PATH = "/excalidraw-assets/";
       try {
-        var t = localStorage.getItem("taskmesh.theme");
         var ok = { green: 1, blue: 1, orange: 1, yellow: 1, purple: 1, red: 1 };
+        var t = localStorage.getItem("taskmesh.theme");
+        var separate = localStorage.getItem("taskmesh.separateProjectThemes") === "1";
+        if (separate) {
+          try {
+            var sticky = JSON.parse(localStorage.getItem("taskmesh.stickyProjectTheme") || "null");
+            if (sticky && ok[sticky.theme]) t = sticky.theme;
+          } catch (e2) {
+            /* ignore sticky parse */
+          }
+        }
         document.documentElement.dataset.theme = ok[t] ? t : "green";
       } catch (e) {
         document.documentElement.dataset.theme = "green";

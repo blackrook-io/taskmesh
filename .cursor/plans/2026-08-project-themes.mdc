@@ -1,0 +1,35 @@
+# Per-project themes (Settings)
+
+## Decisions (locked)
+
+- **Storage:** device-local `localStorage`, same as today’s platform theme (no DB/API).
+- **Project list:** all projects (`GET /api/v1/projects`); app is single-user with no ACL.
+- **Sticky apply:** with Separate Project Themes **on**, entering `/projects/:id` for a project that has an **explicit** theme override sets that theme as the active UI theme and **keeps it** on Home/Ideas/elsewhere until the user enters **another** project that also has an explicit override, or turns the option **off** (then platform theme only).
+- Projects with **no** override do not change the sticky theme (effective default in Settings UI = current platform theme).
+- Spelling in UI: **Separate** (not “Seperate”).
+
+## Branch
+
+- `phase-10-project-themes` from updated `main`.
+
+## Behavior
+
+| Control | Effect |
+|---------|--------|
+| Platform ThemeSwitcher | Updates `taskmesh.theme` only. Re-applies immediately if Separate is off **or** no sticky theme is active. |
+| Separate Project Themes checkbox | Off → platform theme everywhere, clear sticky. On → show per-project pickers; sticky rules above. |
+| Per-project ThemeSwitcher | Writes override for that project id; if that project is the current sticky source (or user is on its page), apply immediately. Clearing back to “same as platform” removes the override. |
+
+## Storage keys
+
+- `taskmesh.theme` — platform
+- `taskmesh.separateProjectThemes` — `"1"` / `"0"`
+- `taskmesh.projectThemes` — `{ [projectId: string]: ThemeId }` explicit overrides only
+- `taskmesh.stickyProjectTheme` — `{ projectId, theme }` while Separate is on
+
+## Files
+
+- `client/src/lib/theme.ts`, `themeContext.ts`, `ThemeProvider.tsx`
+- `client/src/components/shell/ThemeSwitcher.tsx`, `SettingsModal.tsx`
+- `client/src/index.html`, `client/src/index.css`
+- Route sync in ThemeProvider (under Router via Layout)

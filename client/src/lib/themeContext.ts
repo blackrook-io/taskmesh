@@ -2,8 +2,16 @@ import { createContext, useContext } from "react";
 import type { ThemeId } from "./theme";
 
 export type ThemeContextValue = {
+  /** Currently applied theme (document `data-theme`). */
   theme: ThemeId;
+  /** @deprecated Prefer `setPlatformTheme` — kept as alias for platform preference. */
   setTheme: (theme: ThemeId) => void;
+  platformTheme: ThemeId;
+  setPlatformTheme: (theme: ThemeId) => void;
+  separateProjectThemes: boolean;
+  setSeparateProjectThemes: (enabled: boolean) => void;
+  getProjectTheme: (projectId: number) => ThemeId | null;
+  setProjectTheme: (projectId: number, theme: ThemeId | null) => void;
 };
 
 export const ThemeContext = createContext<ThemeContextValue | null>(null);

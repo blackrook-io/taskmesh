@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { NavIcon } from "./NavIcon";
 import { shellIcons } from "./shellIcons";
 import { ThemeSwitcher } from "./ThemeSwitcher";
@@ -13,6 +14,9 @@ import {
   type SettingsSection,
   useSettings,
 } from "../../lib/settings";
+import { useTheme } from "../../lib/themeContext";
+import { apiJson } from "../../api/client";
+import type { Project } from "../../types";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 
 const SECTION_ICONS: Record<SettingsSection, IconDefinition> = {
@@ -24,12 +28,83 @@ const SECTION_ICONS: Record<SettingsSection, IconDefinition> = {
 };
 
 function AppearancePanel() {
+  const {
+    platformTheme,
+    setPlatformTheme,
+    separateProjectThemes,
+    setSeparateProjectThemes,
+    getProjectTheme,
+    setProjectTheme,
+  } = useTheme();
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    enabled: separateProjectThemes,
+    queryFn: async () => {
+      const res = await apiJson<{ data: Project[] }>("/api/v1/projects");
+      return res.data;
+    },
+  });
+
   return (
     <div className="settings-panel">
       <p className="muted" style={{ marginTop: 0 }}>
         Dark themes with different accent colors. Preference is saved on this device.
       </p>
-      <ThemeSwitcher />
+      <ThemeSwitcher
+        label="Platform theme"
+        aria-label="Platform theme"
+        value={platformTheme}
+        onChange={setPlatformTheme}
+      />
+
+      <label className="appearance-separate">
+        <input
+          type="checkbox"
+          checked={separateProjectThemes}
+          onChange={(e) => setSeparateProjectThemes(e.target.checked)}
+        />
+        <span>Separate Project Themes</span>
+      </label>
+
+      {separateProjectThemes ? (
+        <div className="appearance-project-themes">
+          <p className="muted appearance-project-themes__hint">
+            Set a theme per project. Defaults match the platform theme. Entering a project with its
+            own theme keeps that look until you open another themed project or turn this off.
+          </p>
+          {projectsQuery.isLoading ? <p className="muted">Loading projects…</p> : null}
+          {projectsQuery.isError ? (
+            <p className="muted">Could not load projects.</p>
+          ) : null}
+          {projectsQuery.data != null && projectsQuery.data.length === 0 ? (
+            <p className="muted">No projects yet.</p>
+          ) : null}
+          {projectsQuery.data != null && projectsQuery.data.length > 0 ? (
+            <ul className="appearance-project-themes__list">
+              {projectsQuery.data.map((project) => {
+                const override = getProjectTheme(project.id);
+                const value = override ?? platformTheme;
+                return (
+                  <li key={project.id} className="appearance-project-themes__row">
+                    <div className="appearance-project-themes__name">
+                      <span className="appearance-project-themes__number">#{project.number}</span>
+                      <span>{project.name}</span>
+                    </div>
+                    <ThemeSwitcher
+                      compact
+                      label=""
+                      aria-label={`Theme for ${project.name}`}
+                      value={value}
+                      onChange={(theme) => setProjectTheme(project.id, theme)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
