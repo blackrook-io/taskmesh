@@ -1,0 +1,37 @@
+# T0072 — Project Overview / Document full display
+
+## Goal
+
+Project Overview description and Project Documents should show their full Markdown content without a fixed-height resizable editor box. The page (or viewport) scrolls when content is longer than the screen; no drag-resize handle on these surfaces.
+
+## Decisions (from interview)
+
+1. **Scope:** Overview + Documents only. Leave Ideas, Wiki, Task notes, boards, etc. on the existing fixed/resizable height behavior.
+2. **Modes:** Apply to both edit and read-only/preview for these surfaces.
+3. **Resize handle:** Remove on these surfaces. Vertical scrolling (page/viewport) is the overflow mechanism when needed.
+4. **Focus / Expand:** Kept (approved with defaults). Fullscreen Focus still available on Overview/Documents; in Focus mode the editor uses an inner scrollbar.
+
+## Approach
+
+1. Add an `autoHeight` prop (name flexible) on shared `MarkdownEditor`:
+   - No fixed `height` on the surface; height follows content.
+   - Hide/disable the vertical resize handle and related drag/clamp logic for that instance.
+   - Surface overflow visible / not an inner scroll trap so the document page scrolls naturally when content exceeds the viewport.
+   - Sensible minimum height for empty editors so empty Overview/Documents still look usable.
+2. Wire `autoHeight` on `ProjectDetailPage`:
+   - Overview description (edit + `readOnly`).
+   - Document body editor.
+3. CSS: support class (e.g. `.md-editor--auto-height`) so surface/prose min-height and overflow behave correctly without breaking `fill` / fixed-height callers.
+4. Do **not** change other `MarkdownEditor` call sites.
+
+## Out of scope
+
+- Ideas, Wiki, TaskBoard notes, Kanban, TodoList, TaskHistory editors.
+- Changing Focus mode behavior unless requested at approval.
+- Schema / API changes.
+
+## QA follow-ups
+
+- Removed the bordered/rounded “box” chrome around Overview and Document `autoHeight` markdown (content sits flush; Focus mode still uses the framed fullscreen overlay). Toolbar keeps a light bordered bar when editing outside Focus.
+- Restored the outline/rounded box **only while actively editing** (`md-editor--editing`). Preview/read-only stays flush. Wiki view (not page-edit) uses `autoHeight` + readonly unframed styles so Documents/Wiki have no border when not editing.
+

@@ -1259,6 +1259,77 @@ textarea.raw-md {
   overflow: auto;
 }
 
+/* Content-sized editors (Overview / Documents): page scrolls instead of inner resize. */
+.md-editor--auto-height {
+  overflow: visible;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.md-editor--auto-height .md-editor__surface {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 8rem;
+  overflow: visible;
+  background: transparent;
+}
+
+.md-editor--auto-height .tiptap,
+.md-editor--auto-height .ProseMirror {
+  min-height: 8rem;
+  padding-inline: 0;
+}
+
+/* Preview (not actively editing): light toolbar chrome only when toolbar is present. */
+.md-editor--auto-height.md-editor--previewing .md-toolbar {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 0.35rem;
+}
+
+/* Edit mode: restore outlined rounded box around content + toolbar. */
+.md-editor--auto-height.md-editor--editing {
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.md-editor--auto-height.md-editor--editing .md-editor__surface {
+  background: var(--bg);
+}
+
+.md-editor--auto-height.md-editor--editing .tiptap,
+.md-editor--auto-height.md-editor--editing .ProseMirror {
+  padding-inline: 0.7rem;
+}
+
+.md-editor--auto-height.md-editor--focus {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.md-editor--auto-height.md-editor--focus .md-editor__surface {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.md-editor--auto-height.md-editor--focus .tiptap,
+.md-editor--auto-height.md-editor--focus .ProseMirror {
+  padding-inline: 0.7rem;
+}
+
+.md-editor--auto-height.md-editor--focus .md-toolbar {
+  border: none;
+  border-radius: 0;
+  margin-top: 0;
+}
+
 .md-editor--height-locked .md-editor__surface {
   flex: 0 0 auto;
   min-height: 0;
@@ -4580,6 +4651,12 @@ a:focus-visible {
 
 .btn-icon svg {
   display: block;
+}
+
+.md-editor--readonly {
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .md-editor--readonly .md-editor__surface {

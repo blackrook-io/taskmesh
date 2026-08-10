@@ -479,7 +479,7 @@ export function ProjectDetailPage() {
                 </div>
                 <div className="field">
                   <label>Description</label>
-                  <MarkdownEditor value={description} onChange={setDescription} height={280} />
+                  <MarkdownEditor value={description} onChange={setDescription} autoHeight />
                 </div>
               </>
             ) : (
@@ -490,7 +490,7 @@ export function ProjectDetailPage() {
                 <div className="field field--tags-below">
                   <TagInput entityType="project" entityId={projectId} readOnly />
                 </div>
-                <MarkdownEditor value={description} onChange={() => undefined} height={280} readOnly />
+                <MarkdownEditor value={description} onChange={() => undefined} autoHeight readOnly />
               </>
             )}
             {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
@@ -845,7 +845,7 @@ function DocumentEditor({
       </div>
       <div className="field">
         <label>Body</label>
-        <MarkdownEditor value={body} onChange={setBody} height={420} />
+        <MarkdownEditor value={body} onChange={setBody} autoHeight />
       </div>
       <button type="button" className="btn primary" disabled={busy} onClick={() => onSave(title, body)}>
         Save document

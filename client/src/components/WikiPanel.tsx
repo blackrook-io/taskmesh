@@ -581,7 +581,7 @@ export function WikiPanel({
                 <div className="field field--tags-below">
                   <TagInput entityType="document" entityId={detailQuery.data.document.id} readOnly />
                 </div>
-                <MarkdownEditor value={bodyDraft} onChange={() => undefined} height={420} readOnly />
+                <MarkdownEditor value={bodyDraft} onChange={() => undefined} autoHeight readOnly />
               </>
             )}
           </>

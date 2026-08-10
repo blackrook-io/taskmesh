@@ -55,6 +55,11 @@ type Props = {
   maxHeight?: number;
   /** Grow to fill a flex parent instead of a fixed height (until the user resizes). */
   fill?: boolean;
+  /**
+   * Size the surface to content (no fixed height / resize handle).
+   * Page/viewport scrolls when content is long. Focus mode still uses an inner scrollbar.
+   */
+  autoHeight?: boolean;
   enableImageUpload?: boolean;
   placeholder?: string;
   /** Preview-only: no toolbar, not editable. */
@@ -130,6 +135,7 @@ export function MarkdownEditor({
   minHeight: minHeightProp,
   maxHeight: maxHeightProp = DEFAULT_MAX_HEIGHT,
   fill = false,
+  autoHeight = false,
   enableImageUpload = true,
   placeholder = "Write Markdown…",
   readOnly = false,
@@ -161,12 +167,12 @@ export function MarkdownEditor({
   navigateRef.current = navigate;
 
   useEffect(() => {
-    if (heightLocked) return;
+    if (autoHeight || heightLocked) return;
     setSurfaceHeight(clampEditorHeight(height, minHeight, maxHeight));
-  }, [height, heightLocked, maxHeight, minHeight]);
+  }, [autoHeight, height, heightLocked, maxHeight, minHeight]);
 
-  const useFixedHeight = !focusMode && (!fill || heightLocked);
-  const canResize = !focusMode;
+  const useFixedHeight = !autoHeight && !focusMode && (!fill || heightLocked);
+  const canResize = !autoHeight && !focusMode;
 
   const activateEdit = () => {
     if (readOnly) return;
@@ -376,9 +382,11 @@ export function MarkdownEditor({
         "md-editor",
         focusMode ? "md-editor--focus" : null,
         readOnly ? "md-editor--readonly" : null,
-        fill && !heightLocked ? "md-editor--fill" : null,
-        heightLocked ? "md-editor--height-locked" : null,
+        autoHeight ? "md-editor--auto-height" : null,
+        fill && !heightLocked && !autoHeight ? "md-editor--fill" : null,
+        heightLocked && !autoHeight ? "md-editor--height-locked" : null,
         dragging ? "md-editor--resizing" : null,
+        mode === "edit" ? "md-editor--editing" : null,
         mode === "preview" && !readOnly ? "md-editor--previewing" : null,
         className,
       ]
