@@ -35,9 +35,11 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
-import type { Project, ProjectPhase, Task } from "../types";
+import type { Project, Task, TaskGroup } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ColorPopover } from "./shared/ColorPopover";
+import { GroupEditModal } from "./GroupEditModal";
+import { FilterIcon } from "./TaskListFilterBar";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { RowTagChips } from "./shared/RowTagChips";
@@ -57,6 +59,14 @@ import {
   type TaskListSortCol,
 } from "../lib/taskListSort";
 import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
+import {
+  emptyTaskListFilter,
+  evaluateTaskListFilter,
+  formatFilterBreadcrumb,
+  isFilterActive,
+  parseTaskListFilterValue,
+  type TaskListFilter,
+} from "../lib/taskListFilter";
 
 export type TaskReorderPayload = {
   orderedTaskIds: number[];
@@ -146,48 +156,69 @@ function childrenOf(tasks: Task[], parentId: number): Task[] {
 }
 
 type FlatRow =
-  | { kind: "phase"; phase: ProjectPhase | null; key: string }
-  | { kind: "task"; task: Task; depth: number; key: string };
+  | { kind: "group"; group: TaskGroup | null; key: string; taskCount: number }
+  | { kind: "task"; task: Task; depth: number; key: string; groupKey: number | "none"; duplicate: boolean };
+
+function groupFilter(group: TaskGroup): TaskListFilter {
+  return parseTaskListFilterValue(group.filter) ?? emptyTaskListFilter();
+}
 
 function buildRows(
-  phases: ProjectPhase[],
+  groups: TaskGroup[],
   tasks: Task[],
+  listFilter: TaskListFilter,
   collapsed: Set<number | "none">,
   sortCol: SortCol | null,
   sortDir: 1 | -1,
 ): FlatRow[] {
-  const orderedPhases = [...phases].sort((a, b) => a.sortOrder - b.sortOrder);
+  const orderedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder);
   const roots = tasks.filter((t) => t.parentId == null);
   const rows: FlatRow[] = [];
+  const appearCount = new Map<number, number>();
+  const byGroup = new Map<number, Task[]>();
 
-  const pushPhase = (phase: ProjectPhase | null, phaseKey: number | "none") => {
+  for (const g of orderedGroups) {
+    const gf = groupFilter(g);
+    const match = isFilterActive(gf) ? evaluateTaskListFilter(roots, gf) : [];
+    byGroup.set(g.id, match);
+    for (const t of match) {
+      appearCount.set(t.id, (appearCount.get(t.id) ?? 0) + 1);
+    }
+  }
+  const claimed = new Set(appearCount.keys());
+  const unassigned = evaluateTaskListFilter(roots, listFilter).filter((t) => !claimed.has(t.id));
+
+  const pushGroup = (group: TaskGroup | null, groupKey: number | "none", groupRoots: Task[]) => {
     rows.push({
-      kind: "phase",
-      phase,
-      key: `phase-${phaseKey}`,
+      kind: "group",
+      group,
+      key: `group-${groupKey}`,
+      taskCount: groupRoots.length,
     });
-    if (collapsed.has(phaseKey)) return;
-    const phaseRoots = sortRoots(
-      roots.filter((t) => (t.phaseId ?? null) === (phase?.id ?? null)),
-      sortCol,
-      sortDir,
-    );
+    if (collapsed.has(groupKey)) return;
+    const sorted = sortRoots(groupRoots, sortCol, sortDir);
     const pushTree = (t: Task, depth: number) => {
-      rows.push({ kind: "task", task: t, depth, key: `task-${t.id}` });
+      rows.push({
+        kind: "task",
+        task: t,
+        depth,
+        key: `task-${groupKey}-${t.id}`,
+        groupKey,
+        duplicate: (appearCount.get(t.id) ?? 0) > 1,
+      });
       for (const c of childrenOf(tasks, t.id)) {
         pushTree(c, depth + 1);
       }
     };
-    for (const root of phaseRoots) {
+    for (const root of sorted) {
       pushTree(root, 0);
     }
   };
 
-  for (const ph of orderedPhases) {
-    pushPhase(ph, ph.id);
+  for (const g of orderedGroups) {
+    pushGroup(g, g.id, byGroup.get(g.id) ?? []);
   }
-  // Always show Unassigned so dump-from-delete and zero-phase projects are visible.
-  pushPhase(null, "none");
+  pushGroup(null, "none", unassigned);
   return rows;
 }
 
@@ -228,7 +259,6 @@ export function StateCheckbox({
 
 export function TaskEditorFields({
   task,
-  phases: phasesProp,
   allTasks,
   onSavePatch,
   onRequestClose,
@@ -237,7 +267,6 @@ export function TaskEditorFields({
   onOpenTask,
 }: {
   task: Task;
-  phases: ProjectPhase[];
   allTasks?: Task[];
   onSavePatch: (
     patch: TaskPatch,
@@ -300,22 +329,6 @@ export function TaskEditorFields({
       return res.data;
     },
   });
-
-  const phasesQuery = useQuery({
-    queryKey: ["phases", projectId],
-    enabled: projectId != null,
-    queryFn: async () => {
-      const res = await apiJson<{ data: ProjectPhase[] }>(
-        `/api/v1/projects/${projectId}/phases`,
-      );
-      return res.data;
-    },
-  });
-
-  const phases =
-    projectId == null
-      ? []
-      : (phasesQuery.data ?? (projectId === task.projectId ? phasesProp : []));
 
   const knownChildren = (allTasks ?? []).filter((t) => t.parentId === task.id);
   const childrenQuery = useQuery({
@@ -543,29 +556,7 @@ export function TaskEditorFields({
                 {p.name}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor={`t-phase-${task.id}`}>Phase</label>
-          <select
-            id={`t-phase-${task.id}`}
-            value={phaseId ?? ""}
-            disabled={projectId == null}
-            onChange={(e) => {
-              const v = e.target.value;
-              const nextPhase = v ? Number(v) : null;
-              const prev = { ...currentSnap(), phaseId };
-              setPhaseId(nextPhase);
-              void commit(prev, { phaseId: nextPhase });
-            }}
-          >
-            <option value="">{projectId == null ? "—" : "Unassigned"}</option>
-            {phases.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            </select>
         </div>
         <div className="field">
           <label htmlFor={`t-state-${task.id}`}>State</label>
@@ -797,19 +788,23 @@ export function TaskEditorFields({
 function SortableTaskRow({
   task,
   depth,
+  duplicate,
+  groupKey,
   onOpen,
   onCycleState,
   onPatch,
 }: {
   task: Task;
   depth: number;
+  duplicate: boolean;
+  groupKey: number | "none";
   onOpen: () => void;
   onCycleState: () => void;
   onPatch: (patch: TaskPatch) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `task-${task.id}`,
-    data: { type: "task", taskId: task.id, parentId: task.parentId, phaseId: task.phaseId },
+    id: `task-${groupKey}-${task.id}`,
+    data: { type: "task", taskId: task.id, parentId: task.parentId, groupKey },
   });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -838,6 +833,11 @@ function SortableTaskRow({
       </span>
       <span className="task-list-row__title">
         <span className="task-list-row__title-text">{task.title}</span>
+        {duplicate ? (
+          <span className="task-list-row__duplicate" title="Also shown in another group">
+            Duplicate
+          </span>
+        ) : null}
         <RowTagChips entityType="task" entityId={task.id} />
       </span>
       <span className={taskStateClass("task-list-row__state", task.state)}>
@@ -868,74 +868,49 @@ function SortableTaskRow({
   );
 }
 
-function SortablePhaseHeader({
-  phase,
+function SortableGroupHeader({
+  group,
   collapsed,
   taskCount,
   onToggle,
-  onRename,
+  onOpenEdit,
   onRequestDelete,
 }: {
-  phase: ProjectPhase | null;
+  group: TaskGroup | null;
   collapsed: boolean;
   taskCount: number;
   onToggle: () => void;
-  onRename?: (name: string) => void;
+  onOpenEdit?: () => void;
   onRequestDelete?: () => void;
 }) {
-  const sortableId = phase ? `phase-${phase.id}` : "phase-none";
+  const sortableId = group ? `group-${group.id}` : "group-none";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sortableId,
-    data: { type: "phase", phaseId: phase?.id ?? null },
-    disabled: phase == null,
+    data: { type: "group", groupId: group?.id ?? null },
+    disabled: group == null,
   });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    ...(group?.color
+      ? { background: `color-mix(in srgb, ${group.color} 42%, var(--bg-elevated, var(--bg)) 58%)` }
+      : {}),
   };
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(phase?.name ?? "Unassigned");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setName(phase?.name ?? "Unassigned");
-  }, [phase?.name]);
-
-  useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
-
-  const commitRename = () => {
-    if (!phase || !onRename) {
-      setEditing(false);
-      return;
-    }
-    const next = name.trim();
-    if (!next) {
-      setName(phase.name);
-      setEditing(false);
-      return;
-    }
-    if (next !== phase.name) onRename(next);
-    setEditing(false);
-  };
-
-  const cancelRename = () => {
-    setName(phase?.name ?? "Unassigned");
-    setEditing(false);
-  };
+  const gf = group ? groupFilter(group) : emptyTaskListFilter();
+  const filterOn = group != null && isFilterActive(gf);
+  const breadcrumb = filterOn ? formatFilterBreadcrumb(gf) : "";
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-phase-header${phase == null ? " task-phase-header--unassigned" : ""}${isDragging ? " dragging" : ""}`}
+      className={`task-phase-header${group == null ? " task-phase-header--unassigned" : ""}${isDragging ? " dragging" : ""}`}
     >
       <button type="button" className="task-phase-header__collapse" onClick={onToggle} aria-expanded={!collapsed}>
         {collapsed ? "▸" : "▾"}
       </button>
-      {phase ? (
-        <span className="task-drag-handle" {...attributes} {...listeners} title="Drag phase">
+      {group ? (
+        <span className="task-drag-handle" {...attributes} {...listeners} title="Drag group">
           ::
         </span>
       ) : (
@@ -943,49 +918,34 @@ function SortablePhaseHeader({
           ::
         </span>
       )}
-      {phase && onRename && editing ? (
-        <input
-          ref={inputRef}
-          className="task-phase-header__name"
-          value={name}
-          aria-label="Phase name"
-          onChange={(e) => setName(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitRename();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              cancelRename();
-            }
-          }}
-        />
-      ) : (
-        <span
-          className="task-phase-header__name"
-          title={phase && onRename ? "Double-click to rename" : undefined}
-          onDoubleClick={
-            phase && onRename
-              ? (e) => {
-                  e.preventDefault();
-                  setEditing(true);
-                }
-              : undefined
-          }
-        >
-          {phase?.name ?? "Unassigned"}
-        </span>
-      )}
+      <span
+        className="task-phase-header__name"
+        title={group && onOpenEdit ? "Double-click to edit group" : undefined}
+        onDoubleClick={
+          group && onOpenEdit
+            ? (e) => {
+                e.preventDefault();
+                onOpenEdit();
+              }
+            : undefined
+        }
+      >
+        {group?.name ?? "Unassigned"}
+      </span>
       <span className="task-phase-header__count muted" aria-label={`${taskCount} tasks`}>
         {taskCount}
       </span>
-      {phase && onRequestDelete ? (
+      {filterOn ? (
+        <span className="task-phase-header__filter" title={breadcrumb} aria-label={`Filter: ${breadcrumb}`}>
+          <FilterIcon />
+        </span>
+      ) : null}
+      {group && onRequestDelete ? (
         <button
           type="button"
           className="btn small ghost task-phase-header__delete"
-          title="Delete phase"
-          aria-label={`Delete phase ${phase.name}`}
+          title="Delete group"
+          aria-label={`Delete group ${group.name}`}
           onClick={(e) => {
             e.stopPropagation();
             onRequestDelete();
@@ -1000,16 +960,20 @@ function SortablePhaseHeader({
 
 type Props = {
   projectId: number;
-  phases: ProjectPhase[];
+  groups: TaskGroup[];
   tasks: Task[];
+  listFilter: TaskListFilter;
   /** When set, open the Edit Task modal for this task (e.g. after create). */
   requestOpenTask?: Task | null;
   onRequestOpenTaskConsumed?: () => void;
   onReorder: (payload: TaskReorderPayload) => Promise<void>;
-  onReorderPhases: (orderedPhaseIds: number[]) => Promise<void>;
-  onRenamePhase: (phaseId: number, name: string) => Promise<void>;
-  onCreatePhase: (name: string) => Promise<void>;
-  onDeletePhase: (phaseId: number) => Promise<void>;
+  onReorderGroups: (orderedGroupIds: number[]) => Promise<void>;
+  onPatchGroup: (
+    groupId: number,
+    patch: { name?: string; color?: string | null; filter?: TaskListFilter | null },
+  ) => Promise<void>;
+  onCreateGroup: (name: string) => Promise<void>;
+  onDeleteGroup: (groupId: number) => Promise<void>;
   onPatchTask: (
     taskId: number,
     patch: Record<string, unknown>,
@@ -1019,15 +983,16 @@ type Props = {
 
 export function TaskBoard({
   projectId,
-  phases,
+  groups,
   tasks,
+  listFilter,
   requestOpenTask = null,
   onRequestOpenTaskConsumed,
   onReorder,
-  onReorderPhases,
-  onRenamePhase,
-  onCreatePhase,
-  onDeletePhase,
+  onReorderGroups,
+  onPatchGroup,
+  onCreateGroup,
+  onDeleteGroup,
   onPatchTask,
 }: Props) {
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
@@ -1039,14 +1004,15 @@ export function TaskBoard({
     sortStorageKey,
     DEFAULT_PROJECT_TASK_LIST_SORT,
   );
-  const [newPhaseName, setNewPhaseName] = useState("");
-  const [pendingPhaseDelete, setPendingPhaseDelete] = useState<ProjectPhase | null>(null);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [pendingGroupDelete, setPendingGroupDelete] = useState<TaskGroup | null>(null);
+  const [editGroup, setEditGroup] = useState<TaskGroup | null>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const boardSortCol: SortCol | null = sortCol === "project" ? null : sortCol;
-    return buildRows(phases, tasks, collapsed, boardSortCol, sortDir);
-  }, [phases, tasks, collapsed, sortCol, sortDir]);
+    return buildRows(groups, tasks, listFilter, collapsed, boardSortCol, sortDir);
+  }, [groups, tasks, listFilter, collapsed, sortCol, sortDir]);
 
   const onRequestOpenTaskConsumedRef = useRef(onRequestOpenTaskConsumed);
   onRequestOpenTaskConsumedRef.current = onRequestOpenTaskConsumed;
@@ -1064,14 +1030,7 @@ export function TaskBoard({
   }, [fromList]);
   const modalTask = fromList ?? (modalTaskId != null ? modalTaskHeld : null);
 
-  const sortableIds = useMemo(() => {
-    const ids: string[] = [];
-    for (const r of rows) {
-      if (r.kind === "phase") ids.push(r.key);
-      else ids.push(r.key);
-    }
-    return ids;
-  }, [rows]);
+  const sortableIds = useMemo(() => rows.map((r) => r.key), [rows]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -1084,18 +1043,24 @@ export function TaskBoard({
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const activeData = active.data.current as { type?: string; taskId?: number; phaseId?: number | null } | undefined;
-    const overData = over.data.current as { type?: string; taskId?: number; phaseId?: number | null } | undefined;
+    const activeData = active.data.current as
+      | { type?: string; taskId?: number; groupKey?: number | "none"; groupId?: number | null }
+      | undefined;
+    const overData = over.data.current as
+      | { type?: string; taskId?: number; groupKey?: number | "none"; groupId?: number | null }
+      | undefined;
 
-    if (activeData?.type === "phase" && typeof activeData.phaseId === "number") {
-      const phaseIds = phases.map((p) => p.id);
-      const from = phaseIds.indexOf(activeData.phaseId);
+    if (activeData?.type === "group" && typeof activeData.groupId === "number") {
+      const groupIds = groups.map((g) => g.id);
+      const from = groupIds.indexOf(activeData.groupId);
       let to = from;
-      if (overData?.type === "phase" && typeof overData.phaseId === "number") {
-        to = phaseIds.indexOf(overData.phaseId);
+      if (overData?.type === "group" && typeof overData.groupId === "number") {
+        to = groupIds.indexOf(overData.groupId);
+      } else if (overData?.type === "task" && typeof overData.groupKey === "number") {
+        to = groupIds.indexOf(overData.groupKey);
       }
       if (from < 0 || to < 0 || from === to) return;
-      await onReorderPhases(arrayMove(phaseIds, from, to));
+      await onReorderGroups(arrayMove(groupIds, from, to));
       return;
     }
 
@@ -1121,20 +1086,23 @@ export function TaskBoard({
         return;
       }
 
-      let targetPhaseId: number | null | undefined = task.phaseId;
-      if (overData?.type === "phase") {
-        targetPhaseId = overData.phaseId ?? null;
-      } else if (overData?.type === "task" && overData.taskId != null) {
-        const overTask = tasks.find((t) => t.id === overData.taskId);
-        if (overTask) targetPhaseId = overTask.phaseId;
+      const fromKey = activeData.groupKey;
+      let toKey: number | "none" | undefined = fromKey;
+      if (overData?.type === "group") {
+        toKey = overData.groupId ?? "none";
+      } else if (overData?.type === "task") {
+        toKey = overData.groupKey;
       }
+      if (toKey !== fromKey) return;
 
-      const rootsInPhase = tasks
-        .filter((t) => t.parentId == null && (t.phaseId ?? null) === (targetPhaseId ?? null))
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)
-        .map((t) => t.id);
+      const sectionRoots = rows
+        .filter(
+          (r): r is Extract<FlatRow, { kind: "task" }> =>
+            r.kind === "task" && r.groupKey === fromKey && r.depth === 0,
+        )
+        .map((r) => r.task.id);
 
-      const without = rootsInPhase.filter((id) => id !== task.id);
+      const without = sectionRoots.filter((id) => id !== task.id);
       let insertAt = without.length;
       if (overData?.type === "task" && overData.taskId != null) {
         const idx = without.indexOf(overData.taskId);
@@ -1144,7 +1112,6 @@ export function TaskBoard({
       await onReorder({
         orderedTaskIds: next,
         parentId: null,
-        phaseId: targetPhaseId ?? null,
       });
     }
   };
@@ -1196,32 +1163,25 @@ export function TaskBoard({
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
           <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
             {rows.map((row) => {
-              if (row.kind === "phase") {
-                const phaseKey: number | "none" = row.phase?.id ?? "none";
-                const taskCount = tasks.filter(
-                  (t) => t.parentId == null && (t.phaseId ?? null) === (row.phase?.id ?? null),
-                ).length;
+              if (row.kind === "group") {
+                const groupKey: number | "none" = row.group?.id ?? "none";
                 return (
-                  <SortablePhaseHeader
+                  <SortableGroupHeader
                     key={row.key}
-                    phase={row.phase}
-                    collapsed={collapsed.has(phaseKey)}
-                    taskCount={taskCount}
+                    group={row.group}
+                    collapsed={collapsed.has(groupKey)}
+                    taskCount={row.taskCount}
                     onToggle={() => {
                       setCollapsed((prev) => {
                         const next = new Set(prev);
-                        if (next.has(phaseKey)) next.delete(phaseKey);
-                        else next.add(phaseKey);
+                        if (next.has(groupKey)) next.delete(groupKey);
+                        else next.add(groupKey);
                         return next;
                       });
                     }}
-                    onRename={
-                      row.phase
-                        ? (name) => void onRenamePhase(row.phase!.id, name)
-                        : undefined
-                    }
+                    onOpenEdit={row.group ? () => setEditGroup(row.group) : undefined}
                     onRequestDelete={
-                      row.phase ? () => setPendingPhaseDelete(row.phase) : undefined
+                      row.group ? () => setPendingGroupDelete(row.group) : undefined
                     }
                   />
                 );
@@ -1231,6 +1191,8 @@ export function TaskBoard({
                   key={row.key}
                   task={row.task}
                   depth={row.depth}
+                  duplicate={row.duplicate}
+                  groupKey={row.groupKey}
                   onOpen={() => setModalTaskId(row.task.id)}
                   onCycleState={() => {
                     const next = nextTaskState(row.task.state);
@@ -1262,23 +1224,23 @@ export function TaskBoard({
       <div className="task-phase-add">
         <input
           type="text"
-          placeholder="New phase name"
-          value={newPhaseName}
-          onChange={(e) => setNewPhaseName(e.target.value)}
+          placeholder="New group name"
+          value={newGroupName}
+          onChange={(e) => setNewGroupName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && newPhaseName.trim()) {
+            if (e.key === "Enter" && newGroupName.trim()) {
               e.preventDefault();
-              void onCreatePhase(newPhaseName.trim()).then(() => setNewPhaseName(""));
+              void onCreateGroup(newGroupName.trim()).then(() => setNewGroupName(""));
             }
           }}
         />
         <button
           type="button"
           className="btn small"
-          disabled={!newPhaseName.trim()}
-          onClick={() => void onCreatePhase(newPhaseName.trim()).then(() => setNewPhaseName(""))}
+          disabled={!newGroupName.trim()}
+          onClick={() => void onCreateGroup(newGroupName.trim()).then(() => setNewGroupName(""))}
         >
-          Add phase
+          Add group
         </button>
       </div>
 
@@ -1300,7 +1262,6 @@ export function TaskBoard({
           <TaskEditorFields
             key={modalTask.id}
             task={modalTask}
-            phases={phases}
             allTasks={tasks}
             onRequestClose={() => {
               setModalTaskId(null);
@@ -1324,6 +1285,16 @@ export function TaskBoard({
         </ElementShell>
       ) : null}
 
+      {editGroup ? (
+        <GroupEditModal
+          group={editGroup}
+          onClose={() => setEditGroup(null)}
+          onSave={async (patch) => {
+            await onPatchGroup(editGroup.id, patch);
+          }}
+        />
+      ) : null}
+
       <ConfirmDialog
         open={completeBlockMsg != null}
         title="Cannot mark Complete"
@@ -1334,25 +1305,20 @@ export function TaskBoard({
         onConfirm={() => setCompleteBlockMsg(null)}
       />
       <ConfirmDialog
-        open={pendingPhaseDelete != null}
-        title="Delete phase?"
+        open={pendingGroupDelete != null}
+        title="Delete group?"
         message={
-          pendingPhaseDelete
-            ? (() => {
-                const n = tasks.filter((t) => t.phaseId === pendingPhaseDelete.id).length;
-                return n === 0
-                  ? `Delete phase “${pendingPhaseDelete.name}”? It has no tasks.`
-                  : `Delete phase “${pendingPhaseDelete.name}”? ${n} task${n === 1 ? "" : "s"} will move to Unassigned.`;
-              })()
+          pendingGroupDelete
+            ? `Delete group “${pendingGroupDelete.name}”? Tasks are not assigned to groups; only this section is removed.`
             : ""
         }
         confirmLabel="Delete"
-        onCancel={() => setPendingPhaseDelete(null)}
+        onCancel={() => setPendingGroupDelete(null)}
         onConfirm={() => {
-          if (!pendingPhaseDelete) return;
-          const id = pendingPhaseDelete.id;
-          setPendingPhaseDelete(null);
-          void onDeletePhase(id);
+          if (!pendingGroupDelete) return;
+          const id = pendingGroupDelete.id;
+          setPendingGroupDelete(null);
+          void onDeleteGroup(id);
         }}
       />
     </>

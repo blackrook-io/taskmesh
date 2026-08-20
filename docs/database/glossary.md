@@ -86,7 +86,7 @@ Do not conflate the two.
 | Pattern | Typical meaning |
 |---------|-----------------|
 | **CASCADE** | Child rows disappear with the parent (project-owned content, board children, activity, …) |
-| **SET NULL** | Optional link cleared (phase, parent task, source idea, avatar, optional image-board project, …) |
+| **SET NULL** | Optional link cleared (parent task, source idea, avatar, optional image-board project, …) |
 | **RESTRICT** | Prevent deleting a user who still authors tasks (`created_by` / `updated_by`) |
 
 Exact FK lists are on the domain pages.

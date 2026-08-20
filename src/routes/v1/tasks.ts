@@ -113,17 +113,6 @@ tasksRouter.post("/", async (req, res) => {
     const actorId = await getCurrentUserId(db);
 
     let phaseId: number | null = parsed.phaseId ?? null;
-    if (parsed.phaseId != null) {
-      const [ph] = await db
-        .select()
-        .from(schema.projectPhases)
-        .where(eq(schema.projectPhases.id, parsed.phaseId));
-      if (!ph || ph.projectId !== projectId) {
-        sendError(res, 400, "invalid_phase", "Phase does not belong to this project");
-        return;
-      }
-      phaseId = ph.id;
-    }
 
     const parentId = parsed.parentId ?? null;
     const parentOk = await assertParentCompatible(db, projectId, parentId);
@@ -208,16 +197,6 @@ tasksRouter.patch("/reorder", async (req, res) => {
       seen.add(tid);
     }
 
-    if (parsed.phaseId !== undefined && parsed.phaseId != null) {
-      const [ph] = await db
-        .select()
-        .from(schema.projectPhases)
-        .where(eq(schema.projectPhases.id, parsed.phaseId));
-      if (!ph || ph.projectId !== projectId) {
-        sendError(res, 400, "invalid_phase", "Phase does not belong to this project");
-        return;
-      }
-    }
 
     for (let i = 0; i < parsed.orderedTaskIds.length; i++) {
       const tid = parsed.orderedTaskIds[i];
@@ -305,17 +284,6 @@ tasksRouter.patch("/:taskId", async (req, res) => {
     if (!hasFieldChange) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
-    }
-
-    if (parsed.phaseId != null) {
-      const [ph] = await db
-        .select()
-        .from(schema.projectPhases)
-        .where(eq(schema.projectPhases.id, parsed.phaseId));
-      if (!ph || ph.projectId !== projectId) {
-        sendError(res, 400, "invalid_phase", "Phase does not belong to this project");
-        return;
-      }
     }
 
     if (parsed.parentId !== undefined) {

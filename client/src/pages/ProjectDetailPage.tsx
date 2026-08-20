@@ -22,9 +22,9 @@ import {
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
-import { evaluateTaskListFilter, storageKeyForProjectTasks } from "../lib/taskListFilter";
+import { storageKeyForProjectTasks } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
-import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TodoList } from "../types";
+import type { Project, ProjectDocument, ProjectModule, Task, TaskGroup, TodoList } from "../types";
 
 type Tab = "overview" | "images" | "settings" | ProjectModuleKey;
 
@@ -149,11 +149,11 @@ export function ProjectDetailPage() {
     },
   });
 
-  const phasesQuery = useQuery({
-    queryKey: ["phases", projectId],
+  const groupsQuery = useQuery({
+    queryKey: ["task-groups", projectId],
     enabled: !invalidId,
     queryFn: async () => {
-      const res = await apiJson<{ data: ProjectPhase[] }>(`/api/v1/projects/${projectId}/phases`);
+      const res = await apiJson<{ data: TaskGroup[] }>(`/api/v1/projects/${projectId}/groups`);
       return res.data;
     },
   });
@@ -220,7 +220,7 @@ export function ProjectDetailPage() {
 
   const project = projectQuery.data;
   const modules = modulesQuery.data ?? [];
-  const phases = phasesQuery.data ?? [];
+  const groups = groupsQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
   const documents = documentsQuery.data ?? [];
 
@@ -230,10 +230,6 @@ export function ProjectDetailPage() {
     applyFilter: applyTaskListFilter,
     clearFilter: clearTaskListFilter,
   } = usePersistedTaskListFilter(taskListFilterKey);
-  const filteredTasks = useMemo(
-    () => evaluateTaskListFilter(tasks, taskListFilter),
-    [tasks, taskListFilter],
-  );
 
   const selectedDoc = useMemo(
     () => documents.find((d) => d.id === selectedDocId) ?? null,
@@ -551,7 +547,7 @@ export function ProjectDetailPage() {
         <div className="card" style={{ marginTop: "1rem" }}>
           <h2 style={{ marginTop: 0 }}>Danger zone</h2>
           <p className="muted" style={{ marginTop: 0 }}>
-            Deleting this project permanently removes its tasks, documents, phases, and other project
+            Deleting this project permanently removes its tasks, documents, groups, and other project
             content. This cannot be undone.
           </p>
           <button type="button" className="btn danger" onClick={() => setDeleteProjectOpen(true)}>
@@ -599,41 +595,40 @@ export function ProjectDetailPage() {
           <div style={{ marginTop: "0.5rem" }}>
             <TaskBoard
               projectId={projectId}
-              phases={phases}
-              tasks={filteredTasks}
+              groups={groups}
+              tasks={tasks}
+              listFilter={taskListFilter}
               requestOpenTask={requestOpenTask}
               onRequestOpenTaskConsumed={() => setRequestOpenTask(null)}
               onReorder={async (payload) => {
                 await reorderTasks.mutateAsync(payload);
               }}
-              onReorderPhases={async (orderedPhaseIds) => {
-                await apiJson(`/api/v1/projects/${projectId}/phases/reorder`, {
+              onReorderGroups={async (orderedGroupIds) => {
+                await apiJson(`/api/v1/projects/${projectId}/groups/reorder`, {
                   method: "PATCH",
-                  body: JSON.stringify({ orderedPhaseIds }),
+                  body: JSON.stringify({ orderedGroupIds }),
                 });
-                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
-                void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+                void qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
               }}
-              onRenamePhase={async (phaseId, name) => {
-                await apiJson(`/api/v1/projects/${projectId}/phases/${phaseId}`, {
+              onPatchGroup={async (groupId, patch) => {
+                await apiJson(`/api/v1/projects/${projectId}/groups/${groupId}`, {
                   method: "PATCH",
-                  body: JSON.stringify({ name }),
+                  body: JSON.stringify(patch),
                 });
-                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
+                void qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
               }}
-              onCreatePhase={async (name) => {
-                await apiJson(`/api/v1/projects/${projectId}/phases`, {
+              onCreateGroup={async (name) => {
+                await apiJson(`/api/v1/projects/${projectId}/groups`, {
                   method: "POST",
                   body: JSON.stringify({ name }),
                 });
-                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
+                void qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
               }}
-              onDeletePhase={async (phaseId) => {
-                await apiJson(`/api/v1/projects/${projectId}/phases/${phaseId}`, {
+              onDeleteGroup={async (groupId) => {
+                await apiJson(`/api/v1/projects/${projectId}/groups/${groupId}`, {
                   method: "DELETE",
                 });
-                void qc.invalidateQueries({ queryKey: ["phases", projectId] });
-                void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+                void qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
               }}
               onPatchTask={async (taskId, patch, opts) => {
                 return patchTask.mutateAsync({
@@ -750,7 +745,6 @@ export function ProjectDetailPage() {
       {tab === "boards" ? (
         <KanbanBoardsPanel
           projectId={projectId}
-          phases={phases}
           initialBoardId={initialBoardId}
           onInitialBoardConsumed={() => clearSearchParam("board")}
         />
@@ -775,7 +769,7 @@ export function ProjectDetailPage() {
       <ConfirmDialog
         open={deleteProjectOpen}
         title="Delete project?"
-        message="This removes tasks, documents, and phases for this project."
+        message="This removes tasks, documents, and groups for this project."
         onCancel={() => setDeleteProjectOpen(false)}
         onConfirm={() => {
           setDeleteProjectOpen(false);

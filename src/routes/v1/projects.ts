@@ -12,7 +12,7 @@ import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
 import { canvasesRouter } from "./canvases.js";
-import { phasesRouter } from "./phases.js";
+import { groupsRouter } from "./groups.js";
 import { tasksRouter } from "./tasks.js";
 import { wikiRouter } from "./wiki.js";
 
@@ -165,7 +165,7 @@ projectsRouter.delete("/:id", async (req, res) => {
   }
 });
 
-projectsRouter.get("/:id/phases", async (req, res) => {
+projectsRouter.get("/:id/groups", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
@@ -175,16 +175,16 @@ projectsRouter.get("/:id/phases", async (req, res) => {
     }
     const rows = await db
       .select()
-      .from(schema.projectPhases)
-      .where(eq(schema.projectPhases.projectId, id))
-      .orderBy(asc(schema.projectPhases.sortOrder));
+      .from(schema.taskGroups)
+      .where(eq(schema.taskGroups.projectId, id))
+      .orderBy(asc(schema.taskGroups.sortOrder));
     res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
   }
 });
 
-projectsRouter.use("/:projectId/phases", phasesRouter);
+projectsRouter.use("/:projectId/groups", groupsRouter);
 projectsRouter.use("/:projectId/tasks", tasksRouter);
 projectsRouter.use("/:projectId/documents", documentsRouter);
 projectsRouter.use("/:projectId/modules", modulesRouter);

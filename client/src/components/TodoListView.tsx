@@ -14,7 +14,7 @@ import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { formatTaskNumber } from "../lib/taskFields";
 import { patchTaskRecord } from "../lib/patchTask";
-import type { Idea, Project, ProjectPhase, Task, TodoListDetail, TodoListItem } from "../types";
+import type { Idea, Project, Task, TodoListDetail, TodoListItem } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { TaskEditorFields } from "./TaskBoard";
 import { ElementShell } from "./shared/ElementShell";
@@ -265,17 +265,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     },
   });
 
-  const phasesQuery = useQuery({
-    queryKey: ["phases", openTaskQuery.data?.projectId],
-    enabled: openTaskQuery.data?.projectId != null,
-    queryFn: async () => {
-      const res = await apiJson<{ data: ProjectPhase[] }>(
-        `/api/v1/projects/${openTaskQuery.data!.projectId}/phases`,
-      );
-      return res.data;
-    },
-  });
-
   if (detailQuery.isLoading) return <p className="muted">Loading list…</p>;
   if (detailQuery.error) return <p role="alert">{(detailQuery.error as Error).message}</p>;
   if (!list) return <p className="muted">List not found.</p>;
@@ -483,7 +472,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
             <TaskEditorFields
               key={openTaskQuery.data.id}
               task={openTaskQuery.data}
-              phases={phasesQuery.data ?? []}
               onRequestClose={() => setOpenItem(null)}
               onDeleted={() => {
                 setOpenItem(null);

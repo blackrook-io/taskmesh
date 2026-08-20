@@ -19,11 +19,13 @@ export type Project = {
   updatedAt: string;
 };
 
-export type ProjectPhase = {
+export type TaskGroup = {
   id: number;
   projectId: number;
   name: string;
   sortOrder: number;
+  color: string | null;
+  filter: { clauses: { field: string; operator: string; value: string }[]; joins: string[] } | null;
   createdAt: string;
   updatedAt: string;
 };

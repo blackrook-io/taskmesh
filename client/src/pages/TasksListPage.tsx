@@ -34,7 +34,7 @@ import {
 } from "../lib/taskListSort";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
-import type { Project, ProjectPhase, Task } from "../types";
+import type { Project, Task } from "../types";
 
 type SortCol = TaskListSortCol;
 
@@ -162,17 +162,6 @@ export function TasksListPage() {
   }, [openParam, modalTaskFromList, setSearchParams]);
 
   const modalTask = modalTaskFromList ?? (modalTaskId != null ? modalTaskHeld : null);
-
-  const phasesQuery = useQuery({
-    queryKey: ["phases", modalTask?.projectId],
-    enabled: modalTask?.projectId != null,
-    queryFn: async () => {
-      const res = await apiJson<{ data: ProjectPhase[] }>(
-        `/api/v1/projects/${modalTask!.projectId}/phases`,
-      );
-      return res.data;
-    },
-  });
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -474,7 +463,6 @@ export function TasksListPage() {
           <TaskEditorFields
             key={modalTask.id}
             task={modalTask}
-            phases={phasesQuery.data ?? []}
             allTasks={tasks}
             onRequestClose={closeModal}
             onDeleted={closeModal}

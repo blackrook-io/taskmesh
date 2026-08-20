@@ -33,7 +33,7 @@ function defaultValueForField(field: FilterField): string {
   return "";
 }
 
-function FilterIcon() {
+export function FilterIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       <path

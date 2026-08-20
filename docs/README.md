@@ -9,7 +9,7 @@ Authoritative Drizzle definitions live in [`src/db/schema.ts`](../src/db/schema.
 | Page | Contents |
 |------|----------|
 | [Database overview](database/overview.md) | Conceptual model, high-level ERD, how to read the docs |
-| [Projects and ideas](database/projects-and-ideas.md) | `ideas`, `projects`, `project_phases` |
+| [Projects and ideas](database/projects-and-ideas.md) | `ideas`, `projects`, `task_groups` |
 | [Tasks](database/tasks.md) | `tasks`, activity, dependencies, description templates |
 | [Content and modules](database/content-and-modules.md) | Documents, uploads, tags, todos, boards, wiki, canvases, image boards |
 | [Platform tables](database/platform.md) | Non-main inventory: users, API keys, system properties, request logs |

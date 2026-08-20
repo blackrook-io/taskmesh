@@ -1,28 +1,28 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiJson } from "../api/client";
-import type { ProjectPhase } from "../types";
+import type { TaskGroup } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 type Props = {
   projectId: number;
-  phases: ProjectPhase[];
+  phases: TaskGroup[];
 };
 
 export function PhaseManager({ projectId, phases }: Props) {
   const qc = useQueryClient();
   const [newName, setNewName] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<ProjectPhase | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TaskGroup | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ["phases", projectId] });
+    void qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
     void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
   };
 
   const create = useMutation({
     mutationFn: async () => {
-      const res = await apiJson<{ data: ProjectPhase }>(`/api/v1/projects/${projectId}/phases`, {
+      const res = await apiJson<{ data: TaskGroup }>(`/api/v1/projects/${projectId}/groups`, {
         method: "POST",
         body: JSON.stringify({ name: newName.trim() }),
       });
@@ -38,8 +38,8 @@ export function PhaseManager({ projectId, phases }: Props) {
 
   const rename = useMutation({
     mutationFn: async ({ id, name }: { id: number; name: string }) => {
-      const res = await apiJson<{ data: ProjectPhase }>(
-        `/api/v1/projects/${projectId}/phases/${id}`,
+      const res = await apiJson<{ data: TaskGroup }>(
+        `/api/v1/projects/${projectId}/groups/${id}`,
         { method: "PATCH", body: JSON.stringify({ name }) },
       );
       return res.data;
@@ -53,7 +53,7 @@ export function PhaseManager({ projectId, phases }: Props) {
 
   const remove = useMutation({
     mutationFn: async (id: number) => {
-      await apiJson(`/api/v1/projects/${projectId}/phases/${id}`, { method: "DELETE" });
+      await apiJson(`/api/v1/projects/${projectId}/groups/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       setPendingDelete(null);
@@ -64,10 +64,10 @@ export function PhaseManager({ projectId, phases }: Props) {
   });
 
   const reorder = useMutation({
-    mutationFn: async (orderedPhaseIds: number[]) => {
-      const res = await apiJson<{ data: ProjectPhase[] }>(
-        `/api/v1/projects/${projectId}/phases/reorder`,
-        { method: "PATCH", body: JSON.stringify({ orderedPhaseIds }) },
+    mutationFn: async (orderedGroupIds: number[]) => {
+      const res = await apiJson<{ data: TaskGroup[] }>(
+        `/api/v1/projects/${projectId}/groups/reorder`,
+        { method: "PATCH", body: JSON.stringify({ orderedGroupIds }) },
       );
       return res.data;
     },

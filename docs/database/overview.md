@@ -18,7 +18,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Main domain** (full physical documentation):
 
-`ideas`, `projects`, `project_phases`, `tasks`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
+`ideas`, `projects`, `task_groups`, `tasks`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
 
 **Non-main** (inventory + minimal on diagrams):
 
@@ -26,12 +26,12 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 ## Conceptual model
 
-At a high level, a **Project** is the hub. An **Idea** can become a project. Projects own phases, tasks, documents, module toggles, boards, wiki nodes, and canvases. Tasks may also exist outside a project (unsorted / list-only). Tags and todo-list rows attach to entities via polymorphic `(entity_type, entity_id)` pairs. Users and API keys support authorship and future auth; they are not the focus of product modeling.
+At a high level, a **Project** is the hub. An **Idea** can become a project. Projects own task groups, tasks, documents, module toggles, boards, wiki nodes, and canvases. Tasks may also exist outside a project (unsorted / list-only). Tags and todo-list rows attach to entities via polymorphic `(entity_type, entity_id)` pairs. Users and API keys support authorship and future auth; they are not the focus of product modeling.
 
 ```mermaid
 erDiagram
   ideas ||--o| projects : "sourceIdea"
-  projects ||--o{ project_phases : has
+  projects ||--o{ task_groups : has
   projects ||--o{ tasks : "may own"
   projects ||--o{ project_documents : has
   projects ||--o{ todo_lists : "may own"
@@ -45,7 +45,6 @@ erDiagram
   tasks ||--o{ tasks : "parent"
   tasks ||--o{ task_activity : has
   tasks ||--o{ task_dependencies : "depends on / required by"
-  project_phases ||--o{ tasks : "optional phase"
 
   boards ||--o{ board_columns : has
   boards ||--o{ board_lanes : has

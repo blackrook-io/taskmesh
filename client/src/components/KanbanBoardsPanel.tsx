@@ -32,7 +32,6 @@ import type {
   BoardDetail,
   BoardLane,
   Idea,
-  ProjectPhase,
   Task,
   TodoList,
 } from "../types";
@@ -477,14 +476,12 @@ function LaneHead({
 
 type Props = {
   projectId: number;
-  phases: ProjectPhase[];
   initialBoardId?: number | null;
   onInitialBoardConsumed?: () => void;
 };
 
 export function KanbanBoardsPanel({
   projectId,
-  phases,
   initialBoardId = null,
   onInitialBoardConsumed,
 }: Props) {
@@ -1148,7 +1145,6 @@ export function KanbanBoardsPanel({
           <TaskEditorFields
             key={openTaskQuery.data.id}
             task={openTaskQuery.data}
-            phases={phases}
             onRequestClose={() => setOpenCard(null)}
             onDeleted={() => {
               setOpenCard(null);

@@ -240,6 +240,16 @@ export function parseStoredTaskListFilter(raw: string | null): TaskListFilter | 
   }
 }
 
+export function parseTaskListFilterValue(data: unknown): TaskListFilter | null {
+  if (data == null) return null;
+  if (typeof data === "string") return parseStoredTaskListFilter(data);
+  try {
+    return parseStoredTaskListFilter(JSON.stringify(data));
+  } catch {
+    return null;
+  }
+}
+
 export function storageKeyForProjectTasks(projectId: number): string {
   return `taskmesh.taskListFilter.project:${projectId}`;
 }

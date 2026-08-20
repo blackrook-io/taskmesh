@@ -1,0 +1,270 @@
+import { useEffect, useId, useState } from "react";
+import { ColorPopover } from "./shared/ColorPopover";
+import {
+  FILTER_FIELDS,
+  FILTER_FIELD_LABELS,
+  FILTER_JOIN_LABELS,
+  FILTER_OPERATORS,
+  FILTER_OPERATOR_LABELS,
+  emptyTaskListFilter,
+  isFilterActive,
+  newFilterClause,
+  parseTaskListFilterValue,
+  type FilterClause,
+  type FilterField,
+  type FilterJoin,
+  type FilterOperator,
+  type TaskListFilter,
+} from "../lib/taskListFilter";
+import {
+  TASK_PRIORITIES,
+  TASK_PRIORITY_LABELS,
+  SELECTABLE_TASK_STATES,
+  TASK_STATE_LABELS,
+} from "../lib/taskFields";
+import type { TaskGroup } from "../types";
+
+type Props = {
+  group: TaskGroup;
+  onClose: () => void;
+  onSave: (patch: { name: string; color: string | null; filter: TaskListFilter | null }) => Promise<void>;
+};
+
+function defaultValueForField(field: FilterField): string {
+  if (field === "state") return "new";
+  if (field === "priority") return "none";
+  return "";
+}
+
+function ValueInput({
+  clause,
+  onChange,
+}: {
+  clause: FilterClause;
+  onChange: (value: string) => void;
+}) {
+  if (clause.field === "state") {
+    return (
+      <select aria-label="Filter value" value={clause.value} onChange={(e) => onChange(e.target.value)}>
+        {SELECTABLE_TASK_STATES.map((s) => (
+          <option key={s} value={s}>
+            {TASK_STATE_LABELS[s]}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (clause.field === "priority") {
+    return (
+      <select aria-label="Filter value" value={clause.value} onChange={(e) => onChange(e.target.value)}>
+        {TASK_PRIORITIES.map((p) => (
+          <option key={p} value={p}>
+            {TASK_PRIORITY_LABELS[p]}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <input
+      type="text"
+      aria-label="Filter value"
+      placeholder={clause.field === "number" ? "T0053 or 53" : "Value"}
+      value={clause.value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+function draftFromGroup(group: TaskGroup): TaskListFilter {
+  const parsed = parseTaskListFilterValue(group.filter);
+  if (!parsed || !isFilterActive(parsed)) {
+    return emptyTaskListFilter();
+  }
+  return { clauses: parsed.clauses.map((c) => ({ ...c })), joins: [...parsed.joins] };
+}
+
+export function GroupEditModal({ group, onClose, onSave }: Props) {
+  const titleId = useId();
+  const [name, setName] = useState(group.name);
+  const [color, setColor] = useState<string | null>(group.color);
+  const [draft, setDraft] = useState<TaskListFilter>(() => draftFromGroup(group));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const updateClause = (index: number, patch: Partial<FilterClause>) => {
+    setDraft((prev) => {
+      const clauses = prev.clauses.map((c, i) => {
+        if (i !== index) return c;
+        const next = { ...c, ...patch };
+        if (patch.field && patch.field !== c.field) {
+          next.value = defaultValueForField(patch.field);
+        }
+        return next;
+      });
+      return { ...prev, clauses };
+    });
+  };
+
+  const addClause = (join: FilterJoin) => {
+    setDraft((prev) => {
+      if (prev.clauses.length === 0) {
+        return { clauses: [newFilterClause()], joins: [] };
+      }
+      return {
+        clauses: [...prev.clauses, newFilterClause()],
+        joins: [...prev.joins, join],
+      };
+    });
+  };
+
+  const removeClause = (index: number) => {
+    setDraft((prev) => {
+      const clauses = prev.clauses.filter((_, i) => i !== index);
+      if (clauses.length === 0) return emptyTaskListFilter();
+      const joins = prev.joins.filter((_, i) => {
+        if (index === 0) return i !== 0;
+        return i !== index - 1;
+      });
+      return { clauses, joins };
+    });
+  };
+
+  const save = async (clearFilter: boolean) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Name is required");
+      return;
+    }
+    const filter = clearFilter
+      ? null
+      : isFilterActive({
+          clauses: draft.clauses,
+          joins: draft.joins.slice(0, Math.max(0, draft.clauses.length - 1)),
+        })
+        ? {
+            clauses: draft.clauses.map((c) => ({ ...c })),
+            joins: draft.joins.slice(0, Math.max(0, draft.clauses.length - 1)),
+          }
+        : emptyTaskListFilter();
+    const toStore =
+      filter && isFilterActive(filter) ? filter : null;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave({ name: trimmed, color, filter: toStore });
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div
+        className="modal task-list-filter-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h2 id={titleId}>Edit group</h2>
+        <div className="field">
+          <label htmlFor={`group-name-${group.id}`}>Name</label>
+          <input
+            id={`group-name-${group.id}`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+        </div>
+        <div className="field" style={{ marginTop: "0.75rem" }}>
+          <span className="muted" style={{ display: "block", marginBottom: "0.35rem" }}>
+            Color
+          </span>
+          <ColorPopover color={color} onChange={setColor} label="Group color" />
+        </div>
+        <p className="muted task-list-filter-modal__hint" style={{ marginTop: "1rem" }}>
+          Group filter overrides the list filter for this section. No filter means this group stays
+          empty. Use AND / OR to add conditions.
+        </p>
+        <div className="task-list-filter-modal__rows">
+          {draft.clauses.map((clause, index) => (
+            <div key={index} className="task-list-filter-modal__row">
+              {index > 0 ? (
+                <span className="task-list-filter-modal__join-label">
+                  {FILTER_JOIN_LABELS[draft.joins[index - 1] ?? "and"]}
+                </span>
+              ) : (
+                <span className="task-list-filter-modal__join-label task-list-filter-modal__join-label--spacer" />
+              )}
+              <select
+                aria-label="Field"
+                value={clause.field}
+                onChange={(e) => updateClause(index, { field: e.target.value as FilterField })}
+              >
+                {FILTER_FIELDS.map((f) => (
+                  <option key={f} value={f}>
+                    {FILTER_FIELD_LABELS[f]}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Operator"
+                value={clause.operator}
+                onChange={(e) => updateClause(index, { operator: e.target.value as FilterOperator })}
+              >
+                {FILTER_OPERATORS.map((op) => (
+                  <option key={op} value={op}>
+                    {FILTER_OPERATOR_LABELS[op]}
+                  </option>
+                ))}
+              </select>
+              <ValueInput clause={clause} onChange={(value) => updateClause(index, { value })} />
+              <button
+                type="button"
+                className="btn ghost task-list-filter-modal__remove"
+                aria-label="Remove condition"
+                onClick={() => removeClause(index)}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="btn-row task-list-filter-modal__add">
+          <button type="button" className="btn ghost" onClick={() => addClause("and")}>
+            AND
+          </button>
+          <button type="button" className="btn ghost" onClick={() => addClause("or")}>
+            OR
+          </button>
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+        <div className="modal-actions task-list-filter-modal__actions">
+          <button type="button" className="btn ghost" onClick={() => void save(true)} disabled={busy}>
+            Clear filter
+          </button>
+          <div className="task-list-filter-modal__actions-right">
+            <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>
+              Cancel
+            </button>
+            <button type="button" className="btn primary" onClick={() => void save(false)} disabled={busy}>
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

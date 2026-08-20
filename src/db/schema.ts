@@ -47,13 +47,21 @@ export const projects = pgTable("projects", {
     .defaultNow(),
 });
 
-export const projectPhases = pgTable("project_phases", {
+/** List-view Task Groups (saved filter + color). Not the future Project Phase field. */
+export const taskGroups = pgTable("task_groups", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  /** Accent on the group bar (CSS hex). */
+  color: text("color"),
+  /** T0053-shaped filter JSON; null/empty = no tasks under this group. */
+  filter: jsonb("filter").$type<{
+    clauses: { field: string; operator: string; value: string }[];
+    joins: string[];
+  } | null>(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -160,9 +168,8 @@ export const tasks = pgTable("tasks", {
   projectId: integer("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
-  phaseId: integer("phase_id").references(() => projectPhases.id, {
-    onDelete: "set null",
-  }),
+  /** Unused for list grouping (T0075). Kept for T0080 Project Phase; no FK. */
+  phaseId: integer("phase_id"),
   parentId: integer("parent_id").references((): AnyPgColumn => tasks.id, {
     onDelete: "set null",
   }),
@@ -568,7 +575,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     fields: [projects.sourceIdeaId],
     references: [ideas.id],
   }),
-  phases: many(projectPhases),
+  taskGroups: many(taskGroups),
   tasks: many(tasks),
   documents: many(projectDocuments),
   todoLists: many(todoLists),
@@ -579,12 +586,11 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   imageBoards: many(imageBoards),
 }));
 
-export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
+export const taskGroupsRelations = relations(taskGroups, ({ one }) => ({
   project: one(projects, {
-    fields: [projectPhases.projectId],
+    fields: [taskGroups.projectId],
     references: [projects.id],
   }),
-  tasks: many(tasks),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -645,10 +651,6 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, {
     fields: [tasks.projectId],
     references: [projects.id],
-  }),
-  phase: one(projectPhases, {
-    fields: [tasks.phaseId],
-    references: [projectPhases.id],
   }),
   parent: one(tasks, {
     fields: [tasks.parentId],

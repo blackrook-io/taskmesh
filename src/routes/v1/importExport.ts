@@ -453,22 +453,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
       continue;
     }
 
-    let phaseId: number | null = null;
-    if (typeof phaseIdRaw === "number") {
-      const [ph] = await db
-        .select()
-        .from(schema.projectPhases)
-        .where(eq(schema.projectPhases.id, phaseIdRaw));
-      if (!ph || ph.projectId !== projectId) {
-        discarded.push({
-          row: rowNum,
-          code: "invalid_data",
-          reason: `phaseId ${phaseIdRaw} does not belong to project ${projectId}`,
-        });
-        continue;
-      }
-      phaseId = ph.id;
-    }
+    let phaseId: number | null = typeof phaseIdRaw === "number" ? phaseIdRaw : null;
 
     let sortOrder = 0;
     if (raw.sortOrder != null && raw.sortOrder !== "") {

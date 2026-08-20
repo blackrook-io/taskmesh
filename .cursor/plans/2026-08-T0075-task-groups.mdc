@@ -1,0 +1,117 @@
+---
+description: "T0075 — Task Groups refactor (first slice): list Phases → Groups with saved filter, color, modal"
+todos:
+  - id: schema
+    content: Rename project_phases → task_groups; color + filter JSON; drop FK; wipe rows; null phase_id
+  - id: api
+    content: Groups CRUD/reorder; PATCH name/color/filter; docs/database + docs:sync-schema
+  - id: list-ui
+    content: Filter-only sections, Unassigned leftover, duplicate indicator, no-op cross-group drag
+  - id: modal
+    content: Double-click group title → edit modal (rename, filter, color); filter icon + tooltip
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0075 — Task Groups refactor (slice 1)
+
+**Task:** T0075 · id `87` · Ready · project 4 (TaskMesh) · Urgent  
+**Branch (after approval):** `T0075-task-groups`
+
+**Children (out of scope):** T0077 auto-tag · T0078 nav sub-lists · T0079 Tags/Project filter fields · T0080 Project Phase field
+
+## Goal
+
+Replace list-view **Phases** with **Task Groups**: project-scoped named sections. A group may store a **filter** and **color**. Group filters **override** the list filter for that section. Membership (`tasks.phaseId`) is **not** used for placement.
+
+## Decisions (interview)
+
+| # | Decision |
+|---|----------|
+| B | **Start empty** — wipe existing phase rows; do not keep names |
+| C | **Filter-only** sections; a task may appear under multiple groups. Subtle **Duplicate** indicator on the title when it does |
+| D | Drag **into** another group is a **no-op** (no membership write; avoids T0077 rework) |
+| E | Keep **Unassigned** for now (may go away later) |
+| F | **Project Tasks list only** (All Tasks stays flat) |
+| G | Filter fields = T0053: State, Priority, Title, Number |
+| H | Persist filter + color on the **group row in Postgres** |
+| I | Double-click title opens **modal** (no inline rename) |
+| J | Same **16-swatch** palette; color the **full group bar** |
+
+## Scope
+
+**In**
+
+- Rebrand list Phase UI/copy to **Group** (headers, add/delete, drag handle titles)
+- Schema + API for groups: `name`, `sortOrder`, `color`, saved `filter` (same JSON shape as `TaskListFilter`)
+- Wipe current phases; `tasks.phase_id` null; list ignores `phaseId` for sectioning
+- Group edit **modal**: rename, filter builder (reuse T0053 clause UI), color (`ColorPopover`), save/cancel; delete stays confirm
+- Filter **icon** to the right of the count when a filter is saved; **tooltip** = existing breadcrumb formatter
+- Per-section listing: active group filter **only** (ignore list filter). Empty filter → **no tasks** under that group (bar still shows)
+- **Unassigned**: tasks in the project that match the **list** filter and are **not** in any group’s result set
+- Duplicate chip/label on the task title when `task.id` is in **two or more group** sections
+- Group bar color from saved hex
+- Reorder groups (existing drag); reorder tasks **within** a section if that already exists without writing `phaseId`
+- Hide/stop using the task modal **Phase** picker this slice (T0080 brings a real Phase field)
+
+**Out**
+
+- Auto-tag (T0077), nav sub-lists (T0078), Tags/Project/Assignee filter fields (T0079), Project Phase field (T0080)
+- All Tasks grouped sections
+- Unassigned edit modal / color
+- Migrating old phase names or membership
+
+## Approach
+
+### Schema (MINOR on finish-up)
+
+1. Drop FK `tasks.phase_id` → `project_phases` (keep nullable `phase_id` column for T0080; null all rows).
+2. Rename `project_phases` → `task_groups` (columns: existing `id`, `project_id`, `name`, `sort_order`, timestamps + **`color` text null** + **`filter` jsonb null**).
+3. **Delete all `task_groups` rows** (start empty).
+4. Drizzle `schema.ts`, generate SQL, update `docs/database/*`, `npm run docs:sync-schema`.
+
+Validate `filter` JSON against the T0053 shape (`clauses` / `joins`, known fields/operators) on write; reject invalid payloads.
+
+### API
+
+Rename project nested routes from phases → groups, e.g. `/api/v1/projects/:projectId/groups` (CRUD, reorder). PATCH accepts `name`, `color`, `filter` (null/empty = no filter). Update clients, import/export (stop treating `phaseId` as list membership; export can still emit empty `phaseId`), assistant tools labels if they say “Phase” for this table.
+
+Keep a short compatibility shim only if something external still hits `/phases` (private app: prefer a clean rename + grep).
+
+### List rendering (`TaskBoard`)
+
+For each group (sort order):
+
+- If `filter` active → `evaluateTaskListFilter(projectTasks, group.filter)` (do **not** AND with list filter)
+- Else → `[]`
+
+Unassigned: `evaluateTaskListFilter(projectTasks, listFilter)` minus ids already shown in any group.
+
+Duplicate: if a task id appears in more than one group list, show a small muted **Duplicate** marker on the title (tooltip optional: “Also shown in another group”).
+
+Drop on another group / Unassigned: **no-op** (no PATCH `phaseId`). Do not visually “stick” a move.
+
+### Modal + header
+
+Replace inline rename with `onOpenGroup(id)` → modal. Double-click **title** only (not collapse/count/delete). Unassigned: no modal.
+
+Reuse `TaskListFilterBar` / modal row UI inside the group modal (or extract shared clause editor). Apply writes PATCH to the group.
+
+Filter icon: same visual language as the list filter button; `title={formatFilterBreadcrumb(filter)}`.
+
+### Copy / chrome
+
+“Add phase” → “Add group”; delete confirm talks about the **group**, not unassigning tasks (delete does not change tasks).
+
+## Files likely touched
+
+- `src/db/schema.ts`, `drizzle/*.sql`, `src/routes/v1/phases.ts` (rename), `src/routes/v1/index.ts` / `projects.ts`
+- `src/services/tasks.ts` (descendant phase sync — stop using for list groups)
+- `client/src/types.ts`, `TaskBoard.tsx`, `ProjectDetailPage.tsx`, `PhaseManager.tsx` (rebrand or drop if unused)
+- `client/src/lib/taskListFilter.ts` (reuse evaluate + breadcrumb)
+- Task modal / `taskFields` Phase control
+- `docs/database/projects-and-ideas.md`, `overview.md`, `tasks.md`
+
+## Finish-up note
+
+Schema migration → **MINOR** bump (`0.22.1` → `0.23.0`) per versioning.mdc when the user says finish up. Not part of the first implementation commit unless they ask to finish up.

@@ -2085,6 +2085,23 @@ textarea.raw-md {
   text-align: right;
 }
 
+.task-phase-header__filter {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent, var(--text-muted));
+  flex-shrink: 0;
+}
+
+.task-list-row__duplicate {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
 .task-phase-header__delete {
   flex-shrink: 0;
   line-height: 1;

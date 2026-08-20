@@ -9,7 +9,7 @@ Related: [overview](overview.md) · [tasks](tasks.md) · [glossary](glossary.md)
 ```mermaid
 erDiagram
   ideas ||--o| projects : "source_idea_id"
-  projects ||--o{ project_phases : "project_id"
+  projects ||--o{ task_groups : "project_id"
   users ||--o{ projects : "authorship elsewhere"
   ideas {
     int id PK
@@ -26,11 +26,13 @@ erDiagram
     int sort_order
     int source_idea_id FK
   }
-  project_phases {
+  task_groups {
     int id PK
     int project_id FK
     text name
     int sort_order
+    text color
+    jsonb filter
   }
   users {
     int id PK
@@ -93,13 +95,13 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 
 ### Relationships (outbound ownership)
 
-Projects are parents of phases, tasks (optional), documents, todo lists, modules, boards, wiki nodes, canvases, image boards (optional), and task description templates. See domain pages for cascade behavior.
+Projects are parents of task groups, tasks (optional), documents, todo lists, modules, boards, wiki nodes, canvases, image boards (optional), and task description templates. See domain pages for cascade behavior.
 
 ---
 
-## `project_phases`
+## `task_groups`
 
-Ordered phases within a project (for grouping / filtering tasks).
+Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section.
 
 ### Columns
 
@@ -109,6 +111,8 @@ Ordered phases within a project (for grouping / filtering tasks).
 | `project_id` | integer | no | — | FK → `projects.id` |
 | `name` | text | no | — | |
 | `sort_order` | integer | no | `0` | List ordering |
+| `color` | text | yes | — | Accent on the group bar (CSS hex) |
+| `filter` | jsonb | yes | — | T0053-shaped `{ clauses, joins }`; null/empty = no matches |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -119,4 +123,4 @@ Ordered phases within a project (for grouping / filtering tasks).
 
 ### Relationships
 
-- Referenced by `tasks.phase_id` (`ON DELETE SET NULL`).
+- Owned by `projects`. Not referenced by `tasks` (list placement is filter-only). A future Project **Phase** field is a separate table/column (T0080).

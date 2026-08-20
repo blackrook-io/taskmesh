@@ -213,17 +213,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
           sendError(res, 400, "invalid_project", "Project not found");
           return;
         }
-        // Keep phase only if it already belongs to the target project; otherwise unassigned.
+        // T0075: list groups are not membership; clear leftover phaseId on project change.
         if (parsed.phaseId === undefined) {
-          if (existing.phaseId != null) {
-            const [ph] = await db
-              .select()
-              .from(schema.projectPhases)
-              .where(eq(schema.projectPhases.id, existing.phaseId));
-            nextPhaseId = ph && ph.projectId === parsed.projectId ? existing.phaseId : null;
-          } else {
-            nextPhaseId = null;
-          }
+          nextPhaseId = null;
         }
       }
       // Parent must share project scope; clear when project changes unless client set parent.
@@ -232,16 +224,6 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       }
     }
 
-    if (nextPhaseId != null && nextProjectId != null) {
-      const [ph] = await db
-        .select()
-        .from(schema.projectPhases)
-        .where(eq(schema.projectPhases.id, nextPhaseId));
-      if (!ph || ph.projectId !== nextProjectId) {
-        sendError(res, 400, "invalid_phase", "Phase does not belong to project");
-        return;
-      }
-    }
     if (nextPhaseId != null && nextProjectId == null) {
       sendError(res, 400, "invalid_phase", "Phase requires a project");
       return;

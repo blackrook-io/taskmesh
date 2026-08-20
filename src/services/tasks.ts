@@ -151,13 +151,8 @@ async function formatChangeValue(
       return STATE_LABELS[String(value)] ?? String(value);
     case "priority":
       return PRIORITY_LABELS[String(value)] ?? String(value);
-    case "phaseId": {
-      const [ph] = await db
-        .select({ name: schema.projectPhases.name })
-        .from(schema.projectPhases)
-        .where(eq(schema.projectPhases.id, Number(value)));
-      return ph?.name ?? `#${String(value)}`;
-    }
+    case "phaseId":
+      return `#${String(value)}`;
     case "projectId": {
       const [proj] = await db
         .select({ name: schema.projects.name })
