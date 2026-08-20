@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "../../api/client";
 import type { EntityType } from "../../lib/entityType";
 import type { Tag } from "../../types";
+import { sanitizePlainText } from "../../lib/plainText";
 import { TagChip } from "./TagChip";
 
 type Props = {
@@ -175,7 +176,7 @@ export function TagInput({ entityType, entityId, disabled, readOnly, className }
               disabled={disabled || attach.isPending}
               autoComplete="off"
               onChange={(e) => {
-                setQuery(e.target.value);
+                setQuery(sanitizePlainText(e.target.value));
                 setOpen(true);
               }}
               onFocus={() => setOpen(true)}

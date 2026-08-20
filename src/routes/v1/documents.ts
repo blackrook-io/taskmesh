@@ -5,18 +5,19 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateDocumentNumber } from "../../services/entityNumbers.js";
 
 const docBody = z.object({
-  title: z.string().min(1).max(500),
-  body: z.string().max(500_000).optional().nullable(),
+  title: plainTitle(500),
+  body: optionalMarkdown(500_000),
   position: z.number().int().optional(),
 });
 
 const docPatch = z.object({
-  title: z.string().min(1).max(500).optional(),
-  body: z.string().max(500_000).optional().nullable(),
+  title: optionalPlainTitle(500),
+  body: optionalMarkdown(500_000),
   position: z.number().int().optional(),
 });
 

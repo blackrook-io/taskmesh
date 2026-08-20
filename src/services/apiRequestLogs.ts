@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { ilikeEscaped } from "../lib/ilike.js";
 import { formatUserNumber } from "../lib/userFields.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -205,11 +206,10 @@ export async function listApiRequestLogs(
   }
   const search = (opts.q ?? opts.pathContains)?.trim();
   if (search) {
-    const pattern = `%${search}%`;
     conditions.push(
       or(
-        ilike(schema.apiRequestLogs.path, pattern),
-        ilike(schema.apiRequestLogs.message, pattern),
+        ilikeEscaped(schema.apiRequestLogs.path, search),
+        ilikeEscaped(schema.apiRequestLogs.message, search),
       )!,
     );
   }

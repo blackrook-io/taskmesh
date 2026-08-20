@@ -2,6 +2,7 @@ import { and, asc, eq, ne, notInArray, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { formatTaskNumber } from "../lib/taskFields.js";
+import { ilikeEscaped } from "../lib/ilike.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -294,7 +295,6 @@ export async function searchTasksForDependency(
   if (!trimmed) return [];
   const limit = opts?.limit ?? 20;
   const exclude = opts?.excludeIds?.filter((id) => Number.isFinite(id)) ?? [];
-  const pattern = `%${trimmed}%`;
   const numFromToken = trimmed.match(/^t?0*(\d+)$/i);
   const numberEq =
     numFromToken != null ? Number(numFromToken[1]) : Number.NaN;
@@ -304,9 +304,9 @@ export async function searchTasksForDependency(
   const filters = [
     ne(schema.tasks.state, "deleted"),
     or(
-      sql`${schema.tasks.title} ILIKE ${pattern}`,
-      sql`CAST(${schema.tasks.number} AS TEXT) ILIKE ${pattern}`,
-      sql`${displayNumberSql} ILIKE ${pattern}`,
+      ilikeEscaped(schema.tasks.title, trimmed),
+      ilikeEscaped(sql`CAST(${schema.tasks.number} AS TEXT)`, trimmed),
+      ilikeEscaped(displayNumberSql, trimmed),
       Number.isFinite(numberEq) ? eq(schema.tasks.number, numberEq) : sql`false`,
     ),
   ];

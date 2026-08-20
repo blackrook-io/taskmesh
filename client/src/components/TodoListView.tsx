@@ -12,6 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { sanitizePlainText } from "../lib/plainText";
 import { formatTaskNumber } from "../lib/taskFields";
 import { patchTaskRecord } from "../lib/patchTask";
 import type { Idea, Project, Task, TodoListDetail, TodoListItem } from "../types";
@@ -288,7 +289,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           type="text"
           placeholder="New item title"
           value={createTitle}
-          onChange={(e) => setCreateTitle(e.target.value)}
+          onChange={(e) => setCreateTitle(sanitizePlainText(e.target.value))}
           onKeyDown={(e) => {
             if (e.key === "Enter" && createTitle.trim()) createItem.mutate();
           }}

@@ -23,6 +23,7 @@ import {
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
+import { sanitizePlainText } from "../lib/plainText";
 import { storageKeyForProjectTasks, emptyTaskListFilter, isFilterActive, parseTaskListFilterValue } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TaskGroup, TodoList } from "../types";
@@ -625,7 +626,7 @@ export function ProjectDetailPage() {
                   type="text"
                   placeholder="Task title"
                   value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onChange={(e) => setNewTaskTitle(sanitizePlainText(e.target.value))}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && newTaskTitle.trim() && !createTask.isPending) {
                       e.preventDefault();
@@ -875,7 +876,7 @@ function DocumentEditor({
   onDelete: () => void;
   busy: boolean;
 }) {
-  const [title, setTitle] = useState(doc.title);
+  const [title, setTitle] = useState(() => sanitizePlainText(doc.title));
   const [body, setBody] = useState(doc.body ?? "");
 
   useRegisterAssistantAttach(
@@ -903,7 +904,7 @@ function DocumentEditor({
       </div>
       <div className="field">
         <label htmlFor="doc-title">Title</label>
-        <input id="doc-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input id="doc-title" type="text" value={title} onChange={(e) => setTitle(sanitizePlainText(e.target.value))} />
       </div>
       <div className="field">
         <label>Tags</label>

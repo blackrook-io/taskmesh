@@ -9,6 +9,7 @@ import {
 } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   dueDateSchema,
@@ -42,8 +43,8 @@ import {
 import { applyTaskGroupAutoTags } from "../../services/taskGroupAutoTag.js";
 
 const taskBody = z.object({
-  title: z.string().min(1).max(2000),
-  description: z.string().max(50_000).optional().nullable(),
+  title: plainTitle(2000),
+  description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
   /** @deprecated Accept datetime for older clients; stored as dueDate date part. */
   dueAt: z.string().datetime().optional().nullable(),
@@ -56,8 +57,8 @@ const taskBody = z.object({
 });
 
 const taskPatch = z.object({
-  title: z.string().min(1).max(2000).optional(),
-  description: z.string().max(50_000).optional().nullable(),
+  title: optionalPlainTitle(2000),
+  description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
   dueAt: z.string().datetime().optional().nullable(),
   color: z.string().max(64).optional().nullable(),

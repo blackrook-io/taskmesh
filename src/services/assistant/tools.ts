@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, ilike, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { ilikeEscaped } from "../../lib/ilike.js";
 import { fetchUrlForAssistant } from "./fetchUrl.js";
 
 export type AssistantProposal = {
@@ -267,19 +268,18 @@ async function toolFetchUrl(args: unknown, signal?: AbortSignal): Promise<string
 
 async function toolSearch(args: unknown): Promise<string> {
   const { q } = z.object({ q: z.string().min(1).max(200) }).parse(args);
-  const pattern = `%${q}%`;
   const [ideas, projects, tasks, documents] = await Promise.all([
     db
       .select({ id: schema.ideas.id, title: schema.ideas.title })
       .from(schema.ideas)
-      .where(or(ilike(schema.ideas.title, pattern), ilike(schema.ideas.body, pattern)))
+      .where(or(ilikeEscaped(schema.ideas.title, q), ilikeEscaped(schema.ideas.body, q)))
       .orderBy(desc(schema.ideas.updatedAt))
       .limit(8),
     db
       .select({ id: schema.projects.id, name: schema.projects.name })
       .from(schema.projects)
       .where(
-        or(ilike(schema.projects.name, pattern), ilike(schema.projects.description, pattern)),
+        or(ilikeEscaped(schema.projects.name, q), ilikeEscaped(schema.projects.description, q)),
       )
       .orderBy(desc(schema.projects.updatedAt))
       .limit(8),
@@ -293,7 +293,7 @@ async function toolSearch(args: unknown): Promise<string> {
       .where(
         and(
           ne(schema.tasks.state, "deleted"),
-          or(ilike(schema.tasks.title, pattern), ilike(schema.tasks.description, pattern)),
+          or(ilikeEscaped(schema.tasks.title, q), ilikeEscaped(schema.tasks.description, q)),
         ),
       )
       .orderBy(desc(schema.tasks.updatedAt))
@@ -307,8 +307,8 @@ async function toolSearch(args: unknown): Promise<string> {
       .from(schema.projectDocuments)
       .where(
         or(
-          ilike(schema.projectDocuments.title, pattern),
-          ilike(schema.projectDocuments.body, pattern),
+          ilikeEscaped(schema.projectDocuments.title, q),
+          ilikeEscaped(schema.projectDocuments.body, q),
         ),
       )
       .orderBy(desc(schema.projectDocuments.updatedAt))

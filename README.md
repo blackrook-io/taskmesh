@@ -108,6 +108,7 @@ drizzle/             # Generated SQL migrations + meta
 docs/                # Admin/developer docs (database schema, …)
 data/uploads/        # Image uploads (runtime; tracked with .gitkeep)
 INSTALL.md           # Ubuntu bare-metal install guide
+SECURITY.md          # Input-path audit log and re-audit checklist
 ```
 
 ## License

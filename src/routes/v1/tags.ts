@@ -1,19 +1,21 @@
-import { and, asc, eq, ilike, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
+import { ilikeEscaped } from "../../lib/ilike.js";
 
 const idParam = z.coerce.number().int().positive();
 
 const tagBody = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: plainTitle(100),
   color: z.string().trim().max(32).optional().nullable(),
 });
 
 const tagPatch = z.object({
-  name: z.string().trim().min(1).max(100).optional(),
+  name: optionalPlainTitle(100),
   color: z.string().trim().max(32).optional().nullable(),
 });
 
@@ -48,6 +50,10 @@ export const tagsRouter = Router();
 tagsRouter.get("/", async (req, res) => {
   try {
     const qRaw = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (qRaw.length > 100) {
+      sendError(res, 400, "validation_error", "Query q must be at most 100 characters");
+      return;
+    }
     if (qRaw.length > 0 && qRaw.length < 3) {
       sendError(res, 400, "validation_error", "Query q must be at least 3 characters");
       return;
@@ -58,7 +64,7 @@ tagsRouter.get("/", async (req, res) => {
         .select(tagSelect)
         .from(schema.tags)
         .leftJoin(schema.taggings, eq(schema.taggings.tagId, schema.tags.id))
-        .where(ilike(schema.tags.name, `%${qRaw}%`))
+        .where(ilikeEscaped(schema.tags.name, qRaw))
         .groupBy(schema.tags.id)
         .orderBy(asc(schema.tags.name))
         .limit(25);

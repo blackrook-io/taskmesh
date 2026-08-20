@@ -1,6 +1,51 @@
+import dns from "node:dns/promises";
+import net from "node:net";
+import { isBlockedHostname, isBlockedIp } from "../../lib/privateNet.js";
+
 const MAX_BYTES = 500_000;
 const TIMEOUT_MS = 12_000;
 const MAX_TEXT = 12_000;
+const MAX_REDIRECTS = 2;
+
+export class FetchUrlBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FetchUrlBlockedError";
+  }
+}
+
+async function assertUrlAllowed(url: URL): Promise<void> {
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new FetchUrlBlockedError("Only http and https URLs are allowed");
+  }
+  if (url.username || url.password) {
+    throw new FetchUrlBlockedError("URLs with credentials are not allowed");
+  }
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (isBlockedHostname(host)) {
+    throw new FetchUrlBlockedError("Fetching private or local network URLs is not allowed");
+  }
+  if (net.isIP(host)) {
+    if (isBlockedIp(host)) {
+      throw new FetchUrlBlockedError("Fetching private or local network URLs is not allowed");
+    }
+    return;
+  }
+  let records: { address: string }[];
+  try {
+    records = await dns.lookup(host, { all: true, verbatim: true });
+  } catch {
+    throw new FetchUrlBlockedError("Could not resolve host");
+  }
+  if (records.length === 0) {
+    throw new FetchUrlBlockedError("Could not resolve host");
+  }
+  for (const rec of records) {
+    if (isBlockedIp(rec.address)) {
+      throw new FetchUrlBlockedError("Fetching private or local network URLs is not allowed");
+    }
+  }
+}
 
 /**
  * Fetch a URL for assistant research. Only http(s); returns plain text excerpt.
@@ -15,25 +60,6 @@ export async function fetchUrlForAssistant(
   } catch {
     throw new Error("Invalid URL");
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Only http and https URLs are allowed");
-  }
-  // Block obvious local/metadata targets
-  const host = url.hostname.toLowerCase();
-  if (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "0.0.0.0" ||
-    host === "::1" ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal") ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
-    host === "169.254.169.254"
-  ) {
-    throw new Error("Fetching private or local network URLs is not allowed");
-  }
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
@@ -41,15 +67,35 @@ export async function fetchUrlForAssistant(
   signal?.addEventListener("abort", onAbort);
 
   try {
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      redirect: "follow",
-      signal: ac.signal,
-      headers: {
-        Accept: "text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.8",
-        "User-Agent": "TaskMeshAssistant/1.0 (+private research fetch)",
-      },
-    });
+    let current = url;
+    let res: Response | null = null;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      await assertUrlAllowed(current);
+      res = await fetch(current.toString(), {
+        method: "GET",
+        redirect: "manual",
+        signal: ac.signal,
+        headers: {
+          Accept: "text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.8",
+          "User-Agent": "TaskMeshAssistant/1.0 (+private research fetch)",
+        },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        if (!loc) {
+          throw new FetchUrlBlockedError("Redirect without Location");
+        }
+        if (hop === MAX_REDIRECTS) {
+          throw new FetchUrlBlockedError("Too many redirects");
+        }
+        current = new URL(loc, current);
+        continue;
+      }
+      break;
+    }
+    if (!res) {
+      throw new Error("Fetch failed");
+    }
     if (!res.ok) {
       throw new Error(`HTTP ${res.status} ${res.statusText}`);
     }
@@ -63,7 +109,7 @@ export async function fetchUrlForAssistant(
     if (ctype.includes("application/json") || raw.trimStart().startsWith("{") || raw.trimStart().startsWith("[")) {
       const clipped = raw.length > MAX_TEXT ? `${raw.slice(0, MAX_TEXT)}…` : raw;
       return {
-        url: url.toString(),
+        url: current.toString(),
         title: null,
         text: clipped,
         truncated: raw.length > MAX_TEXT,
@@ -71,7 +117,7 @@ export async function fetchUrlForAssistant(
     }
 
     const { title, text, truncated } = htmlToText(raw);
-    return { url: url.toString(), title, text, truncated };
+    return { url: current.toString(), title, text, truncated };
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Fetch timed out or was cancelled");

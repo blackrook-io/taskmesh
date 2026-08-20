@@ -20,10 +20,12 @@ import { uploadsRouter } from "./uploads.js";
 import { usersRouter } from "./users.js";
 import { sendError } from "../../lib/httpError.js";
 import { apiRequestLogger } from "../../middleware/apiRequestLogger.js";
+import { sanitizeIncomingStrings } from "../../middleware/sanitizeIncomingStrings.js";
 import { rejectImmutableBody } from "../../middleware/rejectImmutableBody.js";
 
 export const v1Router = Router();
 
+v1Router.use(sanitizeIncomingStrings);
 v1Router.use(rejectImmutableBody);
 v1Router.use(apiRequestLogger);
 

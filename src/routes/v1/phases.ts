@@ -5,15 +5,16 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 
 const phaseBody = z.object({
-  name: z.string().min(1).max(200),
+  name: plainTitle(200),
   sortOrder: z.number().int().optional(),
 });
 
 const phasePatch = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: optionalPlainTitle(200),
   sortOrder: z.number().int().optional(),
 });
 

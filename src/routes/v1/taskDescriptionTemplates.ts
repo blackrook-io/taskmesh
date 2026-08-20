@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
+import { markdownString } from "../../lib/markdownFields.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import {
   createTemplate,
@@ -52,7 +53,7 @@ taskDescriptionTemplatesRouter.get("/", async (req, res) => {
 const createBody = z
   .object({
     name: z.string().trim().min(1).max(120),
-    body: z.string().max(200_000).refine((s) => s.trim().length > 0, {
+    body: markdownString(200_000).refine((s) => s.trim().length > 0, {
       message: "body must not be empty",
     }),
     projectId: z.number().int().positive().nullable(),

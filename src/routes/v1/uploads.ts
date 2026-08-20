@@ -6,6 +6,7 @@ import { Router } from "express";
 import multer from "multer";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { sniffImageMime } from "../../lib/imageMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { getUploadDir } from "../../lib/paths.js";
 
@@ -44,12 +45,21 @@ uploadsRouter.post("/uploads", upload.single("file"), async (req, res) => {
       sendError(res, 400, "no_file", "Expected multipart field \"file\"");
       return;
     }
-    const mimeType = file.mimetype;
-    if (!ALLOWED_MIME.has(mimeType)) {
+    const head = Buffer.alloc(16);
+    const fd = fs.openSync(file.path, "r");
+    let n = 0;
+    try {
+      n = fs.readSync(fd, head, 0, 16, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const sniffed = sniffImageMime(head.subarray(0, n));
+    if (!sniffed) {
       fs.unlinkSync(file.path);
       sendError(res, 400, "unsupported_file_type", "Only jpeg, png, gif, webp allowed");
       return;
     }
+    const mimeType = sniffed;
 
     const [row] = await db
       .insert(schema.uploads)
@@ -111,6 +121,8 @@ uploadsRouter.get("/files/:storedName", async (req, res) => {
       return;
     }
     res.setHeader("Content-Type", row.mimeType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `inline; filename="${storedName.replace(/"/g, "")}"`);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.sendFile(path.resolve(filePath));
   } catch (err) {

@@ -12,6 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "../api/client";
 import { formatEntityRef } from "../lib/entityRef";
+import { sanitizePlainText } from "../lib/plainText";
 import type { Canvas, ProjectDocument, WikiNode, WikiTreeNode, WikiTreeResponse } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CanvasEditor } from "./CanvasEditor";
@@ -203,7 +204,7 @@ export function WikiPanel({
   useEffect(() => {
     const doc = detailQuery.data?.document;
     const node = detailQuery.data?.node;
-    if (node) setTitleDraft(node.title);
+    if (node) setTitleDraft(sanitizePlainText(node.title));
     if (doc) setBodyDraft(doc.body ?? "");
     else if (node) setBodyDraft("");
   }, [detailQuery.data?.node?.id, detailQuery.data?.document?.id, pageEdit]);
@@ -382,7 +383,7 @@ export function WikiPanel({
   const cancelPageEdit = () => {
     const doc = detailQuery.data?.document;
     const node = detailQuery.data?.node;
-    if (node) setTitleDraft(node.title);
+    if (node) setTitleDraft(sanitizePlainText(node.title));
     if (doc) setBodyDraft(doc.body ?? "");
     else setBodyDraft("");
     setPageEdit(false);
@@ -557,7 +558,7 @@ export function WikiPanel({
                     id="wiki-title"
                     type="text"
                     value={titleDraft}
-                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onChange={(e) => setTitleDraft(sanitizePlainText(e.target.value))}
                   />
                 </div>
                 <div className="field field--tags-below">
@@ -658,7 +659,7 @@ export function WikiPanel({
                   id="wiki-canvas-title"
                   type="text"
                   value={titleDraft}
-                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onChange={(e) => setTitleDraft(sanitizePlainText(e.target.value))}
                 />
               </div>
             ) : (

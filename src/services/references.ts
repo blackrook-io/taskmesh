@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, ne, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import * as schema from "../db/schema.js";
@@ -7,6 +7,7 @@ import {
   formatEntityRef,
   parseEntityRefToken,
 } from "../lib/entityRef.js";
+import { ilikeEscaped } from "../lib/ilike.js";
 import type { EntityType } from "../lib/entityType.js";
 import { formatUserNumber } from "../lib/userFields.js";
 
@@ -67,13 +68,15 @@ function matchNumberOrTitle(opts: {
   exactNumber: number | null;
 }) {
   const { numberCol, titleCol, prefix, q, exactNumber } = opts;
-  const titlePattern = q ? `%${q}%` : "%";
-  const pattern = q ? `%${q}%` : "%";
   const displaySql = sql`(${prefix} || LPAD(CAST(${numberCol} AS TEXT), 4, '0'))`;
   return or(
-    ilike(titleCol, titlePattern),
-    sql`CAST(${numberCol} AS TEXT) ILIKE ${pattern}`,
-    sql`${displaySql} ILIKE ${pattern}`,
+    q
+      ? or(
+          ilikeEscaped(titleCol, q),
+          ilikeEscaped(sql`CAST(${numberCol} AS TEXT)`, q),
+          ilikeEscaped(displaySql, q),
+        )
+      : sql`true`,
     exactNumber != null && Number.isFinite(exactNumber)
       ? eq(numberCol, exactNumber)
       : sql`false`,
@@ -353,7 +356,6 @@ export async function searchUserReferences(
       projectId: null,
     }));
   }
-  const pattern = `%${trimmed}%`;
   const rows = await db
     .select({
       id: schema.users.id,
@@ -365,8 +367,11 @@ export async function searchUserReferences(
       and(
         sql`${schema.users.deactivatedAt} IS NULL`,
         or(
-          ilike(schema.users.displayName, pattern),
-          sql`('U' || LPAD(CAST(${schema.users.number} AS TEXT), 4, '0')) ILIKE ${pattern}`,
+          ilikeEscaped(schema.users.displayName, trimmed),
+          ilikeEscaped(
+            sql`('U' || LPAD(CAST(${schema.users.number} AS TEXT), 4, '0'))`,
+            trimmed,
+          ),
         ),
       ),
     )

@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
 import { allocateBoardNumber, allocateIdeaNumber } from "../../services/entityNumbers.js";
@@ -12,11 +13,11 @@ import { allocateTaskNumber } from "../../services/tasks.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const boardBody = z.object({
-  name: z.string().min(1).max(500),
+  name: plainTitle(500),
 });
 
 const boardPatch = z.object({
-  name: z.string().min(1).max(500).optional(),
+  name: optionalPlainTitle(500),
   sortOrder: z.number().int().optional(),
 });
 
@@ -25,7 +26,7 @@ const boardsReorderBody = z.object({
 });
 
 const columnBody = z.object({
-  name: z.string().min(1).max(200),
+  name: plainTitle(200),
   wipLimit: z.number().int().positive().nullable().optional(),
   sortOrder: z.number().int().optional(),
   /** Insert at this index (0-based) and reindex siblings; overrides append/sortOrder. */
@@ -33,7 +34,7 @@ const columnBody = z.object({
 });
 
 const columnPatch = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: optionalPlainTitle(200),
   wipLimit: z.number().int().positive().nullable().optional(),
   sortOrder: z.number().int().optional(),
 });
@@ -43,7 +44,7 @@ const cardBody = z.object({
   entityType: z.enum(["task", "idea", "todo_list"]).default("task"),
   entityId: z.number().int().positive().optional(),
   /** Create a new task/idea (when entityType is task or idea) and place it on the board */
-  title: z.string().min(1).max(2000).optional(),
+  title: optionalPlainTitle(2000),
   laneId: z.number().int().positive().nullable().optional(),
 });
 
@@ -58,13 +59,13 @@ const columnsReorderBody = z.object({
 });
 
 const laneBody = z.object({
-  name: z.string().min(1).max(200),
+  name: plainTitle(200),
   sortOrder: z.number().int().optional(),
   insertAt: z.number().int().min(0).optional(),
 });
 
 const lanePatch = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: optionalPlainTitle(200),
   sortOrder: z.number().int().optional(),
 });
 

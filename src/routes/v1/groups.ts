@@ -6,6 +6,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { isEmptyTaskGroupFilter, parseTaskGroupFilter } from "../../lib/taskGroupFilter.js";
+import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   applyTaskGroupAutoTags,
@@ -13,7 +14,7 @@ import {
 } from "../../services/taskGroupAutoTag.js";
 
 const groupBody = z.object({
-  name: z.string().min(1).max(200),
+  name: plainTitle(200),
   sortOrder: z.number().int().optional(),
   color: z.string().max(64).optional().nullable(),
   filter: z.unknown().optional().nullable(),
@@ -22,7 +23,7 @@ const groupBody = z.object({
 });
 
 const groupPatch = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: optionalPlainTitle(200),
   sortOrder: z.number().int().optional(),
   color: z.string().max(64).optional().nullable(),
   filter: z.unknown().optional().nullable(),

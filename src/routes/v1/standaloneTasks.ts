@@ -9,6 +9,7 @@ import {
 } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import {
   dueDateSchema,
   selectableTaskStateSchema,
@@ -44,8 +45,8 @@ import {
 const idParam = z.coerce.number().int().positive();
 
 const createBody = z.object({
-  title: z.string().min(1).max(2000),
-  description: z.string().max(50_000).optional().nullable(),
+  title: plainTitle(2000),
+  description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
   color: z.string().max(64).optional().nullable(),
   state: selectableTaskStateSchema.optional(),
@@ -54,8 +55,8 @@ const createBody = z.object({
 });
 
 const patchBody = z.object({
-  title: z.string().min(1).max(2000).optional(),
-  description: z.string().max(50_000).optional().nullable(),
+  title: optionalPlainTitle(2000),
+  description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
   color: z.string().max(64).optional().nullable(),
   state: selectableTaskStateSchema.optional(),

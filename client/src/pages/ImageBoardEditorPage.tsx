@@ -10,6 +10,7 @@ import {
   normalizeDocument,
   type ImageBoardDocument,
 } from "../lib/imageBoardDocument";
+import { sanitizePlainText } from "../lib/plainText";
 import type { ImageBoard, Project } from "../types";
 
 export function ImageBoardEditorPage() {
@@ -43,7 +44,7 @@ export function ImageBoardEditorPage() {
   useEffect(() => {
     if (!data) return;
     setDoc(normalizeDocument(data.document));
-    setTitle(data.title);
+    setTitle(sanitizePlainText(data.title));
   }, [data]);
 
   useEffect(() => {
@@ -93,10 +94,11 @@ export function ImageBoardEditorPage() {
   }, []);
 
   const onTitleChange = (value: string) => {
-    setTitle(value);
+    const next = sanitizePlainText(value);
+    setTitle(next);
     window.clearTimeout(titleTimer.current);
     titleTimer.current = window.setTimeout(() => {
-      const trimmed = value.trim();
+      const trimmed = next.trim();
       if (trimmed) patchMutRef.current({ title: trimmed });
     }, 600);
   };

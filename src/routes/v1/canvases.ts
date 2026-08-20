@@ -4,17 +4,19 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { optionalPlainTitle } from "../../lib/markdownFields.js";
+import { jsonDocumentSchema } from "../../lib/jsonDocument.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateCanvasNumber } from "../../services/entityNumbers.js";
 
 const createBody = z.object({
-  title: z.string().min(1).max(500).optional(),
-  document: z.record(z.string(), z.unknown()).optional(),
+  title: optionalPlainTitle(500),
+  document: jsonDocumentSchema.optional(),
 });
 
 const patchBody = z.object({
-  title: z.string().min(1).max(500).optional(),
-  document: z.record(z.string(), z.unknown()).optional(),
+  title: optionalPlainTitle(500),
+  document: jsonDocumentSchema.optional(),
   sortOrder: z.number().int().optional(),
 });
 

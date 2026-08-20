@@ -8,6 +8,7 @@ import {
   shouldRecordHistory,
 } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { parseRouteId } from "../../lib/routeParams.js";
 import {
   createAdminApiKey,
   expireApiKey,
@@ -81,11 +82,7 @@ const resetPasswordBody = z
 
 adminRouter.post("/users/:id/reset-password", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid user id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const { password } = resetPasswordBody.parse(req.body);
     const data = await resetUserPassword(db, id, password);
     res.json({ data });
@@ -97,11 +94,7 @@ adminRouter.post("/users/:id/reset-password", async (req, res) => {
 
 adminRouter.post("/users/:id/deactivate", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid user id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const data = await deactivateUser(db, id);
     res.json({ data });
   } catch (err) {
@@ -112,11 +105,7 @@ adminRouter.post("/users/:id/deactivate", async (req, res) => {
 
 adminRouter.post("/users/:id/reactivate", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid user id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const data = await reactivateUser(db, id);
     res.json({ data });
   } catch (err) {
@@ -168,11 +157,7 @@ adminRouter.post("/api-keys", async (req, res) => {
 
 adminRouter.post("/api-keys/:id/suspend", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid key id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const actor = await getCurrentUser(db);
     const key = await suspendApiKey(db, id);
     res.locals.logUserId = actor.id;
@@ -187,11 +172,7 @@ adminRouter.post("/api-keys/:id/suspend", async (req, res) => {
 
 adminRouter.post("/api-keys/:id/unsuspend", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid key id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const actor = await getCurrentUser(db);
     const key = await unsuspendApiKey(db, id);
     res.locals.logUserId = actor.id;
@@ -206,11 +187,7 @@ adminRouter.post("/api-keys/:id/unsuspend", async (req, res) => {
 
 adminRouter.post("/api-keys/:id/expire", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid key id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const actor = await getCurrentUser(db);
     const key = await expireApiKey(db, id);
     res.locals.logUserId = actor.id;
@@ -225,11 +202,7 @@ adminRouter.post("/api-keys/:id/expire", async (req, res) => {
 
 adminRouter.post("/api-keys/:id/revoke", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid key id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const actor = await getCurrentUser(db);
     const key = await revokeApiKey(db, id);
     res.locals.logUserId = actor.id;
@@ -397,11 +370,7 @@ const templatePatchBody = z
 
 adminRouter.patch("/task-description-templates/:id", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid template id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const patch = templatePatchBody.parse(req.body);
     const data = await patchAdminTemplate(db, id, patch);
     res.json({ data });
@@ -413,11 +382,7 @@ adminRouter.patch("/task-description-templates/:id", async (req, res) => {
 
 adminRouter.delete("/task-description-templates/:id", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid template id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     await deleteAdminTemplate(db, id);
     res.status(204).send();
   } catch (err) {
@@ -452,11 +417,7 @@ adminRouter.get("/deleted-tasks", async (_req, res) => {
 
 adminRouter.post("/deleted-tasks/:id/restore", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      sendError(res, 400, "invalid_id", "Invalid task id");
-      return;
-    }
+    const id = parseRouteId(req, "id");
     const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
     if (!existing) {
       sendError(res, 404, "not_found", "Task not found");

@@ -23,6 +23,7 @@ import {
   flushTaskEditSession,
 } from "../lib/taskEditSession";
 import type { PatchTaskOptions } from "../lib/patchTask";
+import { sanitizePlainText } from "../lib/plainText";
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
@@ -382,7 +383,7 @@ export function TaskEditorFields({
   useEffect(() => {
     const snap = snapshotFromTask(task);
     reset(snap);
-    setTitle(snap.title);
+    setTitle(sanitizePlainText(snap.title));
     setDescription(snap.description);
     setDueLocal(snap.dueDate ?? "");
     setColor(snap.color);
@@ -410,7 +411,7 @@ export function TaskEditorFields({
   });
 
   const applySnap = (snap: TaskSnapshot) => {
-    setTitle(snap.title);
+    setTitle(sanitizePlainText(snap.title));
     setDescription(snap.description);
     setDueLocal(snap.dueDate ?? "");
     setColor(snap.color);
@@ -421,7 +422,7 @@ export function TaskEditorFields({
   };
 
   const applyServerTask = (row: Task) => {
-    setTitle(row.title);
+    setTitle(sanitizePlainText(row.title));
     setDescription(row.description ?? "");
     setDueLocal(taskDue(row) ?? "");
     setColor(row.color);
@@ -568,7 +569,7 @@ export function TaskEditorFields({
           id={`t-title-${task.id}`}
           type="text"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => setTitle(sanitizePlainText(e.target.value))}
           onBlur={() => {
             if (title !== task.title) {
               void commit({ ...currentSnap(), title: task.title }, { title });

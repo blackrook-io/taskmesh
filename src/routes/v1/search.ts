@@ -1,9 +1,10 @@
-import { and, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { ilikeEscaped } from "../../lib/ilike.js";
 
 export const searchRouter = Router();
 
@@ -27,8 +28,16 @@ const emptyResults = {
 searchRouter.get("/", async (req, res) => {
   try {
     const qRaw = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (qRaw.length > 200) {
+      sendError(res, 400, "validation_error", "Query q must be at most 200 characters");
+      return;
+    }
     const tagName =
       typeof req.query.tag === "string" ? req.query.tag.trim() : "";
+    if (tagName.length > 100) {
+      sendError(res, 400, "validation_error", "tag must be at most 100 characters");
+      return;
+    }
     const tagIdParsed =
       req.query.tagId !== undefined && req.query.tagId !== ""
         ? z.coerce.number().int().positive().safeParse(req.query.tagId)
@@ -81,7 +90,7 @@ searchRouter.get("/", async (req, res) => {
       }
     }
 
-    const pattern = qRaw ? `%${qRaw}%` : null;
+    const q = qRaw || null;
 
     async function idsForType(entityType: string): Promise<number[] | null> {
       if (filterTagId == null) return null;
@@ -126,10 +135,10 @@ searchRouter.get("/", async (req, res) => {
             .where(
               and(
                 ideaIds != null ? inArray(schema.ideas.id, ideaIds) : sql`true`,
-                pattern
+                q
                   ? or(
-                      ilike(schema.ideas.title, pattern),
-                      ilike(schema.ideas.body, pattern),
+                      ilikeEscaped(schema.ideas.title, q),
+                      ilikeEscaped(schema.ideas.body, q),
                     )
                   : sql`true`,
               ),
@@ -148,10 +157,10 @@ searchRouter.get("/", async (req, res) => {
                 projectIds != null
                   ? inArray(schema.projects.id, projectIds)
                   : sql`true`,
-                pattern
+                q
                   ? or(
-                      ilike(schema.projects.name, pattern),
-                      ilike(schema.projects.description, pattern),
+                      ilikeEscaped(schema.projects.name, q),
+                      ilikeEscaped(schema.projects.description, q),
                     )
                   : sql`true`,
               ),
@@ -169,12 +178,15 @@ searchRouter.get("/", async (req, res) => {
               and(
                 ne(schema.tasks.state, "deleted"),
                 taskIds != null ? inArray(schema.tasks.id, taskIds) : sql`true`,
-                pattern
+                q
                   ? or(
-                      ilike(schema.tasks.title, pattern),
-                      ilike(schema.tasks.description, pattern),
-                      sql`CAST(${schema.tasks.number} AS TEXT) ILIKE ${pattern}`,
-                      sql`('T' || LPAD(CAST(${schema.tasks.number} AS TEXT), 4, '0')) ILIKE ${pattern}`,
+                      ilikeEscaped(schema.tasks.title, q),
+                      ilikeEscaped(schema.tasks.description, q),
+                      ilikeEscaped(sql`CAST(${schema.tasks.number} AS TEXT)`, q),
+                      ilikeEscaped(
+                        sql`('T' || LPAD(CAST(${schema.tasks.number} AS TEXT), 4, '0'))`,
+                        q,
+                      ),
                     )
                   : sql`true`,
               ),
@@ -193,10 +205,10 @@ searchRouter.get("/", async (req, res) => {
                 documentIds != null
                   ? inArray(schema.projectDocuments.id, documentIds)
                   : sql`true`,
-                pattern
+                q
                   ? or(
-                      ilike(schema.projectDocuments.title, pattern),
-                      ilike(schema.projectDocuments.body, pattern),
+                      ilikeEscaped(schema.projectDocuments.title, q),
+                      ilikeEscaped(schema.projectDocuments.body, q),
                     )
                   : sql`true`,
               ),
@@ -213,7 +225,7 @@ searchRouter.get("/", async (req, res) => {
             .where(
               and(
                 boardIds != null ? inArray(schema.boards.id, boardIds) : sql`true`,
-                pattern ? ilike(schema.boards.name, pattern) : sql`true`,
+                q ? ilikeEscaped(schema.boards.name, q) : sql`true`,
               ),
             )
             .orderBy(desc(schema.boards.updatedAt))
@@ -235,7 +247,7 @@ searchRouter.get("/", async (req, res) => {
             .where(
               and(
                 canvasIds != null ? inArray(schema.canvases.id, canvasIds) : sql`true`,
-                pattern ? ilike(schema.canvases.title, pattern) : sql`true`,
+                q ? ilikeEscaped(schema.canvases.title, q) : sql`true`,
               ),
             )
             .orderBy(desc(schema.canvases.updatedAt))
@@ -252,7 +264,7 @@ searchRouter.get("/", async (req, res) => {
                 todoListIds != null
                   ? inArray(schema.todoLists.id, todoListIds)
                   : sql`true`,
-                pattern ? ilike(schema.todoLists.title, pattern) : sql`true`,
+                q ? ilikeEscaped(schema.todoLists.title, q) : sql`true`,
               ),
             )
             .orderBy(desc(schema.todoLists.updatedAt))
@@ -302,7 +314,7 @@ searchRouter.get("/", async (req, res) => {
                 wikiNodeIdFilter != null
                   ? inArray(schema.wikiNodes.id, wikiNodeIdFilter)
                   : sql`true`,
-                pattern ? ilike(schema.wikiNodes.title, pattern) : sql`true`,
+                q ? ilikeEscaped(schema.wikiNodes.title, q) : sql`true`,
               ),
             )
             .orderBy(desc(schema.wikiNodes.updatedAt))

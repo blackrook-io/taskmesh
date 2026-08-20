@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
+import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   allocateCanvasNumber,
@@ -22,20 +23,20 @@ import {
 const entityType = z.enum(["document", "canvas"]);
 
 const createPageBody = z.object({
-  title: z.string().min(1).max(500),
+  title: plainTitle(500),
   parentId: z.number().int().positive().nullable().optional(),
-  body: z.string().max(500_000).optional().nullable(),
+  body: optionalMarkdown(500_000),
 });
 
 const linkBody = z.object({
   entityType,
   entityId: z.number().int().positive(),
-  title: z.string().min(1).max(500).optional(),
+  title: optionalPlainTitle(500),
   parentId: z.number().int().positive().nullable().optional(),
 });
 
 const nodePatch = z.object({
-  title: z.string().min(1).max(500).optional(),
+  title: optionalPlainTitle(500),
   pinned: z.boolean().optional(),
 });
 
@@ -72,7 +73,7 @@ wikiRouter.get("/", async (req, res) => {
 });
 
 const createCanvasPageBody = z.object({
-  title: z.string().min(1).max(500),
+  title: plainTitle(500),
   parentId: z.number().int().positive().nullable().optional(),
 });
 

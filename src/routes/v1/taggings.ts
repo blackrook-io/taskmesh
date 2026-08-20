@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { optionalPlainTitle } from "../../lib/markdownFields.js";
 import { ENTITY_TYPES } from "../../lib/entityType.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import {
@@ -20,7 +21,7 @@ const attachBody = z
     entityType: entityTypeSchema,
     entityId: z.number().int().positive(),
     tagId: z.number().int().positive().optional(),
-    name: z.string().trim().min(1).max(100).optional(),
+    name: optionalPlainTitle(100),
     color: z.string().trim().max(32).optional().nullable(),
   })
   .refine((v) => v.tagId != null || (v.name != null && v.name.length > 0), {

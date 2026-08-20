@@ -1,0 +1,126 @@
+# T0073 — Secure inputs (full audit + hardening)
+
+## Context
+
+- **Task:** T0073 (`id` 85) — *Secure inputs* — Ready, High, project TaskMesh (`projectId` 4)
+- **No parent, no comments, no Depends-on**
+- **Confirmed:** full audit this Task; `SECURITY.md` as the living audit record; security over loose UX; auth / rate-limit / public-internet **out of this Task** but **create follow-up Tasks**
+- **No schema migration expected** (PATCH bump on finish-up)
+
+## Goal
+
+1. Audit every user-input path (UI → API → Postgres / filesystem / subprocess / outbound HTTP).
+2. Harden **in-scope** issues listed below (injection, validation, XSS/link protocols, upload sniffing, SSRF gaps, search wildcards, headers).
+3. Ship repo-root **`SECURITY.md`**: what was audited, what was fixed, residual risk, how to re-run the audit.
+4. Create **child Tasks** on PROD under T0073 for work we will not implement here.
+
+## Audit snapshot (pre-implementation)
+
+| Surface | Current state | Risk |
+|---------|---------------|------|
+| SQL | Drizzle + bound `sql\`\`` / `ILIKE ${pattern}`; no string-built queries found | **Low** (SQLi). Search `q` is bound but `%`/`_` are wildcards |
+| Route IDs | Most routes use `parseRouteId` (positive int). **Admin** uses `Number(req.params.id)` | **Low** — `NaN` can 500 or miss rows |
+| JSON bodies | Zod on most routes; many **not** `.strict()` (unknown keys stripped) | **Low** — extra keys ignored, not injected |
+| Search `q` | Unbounded string → `%${q}%` ILIKE | Wildcard / large-pattern cost |
+| Markdown | TipTap; links allow `ctx.defaultValidate` plus relative `/`; **no** `javascript:` denylist on API; **no** server-side HTML sanitize | Stored XSS if a payload renders as HTML |
+| Uploads | UUID filenames; `path.basename` on GET; MIME from client; no magic-byte check | Polyglot / spoofed MIME |
+| Assistant `fetchUrl` | Blocks some private hosts; **follows redirects**; no post-redirect IP check; IPv6/DNS rebind gaps | SSRF |
+| Backups | `execFile("psql"/"pg_dump")` with argv from `DATABASE_URL`; restore wipes DB | Command injection **low** if URL trusted; **no auth** on restore |
+| Import | 20 MB multer memory; Zod row mapping | DoS / bad rows, not SQLi |
+| Canvas `document` | `z.record` unbounded | Large JSON DoS (also covered by 10 MB `express.json`) |
+| HTTP headers | No Helmet / CSP / `X-Content-Type-Options` | Browser XSS / sniffing |
+| Auth | None; `getCurrentUser` is the sole user | Any LAN client = full admin (accepted residual → follow-up Task) |
+
+## Usability impact (approve before code)
+
+Security-over-usability choices **in this Task**. Reject any row to drop it from implementation.
+
+| Change | Usability impact | Recommendation |
+|--------|------------------|----------------|
+| **Escape LIKE `%` `_` `\`** in search, references, dependency search | Typing `%` or `_` no longer means “any characters”. Search for a literal percent (e.g. “50%”) **starts working**. Accidental SQL-wildcard “fuzzy” matching **stops**. | **Do** — this is not a product feature, it is Postgres wildcard leakage |
+| **Cap search `q` at 200** (references already 200) | Command palette / global search rejects or truncates very long pastes | **Do** — 400 with a clear error |
+| **`parseRouteId` on Admin IDs** | Invalid `/admin/.../abc` returns 400 instead of a possible 500 | **Do** — no legitimate UX |
+| **Links: only `http`/`https`/`mailto` + same-origin relative `/...`** | `javascript:`, `data:`, `file:` links in Markdown **will not save/render as clickable**. Normal web/docs links unchanged | **Do** |
+| **Sanitize Markdown on API write** (strip HTML / dangerous tags; keep GFM) | Pasted **raw HTML** in docs/wiki/ideas may be stripped or flattened. TipTap Markdown (headings, lists, tables, images to `/api/v1/files/...`) should round-trip. Custom `<iframe>` / `<script>` in notes **will not work** | **Do** — Markdown is the product format |
+| **Magic-byte check on image uploads** | A file whose bytes are not jpeg/png/gif/webp is rejected even if the OS/browser claimed `image/jpeg`. Rare false rejects | **Do** |
+| **`Content-Disposition: attachment` (or `nosniff` + forced image MIME) on `/files`** | Opening an upload in a new tab still shows the image; HTML/SVG-as-image cannot execute as a document | **Do** — images still embed in Markdown |
+| **Canvas `document` max ~2 MB serialized** | Extremely large Excalidraw scenes fail to save with 400. Typical boards should fit | **Do** — raise in QA if real canvases hit the cap |
+| **SSRF: no redirects to private IPs; resolve host and block RFC1918/link-local/IPv6 ULA/metadata; limit redirects** | Assistant “fetch URL” **cannot** pull intranet, `localhost`, or URLs that bounce to LAN. Public https docs still work. Some CDNs that redirect oddly may fail | **Do** |
+| **Helmet-style headers + CSP** | **Highest break risk:** Excalidraw workers/`blob:`, TipTap inline styles, Vite assets. If CSP is too tight, **Canvas editor or Markdown preview can go blank** | **Do**, with an allowlist: `script-src 'self'`; `style-src 'self' 'unsafe-inline'` (needed today); `img-src 'self' data: blob:`; `worker-src 'self' blob:`; `connect-src 'self'`. **No** `unsafe-eval`. DEV CSP must also allow Vite HMR (`:5173` / `:3001`) **or** apply CSP only in production |
+| **Zod `.strict()` on all bodies** | Any extra JSON key (including harmless UI fields) → **400**. High chance of breaking the SPA | **Do not** this Task — default strip is enough; note in `SECURITY.md` |
+| **Lower `express.json` 10 MB** | Large canvas saves fail | **Do not** — keep 10 MB; rely on per-entity caps |
+| **Cap wiki/docs/ideas at 50k like tasks** | Long wiki pages / schema docs would fail | **Do not** — keep 500k; already a cap |
+| **Disable assistant URL fetch entirely** | Research tool cannot fetch the web | **Do not** — tighten SSRF instead |
+
+**Not changing in this Task (follow-up Tasks):** login/session, rate limits, public-internet multi-user model, CI SAST / `npm audit` gate, backup-restore confirmation UX (already has confirm in UI; still unauthenticated API).
+
+## Implementation
+
+### 1. Shared input helpers (`src/lib/`)
+
+- `escapeIlikePattern(q: string): string` — escape `\`, `%`, `_` then wrap `%…%` at call sites.
+- `assertSafeHttpUrl` / link allowlist for Markdown URLs (shared client + server if practical).
+- Upload magic-byte sniffer (first bytes of jpeg/png/gif/webp).
+- Optional: `sanitizeMarkdown(s: string)` using a small allowlist (prefer **sanitize-html** or **isomorphic-dompurify** with a Markdown-oriented config). Apply on **write** for idea/project/doc/wiki/task description/comment/template bodies.
+
+### 2. Routes / services
+
+- Search + `references` + `taskDependencies` search: length cap + LIKE escape.
+- Admin `Number(req.params.id)` → `parseRouteId`.
+- Canvas create/patch: reject `document` if `JSON.stringify` length > 2_000_000.
+- Uploads: magic bytes after multer; reject mismatch; set `X-Content-Type-Options: nosniff` on file GET.
+- `fetchUrlForAssistant`: after each redirect hop, re-check hostname **and** resolved IPs; `redirect: 'manual'` or max 2 hops with the same private-IP checks; block IPv6 localhost/`fc00:`/`fe80:`/metadata.
+
+### 3. Markdown editor (client)
+
+- Tighten `Link.isAllowedUri` to the same protocol allowlist (defense in depth; API remains source of truth).
+- Do not introduce `dangerouslySetInnerHTML`.
+
+### 4. HTTP headers (`src/index.ts`)
+
+- Production: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, CSP as in the table.
+- Do not add CORS `*` (API is same-origin).
+
+### 5. `SECURITY.md` (repo root)
+
+Living document:
+
+- Threat model (single-user, private network, unauthenticated API).
+- Checklist of surfaces (table above, updated after fixes).
+- How to re-audit (grep for `sql\``, `Number(req.params`, `execFile`, `fetch(`, upload routes, Markdown).
+- Residual risks + links to child Task numbers once created.
+- Explicit: parameterized queries, not “string sanitizing SQL”.
+
+### 6. Tests
+
+- Unit: LIKE escape; magic bytes; URL/SSRF host checks; Markdown sanitizer (script/javascript: stripped, normal MD kept).
+- Route: invalid admin id 400; search `q` too long 400.
+
+### 7. Follow-up Tasks (PROD, children of T0073, state `ready` or `new`)
+
+Create via API after implement approval (project 4, `parentId` none — **siblings**):
+
+| Number | Title |
+|--------|--------|
+| **T0084** | Authentication and session binding |
+| **T0085** | API rate limiting and abuse controls |
+| **T0086** | Automated security tests in CI |
+| **T0087** | Public-internet / multi-user hardening |
+
+## Branch
+
+- `T0073-secure-inputs`
+
+## Done when
+
+- `SECURITY.md` checked in and lists audits + residuals + follow-up Task numbers
+- In-scope hardenings from the usability table (all **Do** rows) shipped
+- Follow-up Tasks exist on PROD
+- QA checklist run; finish-up only on user request
+
+## QA follow-ups
+
+- **Blank To Dos / Documents (2026-08-20):** Restored `ResizableMarkdownImage` import in `MarkdownEditor.tsx`. It was dropped when wiring `isAllowedHref`, which threw `ReferenceError` on any page that mounts the editor (project To Dos, Documents, and other Markdown surfaces).
+- **Paste HTML still visible (2026-08-20):** API only stripped on save. Editor now sanitizes on paste, on load, and on each markdown emit (same rules as the API). Autolinks `<https://…>` are preserved.
+- **Idea titles still allowed `<script>` (2026-08-20):** Plain-text titles/names now strip HTML in the UI as you type and on API write (`plainTitle`). Same for documents, tasks, projects, wiki, boards, and related name fields.
+- **All fields including Add tag (2026-08-20):** Global DOM input sanitizer plus API middleware so every text/query/JSON string is stripped (passwords excluded). Tag create/attach names included.

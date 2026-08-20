@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import { dueDateSchema } from "../../lib/taskFields.js";
 import { recordTaskChanges, type TaskLike } from "../../services/tasks.js";
 import { getCurrentUserId, loadUserMap } from "../../services/users.js";
@@ -12,7 +13,12 @@ import { getCurrentUserId, loadUserMap } from "../../services/users.js";
 const idParam = z.coerce.number().int().positive();
 
 const commentBody = z.object({
-  body: z.string().min(1).max(50_000),
+  body: z
+    .string()
+    .min(1)
+    .max(50_000)
+    .transform(sanitizeMarkdown)
+    .refine((s) => s.trim().length > 0, { message: "body must not be empty" }),
 });
 
 const sessionBody = z.object({

@@ -34,6 +34,8 @@ import { uploadFile } from "../../api/client";
 import { NavIcon } from "../shell/NavIcon";
 import { MarkdownReferenceSuggest } from "./MarkdownReferenceSuggest";
 import { ResizableMarkdownImage } from "./ResizableMarkdownImage";
+import { isAllowedHref } from "../../lib/safeHref";
+import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown";
 
 const DEFAULT_MIN_HEIGHT = 120;
 const DEFAULT_MAX_HEIGHT = 720;
@@ -155,7 +157,7 @@ export function MarkdownEditor({
   const [dragging, setDragging] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const lastEmitted = useRef(value);
+  const lastEmitted = useRef(sanitizeMarkdown(value));
   const editorRef = useRef<Editor | null>(null);
   const modeRef = useRef(mode);
   const onChangeRef = useRef(onChange);
@@ -204,11 +206,7 @@ export function MarkdownEditor({
         openOnClick: false,
         autolink: true,
         HTMLAttributes: { rel: "noopener noreferrer" },
-        isAllowedUri: (url, ctx) => {
-          if (!url) return false;
-          if (url.startsWith("/") && !url.startsWith("//")) return true;
-          return ctx.defaultValidate(url);
-        },
+        isAllowedUri: (url) => isAllowedHref(url ?? ""),
       }),
       ResizableMarkdownImage,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -223,7 +221,7 @@ export function MarkdownEditor({
         markedOptions: { gfm: true },
       }),
     ],
-    content: value || "",
+    content: sanitizeMarkdown(value || ""),
     contentType: "markdown",
     editable: !readOnly && mode === "edit",
     editorProps: {
@@ -246,31 +244,46 @@ export function MarkdownEditor({
         return true;
       },
       handlePaste: (_view, event) => {
-        if (!enableImageUpload || modeRef.current !== "edit") return false;
+        if (modeRef.current !== "edit") return false;
         const items = event.clipboardData?.items;
-        if (!items) return false;
-        const imageItem = Array.from(items).find((item) => item.type.startsWith("image/"));
-        if (!imageItem) return false;
-        const file = imageItem.getAsFile();
-        if (!file) return false;
-        event.preventDefault();
-        void (async () => {
-          setUploading(true);
-          try {
-            const url = await uploadClipboardImage(file);
-            editorRef.current?.chain().focus().setImage({ src: url, alt: file.name }).run();
-          } catch (err) {
-            console.error(err);
-            window.alert(err instanceof Error ? err.message : "Image upload failed");
-          } finally {
-            setUploading(false);
+        if (enableImageUpload && items) {
+          const imageItem = Array.from(items).find((item) => item.type.startsWith("image/"));
+          if (imageItem) {
+            const file = imageItem.getAsFile();
+            if (!file) return false;
+            event.preventDefault();
+            void (async () => {
+              setUploading(true);
+              try {
+                const url = await uploadClipboardImage(file);
+                editorRef.current?.chain().focus().setImage({ src: url, alt: file.name }).run();
+              } catch (err) {
+                console.error(err);
+                window.alert(err instanceof Error ? err.message : "Image upload failed");
+              } finally {
+                setUploading(false);
+              }
+            })();
+            return true;
           }
-        })();
+        }
+        const text = event.clipboardData?.getData("text/plain") ?? "";
+        if (!text) return false;
+        event.preventDefault();
+        const clean = sanitizeMarkdown(text);
+        editorRef.current?.commands.insertContent(clean, { contentType: "markdown" });
         return true;
       },
     },
     onUpdate: ({ editor: ed }) => {
-      const md = ed.getMarkdown();
+      const raw = ed.getMarkdown();
+      const md = sanitizeMarkdown(raw);
+      if (md !== raw) {
+        lastEmitted.current = md;
+        ed.commands.setContent(md, { contentType: "markdown" });
+        onChangeRef.current(md);
+        return;
+      }
       lastEmitted.current = md;
       onChangeRef.current(md);
     },
@@ -279,7 +292,7 @@ export function MarkdownEditor({
       setMode("edit");
     },
     onBlur: ({ editor: ed, event }) => {
-      const md = ed.getMarkdown();
+      const md = sanitizeMarkdown(ed.getMarkdown());
       onBlurRef.current?.(md);
       if (readOnly) return;
       const next = event?.relatedTarget;
@@ -305,8 +318,8 @@ export function MarkdownEditor({
   useEffect(() => {
     if (!editor) return;
     if (value === lastEmitted.current) return;
-    lastEmitted.current = value;
-    editor.commands.setContent(value || "", { contentType: "markdown" });
+    lastEmitted.current = sanitizeMarkdown(value || "");
+    editor.commands.setContent(lastEmitted.current, { contentType: "markdown" });
   }, [editor, value]);
 
   async function pickAndUploadImage() {
@@ -338,6 +351,10 @@ export function MarkdownEditor({
     const trimmed = next.trim();
     if (!trimmed) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    if (!isAllowedHref(trimmed)) {
+      window.alert("Only http, https, mailto, and same-site paths are allowed");
       return;
     }
     editor.chain().focus().extendMarkRange("link").setLink({ href: trimmed }).run();

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { optionalPlainTitle } from "../../lib/markdownFields.js";
 import { toUserProfile } from "../../lib/userFields.js";
 import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
 
@@ -12,7 +13,7 @@ const emailSchema = z.string().trim().email().max(320);
 
 const patchBody = z
   .object({
-    displayName: z.string().trim().min(1).max(200).optional(),
+    displayName: optionalPlainTitle(200),
     email: emailSchema.optional(),
     avatarUploadId: z.union([z.number().int().positive(), z.null()]).optional(),
   })

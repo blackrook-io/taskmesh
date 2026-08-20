@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateIdeaNumber, allocateTodoListNumber } from "../../services/entityNumbers.js";
@@ -11,12 +12,12 @@ import { ensureInboxList } from "../../services/todoLists.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const listBody = z.object({
-  title: z.string().min(1).max(500),
+  title: plainTitle(500),
   projectId: z.number().int().positive().optional().nullable(),
 });
 
 const listPatch = z.object({
-  title: z.string().min(1).max(500).optional(),
+  title: optionalPlainTitle(500),
 });
 
 const itemEntity = z.enum(["idea", "task"]);
@@ -39,13 +40,13 @@ const reorderBody = z.object({
 
 const createItemBody = z.object({
   entityType: itemEntity,
-  title: z.string().min(1).max(2000),
+  title: plainTitle(2000),
   projectId: z.number().int().positive().optional(),
 });
 
 const convertBody = z.object({
   projectId: z.number().int().positive(),
-  title: z.string().min(1).max(2000).optional(),
+  title: optionalPlainTitle(2000),
 });
 
 const idParam = z.coerce.number().int().positive();

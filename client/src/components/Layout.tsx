@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { installDomInputSanitizer } from "../lib/sanitizeDomInputs";
 import { ThemeProvider } from "../lib/ThemeProvider";
 import { AdministrationProvider } from "../lib/administration";
 import { SettingsProvider } from "../lib/settings";
@@ -12,6 +13,10 @@ import { SettingsModal } from "./shell/SettingsModal";
 export function Layout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+
+  useEffect(() => {
+    return installDomInputSanitizer();
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

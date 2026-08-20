@@ -4,6 +4,8 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { optionalPlainTitle } from "../../lib/markdownFields.js";
+import { jsonDocumentSchema } from "../../lib/jsonDocument.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateImageBoardNumber } from "../../services/entityNumbers.js";
 
@@ -14,15 +16,15 @@ const emptyDocument = {
 };
 
 const createBody = z.object({
-  title: z.string().min(1).max(500).optional(),
+  title: optionalPlainTitle(500),
   projectId: z.number().int().positive().nullable().optional(),
-  document: z.record(z.string(), z.unknown()).optional(),
+  document: jsonDocumentSchema.optional(),
 });
 
 const patchBody = z.object({
-  title: z.string().min(1).max(500).optional(),
+  title: optionalPlainTitle(500),
   projectId: z.number().int().positive().nullable().optional(),
-  document: z.record(z.string(), z.unknown()).optional(),
+  document: jsonDocumentSchema.optional(),
   sortOrder: z.number().int().optional(),
 });
 

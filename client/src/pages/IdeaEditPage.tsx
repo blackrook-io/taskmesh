@@ -7,6 +7,7 @@ import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { TagInput } from "../components/shared/TagInput";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { formatEntityRef } from "../lib/entityRef";
+import { sanitizePlainText } from "../lib/plainText";
 import type { Idea, Project } from "../types";
 
 export function IdeaEditPage() {
@@ -31,7 +32,7 @@ export function IdeaEditPage() {
 
   useEffect(() => {
     if (idea) {
-      setTitle(idea.title);
+      setTitle(sanitizePlainText(idea.title));
       setBody(idea.body ?? "");
     }
   }, [idea]);
@@ -133,7 +134,7 @@ export function IdeaEditPage() {
 
       <div className="field">
         <label htmlFor="idea-title">Title</label>
-        <input id="idea-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input id="idea-title" type="text" value={title} onChange={(e) => setTitle(sanitizePlainText(e.target.value))} />
       </div>
 
       <div className="field">

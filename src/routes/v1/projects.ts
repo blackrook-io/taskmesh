@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
@@ -20,14 +21,14 @@ import { wikiRouter } from "./wiki.js";
 const projectStatus = z.enum(["idea", "active", "paused", "done"]);
 
 const projectBody = z.object({
-  name: z.string().min(1).max(500),
-  description: z.string().max(500_000).optional().nullable(),
+  name: plainTitle(500),
+  description: optionalMarkdown(500_000),
   status: projectStatus.optional(),
 });
 
 const projectPatch = z.object({
-  name: z.string().min(1).max(500).optional(),
-  description: z.string().max(500_000).optional().nullable(),
+  name: optionalPlainTitle(500),
+  description: optionalMarkdown(500_000),
   status: projectStatus.optional(),
 });
 
