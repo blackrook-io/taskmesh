@@ -12,11 +12,23 @@ export type TaskDepSummary = {
   state: string;
 };
 
-/** States that no longer block Complete / Delete gates. */
+/** States that are done for list/work visibility (not Pending). */
 export const TERMINAL_TASK_STATES = new Set(["complete", "canceled", "deleted"]);
+
+/** States that no longer block Complete / Delete dependency gates. */
+export const SATISFIED_DEPENDENCY_STATES = new Set([
+  "complete",
+  "canceled",
+  "deleted",
+  "pending",
+]);
 
 export function isOpenTaskState(state: string): boolean {
   return !TERMINAL_TASK_STATES.has(state);
+}
+
+export function isDependencyBlockingState(state: string): boolean {
+  return !SATISFIED_DEPENDENCY_STATES.has(state);
 }
 
 function depLabel(task: Pick<TaskDepSummary, "number" | "title">): string {
@@ -249,7 +261,7 @@ export async function openDependsOnBlockers(
   taskId: number,
 ): Promise<TaskDepSummary[]> {
   const deps = await listDependsOn(db, taskId);
-  return deps.filter((d) => isOpenTaskState(d.state));
+  return deps.filter((d) => isDependencyBlockingState(d.state));
 }
 
 /** Open Required-by tasks that block Delete. */
@@ -258,7 +270,7 @@ export async function openRequiredByBlockers(
   taskId: number,
 ): Promise<TaskDepSummary[]> {
   const deps = await listRequiredBy(db, taskId);
-  return deps.filter((d) => isOpenTaskState(d.state));
+  return deps.filter((d) => isDependencyBlockingState(d.state));
 }
 
 export function formatBlockersMessage(

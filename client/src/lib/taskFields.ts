@@ -4,6 +4,7 @@ export const TASK_STATES = [
   "new",
   "ready",
   "in_progress",
+  "pending",
   "complete",
   "canceled",
   "on_hold",
@@ -17,6 +18,7 @@ export const SELECTABLE_TASK_STATES = [
   "new",
   "ready",
   "in_progress",
+  "pending",
   "complete",
   "canceled",
   "on_hold",
@@ -38,6 +40,7 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   new: "Draft",
   ready: "Ready",
   in_progress: "In Progress",
+  pending: "Pending",
   complete: "Complete",
   canceled: "Canceled",
   on_hold: "On Hold",
@@ -46,6 +49,20 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
 
 export function isDeletedTaskState(state: string): boolean {
   return state === "deleted";
+}
+
+export function isFinishedChildState(state: string): boolean {
+  return state === "complete" || state === "canceled" || state === "deleted";
+}
+
+/** Open Depends-on / Required-by blockers (Pending does not block). */
+export function isDependencyBlockingState(state: string): boolean {
+  return (
+    state !== "complete" &&
+    state !== "canceled" &&
+    state !== "deleted" &&
+    state !== "pending"
+  );
 }
 
 export function isSelectableTaskState(state: string): state is SelectableTaskState {
@@ -71,6 +88,7 @@ export const TASK_STATE_CYCLE: TaskState[] = [
 ];
 
 export function nextTaskState(current: TaskState): TaskState {
+  if (current === "pending") return "complete";
   const i = TASK_STATE_CYCLE.indexOf(current);
   return TASK_STATE_CYCLE[(i + 1) % TASK_STATE_CYCLE.length] ?? "new";
 }
@@ -84,6 +102,7 @@ export type TaskStateTone =
   | "draft"
   | "ready"
   | "progress"
+  | "pending"
   | "done"
   | "canceled"
   | "hold"
@@ -95,6 +114,8 @@ export function taskStateTone(state: TaskState): TaskStateTone {
       return "ready";
     case "in_progress":
       return "progress";
+    case "pending":
+      return "pending";
     case "complete":
       return "done";
     case "canceled":
@@ -116,6 +137,17 @@ export function taskStateClass(base: string, state: TaskState): string {
 
 /** CSS modifier for list Priority selects. */
 export type TaskPriorityTone = "none" | "low" | "medium" | "high" | "urgent";
+
+export const TASK_STATE_SORT_RANK: Record<TaskState, number> = {
+  new: 0,
+  ready: 1,
+  in_progress: 2,
+  pending: 3,
+  on_hold: 4,
+  complete: 5,
+  canceled: 6,
+  deleted: 7,
+};
 
 export function taskPriorityTone(priority: TaskPriority): TaskPriorityTone {
   return priority;

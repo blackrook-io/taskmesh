@@ -26,6 +26,8 @@ curl -fsS "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/activity"
 curl -fsS "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/dependencies"
 ```
 
+If the task row has `parentId` (Child Task), load the Parent the same way (`GET /api/v1/tasks/{parentId}` and its `/activity`). If you need more context or information on a Child Task, refer to the Parent.
+
 ## Dependencies (Depends on / Required by)
 
 ```bash
@@ -37,7 +39,7 @@ curl -fsS "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}/dependencies"
 curl -fsS "http://127.0.0.1:3000/api/v1/tasks/dependency-search?q=T0042&excludeTaskId=${TASK_ID}"
 ```
 
-**Worktask Depends-on gate:** if any `dependsOn[].state` is not `complete` or `canceled`, alert and stop before planning/branch/In Progress.
+**Worktask Depends-on gate:** if any `dependsOn[].state` is not `complete`, `canceled`, or `pending`, alert and stop before planning/branch/In Progress. `pending` means the dependency’s own work is done (waiting on *its* children) and does not block.
 
 ## Update state
 
@@ -54,6 +56,8 @@ curl -fsS -X PATCH "http://127.0.0.1:3000/api/v1/tasks/${TASK_ID}" \
   -H 'Content-Type: application/json' \
   -d '{"state":"complete"}'
 ```
+
+If unfinished direct children remain, the API stores `pending` instead of `complete`. Finishing the last child auto-completes a Pending parent — do not PATCH the parent yourself.
 
 Do **not** send `dueDate` from this skill.
 
@@ -112,6 +116,7 @@ Post when implementing new functionality or corrections during QA (not only at C
 | `new` | Draft |
 | `ready` | Ready |
 | `in_progress` | In Progress |
+| `pending` | Pending |
 | `complete` | Complete |
 | `canceled` | Canceled |
 | `on_hold` | On Hold |
@@ -125,6 +130,8 @@ From the task row: `id`, `number`, `title`, `description`, `state`, `priority`, 
 From activity: all `kind: "comment"` bodies (chronological); skim `kind: "change"` for prior state/priority edits.
 
 From dependencies: `dependsOn` / `requiredBy` summaries (`id`, `number`, `title`, `state`) — used for the Depends-on gate at sizing.
+
+**Parent / Child:** `parentId != null` means this is a Child. If the Agent needs more context or information on a Child Task, it should refer to the Parent (load Parent title, description, comments). Parent context supplements the Child; it does not replace Child-specific acceptance notes.
 
 ## Git ops (this host)
 

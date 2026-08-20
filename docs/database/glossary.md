@@ -54,12 +54,15 @@ Stored on `tasks.state` (text). API values and typical UI labels:
 | `new` | Draft |
 | `ready` | Ready |
 | `in_progress` | In Progress |
+| `pending` | Pending (own work done; waiting on child tasks; stays in working lists) |
 | `complete` | Complete |
 | `canceled` | Canceled |
 | `on_hold` | On Hold |
 | `deleted` | Deleted (soft-delete; hidden from normal lists; not selectable in UI) |
 
 Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the row (preserves Task numbers and references).
+
+**Pending:** Completing a task that still has unfinished direct children is stored as `pending` instead of `complete`. When every direct child is `complete`, `canceled`, or `deleted`, a Pending parent is set to `complete` (ancestors too). Pending does not block Depends-on.
 
 ## Task priority
 

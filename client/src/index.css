@@ -27,6 +27,7 @@
   --task-state-draft: #4ea1ff;
   --task-state-ready: #3ecf8e;
   --task-state-progress: #4ea1ff;
+  --task-state-pending: #c9b458;
   --task-state-done: #3ecf8e;
   --task-state-canceled: #e55;
   --task-state-hold: #e8a838;
@@ -1979,6 +1980,11 @@ textarea.raw-md {
   border-color: var(--task-state-progress);
 }
 
+.task-state-cb--pending {
+  color: var(--task-state-pending);
+  border-color: var(--task-state-pending);
+}
+
 .task-state-cb--done {
   color: var(--task-state-done);
   border-color: var(--task-state-done);
@@ -2014,6 +2020,10 @@ textarea.raw-md {
 
 .task-list-row__state--progress {
   color: var(--task-state-progress);
+}
+
+.task-list-row__state--pending {
+  color: var(--task-state-pending);
 }
 
 .task-list-row__state--done {
@@ -2252,6 +2262,10 @@ textarea.raw-md {
 .task-timeline__tone--progress,
 .task-timeline__seg--progress {
   color: var(--task-state-progress);
+}
+.task-timeline__tone--pending,
+.task-timeline__seg--pending {
+  color: var(--task-state-pending);
 }
 .task-timeline__tone--done,
 .task-timeline__seg--done {
@@ -2625,6 +2639,10 @@ textarea.raw-md {
 .task-dep-list__state {
   font-size: 0.75rem;
   white-space: nowrap;
+}
+
+.task-dep-list__state--pending {
+  color: var(--task-state-pending);
 }
 
 .task-dep-list__remove {

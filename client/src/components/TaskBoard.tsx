@@ -32,6 +32,7 @@ import {
   taskStateClass,
   formatTaskNumber,
   nextTaskState,
+  TASK_STATE_SORT_RANK,
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
@@ -125,15 +126,7 @@ function sortRoots(roots: Task[], col: SortCol | null, dir: 1 | -1): Task[] {
     high: 3,
     urgent: 4,
   };
-  const stateRank: Record<TaskState, number> = {
-    new: 0,
-    ready: 1,
-    in_progress: 2,
-    on_hold: 3,
-    complete: 4,
-    canceled: 5,
-    deleted: 6,
-  };
+  const stateRank: Record<TaskState, number> = TASK_STATE_SORT_RANK;
   return [...roots].sort((a, b) => {
     let cmp = 0;
     if (col === "number") cmp = a.number - b.number;
@@ -234,18 +227,24 @@ export function StateCheckbox({
       ? "○"
       : state === "in_progress"
         ? "/"
-        : state === "complete"
-          ? "✓"
-          : state === "canceled"
-            ? "X"
-            : state === "on_hold"
-              ? "-"
-              : "";
+        : state === "pending"
+          ? "…"
+          : state === "complete"
+            ? "✓"
+            : state === "canceled"
+              ? "X"
+              : state === "on_hold"
+                ? "-"
+                : "";
+  const hint =
+    state === "pending"
+      ? `${TASK_STATE_LABELS[state]} — waiting on child tasks — click to cycle`
+      : `${TASK_STATE_LABELS[state]} — click to cycle`;
   return (
     <button
       type="button"
       className={taskStateClass("task-state-cb", state)}
-      title={`${TASK_STATE_LABELS[state]} — click to cycle`}
+      title={hint}
       aria-label={`State ${TASK_STATE_LABELS[state]}`}
       onClick={(e) => {
         e.stopPropagation();

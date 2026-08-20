@@ -1,0 +1,110 @@
+# T0081 — Pending State for Tasks
+
+## Context
+
+- **Task:** T0081 (`id` 93) — *Pending State for Tasks* — Ready, priority high, project TaskMesh
+- **Parent:** none
+- **Depends on:** none
+- **Problem:** Completing a parent (e.g. T0075) hides it from typical “not Complete” list views, so cascaded children “disappear” from the working list. User currently has to roll the parent back to In Progress just to see children.
+- **Goal:** Add **Pending** = own work is done, waiting on child tasks. Keep the parent visible in active lists. `/worktask` treats Pending as “parent implemented” (children may start). When the last child is done, the parent becomes Complete.
+
+## Decisions (interview confirmed 2026-08-20)
+
+- Complete with unfinished children → **auto-coerce to Pending**
+- Last child Complete/Canceled/Deleted → **auto-complete Pending parent** (walk ancestors)
+- Depends-on / `/worktask` gate → **Pending does not block**
+
+| Topic | Decision |
+|-------|----------|
+| API / DB value | `pending` (UI label **Pending**) |
+| Meaning | Complete *of this task’s own work*, held until children are terminal |
+| Data | `tasks.state` is unconstrained `text` — **no SQL migration**; update `TASK_STATES` + glossary |
+| Selectable | Yes — dropdowns / filters include Pending |
+| Checkbox cycle | **Skip** Pending (like Deleted). Cycle stays Draft → Ready → In Progress → Complete → Canceled → On Hold. Completing via checkbox/API still hits the coerce rule below |
+| Tone | Distinct from In Progress and Complete (amber/olive “waiting”) |
+| Open vs list visibility | **Open** for default list filters (`isOpenTaskState` stays true) so Pending parents remain in working lists |
+| Depends-on / Complete blockers | **Does not block** — treat like Complete/Canceled for `openDependsOnBlockers` and `/worktask` Depends-on gate |
+| Complete → Pending coerce | If PATCH/create would set `complete` and the task has any **direct** child whose state is not `complete` \| `canceled` \| `deleted`, save **`pending` instead**. Applies to UI, API, and `/worktask` finish-up |
+| Pending → Complete | When a child becomes `complete` \| `canceled` \| `deleted`, if the parent is `pending` and **all direct children** are now in that terminal set, set parent to `complete`. Recurse up the ancestor chain |
+| A Pending child | Does **not** count as done for the parent’s last-child check (parent stays Pending until that child is Complete/Canceled/Deleted) |
+| Manual Pending | User may set Pending even without children (allowed; no auto-complete until they Complete it or later children all finish) |
+| `/worktask` finish-up | If the task has unfinished direct children → `pending` (not `complete`). After last child finish-up → parent `complete` if it is still `pending` (server should do this so UI-complete of last child also works) |
+| `/worktask` Depends-on | `pending` is a satisfied blocker (same as complete/canceled) |
+| `/worktask` state list | Add `pending` (UI: Pending). Fresh start still expects `ready` |
+| Out of scope | Changing default list filters; auto-reopening a already-Complete parent when a new child is added; Project Phase / Task Groups |
+
+## Implementation
+
+### 1. Shared enums / labels / tones
+
+- Server + client `TASK_STATES`: insert `pending` after `in_progress` (before `complete`)
+- `SELECTABLE_TASK_STATES`: include `pending`
+- Labels: `pending` → Pending
+- Timeline / filter / activity state maps
+- `taskStateTone`: new `pending` tone + CSS tokens on checkbox + list state
+- Sort rank: after In Progress, before Complete
+
+### 2. Open vs blocking
+
+Split the current “terminal” idea:
+
+- **List / open work:** `pending` is open (visible).
+- **Dependency blockers:** `pending` is **not** an open blocker (alongside complete, canceled, deleted).
+
+Update `TERMINAL_TASK_STATES` / `isOpenTaskState` (or add `isBlockingTaskState`) and tests. Do not let Pending block Complete of a dependent task.
+
+### 3. Parent/child transitions (API)
+
+In task PATCH (and create-if-state-complete):
+
+1. Coerce `complete` → `pending` when unfinished direct children exist.
+2. After a child’s state change, maybeCompletePendingAncestors.
+
+Activity `change` rows should record the **actual** saved state (Pending vs Complete).
+
+### 4. UI
+
+- State dropdowns, filters, board labels, dependency lists, timeline
+- Optional short title/tooltip: “Waiting on child tasks”
+- Confirm-delete / state displays stay consistent
+- Completing a parent with open children should land on Pending without a scary error (maybe a brief confirmation or silent coerce — prefer silent coerce + resulting Pending in the UI)
+
+### 5. `/worktask` skill + reference
+
+- State table includes `pending`
+- Depends-on gate: allow `complete` \| `canceled` \| `pending`
+- Finish-up of a parent with remaining children → PATCH `pending`
+- Finish-up of a child: if it was the last unfinished sibling, parent becomes Complete (rely on API; skill may still PATCH parent complete if API already did it — prefer API as source of truth)
+- Document: Pending parent = first-slice implemented; children may `/worktask` start
+- Carry existing uncommitted Parent-context skill notes in these same files (already on `main` working tree)
+
+### 6. Docs
+
+- `docs/database/glossary.md` task states table
+- `npm run docs:sync-schema` after docs change (no new `drizzle/*.sql` → **PATCH** bump on finish-up)
+
+### 7. Tests
+
+- Coerce complete → pending with open children
+- Last child complete promotes pending parent
+- Canceled child counts as finished
+- Pending child does not promote parent
+- Ancestor chain promotion
+- Depends-on: pending does not block
+- `isOpenTaskState("pending") === true` (or equivalent list-open helper)
+
+## Branch
+
+`T0081-pending-task-state`
+
+## QA (preview)
+
+- Set a parent Complete while it has Draft/Ready children → parent shows **Pending**, still in the working list, children still cascaded
+- Complete/cancel the last child → parent becomes **Complete** and leaves the default working list
+- `/worktask` Depends-on a Pending task → not blocked
+- Filter/dropdown/timeline show Pending
+- Checkbox cycle does not visit Pending; selecting Complete on a parent with kids still coerces
+
+## QA follow-ups
+
+- **T0075 Complete did not coerce (DEV):** the DEV API worker had started before `resolvePersistedState` was wired into the PATCH routes, so Completing T0075 wrote `complete` with no coerce. Reloaded `:3001` and re-PATCHed T0075 `complete` → stored **`pending`**. No code change; coerce path is correct when the new API is running.

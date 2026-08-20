@@ -4,6 +4,7 @@ export const TASK_STATES = [
   "new",
   "ready",
   "in_progress",
+  "pending",
   "complete",
   "canceled",
   "on_hold",
@@ -17,6 +18,7 @@ export const SELECTABLE_TASK_STATES = [
   "new",
   "ready",
   "in_progress",
+  "pending",
   "complete",
   "canceled",
   "on_hold",
@@ -40,6 +42,11 @@ export const taskPrioritySchema = z.enum(TASK_PRIORITIES);
 
 export function isDeletedTaskState(state: string): boolean {
   return state === "deleted";
+}
+
+/** Direct children in these states count as done for Pending → Complete. */
+export function isFinishedChildState(state: string): boolean {
+  return state === "complete" || state === "canceled" || state === "deleted";
 }
 
 /** YYYY-MM-DD only. */

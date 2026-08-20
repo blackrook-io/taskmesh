@@ -23,6 +23,10 @@ import {
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
 import {
+  afterTaskHierarchyChange,
+  resolvePersistedState,
+} from "../../services/taskPending.js";
+import {
   attachTaskActor,
   attachTaskActors,
   getCurrentUserId,
@@ -153,6 +157,11 @@ standaloneTasksRouter.post("/", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create task");
       return;
     }
+    await afterTaskHierarchyChange(db, row.id, null, {
+      actorId,
+      source: activitySourceFromRequest(req),
+      recordHistory: shouldRecordHistory(req),
+    });
     res.status(201).json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
@@ -247,6 +256,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       return;
     }
 
+    const persistedState = await resolvePersistedState(db, taskId, parsed.state);
+    const previousParentId = existing.parentId;
+
     const [row] = await db
       .update(schema.tasks)
       .set({
@@ -254,7 +266,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
-        ...(parsed.state !== undefined ? { state: parsed.state } : {}),
+        ...(persistedState !== undefined ? { state: persistedState } : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.projectId !== undefined || nextProjectId !== existing.projectId
           ? { projectId: nextProjectId }
@@ -270,12 +282,14 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       })
       .where(eq(schema.tasks.id, taskId))
       .returning();
+    const activityOpts = {
+      actorId,
+      source: activitySourceFromRequest(req),
+      recordHistory: shouldRecordHistory(req),
+    };
     if (row) {
-      await recordTaskChanges(db, taskId, existing, row, {
-        actorId,
-        source: activitySourceFromRequest(req),
-        recordHistory: shouldRecordHistory(req),
-      });
+      await recordTaskChanges(db, taskId, existing, row, activityOpts);
+      await afterTaskHierarchyChange(db, taskId, previousParentId, activityOpts);
     }
     res.json({ data: row ? await attachTaskActor(db, row) : row });
   } catch (err) {
@@ -320,6 +334,11 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
       return;
     }
     await recordTaskChanges(db, taskId, existing, row, {
+      actorId,
+      source: activitySourceFromRequest(req),
+      recordHistory: shouldRecordHistory(req),
+    });
+    await afterTaskHierarchyChange(db, taskId, existing.parentId, {
       actorId,
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),

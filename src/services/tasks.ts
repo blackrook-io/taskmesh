@@ -86,6 +86,7 @@ const STATE_LABELS: Record<string, string> = {
   new: "Draft",
   ready: "Ready",
   in_progress: "In Progress",
+  pending: "Pending",
   complete: "Complete",
   canceled: "Canceled",
   on_hold: "On Hold",

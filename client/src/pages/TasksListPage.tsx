@@ -18,6 +18,7 @@ import {
   TASK_STATE_LABELS,
   formatTaskNumber,
   nextTaskState,
+  TASK_STATE_SORT_RANK,
   taskPriorityClass,
   taskStateClass,
   type TaskPriority,
@@ -44,15 +45,7 @@ function taskDue(task: Task): string | null {
 
 function sortTasks(list: Task[], col: SortCol | null, dir: 1 | -1, projectName: (id: number | null) => string) {
   if (!col) return list;
-  const stateRank: Record<Task["state"], number> = {
-    new: 0,
-    ready: 1,
-    in_progress: 2,
-    on_hold: 3,
-    complete: 4,
-    canceled: 5,
-    deleted: 6,
-  };
+  const stateRank: Record<Task["state"], number> = TASK_STATE_SORT_RANK;
   const priRank: Record<Task["priority"], number> = {
     none: 0,
     low: 1,

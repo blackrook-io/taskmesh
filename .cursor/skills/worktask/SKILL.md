@@ -24,10 +24,11 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 1. **PROD only for task I/O** — base URL `http://127.0.0.1:3000` (systemd PROD). Never use DEV `:3001` or Vite `:5173` for task reads/writes.
 2. Prefer the **HTTP API** (see [reference.md](reference.md)). Do not use raw SQL for task updates.
 3. Do **not** change `dueDate` (including on Complete).
-4. State values: `new` (UI: Draft) | `ready` (UI: Ready) | `in_progress` | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`.
+4. State values: `new` (UI: Draft) | `ready` (UI: Ready) | `in_progress` | `pending` (UI: Pending — own work done, waiting on children) | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`.
 5. Follow repo plan + git + finish-up rules; this skill **adds** task bookkeeping and **replaces** `phase-N-*` branch naming with `T####-*` for this workstream.
 6. **Never** update git config (`user.name` / `user.email`). If commit fails for missing identity, set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for that command only (see [reference.md](reference.md)).
 7. **App version** — on finish-up, bump SemVer per [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) in the merge commit (MINOR if this Task added a Drizzle migration, otherwise PATCH). Mention the new version in the completion comment. Do not skip the bump.
+8. **Child Task → Parent** — if the Agent needs more context or information on a Child Task, it should refer to the Parent. Load the Parent from PROD (`parentId` → `GET /api/v1/tasks/{parentId}` plus description/comments as needed). Do not invent missing background.
 
 ## Workflow checklist
 
@@ -56,7 +57,9 @@ Worktask:
    - **Description**
    - **Comments** (`kind === "comment"`) and relevant `kind === "change"` rows for history
    - **Depends on** (blocking tasks)
-5. Note `id`, `state`, `priority`, `projectId`, formatted number `T####`.
+   - **Parent** when `parentId` is set (this is a Child Task)
+5. Note `id`, `state`, `priority`, `projectId`, `parentId`, formatted number `T####`.
+6. If `parentId` is set: fetch the Parent from PROD. If the Child’s title, description, or comments are thin, ambiguous, or incomplete — or you otherwise need more context or information on the Child Task — **refer to the Parent** (title, description, comments, activity). Use that as the missing brief; do not ask the user to restate what the Parent already records.
 
 If not found or PROD unhealthy → stop and report.
 
@@ -73,11 +76,11 @@ If the work looks too large for one session (many unrelated surfaces, multi-day 
 After load (and as part of the sizing assessment):
 
 1. Inspect `dependsOn` from `GET /api/v1/tasks/{id}/dependencies`.
-2. If **any** Depends-on task has `state` other than `complete` or `canceled`:
+2. If **any** Depends-on task has `state` other than `complete`, `canceled`, or `pending`:
    - **Alert** the user with the open blockers (`T####`, title, state).
    - **Stop** the workflow — do not interview/plan further, do not create a branch, do not mark In Progress.
    - No cleanup is needed if nothing was started; if this gate is hit mid-flight somehow, do not leave the task In Progress from this skill.
-3. Terminal Depends-on (`complete` / `canceled`) are fine; empty Depends-on is fine.
+3. Satisfied Depends-on (`complete` / `canceled` / `pending`) are fine; empty Depends-on is fine. **Pending** means the parent’s own implementation is done and children may start.
 
 ### 3. State gate
 
@@ -86,7 +89,7 @@ Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still bein
 - If `state` is `ready`: proceed (interview / plan).
 - If `state` is `in_progress`: **Resume** path — alert with current state / branch / plan hints; ask whether to continue, resume, or abort. Do not create a duplicate branch by default.
 - If `state` is `new` (Draft): **Alert** that the task is still Draft, not Ready. Ask whether to continue anyway, wait until they mark Ready, or abort. Do not mark In Progress or create a branch until they decide.
-- Any other state (`complete`, `canceled`, `on_hold`, …): **Alert** with current state (and any existing worktask comments / branch hints). Ask whether to continue, resume, or abort. Do not mark In Progress or create a branch until they decide.
+- Any other state (`complete`, `canceled`, `pending`, `on_hold`, …): **Alert** with current state (and any existing worktask comments / branch hints). Ask whether to continue, resume, or abort. Do not mark In Progress or create a branch until they decide.
 
 ### 4. Interview + plan
 
@@ -123,6 +126,8 @@ Do **all** of the following in order (same as development-rules, with Task bookk
 4. **Archive** the plan — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/`, commit on `main`, push again. Archived plan must include any QA follow-up notes.
 5. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed (script also stamps `data/prod-release.json`).
 6. **PROD Task** — completion comment (include original scope, **shipped version**, and QA follow-ups), then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
+   - If this task still has unfinished **direct children** (state not `complete` / `canceled` / `deleted`), the API **coerces Complete → Pending**. Prefer sending `complete` anyway and trust the coerce, or send `pending` explicitly.
+   - When finishing a **child**, do not PATCH the parent yourself: if the parent is Pending and this was the last unfinished child, the API sets the parent to `complete`.
 
 If the user wants finish-up **without** closing the Task (follow-ups remain), ask once and skip the Complete transition / still add a progress comment if useful.
 

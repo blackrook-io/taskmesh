@@ -4,6 +4,7 @@ import { apiJson } from "../../api/client";
 import {
   formatTaskNumber,
   isDeletedTaskState,
+  isDependencyBlockingState,
   TASK_STATE_LABELS,
   taskStateClass,
   type TaskState,
@@ -248,9 +249,7 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
 /** Fetch open Depends-on blockers for Complete gate (client-side pre-check). */
 export async function fetchOpenDependsOn(taskId: number): Promise<TaskDepSummary[]> {
   const res = await apiJson<{ data: DepPayload }>(`/api/v1/tasks/${taskId}/dependencies`);
-  return res.data.dependsOn.filter(
-    (d) => d.state !== "complete" && d.state !== "canceled" && d.state !== "deleted",
-  );
+  return res.data.dependsOn.filter((d) => isDependencyBlockingState(d.state));
 }
 
 export function formatCompleteBlockMessage(blockers: TaskDepSummary[]): string {
