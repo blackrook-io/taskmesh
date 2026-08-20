@@ -1017,6 +1017,14 @@ function SortableGroupHeader({
           <FilterIcon />
         </span>
       ) : null}
+      {group?.autoTagId != null ? (
+        <span
+          className="task-phase-header__auto-tag muted"
+          title={`Auto-tag: ${filterCtx?.tagNames?.get(group.autoTagId) ?? `#${group.autoTagId}`}`}
+        >
+          #{filterCtx?.tagNames?.get(group.autoTagId) ?? group.autoTagId}
+        </span>
+      ) : null}
       {group && onRequestDelete ? (
         <button
           type="button"
@@ -1054,10 +1062,12 @@ type Props = {
       color?: string | null;
       filter?: TaskListFilter | null;
       showInNav?: boolean;
+      autoTagId?: number | null;
     },
   ) => Promise<void>;
   onCreateGroup: (name: string) => Promise<void>;
   onDeleteGroup: (groupId: number) => Promise<void>;
+  onAttachTaskTag: (taskId: number, tagId: number) => Promise<void>;
   onPatchTask: (
     taskId: number,
     patch: Record<string, unknown>,
@@ -1078,6 +1088,7 @@ export function TaskBoard({
   onPatchGroup,
   onCreateGroup,
   onDeleteGroup,
+  onAttachTaskTag,
   onPatchTask,
 }: Props) {
   const { phaseNames } = usePhaseFilterOptions(projectId);
@@ -1204,7 +1215,15 @@ export function TaskBoard({
       } else if (overData?.type === "task") {
         toKey = overData.groupKey;
       }
-      if (toKey !== fromKey) return;
+      if (toKey !== fromKey) {
+        if (typeof toKey === "number") {
+          const target = groups.find((g) => g.id === toKey);
+          if (target?.autoTagId != null) {
+            await onAttachTaskTag(task.id, target.autoTagId);
+          }
+        }
+        return;
+      }
 
       const sectionRoots = rows
         .filter(

@@ -1,0 +1,2 @@
+ALTER TABLE "task_groups" ADD COLUMN "auto_tag_id" integer;--> statement-breakpoint
+ALTER TABLE "task_groups" ADD CONSTRAINT "task_groups_auto_tag_id_tags_id_fk" FOREIGN KEY ("auto_tag_id") REFERENCES "public"."tags"("id") ON DELETE set null ON UPDATE no action;

@@ -3502,10 +3502,12 @@ a:focus-visible {
   accent-color: var(--accent);
 }
 
-.group-edit-nav-toggle__hint {
-  display: block;
-  font-size: 0.85rem;
-  margin-top: 0.15rem;
+.task-phase-header__auto-tag {
+  font-size: 0.8rem;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 560px) {

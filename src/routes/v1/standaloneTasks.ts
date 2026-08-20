@@ -34,6 +34,7 @@ import {
   attachTaskActors,
   getCurrentUserId,
 } from "../../services/users.js";
+import { applyTaskGroupAutoTags } from "../../services/taskGroupAutoTag.js";
 import {
   rejectCompleteIfBlocked,
   rejectDeleteIfBlocked,
@@ -301,6 +302,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       }
       await recordTaskChanges(db, taskId, existing, row, activityOpts);
       await afterTaskHierarchyChange(db, taskId, previousParentId, activityOpts);
+      if (row.projectId != null) {
+        await applyTaskGroupAutoTags(db, { projectId: row.projectId, taskId });
+      }
     }
     res.json({ data: row ? await attachTaskActor(db, row) : row });
   } catch (err) {

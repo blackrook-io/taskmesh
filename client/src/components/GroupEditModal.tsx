@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { GroupAutoTagPicker } from "./GroupAutoTagPicker";
 import { ColorPopover } from "./shared/ColorPopover";
 import { FilterClauseValueInput } from "./TaskListFilterBar";
 import {
@@ -20,7 +21,7 @@ import {
 } from "../lib/taskListFilter";
 import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
-import type { TaskGroup } from "../types";
+import type { Tag, TaskGroup } from "../types";
 
 type Props = {
   group: TaskGroup;
@@ -30,6 +31,7 @@ type Props = {
     color: string | null;
     filter: TaskListFilter | null;
     showInNav: boolean;
+    autoTagId: number | null;
   }) => Promise<void>;
 };
 
@@ -50,6 +52,13 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
   const [color, setColor] = useState<string | null>(group.color);
   const [draft, setDraft] = useState<TaskListFilter>(() => draftFromGroup(group));
   const [showInNav, setShowInNav] = useState(group.showInNav);
+  const [autoTag, setAutoTag] = useState<Pick<Tag, "id" | "name" | "color"> | null>(() => {
+    if (group.autoTagId == null) return null;
+    const found = tags.find((t) => t.id === group.autoTagId);
+    return found
+      ? { id: found.id, name: found.name, color: null }
+      : { id: group.autoTagId, name: `#${group.autoTagId}`, color: null };
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,7 +129,13 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await onSave({ name: trimmed, color, filter: toStore, showInNav: pin });
+      await onSave({
+        name: trimmed,
+        color,
+        filter: toStore,
+        showInNav: pin,
+        autoTagId: autoTag?.id ?? null,
+      });
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -153,6 +168,16 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
             Color
           </span>
           <ColorPopover color={color} onChange={setColor} label="Group color" />
+        </div>
+        <div className="field" style={{ marginTop: "0.75rem" }}>
+          <span className="muted" style={{ display: "block", marginBottom: "0.35rem" }}>
+            Auto-tag
+          </span>
+          <p className="muted" style={{ margin: "0 0 0.35rem", fontSize: "0.85rem" }}>
+            Applied to tasks that match this group’s filter, and when a task is dragged into this
+            group. Existing tags are not removed if a task later leaves the filter.
+          </p>
+          <GroupAutoTagPicker tag={autoTag} onChange={setAutoTag} disabled={busy} />
         </div>
         <p className="muted task-list-filter-modal__hint" style={{ marginTop: "1rem" }}>
           Group filter overrides the list filter for this section. No filter means this group stays

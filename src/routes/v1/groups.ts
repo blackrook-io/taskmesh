@@ -7,6 +7,10 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { isEmptyTaskGroupFilter, parseTaskGroupFilter } from "../../lib/taskGroupFilter.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import {
+  applyTaskGroupAutoTags,
+  assertAutoTagId,
+} from "../../services/taskGroupAutoTag.js";
 
 const groupBody = z.object({
   name: z.string().min(1).max(200),
@@ -14,6 +18,7 @@ const groupBody = z.object({
   color: z.string().max(64).optional().nullable(),
   filter: z.unknown().optional().nullable(),
   showInNav: z.boolean().optional(),
+  autoTagId: z.number().int().positive().nullable().optional(),
 });
 
 const groupPatch = z.object({
@@ -22,6 +27,7 @@ const groupPatch = z.object({
   color: z.string().max(64).optional().nullable(),
   filter: z.unknown().optional().nullable(),
   showInNav: z.boolean().optional(),
+  autoTagId: z.number().int().positive().nullable().optional(),
 });
 
 const reorderBody = z.object({
@@ -54,6 +60,11 @@ groupsRouter.post("/", async (req, res) => {
       return;
     }
     const storedFilter = filterParsed === undefined ? null : filterParsed;
+    const autoTagOk = await assertAutoTagId(db, parsed.autoTagId);
+    if (!autoTagOk.ok) {
+      sendError(res, 400, "invalid_auto_tag", autoTagOk.message);
+      return;
+    }
     const existing = await db
       .select({ m: schema.taskGroups.sortOrder })
       .from(schema.taskGroups)
@@ -69,12 +80,14 @@ groupsRouter.post("/", async (req, res) => {
         color: parsed.color ?? null,
         filter: storedFilter,
         showInNav: isEmptyTaskGroupFilter(storedFilter) ? false : (parsed.showInNav ?? false),
+        autoTagId: parsed.autoTagId === undefined ? null : parsed.autoTagId,
       })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create group");
       return;
     }
+    await applyTaskGroupAutoTags(db, { projectId });
     res.status(201).json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -130,8 +143,13 @@ groupsRouter.patch("/:groupId", async (req, res) => {
     const projectId = parseRouteId(req, "projectId");
     const groupId = parseRouteId(req, "groupId");
     const parsed = groupPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["name", "sortOrder", "color", "filter", "showInNav"])) {
-      sendError(res, 400, "empty_patch", "Provide name, sortOrder, color, filter, and/or showInNav");
+    if (!hasDefinedKeys(parsed, ["name", "sortOrder", "color", "filter", "showInNav", "autoTagId"])) {
+      sendError(res, 400, "empty_patch", "Provide name, sortOrder, color, filter, showInNav, and/or autoTagId");
+      return;
+    }
+    const autoTagOk = await assertAutoTagId(db, parsed.autoTagId);
+    if (!autoTagOk.ok) {
+      sendError(res, 400, "invalid_auto_tag", autoTagOk.message);
       return;
     }
     const [existing] = await db
@@ -165,10 +183,12 @@ groupsRouter.patch("/:groupId", async (req, res) => {
           : parsed.showInNav !== undefined
             ? { showInNav: parsed.showInNav }
             : {}),
+        ...(parsed.autoTagId !== undefined ? { autoTagId: parsed.autoTagId } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.taskGroups.id, groupId))
       .returning();
+    await applyTaskGroupAutoTags(db, { projectId });
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);

@@ -39,6 +39,7 @@ import {
   rejectDeleteIfBlocked,
   rejectDeleteIfHasChildren,
 } from "./taskDependencies.js";
+import { applyTaskGroupAutoTags } from "../../services/taskGroupAutoTag.js";
 
 const taskBody = z.object({
   title: z.string().min(1).max(2000),
@@ -170,6 +171,7 @@ tasksRouter.post("/", async (req, res) => {
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),
     });
+    await applyTaskGroupAutoTags(db, { projectId, taskId: row.id });
     res.status(201).json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
@@ -246,6 +248,9 @@ tasksRouter.patch("/reorder", async (req, res) => {
       .from(schema.tasks)
       .where(and(eq(schema.tasks.projectId, projectId), ne(schema.tasks.state, "deleted")))
       .orderBy(asc(schema.tasks.sortOrder), asc(schema.tasks.id));
+    if (parsed.phaseId !== undefined) {
+      await applyTaskGroupAutoTags(db, { projectId });
+    }
     res.json({ data: await attachTaskActors(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
@@ -372,6 +377,7 @@ tasksRouter.patch("/:taskId", async (req, res) => {
     if (row) {
       await recordTaskChanges(db, taskId, existing, row, activityOpts);
       await afterTaskHierarchyChange(db, taskId, previousParentId, activityOpts);
+      await applyTaskGroupAutoTags(db, { projectId, taskId });
     }
 
     res.json({ data: row ? await attachTaskActor(db, row) : row });

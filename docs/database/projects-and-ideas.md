@@ -11,6 +11,7 @@ erDiagram
   ideas ||--o| projects : "source_idea_id"
   projects ||--o{ task_groups : "project_id"
   projects ||--o{ project_phases : "project_id"
+  tags ||--o{ task_groups : "auto_tag_id"
   users ||--o{ projects : "authorship elsewhere"
   ideas {
     int id PK
@@ -35,6 +36,7 @@ erDiagram
     text color
     jsonb filter
     boolean show_in_nav
+    int auto_tag_id FK
   }
   project_phases {
     int id PK
@@ -109,7 +111,7 @@ Projects are parents of task groups, project phases, tasks (optional), documents
 
 ## `task_groups`
 
-Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section. `show_in_nav` (T0078) opts the group into the Project menu under Tasks when a filter is active. Filter clause fields: State, Priority, Title, Number, Phase (T0080).
+Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section. `show_in_nav` (T0078) opts the group into the Project menu under Tasks when a filter is active. Optional `auto_tag_id` (T0077) names a tag that is applied to matching tasks (add-only), including drag-into the group in List View. Filter clause fields: State, Priority, Title, Number, Phase (T0080), Tags, Project.
 
 ### Columns
 
@@ -122,6 +124,7 @@ Named list-view sections within a project (T0075). Optional saved filter and bar
 | `color` | text | yes | — | Accent on the group bar (CSS hex) |
 | `filter` | jsonb | yes | — | T0053-shaped `{ clauses, joins }`; null/empty = no matches |
 | `show_in_nav` | boolean | no | `false` | When true and filter is active, appear under Tasks in the Project menu |
+| `auto_tag_id` | integer | yes | — | FK → `tags.id`; auto-applied to matching tasks (T0077) |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -129,10 +132,11 @@ Named list-view sections within a project (T0075). Optional saved filter and bar
 
 - **PK:** `id`
 - **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
+- **FK:** `auto_tag_id` → `tags.id` · **ON DELETE SET NULL**
 
 ### Relationships
 
-- Owned by `projects`. Not referenced by `tasks` (list placement is filter-only). Project **Phases** (`project_phases`) are a separate table; tasks associate via `tasks.phase_id`.
+- Owned by `projects`. Not referenced by `tasks` (list placement is filter-only). Optional auto-tag via `auto_tag_id`. Project **Phases** (`project_phases`) are a separate table; tasks associate via `tasks.phase_id`.
 
 ---
 

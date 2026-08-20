@@ -159,7 +159,7 @@ Global tag catalog plus polymorphic attachments.
 | `color` | text | yes | — | Accent |
 | `created_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `name`.
+**Constraints:** PK `id`; UNIQUE `name`. Referenced by `task_groups.auto_tag_id` (`ON DELETE SET NULL`).
 
 ### `taggings` columns
 

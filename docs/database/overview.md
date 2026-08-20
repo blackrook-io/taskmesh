@@ -52,6 +52,7 @@ erDiagram
   boards ||--o{ board_cards : has
   todo_lists ||--o{ todo_list_items : has
   tags ||--o{ taggings : has
+  task_groups }o--o| tags : "auto_tag"
   wiki_nodes ||--o{ wiki_nodes : "parent"
 
   users ||--o{ tasks : "createdBy / updatedBy"

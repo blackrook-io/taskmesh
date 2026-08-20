@@ -9,6 +9,7 @@ import {
   entityExists,
   isTaggableEntityType,
 } from "../../services/entities.js";
+import { applyTaskGroupAutoTagsForTask } from "../../services/taskGroupAutoTag.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -139,6 +140,10 @@ taggingsRouter.post("/", async (req, res) => {
       entityId: parsed.entityId,
     });
 
+    if (parsed.entityType === "task") {
+      await applyTaskGroupAutoTagsForTask(db, parsed.entityId);
+    }
+
     res.status(201).json({ data: tag });
   } catch (err) {
     handleRouteError(res, err);
@@ -170,6 +175,9 @@ taggingsRouter.delete("/", async (req, res) => {
     if (deleted.length === 0) {
       sendError(res, 404, "not_found", "Tagging not found");
       return;
+    }
+    if (body.entityType === "task") {
+      await applyTaskGroupAutoTagsForTask(db, body.entityId);
     }
     res.status(204).end();
   } catch (err) {

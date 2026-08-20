@@ -678,6 +678,16 @@ export function ProjectDetailPage() {
                   body: JSON.stringify(patch),
                 });
                 await qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
+                void qc.invalidateQueries({ queryKey: ["taggings", "task"] });
+                void qc.invalidateQueries({ queryKey: ["tags"] });
+              }}
+              onAttachTaskTag={async (taskId, tagId) => {
+                await apiJson("/api/v1/taggings", {
+                  method: "POST",
+                  body: JSON.stringify({ entityType: "task", entityId: taskId, tagId }),
+                });
+                void qc.invalidateQueries({ queryKey: ["taggings", "task"] });
+                void qc.invalidateQueries({ queryKey: ["tags"] });
               }}
               onCreateGroup={async (name) => {
                 await apiJson(`/api/v1/projects/${projectId}/groups`, {

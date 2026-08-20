@@ -1,0 +1,80 @@
+---
+description: "T0077 — Task Group auto-tag: apply a configured tag on filter match and drag-into"
+todos:
+  - id: schema
+    content: Add task_groups.auto_tag_id FK to tags; docs/database + docs:sync-schema
+  - id: apply-service
+    content: Server apply-on-match using existing taggings; hook task/tagging/group writes
+  - id: modal-drag
+    content: Group modal auto-tag picker; drag-into group applies the tag
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0077 — Task Group auto-tag
+
+**Task:** T0077 · id `89` · Ready · High · project 4 (TaskMesh)  
+**Parent:** T0075 (Task Groups refactor) · id `87` · Pending  
+**Depends on:** T0075 — **Pending** (own work done; gate satisfied)  
+**Branch (after approval):** `T0077-task-group-auto-tag`
+
+## Goal
+
+Let a Task Group store **one existing Tag**. Any Task in that Project that matches the group’s saved filter gets that tag applied automatically — including when a Task is **dragged into** the group in List View, and when it **starts matching later** (create/update/tag/filter change). Use the existing `tags` / `taggings` model.
+
+## Decisions (confirmed)
+
+| # | Topic | Proposal |
+|---|--------|----------|
+| A | Config | One optional `autoTagId` on the group (`tags.id`). Empty = auto-tag off. |
+| B | Picker | Group edit modal: single-tag picker (existing tags; create-by-name allowed, then store the id). |
+| C | Add-only | Apply the tag; **do not** auto-remove if the task later stops matching. |
+| D | Match apply | Server-side: after task create/update, after tagging attach/detach on a task, after group save (filter or auto-tag). |
+| E | Drag-into | Drop on a group **with** auto-tag → attach that tag (idempotent). No auto-tag / Unassigned → still no-op. Does not write `phaseId`. |
+| F | Empty filter | Filter-empty groups still have no members. Drag-into still applies the auto-tag if set. |
+| G | Scope | Only tasks in the group’s project. Multiple matching groups → each auto-tag is applied. |
+| H | Appearance | Task appears in the group only if the **filter** now matches (e.g. filter includes Tags IS that tag). Auto-tag does not mutate state/priority/etc. |
+
+## Scope
+
+**In**
+
+- `task_groups.auto_tag_id` nullable FK → `tags.id` (`ON DELETE SET NULL`)
+- Groups API create/PATCH include `autoTagId`
+- Apply service using existing taggings unique key (no duplicate rows)
+- Group modal: Auto-tag field
+- List View: drag task onto another group applies that group’s auto-tag, then lists refresh
+- Schema docs + `docs:sync-schema`
+
+**Out**
+
+- T0078 nav, T0079 extra filter fields, T0080 Project Phase
+- Auto-removing tags, multi-tag auto-apply, inventing a second tagging table
+- Changing other task fields on drag-into
+- All Tasks grouped sections
+
+## Approach
+
+### Schema (MINOR on finish-up)
+
+1. `ALTER TABLE task_groups ADD COLUMN auto_tag_id integer NULL REFERENCES tags(id) ON DELETE SET NULL`
+2. Update `schema.ts`, generate SQL, `docs/database/projects-and-ideas.md` (+ overview if needed), `npm run docs:sync-schema`
+
+### Server apply
+
+Port enough of `taskMatchesFilter` / tag context to a **server** helper (do not rely on the SPA being open). For a project (or one task):
+
+- Load groups with non-null `autoTagId` and a non-empty filter
+- Load candidate tasks + their tag ids
+- For each match, insert tagging `(autoTagId, 'task', taskId)` if missing
+
+Hook from: groups POST/PATCH, tasks POST/PATCH (when `projectId` is set), taggings POST/DELETE when `entityType === 'task'`.
+
+### UI
+
+- `GroupEditModal`: Auto-tag control under Color; clearable
+- `TaskBoard` `handleDragEnd`: when `toKey !== fromKey` and target is a group with `autoTagId`, POST `/api/v1/taggings` then invalidate tasks/taggings (drop the current early-return no-op for that case)
+
+## Finish-up note
+
+New Drizzle SQL → **MINOR** bump on finish-up (`package.json` PATCH reset). Current PROD is `0.25.1` at plan time; increment from whatever is in `package.json` then.

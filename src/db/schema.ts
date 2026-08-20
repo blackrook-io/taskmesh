@@ -64,6 +64,10 @@ export const taskGroups = pgTable("task_groups", {
   } | null>(),
   /** When true and filter is active, list under Tasks in the Project menu. */
   showInNav: boolean("show_in_nav").notNull().default(false),
+  /** Optional tag applied to tasks that match this group’s filter (T0077). */
+  autoTagId: integer("auto_tag_id").references(() => tags.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -612,6 +616,10 @@ export const taskGroupsRelations = relations(taskGroups, ({ one }) => ({
     fields: [taskGroups.projectId],
     references: [projects.id],
   }),
+  autoTag: one(tags, {
+    fields: [taskGroups.autoTagId],
+    references: [tags.id],
+  }),
 }));
 
 export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
@@ -739,6 +747,7 @@ export const projectDocumentsRelations = relations(projectDocuments, ({ one }) =
 
 export const tagsRelations = relations(tags, ({ many }) => ({
   taggings: many(taggings),
+  taskGroups: many(taskGroups),
 }));
 
 export const taggingsRelations = relations(taggings, ({ one }) => ({
