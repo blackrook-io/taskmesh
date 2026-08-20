@@ -86,4 +86,4 @@ New migration → **MINOR** bump from current `package.json` (PATCH reset to `0`
 ## QA follow-ups
 
 - **Add Phase → “No such API route”:** The Settings UI was talking to a DEV API process that had not reloaded the new `/api/v1/projects/:id/phases` routes (`tsx watch` missed the agent’s file writes). Restarted the DEV API on :3001; POST create now returns 201. No route-path change required — nested CRUD matches Groups.
-- **Phase in Filters:** List Filter and Task Group filter builders include **Phase** (`is` / `is not` / contains / starts with). Value picker is None plus the project’s phases (All Tasks labels `Project — Phase`). Group filter JSON now allows `field: "phase"`.
+- **Phase in Filters:** List Filter and Task Group filter builders include **Phase** (`is` / `is not` / contains / starts with). Value picker is None plus the project’s phases (All Tasks labels `Project — Phase`). Group filter JSON now allows `field: "phase"`. Finish-up build: narrowed `matchPhase` so `contains` / `starts_with` are not compared to `is_not` (tsc).

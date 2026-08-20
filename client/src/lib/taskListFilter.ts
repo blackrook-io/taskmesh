@@ -148,12 +148,7 @@ function matchPhase(task: Task, clause: FilterClause, ctx?: FilterMatchContext):
     return clause.operator === "is" ? eq : !eq;
   }
   const haystacks = fieldHaystacks(task, "phase", ctx);
-  if (!value) {
-    return clause.operator === "is_not";
-  }
-  if (clause.operator === "is_not") {
-    return haystacks.every((h) => matchText(h, value, "is_not"));
-  }
+  if (!value) return false;
   return haystacks.some((h) => matchText(h, value, clause.operator));
 }
 
