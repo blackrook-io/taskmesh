@@ -28,6 +28,7 @@ import {
   isFilterActive,
   storageKeyForGlobalTasks,
 } from "../lib/taskListFilter";
+import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import {
   DEFAULT_GLOBAL_TASK_LIST_SORT,
   storageKeyForGlobalTaskSort,
@@ -129,10 +130,13 @@ export function TasksListPage() {
     clearFilter: clearTaskListFilter,
   } = usePersistedTaskListFilter(taskListFilterKey);
 
+  const { phaseNames } = usePhaseFilterOptions();
+  const filterCtx = useMemo(() => ({ phaseNames }), [phaseNames]);
+
   const tasks = useMemo(() => {
-    const filtered = evaluateTaskListFilter(tasksQuery.data ?? [], taskListFilter);
+    const filtered = evaluateTaskListFilter(tasksQuery.data ?? [], taskListFilter, filterCtx);
     return sortTasks(filtered, sortCol, sortDir, projectLabel);
-  }, [tasksQuery.data, sortCol, sortDir, projectNameById, taskListFilter]);
+  }, [tasksQuery.data, sortCol, sortDir, projectNameById, taskListFilter, filterCtx]);
 
   const modalTaskFromList =
     modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;

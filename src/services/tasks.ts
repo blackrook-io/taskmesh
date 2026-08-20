@@ -58,6 +58,35 @@ export async function assertParentCompatible(
   return { ok: true };
 }
 
+/** Phase must belong to the task's project. Null phase is always allowed. */
+export async function assertPhaseForProject(
+  db: Db,
+  projectId: number | null,
+  phaseId: number | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (phaseId == null) return { ok: true };
+  if (projectId == null) {
+    return { ok: false, message: "Phase requires a project" };
+  }
+  const [phase] = await db
+    .select({ id: schema.projectPhases.id, projectId: schema.projectPhases.projectId })
+    .from(schema.projectPhases)
+    .where(eq(schema.projectPhases.id, phaseId));
+  if (!phase || phase.projectId !== projectId) {
+    return { ok: false, message: "Phase not found for this project" };
+  }
+  return { ok: true };
+}
+
+/** Children share the parent's phase (no independent child phase). */
+export async function inheritPhaseFromParent(db: Db, parentId: number): Promise<number | null> {
+  const [parent] = await db
+    .select({ phaseId: schema.tasks.phaseId })
+    .from(schema.tasks)
+    .where(eq(schema.tasks.id, parentId));
+  return parent?.phaseId ?? null;
+}
+
 /** When a parent's phase changes, mirror to all descendants. */
 export async function syncDescendantPhases(
   db: Db,
@@ -152,8 +181,13 @@ async function formatChangeValue(
       return STATE_LABELS[String(value)] ?? String(value);
     case "priority":
       return PRIORITY_LABELS[String(value)] ?? String(value);
-    case "phaseId":
-      return `#${String(value)}`;
+    case "phaseId": {
+      const [phase] = await db
+        .select({ name: schema.projectPhases.name })
+        .from(schema.projectPhases)
+        .where(eq(schema.projectPhases.id, Number(value)));
+      return phase?.name ?? `#${String(value)}`;
+    }
     case "projectId": {
       const [proj] = await db
         .select({ name: schema.projects.name })

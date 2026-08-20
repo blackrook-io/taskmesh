@@ -9,6 +9,7 @@ Related: [overview](overview.md) · [projects and ideas](projects-and-ideas.md) 
 ```mermaid
 erDiagram
   projects ||--o{ tasks : "project_id"
+  project_phases ||--o{ tasks : "phase_id"
   tasks ||--o{ tasks : "parent_id"
   users ||--o{ tasks : "created_by / updated_by"
   tasks ||--o{ task_activity : "task_id"
@@ -18,6 +19,10 @@ erDiagram
   users ||--o{ task_description_templates : "created / updated"
   users ||--o{ task_activity : "created_by"
 
+  project_phases {
+    int id PK
+    text name
+  }
   tasks {
     int id PK
     int number UK
@@ -60,7 +65,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 |--------|------|----------|---------|--------|
 | `id` | serial | no | — | Primary key |
 | `project_id` | integer | yes | — | FK → `projects.id`; null = unsorted / list-only |
-| `phase_id` | integer | yes | — | Unused for list grouping (T0075). Kept for T0080 Project Phase; no FK |
+| `phase_id` | integer | yes | — | FK → `project_phases.id`; null = no phase. Not used for list grouping |
 | `parent_id` | integer | yes | — | Self-FK → `tasks.id` (subtask tree) |
 | `number` | integer | no | — | App-wide unique display number (T####) |
 | `title` | text | no | — | |
@@ -81,6 +86,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 - **PK:** `id`
 - **UNIQUE:** `number`
 - **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
+- **FK:** `phase_id` → `project_phases.id` · **ON DELETE SET NULL**
 - **FK:** `parent_id` → `tasks.id` · **ON DELETE SET NULL**
 - **FK:** `created_by_id` → `users.id` · **ON DELETE RESTRICT**
 - **FK:** `updated_by_id` → `users.id` · **ON DELETE RESTRICT**

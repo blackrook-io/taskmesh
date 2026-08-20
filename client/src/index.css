@@ -4105,6 +4105,10 @@ a:focus-visible {
   gap: 0.4rem;
 }
 
+.phase-manager__row.dragging {
+  opacity: 0.7;
+}
+
 .phase-manager__name {
   flex: 1;
   min-width: 0;

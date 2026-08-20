@@ -6,6 +6,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { PencilIcon } from "../components/shared/PencilIcon";
 import { TagInput } from "../components/shared/TagInput";
+import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { TodoListView } from "../components/TodoListView";
@@ -24,7 +25,7 @@ import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
 import { storageKeyForProjectTasks, emptyTaskListFilter, isFilterActive, parseTaskListFilterValue } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
-import type { Project, ProjectDocument, ProjectModule, Task, TaskGroup, TodoList } from "../types";
+import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TaskGroup, TodoList } from "../types";
 
 type Tab = "overview" | "images" | "settings" | ProjectModuleKey;
 
@@ -155,6 +156,15 @@ export function ProjectDetailPage() {
     enabled: !invalidId,
     queryFn: async () => {
       const res = await apiJson<{ data: TaskGroup[] }>(`/api/v1/projects/${projectId}/groups`);
+      return res.data;
+    },
+  });
+
+  const phasesQuery = useQuery({
+    queryKey: ["project-phases", projectId],
+    enabled: !invalidId,
+    queryFn: async () => {
+      const res = await apiJson<{ data: ProjectPhase[] }>(`/api/v1/projects/${projectId}/phases`);
       return res.data;
     },
   });
@@ -589,10 +599,13 @@ export function ProjectDetailPage() {
               })}
           </div>
         </div>
+        <div style={{ marginTop: "1rem" }}>
+          <PhaseManager projectId={projectId} phases={phasesQuery.data ?? []} />
+        </div>
         <div className="card" style={{ marginTop: "1rem" }}>
           <h2 style={{ marginTop: 0 }}>Danger zone</h2>
           <p className="muted" style={{ marginTop: 0 }}>
-            Deleting this project permanently removes its tasks, documents, groups, and other project
+            Deleting this project permanently removes its tasks, documents, groups, phases, and other project
             content. This cannot be undone.
           </p>
           <button type="button" className="btn danger" onClick={() => setDeleteProjectOpen(true)}>
@@ -634,6 +647,7 @@ export function ProjectDetailPage() {
           </div>
           <TaskListFilterBar
             key={navGroup ? `group-${navGroup.id}` : "list"}
+            projectId={projectId}
             filter={displayedTaskListFilter}
             onApply={(next) => takeOverListFilter(next)}
             onClear={() => takeOverListFilter("clear")}

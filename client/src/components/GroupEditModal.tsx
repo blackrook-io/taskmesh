@@ -1,11 +1,13 @@
 import { useEffect, useId, useState } from "react";
 import { ColorPopover } from "./shared/ColorPopover";
+import { FilterClauseValueInput } from "./TaskListFilterBar";
 import {
   FILTER_FIELDS,
   FILTER_FIELD_LABELS,
   FILTER_JOIN_LABELS,
   FILTER_OPERATORS,
   FILTER_OPERATOR_LABELS,
+  defaultValueForField,
   emptyTaskListFilter,
   isFilterActive,
   newFilterClause,
@@ -16,12 +18,7 @@ import {
   type FilterOperator,
   type TaskListFilter,
 } from "../lib/taskListFilter";
-import {
-  TASK_PRIORITIES,
-  TASK_PRIORITY_LABELS,
-  SELECTABLE_TASK_STATES,
-  TASK_STATE_LABELS,
-} from "../lib/taskFields";
+import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import type { TaskGroup } from "../types";
 
 type Props = {
@@ -35,52 +32,6 @@ type Props = {
   }) => Promise<void>;
 };
 
-function defaultValueForField(field: FilterField): string {
-  if (field === "state") return "new";
-  if (field === "priority") return "none";
-  return "";
-}
-
-function ValueInput({
-  clause,
-  onChange,
-}: {
-  clause: FilterClause;
-  onChange: (value: string) => void;
-}) {
-  if (clause.field === "state") {
-    return (
-      <select aria-label="Filter value" value={clause.value} onChange={(e) => onChange(e.target.value)}>
-        {SELECTABLE_TASK_STATES.map((s) => (
-          <option key={s} value={s}>
-            {TASK_STATE_LABELS[s]}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  if (clause.field === "priority") {
-    return (
-      <select aria-label="Filter value" value={clause.value} onChange={(e) => onChange(e.target.value)}>
-        {TASK_PRIORITIES.map((p) => (
-          <option key={p} value={p}>
-            {TASK_PRIORITY_LABELS[p]}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  return (
-    <input
-      type="text"
-      aria-label="Filter value"
-      placeholder={clause.field === "number" ? "T0053 or 53" : "Value"}
-      value={clause.value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
-}
-
 function draftFromGroup(group: TaskGroup): TaskListFilter {
   const parsed = parseTaskListFilterValue(group.filter);
   if (!parsed || !isFilterActive(parsed)) {
@@ -91,6 +42,7 @@ function draftFromGroup(group: TaskGroup): TaskListFilter {
 
 export function GroupEditModal({ group, onClose, onSave }: Props) {
   const titleId = useId();
+  const { phases } = usePhaseFilterOptions(group.projectId);
   const [name, setName] = useState(group.name);
   const [color, setColor] = useState<string | null>(group.color);
   const [draft, setDraft] = useState<TaskListFilter>(() => draftFromGroup(group));
@@ -242,7 +194,11 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
                   </option>
                 ))}
               </select>
-              <ValueInput clause={clause} onChange={(value) => updateClause(index, { value })} />
+              <FilterClauseValueInput
+                clause={clause}
+                phases={phases}
+                onChange={(value) => updateClause(index, { value })}
+              />
               <button
                 type="button"
                 className="btn ghost task-list-filter-modal__remove"

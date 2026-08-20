@@ -18,8 +18,11 @@ import {
 import {
   allocateTaskNumber,
   assertParentCompatible,
+  assertPhaseForProject,
+  inheritPhaseFromParent,
   nextSiblingSortOrder,
   recordTaskChanges,
+  syncDescendantPhases,
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
 import {
@@ -222,7 +225,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
           sendError(res, 400, "invalid_project", "Project not found");
           return;
         }
-        // T0075: list groups are not membership; clear leftover phaseId on project change.
+        // Project Phases are project-scoped; drop unless the client set a new phase.
         if (parsed.phaseId === undefined) {
           nextPhaseId = null;
         }
@@ -233,9 +236,14 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       }
     }
 
-    if (nextPhaseId != null && nextProjectId == null) {
-      sendError(res, 400, "invalid_phase", "Phase requires a project");
-      return;
+    if (nextParentId != null) {
+      nextPhaseId = await inheritPhaseFromParent(db, nextParentId);
+    } else {
+      const phaseOk = await assertPhaseForProject(db, nextProjectId, nextPhaseId);
+      if (!phaseOk.ok) {
+        sendError(res, 400, "invalid_phase", phaseOk.message);
+        return;
+      }
     }
 
     if (parsed.parentId !== undefined || nextParentId !== existing.parentId) {
@@ -288,6 +296,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       recordHistory: shouldRecordHistory(req),
     };
     if (row) {
+      if (row.phaseId !== existing.phaseId) {
+        await syncDescendantPhases(db, taskId, row.phaseId, actorId);
+      }
       await recordTaskChanges(db, taskId, existing, row, activityOpts);
       await afterTaskHierarchyChange(db, taskId, previousParentId, activityOpts);
     }

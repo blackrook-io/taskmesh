@@ -13,6 +13,7 @@ import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
 import { canvasesRouter } from "./canvases.js";
 import { groupsRouter } from "./groups.js";
+import { phasesRouter } from "./phases.js";
 import { tasksRouter } from "./tasks.js";
 import { wikiRouter } from "./wiki.js";
 
@@ -184,7 +185,27 @@ projectsRouter.get("/:id/groups", async (req, res) => {
   }
 });
 
+projectsRouter.get("/:id/phases", async (req, res) => {
+  try {
+    const id = idParam.parse(req.params.id);
+    const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
+    if (!proj) {
+      sendError(res, 404, "not_found", "Project not found");
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(schema.projectPhases)
+      .where(eq(schema.projectPhases.projectId, id))
+      .orderBy(asc(schema.projectPhases.sortOrder));
+    res.json({ data: rows });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
 projectsRouter.use("/:projectId/groups", groupsRouter);
+projectsRouter.use("/:projectId/phases", phasesRouter);
 projectsRouter.use("/:projectId/tasks", tasksRouter);
 projectsRouter.use("/:projectId/documents", documentsRouter);
 projectsRouter.use("/:projectId/modules", modulesRouter);

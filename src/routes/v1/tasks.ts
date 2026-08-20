@@ -22,6 +22,8 @@ import {
 import {
   allocateTaskNumber,
   assertParentCompatible,
+  assertPhaseForProject,
+  inheritPhaseFromParent,
   nextSiblingSortOrder,
   recordTaskChanges,
   syncDescendantPhases,
@@ -126,9 +128,12 @@ tasksRouter.post("/", async (req, res) => {
     }
 
     if (parentId != null) {
-      const [parent] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parentId));
-      if (parent?.phaseId != null) {
-        phaseId = parent.phaseId;
+      phaseId = await inheritPhaseFromParent(db, parentId);
+    } else {
+      const phaseOk = await assertPhaseForProject(db, projectId, phaseId);
+      if (!phaseOk.ok) {
+        sendError(res, 400, "invalid_phase", phaseOk.message);
+        return;
       }
     }
 
@@ -207,7 +212,13 @@ tasksRouter.patch("/reorder", async (req, res) => {
       seen.add(tid);
     }
 
-
+    if (parsed.phaseId !== undefined) {
+      const phaseOk = await assertPhaseForProject(db, projectId, parsed.phaseId);
+      if (!phaseOk.ok) {
+        sendError(res, 400, "invalid_phase", phaseOk.message);
+        return;
+      }
+    }
     for (let i = 0; i < parsed.orderedTaskIds.length; i++) {
       const tid = parsed.orderedTaskIds[i];
       if (tid === undefined) continue;
@@ -308,6 +319,18 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       }
     }
 
+    const nextParentId = parsed.parentId !== undefined ? parsed.parentId : existing.parentId;
+    let nextPhaseId = parsed.phaseId !== undefined ? parsed.phaseId : existing.phaseId;
+    if (nextParentId != null) {
+      nextPhaseId = await inheritPhaseFromParent(db, nextParentId);
+    } else {
+      const phaseOk = await assertPhaseForProject(db, projectId, nextPhaseId);
+      if (!phaseOk.ok) {
+        sendError(res, 400, "invalid_phase", phaseOk.message);
+        return;
+      }
+    }
+
     const completeGate = await rejectCompleteIfBlocked(taskId, parsed.state);
     if (completeGate.blocked) {
       sendError(res, 400, "dependency_incomplete", completeGate.message);
@@ -324,7 +347,9 @@ tasksRouter.patch("/:taskId", async (req, res) => {
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(dueDate !== undefined ? { dueDate } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
-        ...(parsed.phaseId !== undefined ? { phaseId: parsed.phaseId } : {}),
+        ...(nextPhaseId !== existing.phaseId || parsed.phaseId !== undefined
+          ? { phaseId: nextPhaseId }
+          : {}),
         ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
         ...(persistedState !== undefined ? { state: persistedState } : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
@@ -335,8 +360,8 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       .where(eq(schema.tasks.id, taskId))
       .returning();
 
-    if (row && parsed.phaseId !== undefined) {
-      await syncDescendantPhases(db, taskId, parsed.phaseId, actorId);
+    if (row && row.phaseId !== existing.phaseId) {
+      await syncDescendantPhases(db, taskId, row.phaseId, actorId);
     }
 
     const activityOpts = {

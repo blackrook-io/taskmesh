@@ -47,7 +47,7 @@ export const projects = pgTable("projects", {
     .defaultNow(),
 });
 
-/** List-view Task Groups (saved filter + color). Not the future Project Phase field. */
+/** List-view Task Groups (saved filter + color). Distinct from Project Phases. */
 export const taskGroups = pgTable("task_groups", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id")
@@ -64,6 +64,22 @@ export const taskGroups = pgTable("task_groups", {
   } | null>(),
   /** When true and filter is active, list under Tasks in the Project menu. */
   showInNav: boolean("show_in_nav").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Project development phases. Tasks optionally associate via phase_id. */
+export const projectPhases = pgTable("project_phases", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -170,8 +186,10 @@ export const tasks = pgTable("tasks", {
   projectId: integer("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
-  /** Unused for list grouping (T0075). Kept for T0080 Project Phase; no FK. */
-  phaseId: integer("phase_id"),
+  /** Optional Project Phase (not Task Group membership). */
+  phaseId: integer("phase_id").references(() => projectPhases.id, {
+    onDelete: "set null",
+  }),
   parentId: integer("parent_id").references((): AnyPgColumn => tasks.id, {
     onDelete: "set null",
   }),
@@ -578,6 +596,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     references: [ideas.id],
   }),
   taskGroups: many(taskGroups),
+  phases: many(projectPhases),
   tasks: many(tasks),
   documents: many(projectDocuments),
   todoLists: many(todoLists),
@@ -593,6 +612,14 @@ export const taskGroupsRelations = relations(taskGroups, ({ one }) => ({
     fields: [taskGroups.projectId],
     references: [projects.id],
   }),
+}));
+
+export const projectPhasesRelations = relations(projectPhases, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [projectPhases.projectId],
+    references: [projects.id],
+  }),
+  tasks: many(tasks),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -653,6 +680,10 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   project: one(projects, {
     fields: [tasks.projectId],
     references: [projects.id],
+  }),
+  phase: one(projectPhases, {
+    fields: [tasks.phaseId],
+    references: [projectPhases.id],
   }),
   parent: one(tasks, {
     fields: [tasks.parentId],

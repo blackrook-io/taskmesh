@@ -31,6 +31,15 @@ export type TaskGroup = {
   updatedAt: string;
 };
 
+export type ProjectPhase = {
+  id: number;
+  projectId: number;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type UserRef = {
   id: number;
   referenceId: string;

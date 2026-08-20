@@ -5,6 +5,7 @@ import {
   FILTER_JOIN_LABELS,
   FILTER_OPERATORS,
   FILTER_OPERATOR_LABELS,
+  defaultValueForField,
   formatFilterBreadcrumb,
   isFilterActive,
   newFilterClause,
@@ -20,36 +21,24 @@ import {
   TASK_STATE_LABELS,
   SELECTABLE_TASK_STATES,
 } from "../lib/taskFields";
+import { usePhaseFilterOptions, type PhaseFilterOption } from "../lib/usePhaseFilterOptions";
 
 type Props = {
   filter: TaskListFilter;
   onApply: (filter: TaskListFilter) => void;
   onClear: () => void;
+  /** When set, Phase values are that project’s phases; omit for All Tasks. */
+  projectId?: number;
 };
 
-function defaultValueForField(field: FilterField): string {
-  if (field === "state") return "new";
-  if (field === "priority") return "none";
-  return "";
-}
-
-export function FilterIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path
-        fill="currentColor"
-        d="M2 3.5h12l-4.2 5.1v3.4L6.2 13V8.6L2 3.5zm1.7.9 3.3 4v2.8l1.6-.9V8.4l3.3-4H3.7z"
-      />
-    </svg>
-  );
-}
-
-function ValueInput({
+export function FilterClauseValueInput({
   clause,
   onChange,
+  phases,
 }: {
   clause: FilterClause;
   onChange: (value: string) => void;
+  phases: PhaseFilterOption[];
 }) {
   if (clause.field === "state") {
     return (
@@ -81,6 +70,33 @@ function ValueInput({
       </select>
     );
   }
+  if (clause.field === "phase") {
+    if (clause.operator === "contains" || clause.operator === "starts_with") {
+      return (
+        <input
+          type="text"
+          aria-label="Filter value"
+          placeholder="Phase name"
+          value={clause.value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
+    }
+    return (
+      <select
+        aria-label="Filter value"
+        value={clause.value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">None</option>
+        {phases.map((p) => (
+          <option key={p.id} value={String(p.id)}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
   return (
     <input
       type="text"
@@ -89,6 +105,17 @@ function ValueInput({
       value={clause.value}
       onChange={(e) => onChange(e.target.value)}
     />
+  );
+}
+
+export function FilterIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M2 3.5h12l-4.2 5.1v3.4L6.2 13V8.6L2 3.5zm1.7.9 3.3 4v2.8l1.6-.9V8.4l3.3-4H3.7z"
+      />
+    </svg>
   );
 }
 
@@ -102,11 +129,12 @@ function draftFromFilter(filter: TaskListFilter): TaskListFilter {
   };
 }
 
-export function TaskListFilterBar({ filter, onApply, onClear }: Props) {
+export function TaskListFilterBar({ filter, onApply, onClear, projectId }: Props) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<TaskListFilter>(() => draftFromFilter(filter));
   const titleId = useId();
-  const breadcrumb = formatFilterBreadcrumb(filter);
+  const { phases, phaseNames } = usePhaseFilterOptions(projectId);
+  const breadcrumb = formatFilterBreadcrumb(filter, { phaseNames });
   const active = isFilterActive(filter);
 
   useEffect(() => {
@@ -249,8 +277,9 @@ export function TaskListFilterBar({ filter, onApply, onClear }: Props) {
                       </option>
                     ))}
                   </select>
-                  <ValueInput
+                  <FilterClauseValueInput
                     clause={clause}
+                    phases={phases}
                     onChange={(value) => updateClause(index, { value })}
                   />
                   <button

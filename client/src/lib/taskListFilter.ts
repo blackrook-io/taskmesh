@@ -11,7 +11,7 @@ import {
 } from "./taskFields";
 import type { Task } from "../types";
 
-export const FILTER_FIELDS = ["state", "priority", "title", "number"] as const;
+export const FILTER_FIELDS = ["state", "priority", "title", "number", "phase"] as const;
 export type FilterField = (typeof FILTER_FIELDS)[number];
 
 export const FILTER_OPERATORS = ["is", "is_not", "contains", "starts_with"] as const;
@@ -37,6 +37,7 @@ export const FILTER_FIELD_LABELS: Record<FilterField, string> = {
   priority: "Priority",
   title: "Title",
   number: "Number",
+  phase: "Phase",
 };
 
 export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
@@ -49,6 +50,17 @@ export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
 export const FILTER_JOIN_LABELS: Record<FilterJoin, string> = {
   and: "AND",
   or: "OR",
+};
+
+export function defaultValueForField(field: FilterField): string {
+  if (field === "state") return "new";
+  if (field === "priority") return "none";
+  return "";
+}
+
+/** Optional names for Phase clauses (id → label). */
+export type FilterMatchContext = {
+  phaseNames?: ReadonlyMap<number, string>;
 };
 
 export function emptyTaskListFilter(): TaskListFilter {
@@ -108,7 +120,7 @@ function matchNumber(taskNumber: number, rawValue: string, operator: FilterOpera
   return matchText(display, value, "starts_with") || matchText(digits, value, "starts_with");
 }
 
-function fieldHaystacks(task: Task, field: FilterField): string[] {
+function fieldHaystacks(task: Task, field: FilterField, ctx?: FilterMatchContext): string[] {
   switch (field) {
     case "state":
       return [task.state, TASK_STATE_LABELS[task.state]];
@@ -118,11 +130,42 @@ function fieldHaystacks(task: Task, field: FilterField): string[] {
       return [task.title];
     case "number":
       return [formatTaskNumber(task.number), String(task.number)];
+    case "phase": {
+      if (task.phaseId == null) return ["none", ""];
+      const name = ctx?.phaseNames?.get(task.phaseId) ?? "";
+      return [name, String(task.phaseId)].filter((s) => s.length > 0);
+    }
   }
 }
 
-export function clauseMatchesTask(task: Task, clause: FilterClause): boolean {
+function matchPhase(task: Task, clause: FilterClause, ctx?: FilterMatchContext): boolean {
   const value = clause.value.trim();
+  const noneWanted = value === "" || foldCase(value) === "none";
+  if (clause.operator === "is" || clause.operator === "is_not") {
+    const eq = noneWanted
+      ? task.phaseId == null
+      : task.phaseId != null && String(task.phaseId) === value;
+    return clause.operator === "is" ? eq : !eq;
+  }
+  const haystacks = fieldHaystacks(task, "phase", ctx);
+  if (!value) {
+    return clause.operator === "is_not";
+  }
+  if (clause.operator === "is_not") {
+    return haystacks.every((h) => matchText(h, value, "is_not"));
+  }
+  return haystacks.some((h) => matchText(h, value, clause.operator));
+}
+
+export function clauseMatchesTask(
+  task: Task,
+  clause: FilterClause,
+  ctx?: FilterMatchContext,
+): boolean {
+  const value = clause.value.trim();
+  if (clause.field === "phase") {
+    return matchPhase(task, clause, ctx);
+  }
   if (clause.field === "number") {
     if (!value && (clause.operator === "is" || clause.operator === "contains" || clause.operator === "starts_with")) {
       return false;
@@ -135,7 +178,7 @@ export function clauseMatchesTask(task: Task, clause: FilterClause): boolean {
     return false;
   }
 
-  const haystacks = fieldHaystacks(task, clause.field);
+  const haystacks = fieldHaystacks(task, clause.field, ctx);
 
   if (clause.field === "state" || clause.field === "priority") {
     if (clause.operator === "is" || clause.operator === "is_not") {
@@ -155,34 +198,51 @@ export function clauseMatchesTask(task: Task, clause: FilterClause): boolean {
 }
 
 /** Left-to-right: ((c0 ⊕ c1) ⊕ c2) … */
-export function taskMatchesFilter(task: Task, filter: TaskListFilter): boolean {
+export function taskMatchesFilter(
+  task: Task,
+  filter: TaskListFilter,
+  ctx?: FilterMatchContext,
+): boolean {
   const { clauses, joins } = filter;
   if (clauses.length === 0) return true;
-  let result = clauseMatchesTask(task, clauses[0]!);
+  let result = clauseMatchesTask(task, clauses[0]!, ctx);
   for (let i = 1; i < clauses.length; i++) {
     const join = joins[i - 1] ?? "and";
-    const next = clauseMatchesTask(task, clauses[i]!);
+    const next = clauseMatchesTask(task, clauses[i]!, ctx);
     result = join === "or" ? result || next : result && next;
   }
   return result;
 }
 
-export function evaluateTaskListFilter(tasks: Task[], filter: TaskListFilter): Task[] {
+export function evaluateTaskListFilter(
+  tasks: Task[],
+  filter: TaskListFilter,
+  ctx?: FilterMatchContext,
+): Task[] {
   if (!isFilterActive(filter)) return tasks;
-  return tasks.filter((t) => taskMatchesFilter(t, filter));
+  return tasks.filter((t) => taskMatchesFilter(t, filter, ctx));
 }
 
-function clauseValueLabel(clause: FilterClause): string {
+function clauseValueLabel(clause: FilterClause, ctx?: FilterMatchContext): string {
   if (clause.field === "state" && (TASK_STATES as readonly string[]).includes(clause.value)) {
     return TASK_STATE_LABELS[clause.value as TaskState];
   }
   if (clause.field === "priority" && (TASK_PRIORITIES as readonly string[]).includes(clause.value)) {
     return TASK_PRIORITY_LABELS[clause.value as TaskPriority];
   }
+  if (clause.field === "phase") {
+    const raw = clause.value.trim();
+    if (!raw || foldCase(raw) === "none") return "None";
+    const id = Number(raw);
+    if (Number.isFinite(id) && ctx?.phaseNames?.has(id)) {
+      return ctx.phaseNames.get(id)!;
+    }
+    return raw;
+  }
   return clause.value.trim() || "∅";
 }
 
-export function formatFilterBreadcrumb(filter: TaskListFilter): string {
+export function formatFilterBreadcrumb(filter: TaskListFilter, ctx?: FilterMatchContext): string {
   if (!isFilterActive(filter)) return "";
   const parts: string[] = [];
   filter.clauses.forEach((clause, i) => {
@@ -190,7 +250,7 @@ export function formatFilterBreadcrumb(filter: TaskListFilter): string {
       parts.push(FILTER_JOIN_LABELS[filter.joins[i - 1] ?? "and"]);
     }
     parts.push(
-      `${FILTER_FIELD_LABELS[clause.field]} ${FILTER_OPERATOR_LABELS[clause.operator]} ${clauseValueLabel(clause)}`,
+      `${FILTER_FIELD_LABELS[clause.field]} ${FILTER_OPERATOR_LABELS[clause.operator]} ${clauseValueLabel(clause, ctx)}`,
     );
   });
   return parts.join(" ");

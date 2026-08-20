@@ -1,0 +1,89 @@
+---
+description: "T0080 — Project Phase field for Tasks (distinct from Task Groups)"
+todos:
+  - id: schema
+    content: New project_phases table; restore tasks.phase_id FK; docs + docs:sync-schema
+  - id: api
+    content: Nested phases CRUD/reorder; validate phase belongs to task project; DELETE nulls tasks
+  - id: project-ui
+    content: Project screen manage Phases (add/rename/delete, confirm delete)
+  - id: task-ui
+    content: Task modal Project + Phase fields; clear phase when project cleared
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0080 — Project Phase field for Tasks
+
+**Task:** T0080 · id `92` · Ready · High · project 4 (TaskMesh)  
+**Parent:** T0075 (Task Groups refactor) · id `87` · Pending  
+**Depends on:** T0075 — **Pending** (gate OK)  
+**Branch (after approval):** `T0080-project-phases`
+
+## Goal
+
+Give Tasks a real **Project Phase** association, separate from list-view **Task Groups**. Projects can define named phases; tasks optionally point at one. List grouping stays filter-based Groups (T0075). No migration of old list-Phase membership (already wiped).
+
+## Decisions (interview)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| A | Manage UI location | **Project Settings** card “Phases” (add / rename / reorder / delete). Not on the Tasks list (that is Groups). |
+| B | Phase model | Simple: `name` + `sortOrder`. **No color, no filter** (those belong to Groups). |
+| C | Task picker | Restore **Phase** `<select>` on the task modal next to **Project**. Hidden/disabled when the task has no project. Empty option = none. |
+| D | List rows | **Modal-only**. Do not group the task list by Phase; no Phase list-filter field. |
+| E | Parent → children | **Keep** `syncDescendantPhases`. When a parent moves, children move with it. Children stay with parent (no multi-Phase tasks). |
+| F | Delete Phase | Confirm; set `phase_id` **null** on associated tasks (allow deleting the last phase). FK `ON DELETE SET NULL`. |
+| G | Reorder | **Drag-and-drop** like Tasks (not ↑↓ buttons). |
+
+## Scope
+
+**In**
+
+- New `project_phases` table (project-scoped names + sort).
+- Restore `tasks.phase_id` FK → `project_phases.id` (`ON DELETE SET NULL`). Column already exists, currently unconstrained (T0075).
+- API: `/api/v1/projects/:projectId/phases` CRUD + reorder.
+- Task create/update: `phaseId` must belong to the task’s `projectId`; reject or null if no project.
+- Project Settings: add / rename / delete (confirm) / reorder.
+- Task modal: Project + Phase fields.
+- History: log Phase as the **phase name** (not `#id`).
+- Import/export: treat `phaseId` as this FK again (must match project).
+- `docs/database/` + `npm run docs:sync-schema`.
+- Repair leftover `PhaseManager.tsx` (today it still talks to **groups**).
+
+**Out**
+
+- Task Group modal/filter/color, auto-tag, nav sub-lists, extra list filter fields (T0077–T0079).
+- Grouping the Tasks list by Phase.
+- Preserving pre-T0075 list-Phase membership.
+- Color on Project Phases.
+
+## Approach
+
+### Schema (MINOR on finish-up)
+
+1. Add `project_phases`: `id`, `project_id` (FK cascade), `name`, `sort_order`, timestamps. Empty by default (no seed).
+2. Add FK `tasks.phase_id` → `project_phases.id` **ON DELETE SET NULL**. All current `phase_id` values are null after T0075.
+3. Drizzle generate → review `drizzle/` → migrate. Update `docs/database/projects-and-ideas.md`, `tasks.md`, `overview.md`, glossary if needed. Run `docs:sync-schema`.
+
+### API
+
+- Nested router similar to groups, simpler body (`name`, `sortOrder`).
+- DELETE phase: DB SET NULL on tasks; confirm copy in UI: “Tasks currently in this phase will have Phase cleared.”
+- Task PATCH/POST: if `phaseId` set, require matching `projectId` and existing phase row (`invalid_phase` already used).
+- Changing `projectId` without a new `phaseId`: clear `phaseId` (already in standalone path).
+- Child create: inherit parent `phaseId` when parent has one (existing).
+
+### UI
+
+- Settings: rewrite `PhaseManager` against `/phases`; **drag-and-drop reorder** like Tasks; confirm delete; allow zero phases.
+- Task modal: Phase select loaded from `["project-phases", projectId]`. Disabled when the task has a parent (inherited).
+
+## Finish-up note
+
+New migration → **MINOR** bump from current `package.json` (PATCH reset to `0`) when the user says finish up.
+
+## QA follow-ups
+
+- **Add Phase → “No such API route”:** The Settings UI was talking to a DEV API process that had not reloaded the new `/api/v1/projects/:id/phases` routes (`tsx watch` missed the agent’s file writes). Restarted the DEV API on :3001; POST create now returns 201. No route-path change required — nested CRUD matches Groups.
+- **Phase in Filters:** List Filter and Task Group filter builders include **Phase** (`is` / `is not` / contains / starts with). Value picker is None plus the project’s phases (All Tasks labels `Project — Phase`). Group filter JSON now allows `field: "phase"`.

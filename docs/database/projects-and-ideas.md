@@ -10,6 +10,7 @@ Related: [overview](overview.md) · [tasks](tasks.md) · [glossary](glossary.md)
 erDiagram
   ideas ||--o| projects : "source_idea_id"
   projects ||--o{ task_groups : "project_id"
+  projects ||--o{ project_phases : "project_id"
   users ||--o{ projects : "authorship elsewhere"
   ideas {
     int id PK
@@ -34,6 +35,12 @@ erDiagram
     text color
     jsonb filter
     boolean show_in_nav
+  }
+  project_phases {
+    int id PK
+    int project_id FK
+    text name
+    int sort_order
   }
   users {
     int id PK
@@ -96,13 +103,13 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 
 ### Relationships (outbound ownership)
 
-Projects are parents of task groups, tasks (optional), documents, todo lists, modules, boards, wiki nodes, canvases, image boards (optional), and task description templates. See domain pages for cascade behavior.
+Projects are parents of task groups, project phases, tasks (optional), documents, todo lists, modules, boards, wiki nodes, canvases, image boards (optional), and task description templates. See domain pages for cascade behavior.
 
 ---
 
 ## `task_groups`
 
-Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section. `show_in_nav` (T0078) opts the group into the Project menu under Tasks when a filter is active.
+Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section. `show_in_nav` (T0078) opts the group into the Project menu under Tasks when a filter is active. Filter clause fields: State, Priority, Title, Number, Phase (T0080).
 
 ### Columns
 
@@ -125,4 +132,30 @@ Named list-view sections within a project (T0075). Optional saved filter and bar
 
 ### Relationships
 
-- Owned by `projects`. Not referenced by `tasks` (list placement is filter-only). A future Project **Phase** field is a separate table/column (T0080).
+- Owned by `projects`. Not referenced by `tasks` (list placement is filter-only). Project **Phases** (`project_phases`) are a separate table; tasks associate via `tasks.phase_id`.
+
+---
+
+## `project_phases`
+
+Named development phases on a project (T0080). Distinct from list-view **Task Groups**. Tasks optionally point at one phase via `tasks.phase_id`. Projects may have zero phases. Deleting a phase sets associated tasks’ `phase_id` to null (`ON DELETE SET NULL`).
+
+### Columns
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `project_id` | integer | no | — | FK → `projects.id` |
+| `name` | text | no | — | |
+| `sort_order` | integer | no | `0` | Settings list order |
+| `created_at` | timestamptz | no | `now()` | |
+| `updated_at` | timestamptz | no | `now()` | |
+
+### Constraints
+
+- **PK:** `id`
+- **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
+
+### Relationships
+
+- Owned by `projects`. Referenced by `tasks.phase_id`.

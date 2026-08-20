@@ -12,7 +12,7 @@ import {
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
-import { allocateTaskNumber } from "../../services/tasks.js";
+import { allocateTaskNumber, assertPhaseForProject } from "../../services/tasks.js";
 import { getCurrentUserId } from "../../services/users.js";
 import {
   objectsToCsv,
@@ -454,6 +454,17 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
     }
 
     let phaseId: number | null = typeof phaseIdRaw === "number" ? phaseIdRaw : null;
+    if (phaseId != null) {
+      const phaseOk = await assertPhaseForProject(db, projectId, phaseId);
+      if (!phaseOk.ok) {
+        discarded.push({
+          row: rowNum,
+          code: "invalid_data",
+          reason: phaseOk.message,
+        });
+        continue;
+      }
+    }
 
     let sortOrder = 0;
     if (raw.sortOrder != null && raw.sortOrder !== "") {

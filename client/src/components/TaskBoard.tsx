@@ -36,11 +36,12 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
-import type { Project, Task, TaskGroup } from "../types";
+import type { Project, ProjectPhase, Task, TaskGroup } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ColorPopover } from "./shared/ColorPopover";
 import { GroupEditModal } from "./GroupEditModal";
 import { FilterIcon } from "./TaskListFilterBar";
+import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { RowTagChips } from "./shared/RowTagChips";
@@ -68,6 +69,7 @@ import {
   isFilterActive,
   parseTaskListFilterValue,
   taskMatchesFilter,
+  type FilterMatchContext,
   type TaskListFilter,
 } from "../lib/taskListFilter";
 
@@ -166,11 +168,12 @@ function buildRows(
   sortCol: SortCol | null,
   sortDir: 1 | -1,
   navListView: boolean,
+  filterCtx?: FilterMatchContext,
 ): FlatRow[] {
   const rows: FlatRow[] = [];
 
   if (navListView) {
-    const matched = evaluateTaskListFilter(tasks, listFilter);
+    const matched = evaluateTaskListFilter(tasks, listFilter, filterCtx);
     const matchedIds = new Set(matched.map((t) => t.id));
     const visualRoots = matched.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
     const walk = (t: Task, depth: number) => {
@@ -199,14 +202,14 @@ function buildRows(
 
   for (const g of orderedGroups) {
     const gf = groupFilter(g);
-    const match = isFilterActive(gf) ? evaluateTaskListFilter(allRoots, gf) : [];
+    const match = isFilterActive(gf) ? evaluateTaskListFilter(allRoots, gf, filterCtx) : [];
     byGroup.set(g.id, match);
     for (const t of match) {
       appearCount.set(t.id, (appearCount.get(t.id) ?? 0) + 1);
     }
   }
   const claimed = new Set(appearCount.keys());
-  const unassigned = evaluateTaskListFilter(allRoots, listFilter).filter((t) => !claimed.has(t.id));
+  const unassigned = evaluateTaskListFilter(allRoots, listFilter, filterCtx).filter((t) => !claimed.has(t.id));
 
   const pushGroup = (group: TaskGroup | null, groupKey: number | "none", groupRoots: Task[]) => {
     rows.push({
@@ -355,6 +358,15 @@ export function TaskEditorFields({
     },
   });
 
+  const phasesQuery = useQuery({
+    queryKey: ["project-phases", projectId],
+    enabled: projectId != null,
+    queryFn: async () => {
+      const res = await apiJson<{ data: ProjectPhase[] }>(`/api/v1/projects/${projectId}/phases`);
+      return res.data;
+    },
+  });
+
   const knownChildren = (allTasks ?? []).filter((t) => t.parentId === task.id);
   const childrenQuery = useQuery({
     queryKey: ["tasks", "children-of", task.id],
@@ -425,7 +437,10 @@ export function TaskEditorFields({
       if (updated) applyServerTask(updated);
       setSaveError(null);
       if (patch.projectId !== undefined) {
-        void qc.invalidateQueries({ queryKey: ["phases", patch.projectId] });
+        void qc.invalidateQueries({ queryKey: ["project-phases", patch.projectId] });
+        void qc.invalidateQueries({ queryKey: ["tasks"] });
+      }
+      if (patch.phaseId !== undefined) {
         void qc.invalidateQueries({ queryKey: ["tasks"] });
       }
     } catch (err) {
@@ -571,8 +586,8 @@ export function TaskEditorFields({
               const nextProject = raw === "" ? null : Number(raw);
               const prev = { ...currentSnap(), projectId };
               setProjectId(nextProject);
-              if (nextProject == null) setPhaseId(null);
-              void commit(prev, { projectId: nextProject });
+              setPhaseId(null);
+              void commit(prev, { projectId: nextProject, phaseId: null });
             }}
           >
             <option value="">No project</option>
@@ -583,6 +598,40 @@ export function TaskEditorFields({
             ))}
             </select>
         </div>
+        {projectId != null ? (
+          <div className="field">
+            <label htmlFor={`t-phase-${task.id}`}>Phase</label>
+            <select
+              id={`t-phase-${task.id}`}
+              value={phaseId ?? ""}
+              disabled={task.parentId != null}
+              title={
+                task.parentId != null
+                  ? "Children share the parent’s phase"
+                  : undefined
+              }
+              onChange={(e) => {
+                const raw = e.target.value;
+                const next = raw === "" ? null : Number(raw);
+                const prev = { ...currentSnap(), phaseId };
+                setPhaseId(next);
+                void commit(prev, { phaseId: next });
+              }}
+            >
+              <option value="">None</option>
+              {(phasesQuery.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {task.parentId != null ? (
+              <p className="muted" style={{ margin: "0.25rem 0 0" }}>
+                Inherited from parent
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="field">
           <label htmlFor={`t-state-${task.id}`}>State</label>
           <select
@@ -900,6 +949,7 @@ function SortableGroupHeader({
   onToggle,
   onOpenEdit,
   onRequestDelete,
+  phaseNames,
 }: {
   group: TaskGroup | null;
   collapsed: boolean;
@@ -907,6 +957,7 @@ function SortableGroupHeader({
   onToggle: () => void;
   onOpenEdit?: () => void;
   onRequestDelete?: () => void;
+  phaseNames?: Map<number, string>;
 }) {
   const sortableId = group ? `group-${group.id}` : "group-none";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -923,7 +974,7 @@ function SortableGroupHeader({
   };
   const gf = group ? groupFilter(group) : emptyTaskListFilter();
   const filterOn = group != null && isFilterActive(gf);
-  const breadcrumb = filterOn ? formatFilterBreadcrumb(gf) : "";
+  const breadcrumb = filterOn ? formatFilterBreadcrumb(gf, { phaseNames }) : "";
 
   return (
     <div
@@ -1028,6 +1079,8 @@ export function TaskBoard({
   onDeleteGroup,
   onPatchTask,
 }: Props) {
+  const { phaseNames } = usePhaseFilterOptions(projectId);
+  const filterCtx = useMemo(() => ({ phaseNames }), [phaseNames]);
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
@@ -1052,8 +1105,9 @@ export function TaskBoard({
       boardSortCol,
       sortDir,
       navListView,
+      filterCtx,
     );
-  }, [groups, tasks, listFilter, collapsed, sortCol, sortDir, navListView]);
+  }, [groups, tasks, listFilter, collapsed, sortCol, sortDir, navListView, filterCtx]);
 
   const displayRows = useMemo(() => {
     if (!navListView) return rows;
@@ -1061,13 +1115,13 @@ export function TaskBoard({
     const out: FlatRow[] = [];
     for (const row of rows) {
       if (row.kind === "group") continue;
-      if (!isFilterActive(listFilter) || !taskMatchesFilter(row.task, listFilter)) continue;
+      if (!isFilterActive(listFilter) || !taskMatchesFilter(row.task, listFilter, filterCtx)) continue;
       if (seen.has(row.task.id)) continue;
       seen.add(row.task.id);
       out.push({ ...row, duplicate: false, groupKey: "none" });
     }
     return out;
-  }, [navListView, rows, listFilter]);
+  }, [navListView, rows, listFilter, filterCtx]);
 
   const onRequestOpenTaskConsumedRef = useRef(onRequestOpenTaskConsumed);
   onRequestOpenTaskConsumedRef.current = onRequestOpenTaskConsumed;
@@ -1227,6 +1281,7 @@ export function TaskBoard({
                     group={row.group}
                     collapsed={collapsed.has(groupKey)}
                     taskCount={row.taskCount}
+                    phaseNames={phaseNames}
                     onToggle={() => {
                       setCollapsed((prev) => {
                         const next = new Set(prev);
