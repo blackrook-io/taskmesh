@@ -1,0 +1,33 @@
+# T0032 — Remove Tags UI from Kanban boards and To Do lists
+
+**Task:** T0032 (`id` 32) — Kanban Boards do not support Tags  
+**Branch (after approval):** `T0032-remove-board-todolist-tags-ui`  
+**Decision:** Boards and To Do lists should **not** expose tag editing in the UI. Existing DB tag links stay; search may still return tagged boards/lists.
+
+## Product decisions (confirmed)
+
+1. **Boards** — remove the “Add tag…” / `TagInput` row on the Kanban main page.
+2. **To Do lists** — same: remove container-level `TagInput` (non-inbox lists).
+3. **Orphan links** — leave any existing `board` / `todo_list` tag associations in the DB.
+4. **Search** — continue returning boards and todo lists that match tags (no API/search change for this).
+
+## Out of scope
+
+- Schema / migrations
+- Tag API changes (attach/detach still allowed if called)
+- Tags on tasks, ideas, projects, documents, canvases, wiki nodes
+- Card-level tags opened from a board or list modal
+
+## Implementation
+
+1. **`KanbanBoardsPanel.tsx`** — remove the `TagInput` block for `entityType="board"` under the board tabs; drop unused `TagInput` import if no longer needed (idea tags in the open-card modal stay).
+2. **`TodoListView.tsx`** — remove the non-inbox `TagInput` for `entityType="todo_list"`; keep idea/task tags in item detail if present; clean unused import if applicable.
+3. Smoke-check: no other board/list container `TagInput` call sites; search behavior unchanged.
+
+## Acceptance
+
+- Project Kanban: no tag row under board tabs; lanes/cards unchanged.
+- To Do list view (non-inbox): no list-level tag row; items still editable.
+- Existing board/list tags remain in DB; tagging those entity types via API still works.
+- Tag search can still surface boards / todo lists that already have tags.
+- Version bump on finish-up: **PATCH** only (no migration).

@@ -279,11 +279,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
 
   return (
     <div className="todo-list-view">
-      {list.kind !== "inbox" ? (
-        <div className="field field--tags-below" style={{ marginBottom: "0.75rem" }}>
-          <TagInput entityType="todo_list" entityId={list.id} />
-        </div>
-      ) : null}
       <div className="todo-create-row">
         <input
           type="text"

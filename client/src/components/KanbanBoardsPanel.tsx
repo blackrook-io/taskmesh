@@ -1028,12 +1028,6 @@ export function KanbanBoardsPanel({
         </p>
       ) : null}
 
-      {activeBoardId != null ? (
-        <div className="field field--tags-below" style={{ marginBottom: "0.75rem" }}>
-          <TagInput entityType="board" entityId={activeBoardId} />
-        </div>
-      ) : null}
-
       {activeBoardId == null ? (
         <p className="muted">Create a board with + to start planning.</p>
       ) : detailQuery.isLoading ? (
