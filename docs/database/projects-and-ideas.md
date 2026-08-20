@@ -33,6 +33,7 @@ erDiagram
     int sort_order
     text color
     jsonb filter
+    boolean show_in_nav
   }
   users {
     int id PK
@@ -101,7 +102,7 @@ Projects are parents of task groups, tasks (optional), documents, todo lists, mo
 
 ## `task_groups`
 
-Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section.
+Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section. `show_in_nav` (T0078) opts the group into the Project menu under Tasks when a filter is active.
 
 ### Columns
 
@@ -113,6 +114,7 @@ Named list-view sections within a project (T0075). Optional saved filter and bar
 | `sort_order` | integer | no | `0` | List ordering |
 | `color` | text | yes | — | Accent on the group bar (CSS hex) |
 | `filter` | jsonb | yes | — | T0053-shaped `{ clauses, joins }`; null/empty = no matches |
+| `show_in_nav` | boolean | no | `false` | When true and filter is active, appear under Tasks in the Project menu |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 

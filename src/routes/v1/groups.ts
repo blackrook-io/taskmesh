@@ -5,7 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
-import { parseTaskGroupFilter } from "../../lib/taskGroupFilter.js";
+import { isEmptyTaskGroupFilter, parseTaskGroupFilter } from "../../lib/taskGroupFilter.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 
 const groupBody = z.object({
@@ -13,6 +13,7 @@ const groupBody = z.object({
   sortOrder: z.number().int().optional(),
   color: z.string().max(64).optional().nullable(),
   filter: z.unknown().optional().nullable(),
+  showInNav: z.boolean().optional(),
 });
 
 const groupPatch = z.object({
@@ -20,6 +21,7 @@ const groupPatch = z.object({
   sortOrder: z.number().int().optional(),
   color: z.string().max(64).optional().nullable(),
   filter: z.unknown().optional().nullable(),
+  showInNav: z.boolean().optional(),
 });
 
 const reorderBody = z.object({
@@ -51,6 +53,7 @@ groupsRouter.post("/", async (req, res) => {
       sendError(res, 400, "invalid_filter", "Invalid group filter");
       return;
     }
+    const storedFilter = filterParsed === undefined ? null : filterParsed;
     const existing = await db
       .select({ m: schema.taskGroups.sortOrder })
       .from(schema.taskGroups)
@@ -64,7 +67,8 @@ groupsRouter.post("/", async (req, res) => {
         name: parsed.name,
         sortOrder: nextSort,
         color: parsed.color ?? null,
-        filter: filterParsed === undefined ? null : filterParsed,
+        filter: storedFilter,
+        showInNav: isEmptyTaskGroupFilter(storedFilter) ? false : (parsed.showInNav ?? false),
       })
       .returning();
     if (!row) {
@@ -126,8 +130,8 @@ groupsRouter.patch("/:groupId", async (req, res) => {
     const projectId = parseRouteId(req, "projectId");
     const groupId = parseRouteId(req, "groupId");
     const parsed = groupPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["name", "sortOrder", "color", "filter"])) {
-      sendError(res, 400, "empty_patch", "Provide name, sortOrder, color, and/or filter");
+    if (!hasDefinedKeys(parsed, ["name", "sortOrder", "color", "filter", "showInNav"])) {
+      sendError(res, 400, "empty_patch", "Provide name, sortOrder, color, filter, and/or showInNav");
       return;
     }
     const [existing] = await db
@@ -147,6 +151,8 @@ groupsRouter.patch("/:groupId", async (req, res) => {
       }
       nextFilter = parsedFilter;
     }
+    const resolvedFilter = nextFilter !== undefined ? nextFilter : existing.filter;
+    const navOff = isEmptyTaskGroupFilter(resolvedFilter);
     const [row] = await db
       .update(schema.taskGroups)
       .set({
@@ -154,6 +160,11 @@ groupsRouter.patch("/:groupId", async (req, res) => {
         ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
         ...(nextFilter !== undefined ? { filter: nextFilter } : {}),
+        ...(navOff
+          ? { showInNav: false }
+          : parsed.showInNav !== undefined
+            ? { showInNav: parsed.showInNav }
+            : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.taskGroups.id, groupId))

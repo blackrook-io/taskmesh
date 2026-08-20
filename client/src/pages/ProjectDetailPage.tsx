@@ -22,7 +22,7 @@ import {
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
-import { storageKeyForProjectTasks } from "../lib/taskListFilter";
+import { storageKeyForProjectTasks, emptyTaskListFilter, isFilterActive, parseTaskListFilterValue } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import type { Project, ProjectDocument, ProjectModule, Task, TaskGroup, TodoList } from "../types";
 
@@ -74,6 +74,7 @@ export function ProjectDetailPage() {
   const qc = useQueryClient();
 
   const tab = parseTab(searchParams.get("tab"));
+  const groupParam = parseIdParam(searchParams.get("group"));
   const initialDocId = parseIdParam(searchParams.get("doc"));
   const initialBoardId = parseIdParam(searchParams.get("board"));
   const initialCanvasId = parseIdParam(searchParams.get("canvas"));
@@ -230,6 +231,50 @@ export function ProjectDetailPage() {
     applyFilter: applyTaskListFilter,
     clearFilter: clearTaskListFilter,
   } = usePersistedTaskListFilter(taskListFilterKey);
+
+  const navListView = tab === "tasks" && groupParam != null;
+
+  const navGroup = useMemo(() => {
+    if (!navListView) return null;
+    return groups.find((g) => g.id === groupParam) ?? null;
+  }, [navListView, groupParam, groups]);
+
+  const navGroupFilter = useMemo(() => {
+    if (!navGroup) return null;
+    const parsed = parseTaskListFilterValue(navGroup.filter);
+    if (!parsed || !isFilterActive(parsed)) return null;
+    return parsed;
+  }, [navGroup]);
+
+  const displayedTaskListFilter = navListView
+    ? (navGroupFilter ?? emptyTaskListFilter())
+    : taskListFilter;
+
+  useEffect(() => {
+    if (!navListView || groupParam == null || !groupsQuery.isSuccess) return;
+    if (groups.some((g) => g.id === groupParam)) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("group");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [navListView, groupParam, groups, groupsQuery.isSuccess, setSearchParams]);
+
+  const takeOverListFilter = (next: typeof taskListFilter | "clear") => {
+    if (next === "clear") clearTaskListFilter();
+    else applyTaskListFilter(next);
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("group");
+        return params;
+      },
+      { replace: true },
+    );
+  };
 
   const selectedDoc = useMemo(
     () => documents.find((d) => d.id === selectedDocId) ?? null,
@@ -588,16 +633,19 @@ export function ProjectDetailPage() {
             </div>
           </div>
           <TaskListFilterBar
-            filter={taskListFilter}
-            onApply={applyTaskListFilter}
-            onClear={clearTaskListFilter}
+            key={navGroup ? `group-${navGroup.id}` : "list"}
+            filter={displayedTaskListFilter}
+            onApply={(next) => takeOverListFilter(next)}
+            onClear={() => takeOverListFilter("clear")}
           />
           <div style={{ marginTop: "0.5rem" }}>
             <TaskBoard
+              key={navListView ? `nav-list-${groupParam}` : "grouped-board"}
               projectId={projectId}
               groups={groups}
               tasks={tasks}
-              listFilter={taskListFilter}
+              listFilter={displayedTaskListFilter}
+              navListView={navListView}
               requestOpenTask={requestOpenTask}
               onRequestOpenTaskConsumed={() => setRequestOpenTask(null)}
               onReorder={async (payload) => {
@@ -615,7 +663,7 @@ export function ProjectDetailPage() {
                   method: "PATCH",
                   body: JSON.stringify(patch),
                 });
-                void qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
+                await qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
               }}
               onCreateGroup={async (name) => {
                 await apiJson(`/api/v1/projects/${projectId}/groups`, {

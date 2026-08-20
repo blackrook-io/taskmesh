@@ -1,0 +1,1 @@
+ALTER TABLE "task_groups" ADD COLUMN "show_in_nav" boolean DEFAULT false NOT NULL;

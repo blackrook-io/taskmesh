@@ -8,8 +8,9 @@ import {
   isProjectModuleKey,
   type ProjectModuleKey,
 } from "./projectModules";
-import type { ProjectModule } from "../types";
+import type { ProjectModule, TaskGroup } from "../types";
 import { shellIcons } from "../components/shell/shellIcons";
+import { isFilterActive, parseTaskListFilterValue } from "./taskListFilter";
 
 export type ContextNavItem = {
   id: string;
@@ -21,6 +22,10 @@ export type ContextNavItem = {
   icon?: IconDefinition;
   /** Pin to the bottom of the context pane (e.g. project Settings). */
   pin?: "bottom";
+  /** Indent under a parent item (Task Group sub-lists). */
+  nested?: boolean;
+  /** Optional color chip instead of (or in the glyph slot with) the icon. */
+  swatch?: string | null;
 };
 
 export type ShellSection =
@@ -115,6 +120,17 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
     },
   });
 
+  const groupsQuery = useQuery({
+    queryKey: ["task-groups", projectId],
+    enabled: projectId != null,
+    queryFn: async () => {
+      const res = await apiJson<{ data: TaskGroup[] }>(
+        `/api/v1/projects/${projectId}/groups`,
+      );
+      return res.data;
+    },
+  });
+
   const listsQuery = useQuery({
     queryKey: ["todo-lists", "global"],
     enabled: section === "lists",
@@ -145,6 +161,14 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
       );
       const rawTab = searchParams.get("tab") ?? "overview";
       const activeTab = rawTab === "todos" ? "todo_lists" : rawTab;
+      const rawGroup = searchParams.get("group");
+      const navGroupId = rawGroup != null && rawGroup !== "" ? Number(rawGroup) : NaN;
+      const groupParamOn = Number.isFinite(navGroupId);
+      const pinnedGroups = (groupsQuery.data ?? []).filter((g) => {
+        if (!g.showInNav) return false;
+        const parsed = parseTaskListFilterValue(g.filter);
+        return parsed != null && isFilterActive(parsed);
+      });
 
       const items: ContextNavItem[] = PROJECT_MIDDLE.flatMap((entry) => {
         const needsModule = entry.moduleKey != null;
@@ -154,16 +178,26 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
           entry.tab === "overview"
             ? `/projects/${projectId}`
             : `/projects/${projectId}?tab=${entry.tab}`;
-        return [
-          {
-            id: entry.id,
-            label: entry.label,
-            path,
-            active: activeTab === entry.tab,
-            icon: entry.icon,
-            pin: entry.pin,
-          },
-        ];
+        const isTasks = entry.tab === "tasks";
+        const parent: ContextNavItem = {
+          id: entry.id,
+          label: entry.label,
+          path,
+          active: isTasks ? activeTab === "tasks" && !groupParamOn : activeTab === entry.tab,
+          icon: entry.icon,
+          pin: entry.pin,
+        };
+        if (!isTasks) return [parent];
+        const children: ContextNavItem[] = pinnedGroups.map((g) => ({
+          id: `task-group-${g.id}`,
+          label: g.name,
+          path: `/projects/${projectId}?tab=tasks&group=${g.id}`,
+          active: activeTab === "tasks" && groupParamOn && navGroupId === g.id,
+          nested: true,
+          swatch: g.color,
+          icon: shellIcons.tasks,
+        }));
+        return [parent, ...children];
       });
 
       return { title: "Project Menu", items };
@@ -328,6 +362,7 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
     section,
     projectId,
     modulesQuery.data,
+    groupsQuery.data,
     listsQuery.data,
     imageBoardsQuery.data,
     searchParams,

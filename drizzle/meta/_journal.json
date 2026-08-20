@@ -162,6 +162,13 @@
       "when": 1787217000000,
       "tag": "0022_task_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787235577402,
+      "tag": "0023_task_group_nav",
+      "breakpoints": true
     }
   ]
 }

@@ -26,6 +26,7 @@ export type TaskGroup = {
   sortOrder: number;
   color: string | null;
   filter: { clauses: { field: string; operator: string; value: string }[]; joins: string[] } | null;
+  showInNav: boolean;
   createdAt: string;
   updatedAt: string;
 };

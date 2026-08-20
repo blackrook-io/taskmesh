@@ -3,21 +3,29 @@ import { useContextNavItems, type ContextNavItem } from "../../lib/useShellNav";
 import { NavIcon } from "./NavIcon";
 
 function NavItem({ item }: { item: ContextNavItem }) {
+  const glyph = item.swatch ? (
+    <span className="context-nav__glyph" aria-hidden>
+      <span className="context-nav__swatch" style={{ background: item.swatch }} />
+    </span>
+  ) : item.icon ? (
+    <span className="context-nav__glyph" aria-hidden>
+      <NavIcon icon={item.icon} />
+    </span>
+  ) : null;
+
   const content = (
     <>
-      {item.icon ? (
-        <span className="context-nav__glyph" aria-hidden>
-          <NavIcon icon={item.icon} />
-        </span>
-      ) : null}
+      {glyph}
       <span>{item.label}</span>
     </>
   );
 
+  const nested = item.nested ? " context-nav__item--nested" : "";
+
   if (item.disabled || !item.path) {
     return (
       <span
-        className={`context-nav__item is-disabled${item.active ? " is-active" : ""}`}
+        className={`context-nav__item is-disabled${item.active ? " is-active" : ""}${nested}`}
         title={item.title}
       >
         {content}
@@ -28,7 +36,7 @@ function NavItem({ item }: { item: ContextNavItem }) {
   return (
     <Link
       to={item.path}
-      className={`context-nav__item${item.active ? " is-active" : ""}`}
+      className={`context-nav__item${item.active ? " is-active" : ""}${nested}`}
       title={item.title}
     >
       {content}

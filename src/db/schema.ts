@@ -62,6 +62,8 @@ export const taskGroups = pgTable("task_groups", {
     clauses: { field: string; operator: string; value: string }[];
     joins: string[];
   } | null>(),
+  /** When true and filter is active, list under Tasks in the Project menu. */
+  showInNav: boolean("show_in_nav").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

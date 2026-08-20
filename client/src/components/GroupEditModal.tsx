@@ -27,7 +27,12 @@ import type { TaskGroup } from "../types";
 type Props = {
   group: TaskGroup;
   onClose: () => void;
-  onSave: (patch: { name: string; color: string | null; filter: TaskListFilter | null }) => Promise<void>;
+  onSave: (patch: {
+    name: string;
+    color: string | null;
+    filter: TaskListFilter | null;
+    showInNav: boolean;
+  }) => Promise<void>;
 };
 
 function defaultValueForField(field: FilterField): string {
@@ -89,6 +94,7 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
   const [name, setName] = useState(group.name);
   const [color, setColor] = useState<string | null>(group.color);
   const [draft, setDraft] = useState<TaskListFilter>(() => draftFromGroup(group));
+  const [showInNav, setShowInNav] = useState(group.showInNav);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,6 +144,11 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
     });
   };
 
+  const filterDraftActive = isFilterActive({
+    clauses: draft.clauses,
+    joins: draft.joins.slice(0, Math.max(0, draft.clauses.length - 1)),
+  });
+
   const save = async (clearFilter: boolean) => {
     const trimmed = name.trim();
     if (!trimmed) {
@@ -157,10 +168,11 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
         : emptyTaskListFilter();
     const toStore =
       filter && isFilterActive(filter) ? filter : null;
+    const pin = toStore != null && showInNav;
     setBusy(true);
     setError(null);
     try {
-      await onSave({ name: trimmed, color, filter: toStore });
+      await onSave({ name: trimmed, color, filter: toStore, showInNav: pin });
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -251,6 +263,22 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
           </button>
         </div>
         {error ? <p className="error">{error}</p> : null}
+        <label className="group-edit-nav-toggle">
+          <input
+            type="checkbox"
+            checked={showInNav && filterDraftActive}
+            disabled={!filterDraftActive || busy}
+            onChange={(e) => setShowInNav(e.target.checked)}
+          />
+          <span>
+            Show under Tasks in Project menu
+            <span className="muted group-edit-nav-toggle__hint">
+              {filterDraftActive
+                ? "Adds a list view that opens this project’s Tasks with this group’s filter applied."
+                : "Save a filter first to pin this group in the menu."}
+            </span>
+          </span>
+        </label>
         <div className="modal-actions task-list-filter-modal__actions">
           <button type="button" className="btn ghost" onClick={() => void save(true)} disabled={busy}>
             Clear filter

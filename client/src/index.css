@@ -903,6 +903,19 @@ a.app-nav__item.active {
   cursor: not-allowed;
 }
 
+.context-nav__item--nested {
+  padding-left: calc(var(--space-4) + 1.15rem);
+  font-size: 0.85rem;
+}
+
+.context-nav__swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent);
+}
+
 .coming-soon {
   max-width: 36rem;
 }
@@ -3470,6 +3483,29 @@ a:focus-visible {
   display: flex;
   gap: 0.4rem;
   margin-left: auto;
+}
+
+.group-edit-nav-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 1rem 0 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-edit-nav-toggle input {
+  flex-shrink: 0;
+  width: auto;
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+}
+
+.group-edit-nav-toggle__hint {
+  display: block;
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
 }
 
 @media (max-width: 560px) {

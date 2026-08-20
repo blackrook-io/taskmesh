@@ -19,6 +19,8 @@ export default defineConfig(({ mode }) => {
       host: true, // 0.0.0.0 — LAN hosts can reach :5173
       port: 5173,
       strictPort: true,
+      // Agent/editor writes sometimes skip inotify; polling keeps HMR honest.
+      watch: { usePolling: true, interval: 400 },
       proxy: {
         "/api": {
           target: `http://127.0.0.1:${apiPort}`,

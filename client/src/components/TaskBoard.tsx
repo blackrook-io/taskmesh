@@ -60,12 +60,14 @@ import {
   type TaskListSortCol,
 } from "../lib/taskListSort";
 import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
+/** T0078: nav sub-list is a flat filtered list (no group bars). */
 import {
   emptyTaskListFilter,
   evaluateTaskListFilter,
   formatFilterBreadcrumb,
   isFilterActive,
   parseTaskListFilterValue,
+  taskMatchesFilter,
   type TaskListFilter,
 } from "../lib/taskListFilter";
 
@@ -163,23 +165,48 @@ function buildRows(
   collapsed: Set<number | "none">,
   sortCol: SortCol | null,
   sortDir: 1 | -1,
+  navListView: boolean,
 ): FlatRow[] {
-  const orderedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder);
-  const roots = tasks.filter((t) => t.parentId == null);
   const rows: FlatRow[] = [];
+
+  if (navListView) {
+    const matched = evaluateTaskListFilter(tasks, listFilter);
+    const matchedIds = new Set(matched.map((t) => t.id));
+    const visualRoots = matched.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
+    const walk = (t: Task, depth: number) => {
+      rows.push({
+        kind: "task",
+        task: t,
+        depth,
+        key: `task-nav-${t.id}`,
+        groupKey: "none",
+        duplicate: false,
+      });
+      for (const c of childrenOf(tasks, t.id)) {
+        if (matchedIds.has(c.id)) walk(c, depth + 1);
+      }
+    };
+    for (const root of sortRoots(visualRoots, sortCol, sortDir)) {
+      walk(root, 0);
+    }
+    return rows;
+  }
+
+  const orderedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder);
+  const allRoots = tasks.filter((t) => t.parentId == null);
   const appearCount = new Map<number, number>();
   const byGroup = new Map<number, Task[]>();
 
   for (const g of orderedGroups) {
     const gf = groupFilter(g);
-    const match = isFilterActive(gf) ? evaluateTaskListFilter(roots, gf) : [];
+    const match = isFilterActive(gf) ? evaluateTaskListFilter(allRoots, gf) : [];
     byGroup.set(g.id, match);
     for (const t of match) {
       appearCount.set(t.id, (appearCount.get(t.id) ?? 0) + 1);
     }
   }
   const claimed = new Set(appearCount.keys());
-  const unassigned = evaluateTaskListFilter(roots, listFilter).filter((t) => !claimed.has(t.id));
+  const unassigned = evaluateTaskListFilter(allRoots, listFilter).filter((t) => !claimed.has(t.id));
 
   const pushGroup = (group: TaskGroup | null, groupKey: number | "none", groupRoots: Task[]) => {
     rows.push({
@@ -189,7 +216,6 @@ function buildRows(
       taskCount: groupRoots.length,
     });
     if (collapsed.has(groupKey)) return;
-    const sorted = sortRoots(groupRoots, sortCol, sortDir);
     const pushTree = (t: Task, depth: number) => {
       rows.push({
         kind: "task",
@@ -203,7 +229,7 @@ function buildRows(
         pushTree(c, depth + 1);
       }
     };
-    for (const root of sorted) {
+    for (const root of sortRoots(groupRoots, sortCol, sortDir)) {
       pushTree(root, 0);
     }
   };
@@ -962,6 +988,8 @@ type Props = {
   groups: TaskGroup[];
   tasks: Task[];
   listFilter: TaskListFilter;
+  /** Nav sub-list: flat filtered list, no Group/Unassigned header bars. */
+  navListView?: boolean;
   /** When set, open the Edit Task modal for this task (e.g. after create). */
   requestOpenTask?: Task | null;
   onRequestOpenTaskConsumed?: () => void;
@@ -969,7 +997,12 @@ type Props = {
   onReorderGroups: (orderedGroupIds: number[]) => Promise<void>;
   onPatchGroup: (
     groupId: number,
-    patch: { name?: string; color?: string | null; filter?: TaskListFilter | null },
+    patch: {
+      name?: string;
+      color?: string | null;
+      filter?: TaskListFilter | null;
+      showInNav?: boolean;
+    },
   ) => Promise<void>;
   onCreateGroup: (name: string) => Promise<void>;
   onDeleteGroup: (groupId: number) => Promise<void>;
@@ -985,6 +1018,7 @@ export function TaskBoard({
   groups,
   tasks,
   listFilter,
+  navListView = false,
   requestOpenTask = null,
   onRequestOpenTaskConsumed,
   onReorder,
@@ -1010,8 +1044,30 @@ export function TaskBoard({
 
   const rows = useMemo(() => {
     const boardSortCol: SortCol | null = sortCol === "project" ? null : sortCol;
-    return buildRows(groups, tasks, listFilter, collapsed, boardSortCol, sortDir);
-  }, [groups, tasks, listFilter, collapsed, sortCol, sortDir]);
+    return buildRows(
+      groups,
+      tasks,
+      listFilter,
+      collapsed,
+      boardSortCol,
+      sortDir,
+      navListView,
+    );
+  }, [groups, tasks, listFilter, collapsed, sortCol, sortDir, navListView]);
+
+  const displayRows = useMemo(() => {
+    if (!navListView) return rows;
+    const seen = new Set<number>();
+    const out: FlatRow[] = [];
+    for (const row of rows) {
+      if (row.kind === "group") continue;
+      if (!isFilterActive(listFilter) || !taskMatchesFilter(row.task, listFilter)) continue;
+      if (seen.has(row.task.id)) continue;
+      seen.add(row.task.id);
+      out.push({ ...row, duplicate: false, groupKey: "none" });
+    }
+    return out;
+  }, [navListView, rows, listFilter]);
 
   const onRequestOpenTaskConsumedRef = useRef(onRequestOpenTaskConsumed);
   onRequestOpenTaskConsumedRef.current = onRequestOpenTaskConsumed;
@@ -1029,7 +1085,7 @@ export function TaskBoard({
   }, [fromList]);
   const modalTask = fromList ?? (modalTaskId != null ? modalTaskHeld : null);
 
-  const sortableIds = useMemo(() => rows.map((r) => r.key), [rows]);
+  const sortableIds = useMemo(() => displayRows.map((r) => r.key), [displayRows]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -1161,8 +1217,9 @@ export function TaskBoard({
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
           <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-            {rows.map((row) => {
+            {displayRows.map((row) => {
               if (row.kind === "group") {
+                if (navListView) return null;
                 const groupKey: number | "none" = row.group?.id ?? "none";
                 return (
                   <SortableGroupHeader
@@ -1220,6 +1277,7 @@ export function TaskBoard({
         </DndContext>
       </div>
 
+      {navListView ? null : (
       <div className="task-phase-add">
         <input
           type="text"
@@ -1242,6 +1300,7 @@ export function TaskBoard({
           Add group
         </button>
       </div>
+      )}
 
       {modalTask ? (
         <ElementShell

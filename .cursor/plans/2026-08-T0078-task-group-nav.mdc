@@ -1,0 +1,117 @@
+---
+description: "T0078 — Task Group nav sub-lists under Project Menu → Tasks"
+todos:
+  - id: schema
+    content: Add task_groups.show_in_nav boolean; migration + docs/database + docs:sync-schema
+  - id: api
+    content: Groups POST/PATCH accept showInNav; return on GET
+  - id: modal
+    content: Group edit modal checkbox to pin the group under Tasks in Project Menu
+  - id: nav
+    content: Nested Project Menu items; URL group param; grouped board with list filter overlay
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0078 — Task Group nav sub-lists
+
+**Task:** T0078 · id `90` · Ready · High · project 4 (TaskMesh)  
+**Parent:** T0075 (id `87`, Pending) — first slice shipped (`0.23.0`); children remain  
+**Depends on:** T0075 (`pending` — allowed)  
+**Branch (after approval):** `T0078-task-group-nav`
+
+**Out of scope:** T0077 auto-tag · T0079 Tags/Project filter fields · T0080 Project Phase field
+
+## Goal
+
+Let the user **opt a Task Group into the Project Menu** (middle pane) as a **sub-item under Tasks**. Selecting that item opens a **list view** of project tasks with the Group’s saved filter already applied.
+
+Example labels the user might pin: Completed Tasks, On-hold Tasks, Draft State, Urgent Tasks. (Tags-based examples wait on T0079.)
+
+## Decisions (confirmed)
+
+| # | Decision |
+|---|----------|
+| A | **Opt-in** checkbox at the **bottom** of the Group edit modal: “Show under Tasks in Project menu”. Default **off**. |
+| B | Persist `show_in_nav` on the **group row** (not localStorage). |
+| C | Sub-items are **always visible** (indented under Tasks). No collapse/expand in v1. |
+| D | Order follows the Group’s existing **sort order** among pinned groups only. |
+| E | URL: `/projects/:id?tab=tasks&group=<groupId>`. Parent **Tasks** stays `/projects/:id?tab=tasks` (no `group`). |
+| F | Clicking a sub-item opens a **flat List View**: only tasks matching the Group’s saved filter, **no Group/Unassigned header bars**, no Add group. Do **not** write into the main list’s localStorage while the `group` param is set. Editing/applying/clearing the list filter bar takes over: persist to localStorage and drop `group` (returns to the grouped board). Clicking **Tasks** restores the grouped board. |
+| G | If the Group has **no active filter**, the checkbox is disabled (hint: save a filter first). On save with an empty filter, force `showInNav` false. Pinned groups whose filter is later cleared **drop out of the menu**. |
+| H | Active highlight: the **sub-item** is active when `group` matches; **Tasks** is active only when `tab=tasks` and **no** `group` param. |
+| I | Nav label = Group **name**. Optional **color** as a small swatch on the glyph, not the full row. |
+| J | Switching away from Tasks **drops** `group`. Opening a task modal keeps `group` in the URL. |
+
+## Scope
+
+**In**
+
+- Schema: `task_groups.show_in_nav` boolean, default `false`
+- API: create/update/list include `showInNav`
+- Group edit modal: checkbox + short hint
+- `useShellNav` / `ContextNav`: nested children under Tasks; fetch project groups when on a project
+- `ProjectDetailPage`: `group` query param → grouped `TaskBoard` with that Group’s filter as the list filter overlay
+- Docs: `docs/database/projects-and-ideas.md` (and overview if the column list is mirrored); `npm run docs:sync-schema`
+
+**Out**
+
+- Auto-tag, extra filter fields, Project Phase field
+- Pinning Unassigned
+- Global `/tasks` menu (All Tasks / Unassigned) — this is **Project Menu** only
+- Drag-reorder of nav items separate from Group reorder
+- Persist focused-view filter edits back onto the Group (filter edits stay in the Group modal)
+
+## Approach
+
+### Schema (MINOR on finish-up)
+
+1. Add `show_in_nav boolean not null default false` to `task_groups`.
+2. Drizzle `schema.ts`, generate SQL, update `docs/database/`, `npm run docs:sync-schema`.
+
+Existing groups stay unpinned.
+
+### API
+
+- `POST` / `PATCH` `/api/v1/projects/:projectId/groups` accept `showInNav` boolean.
+- Empty-patch error message includes `showInNav`.
+- GET project (or groups list) already returns full rows — clients pick up the field.
+
+### Modal
+
+- Checkbox bound to draft state; saved with name/color/filter.
+- Disabled when the current filter draft is inactive (unless already saved-active and they’re only toggling pin before clearing — on save, pin + empty filter → `showInNav` stored but nav hides until filter exists; simpler: **on save**, if filter is null, force `showInNav` false).
+
+### Project Menu
+
+- Extend `ContextNavItem` with optional `indent` / `child` flag (or nested `children` on Tasks).
+- Query `GET /api/v1/projects/:id/groups` (same key as the project page).
+- Render pinned+filtered groups after Tasks, indented.
+- Mobile: same list; keep touch targets.
+
+### Grouped board + list filter overlay
+
+- Parse `group` on `ProjectDetailPage` when `tab=tasks`.
+- If id unknown / not in this project / no active filter: drop param.
+- `listFilter` for the board and filter bar = that Group’s saved filter. Do not write localStorage until the user applies or clears the bar.
+- Group sections behave as in T0075 (group filter overrides list filter).
+
+## Files likely touched
+
+- `src/db/schema.ts`, `drizzle/*.sql`, `src/routes/v1/groups.ts`
+- `docs/database/projects-and-ideas.md`
+- `client/src/types.ts`, `GroupEditModal.tsx`, `TaskBoard.tsx`, `ProjectDetailPage.tsx`
+- `client/src/lib/useShellNav.ts`, `client/src/components/shell/ContextNav.tsx`, `client/src/index.css`
+- Import/export only if group JSON is serialized
+
+## Finish-up note
+
+Schema migration → **MINOR** bump from current `package.json` (today `0.23.1` → `0.24.0` if still no other schema Tasks land first) per versioning.mdc when the user says finish up.
+
+## QA follow-ups
+
+- Group edit modal: nav checkbox sat **above** the label because `.field` is `flex-direction: column`. Replaced with a row layout so the checkbox sits to the left of “Show under Tasks in Project menu”.
+- Duplicate `isFilterActive` import in `useShellNav.ts` caused a Vite parse error and blocked the Project menu from updating after pinning a Group. Removed the duplicate import; group PATCH now awaits query invalidation so the menu refreshes after Save.
+- Nav sub-lists showed the filter bar correctly but still listed non-matching tasks because T0075 group filters **override** the list filter. **QA:** a sub-list is now a **flat** view: hide all Group/Unassigned bars, show only tasks that match the preset (including omitting non-matching children).
+- Flat view still showed Group bars because `navListView` required the group row to be in memory and an effect **dropped `group` from the URL** when the overlay filter was not ready. Nav list mode is now **URL-driven** (`?group=`), that effect only removes unknown ids, and TaskBoard **never renders group header rows** in that mode (also de-dupes and re-filters tasks in the render path).
+- DEV Vite was still transforming a **stale TaskBoard.tsx** (no `navListView` in the served module) while ProjectDetailPage had already updated — so the UI could not pick up list-view changes. Restarted Vite; enabled `server.watch.usePolling` so editor writes invalidate HMR.
