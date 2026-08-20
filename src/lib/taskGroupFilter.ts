@@ -1,7 +1,7 @@
 /** Server-side validation of T0053 task-list filter JSON stored on task groups. */
 
-const FILTER_FIELDS = ["state", "priority", "title", "number", "phase"] as const;
-const FILTER_OPERATORS = ["is", "is_not", "contains", "starts_with"] as const;
+const FILTER_FIELDS = ["state", "priority", "title", "number", "phase", "tags", "project"] as const;
+const FILTER_OPERATORS = ["is", "is_not", "contains", "does_not_contain", "starts_with"] as const;
 const FILTER_JOINS = ["and", "or"] as const;
 
 export type TaskGroupFilter = {

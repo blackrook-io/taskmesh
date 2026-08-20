@@ -29,6 +29,7 @@ import {
   storageKeyForGlobalTasks,
 } from "../lib/taskListFilter";
 import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
+import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
 import {
   DEFAULT_GLOBAL_TASK_LIST_SORT,
   storageKeyForGlobalTaskSort,
@@ -131,7 +132,11 @@ export function TasksListPage() {
   } = usePersistedTaskListFilter(taskListFilterKey);
 
   const { phaseNames } = usePhaseFilterOptions();
-  const filterCtx = useMemo(() => ({ phaseNames }), [phaseNames]);
+  const { filterCtx: tagProjectCtx } = useTaskFilterLookups({ includeProjects: true });
+  const filterCtx = useMemo(
+    () => ({ ...tagProjectCtx, phaseNames }),
+    [tagProjectCtx, phaseNames],
+  );
 
   const tasks = useMemo(() => {
     const filtered = evaluateTaskListFilter(tasksQuery.data ?? [], taskListFilter, filterCtx);
@@ -300,6 +305,7 @@ export function TasksListPage() {
         filter={taskListFilter}
         onApply={applyTaskListFilter}
         onClear={clearTaskListFilter}
+        includeProject
       />
 
       <div className="task-list task-list--global">

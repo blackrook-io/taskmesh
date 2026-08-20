@@ -42,6 +42,7 @@ import { ColorPopover } from "./shared/ColorPopover";
 import { GroupEditModal } from "./GroupEditModal";
 import { FilterIcon } from "./TaskListFilterBar";
 import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
+import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { RowTagChips } from "./shared/RowTagChips";
@@ -949,7 +950,7 @@ function SortableGroupHeader({
   onToggle,
   onOpenEdit,
   onRequestDelete,
-  phaseNames,
+  filterCtx,
 }: {
   group: TaskGroup | null;
   collapsed: boolean;
@@ -957,7 +958,7 @@ function SortableGroupHeader({
   onToggle: () => void;
   onOpenEdit?: () => void;
   onRequestDelete?: () => void;
-  phaseNames?: Map<number, string>;
+  filterCtx?: FilterMatchContext;
 }) {
   const sortableId = group ? `group-${group.id}` : "group-none";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -974,7 +975,7 @@ function SortableGroupHeader({
   };
   const gf = group ? groupFilter(group) : emptyTaskListFilter();
   const filterOn = group != null && isFilterActive(gf);
-  const breadcrumb = filterOn ? formatFilterBreadcrumb(gf, { phaseNames }) : "";
+  const breadcrumb = filterOn ? formatFilterBreadcrumb(gf, filterCtx) : "";
 
   return (
     <div
@@ -1080,7 +1081,8 @@ export function TaskBoard({
   onPatchTask,
 }: Props) {
   const { phaseNames } = usePhaseFilterOptions(projectId);
-  const filterCtx = useMemo(() => ({ phaseNames }), [phaseNames]);
+  const { filterCtx: tagCtx } = useTaskFilterLookups({ includeProjects: false });
+  const filterCtx = useMemo(() => ({ ...tagCtx, phaseNames }), [tagCtx, phaseNames]);
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
@@ -1281,7 +1283,7 @@ export function TaskBoard({
                     group={row.group}
                     collapsed={collapsed.has(groupKey)}
                     taskCount={row.taskCount}
-                    phaseNames={phaseNames}
+                    filterCtx={filterCtx}
                     onToggle={() => {
                       setCollapsed((prev) => {
                         const next = new Set(prev);

@@ -1,0 +1,69 @@
+---
+description: "T0079 — Task list filter fields: Tags and Project (All Tasks)"
+todos:
+  - id: model
+    content: Add tags + project fields; does_not_contain operator; match + breadcrumb; server validation
+    status: complete
+  - id: tag-data
+    content: Bulk-load task taggings for client-side match; tag dropdown options
+    status: complete
+  - id: ui
+    content: Tags contain / does not contain / starts with; Project on All Tasks only
+    status: complete
+  - id: assignee-draft
+    content: Standalone Draft Unassigned task for future Assignee filter (no link to T0079)
+    status: complete
+  - id: qa
+    content: Manual QA checklist
+    status: complete
+---
+
+# T0079 — Task list filter fields: Tags and Project
+
+**Task:** T0079 · id `91` · Ready → In Progress · High · project 4 (TaskMesh)  
+**Parent:** T0075 Task Groups refactor (id `87`, Pending)  
+**Depends on:** T0075 — **satisfied** (`pending`)  
+**Branch:** `T0079-filter-tags-project`
+
+## Goal
+
+Extend the T0053/T0075 filter builder so lists and Task Group saved filters can match **Tags**, and the **All Tasks** list can also match **Project**. Assignee is a later multi-user task (standalone Draft, not related to T0079).
+
+## Decisions (interview)
+
+| # | Decision |
+|---|----------|
+| 1 | Tags use **contains** / **does not contain** (new operator `does_not_contain`) for tag membership. Natural language: “Tags contains Security”. Dropdown of tags; has-tag / has-not-tag (other tags allowed). **None** = untagged / has any tag. |
+| 2 | Tags **starts with** matches any attached tag **name** prefix (e.g. `W` → Work, Winter). Case-insensitive. |
+| 3 | **Project** field only on All Tasks / unassigned. Hidden on project lists and Group editor (task already has 0 or 1 project). |
+| 4 | Project `is` / `is not`: dropdown + **None** (unassigned). `contains` / `starts with` / `does not contain` match project **name**. |
+| 5 | Assignee **not** in this slice. Created **T0082** (id `94`) standalone Draft Unassigned — no parent, no depends-on to T0079. |
+| 6 | Leave existing **Phase** clause as-is (T0080). |
+| 7 | Stay **client-side**; bulk-load task taggings (no N+1). |
+| H | **No new migration**. PATCH bump on finish-up. |
+
+## Scope
+
+**In**
+
+- Fields `tags`, `project`; operator `does_not_contain` (“does not contain”) on all fields (inverse of substring `contains` except Tags, where contains = membership)
+- Tags on project list, All Tasks, Task Group saved filter
+- Project on All Tasks list filter only
+- `GET /api/v1/taggings?entityType=task` without `entityId` returns all task taggings
+
+**Out**
+
+- Assignee filter UI (follow-up Draft task)
+- T0077 auto-tag, T0080 Project Phase field
+- Server-side SQL filter query params
+
+## Approach
+
+1. **Model** — `taskListFilter.ts` + `taskGroupFilter.ts`: fields, `does_not_contain`, `operatorsForField` (tags: contains / does_not_contain / starts_with). `FilterMatchContext`: `taskTags`, `tagNames`, `projectNames`.
+2. **Taggings** — optional `entityId` on GET; bulk rows include `entityId`.
+3. **UI** — shared value inputs; `includeProject` on All Tasks bar; Group modal Tags only.
+4. **Evaluate** — wire `filterCtx` on `TasksListPage` and `TaskBoard`.
+
+## Finish-up (when asked)
+
+PATCH version bump (no new `drizzle/*.sql`). Merge, archive this plan, deploy, complete T0079. Leave `dueDate` unchanged. Do not PATCH parent T0075.

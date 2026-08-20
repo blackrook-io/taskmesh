@@ -1,14 +1,15 @@
 import { useEffect, useId, useState } from "react";
 import {
-  FILTER_FIELDS,
   FILTER_FIELD_LABELS,
   FILTER_JOIN_LABELS,
-  FILTER_OPERATORS,
   FILTER_OPERATOR_LABELS,
-  defaultValueForField,
+  applyClausePatch,
+  clauseValueUsesPicker,
+  filterFieldsForScope,
   formatFilterBreadcrumb,
   isFilterActive,
   newFilterClause,
+  operatorsForField,
   type FilterClause,
   type FilterField,
   type FilterJoin,
@@ -22,6 +23,8 @@ import {
   SELECTABLE_TASK_STATES,
 } from "../lib/taskFields";
 import { usePhaseFilterOptions, type PhaseFilterOption } from "../lib/usePhaseFilterOptions";
+import { useTaskFilterLookups, type FilterTagOption } from "../lib/useTaskFilterLookups";
+import type { Project } from "../types";
 
 type Props = {
   filter: TaskListFilter;
@@ -29,16 +32,22 @@ type Props = {
   onClear: () => void;
   /** When set, Phase values are that project’s phases; omit for All Tasks. */
   projectId?: number;
+  /** All Tasks / unassigned lists only. */
+  includeProject?: boolean;
 };
 
 export function FilterClauseValueInput({
   clause,
   onChange,
   phases,
+  tags,
+  projects,
 }: {
   clause: FilterClause;
   onChange: (value: string) => void;
   phases: PhaseFilterOption[];
+  tags: FilterTagOption[];
+  projects?: Project[];
 }) {
   if (clause.field === "state") {
     return (
@@ -71,7 +80,7 @@ export function FilterClauseValueInput({
     );
   }
   if (clause.field === "phase") {
-    if (clause.operator === "contains" || clause.operator === "starts_with") {
+    if (!clauseValueUsesPicker("phase", clause.operator)) {
       return (
         <input
           type="text"
@@ -92,6 +101,60 @@ export function FilterClauseValueInput({
         {phases.map((p) => (
           <option key={p.id} value={String(p.id)}>
             {p.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (clause.field === "tags") {
+    if (!clauseValueUsesPicker("tags", clause.operator)) {
+      return (
+        <input
+          type="text"
+          aria-label="Filter value"
+          placeholder="Tag name prefix"
+          value={clause.value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
+    }
+    return (
+      <select
+        aria-label="Filter value"
+        value={clause.value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">None</option>
+        {tags.map((t) => (
+          <option key={t.id} value={String(t.id)}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (clause.field === "project") {
+    if (!clauseValueUsesPicker("project", clause.operator)) {
+      return (
+        <input
+          type="text"
+          aria-label="Filter value"
+          placeholder="Project name"
+          value={clause.value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
+    }
+    return (
+      <select
+        aria-label="Filter value"
+        value={clause.value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">None</option>
+        {(projects ?? []).map((p) => (
+          <option key={p.id} value={String(p.id)}>
+            {p.name}
           </option>
         ))}
       </select>
@@ -129,12 +192,25 @@ function draftFromFilter(filter: TaskListFilter): TaskListFilter {
   };
 }
 
-export function TaskListFilterBar({ filter, onApply, onClear, projectId }: Props) {
+export function TaskListFilterBar({
+  filter,
+  onApply,
+  onClear,
+  projectId,
+  includeProject = false,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<TaskListFilter>(() => draftFromFilter(filter));
   const titleId = useId();
+  const fields = filterFieldsForScope(includeProject);
   const { phases, phaseNames } = usePhaseFilterOptions(projectId);
-  const breadcrumb = formatFilterBreadcrumb(filter, { phaseNames });
+  const { tags, projects, filterCtx: tagProjectCtx } = useTaskFilterLookups({
+    includeProjects: includeProject,
+  });
+  const breadcrumb = formatFilterBreadcrumb(filter, {
+    ...tagProjectCtx,
+    phaseNames,
+  });
   const active = isFilterActive(filter);
 
   useEffect(() => {
@@ -152,23 +228,10 @@ export function TaskListFilterBar({ filter, onApply, onClear, projectId }: Props
   }, [open]);
 
   const updateClause = (index: number, patch: Partial<FilterClause>) => {
-    setDraft((prev) => {
-      const clauses = prev.clauses.map((c, i) => {
-        if (i !== index) return c;
-        const next = { ...c, ...patch };
-        if (patch.field && patch.field !== c.field) {
-          next.value = defaultValueForField(patch.field);
-          if (
-            (patch.field === "state" || patch.field === "priority") &&
-            (next.operator === "contains" || next.operator === "starts_with")
-          ) {
-            /* keep operator; value reset above */
-          }
-        }
-        return next;
-      });
-      return { ...prev, clauses };
-    });
+    setDraft((prev) => ({
+      ...prev,
+      clauses: prev.clauses.map((c, i) => (i === index ? applyClausePatch(c, patch) : c)),
+    }));
   };
 
   const addClause = (join: FilterJoin) => {
@@ -194,10 +257,7 @@ export function TaskListFilterBar({ filter, onApply, onClear, projectId }: Props
 
   const apply = () => {
     const cleaned: TaskListFilter = {
-      clauses: draft.clauses.map((c) => ({
-        ...c,
-        value: c.field === "title" || c.field === "number" ? c.value : c.value,
-      })),
+      clauses: draft.clauses.map((c) => ({ ...c })),
       joins: draft.joins.slice(0, Math.max(0, draft.clauses.length - 1)),
     };
     onApply(cleaned);
@@ -244,54 +304,64 @@ export function TaskListFilterBar({ filter, onApply, onClear, projectId }: Props
             </p>
 
             <div className="task-list-filter-modal__rows">
-              {draft.clauses.map((clause, index) => (
-                <div key={index} className="task-list-filter-modal__row">
-                  {index > 0 ? (
-                    <span className="task-list-filter-modal__join-label">
-                      {FILTER_JOIN_LABELS[draft.joins[index - 1] ?? "and"]}
-                    </span>
-                  ) : (
-                    <span className="task-list-filter-modal__join-label task-list-filter-modal__join-label--spacer" />
-                  )}
-                  <select
-                    aria-label="Field"
-                    value={clause.field}
-                    onChange={(e) => updateClause(index, { field: e.target.value as FilterField })}
-                  >
-                    {FILTER_FIELDS.map((f) => (
-                      <option key={f} value={f}>
-                        {FILTER_FIELD_LABELS[f]}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="Operator"
-                    value={clause.operator}
-                    onChange={(e) =>
-                      updateClause(index, { operator: e.target.value as FilterOperator })
-                    }
-                  >
-                    {FILTER_OPERATORS.map((op) => (
-                      <option key={op} value={op}>
-                        {FILTER_OPERATOR_LABELS[op]}
-                      </option>
-                    ))}
-                  </select>
-                  <FilterClauseValueInput
-                    clause={clause}
-                    phases={phases}
-                    onChange={(value) => updateClause(index, { value })}
-                  />
-                  <button
-                    type="button"
-                    className="btn ghost task-list-filter-modal__remove"
-                    aria-label="Remove condition"
-                    onClick={() => removeClause(index)}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+              {draft.clauses.map((clause, index) => {
+                const fieldOptions = fields.includes(clause.field)
+                  ? fields
+                  : [...fields, clause.field];
+                return (
+                  <div key={index} className="task-list-filter-modal__row">
+                    {index > 0 ? (
+                      <span className="task-list-filter-modal__join-label">
+                        {FILTER_JOIN_LABELS[draft.joins[index - 1] ?? "and"]}
+                      </span>
+                    ) : (
+                      <span className="task-list-filter-modal__join-label task-list-filter-modal__join-label--spacer" />
+                    )}
+                    <select
+                      aria-label="Field"
+                      value={clause.field}
+                      onChange={(e) => updateClause(index, { field: e.target.value as FilterField })}
+                    >
+                      {fieldOptions.map((f) => (
+                        <option key={f} value={f}>
+                          {FILTER_FIELD_LABELS[f]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="Operator"
+                      value={clause.operator}
+                      onChange={(e) =>
+                        updateClause(index, { operator: e.target.value as FilterOperator })
+                      }
+                    >
+                      {(operatorsForField(clause.field).includes(clause.operator)
+                        ? operatorsForField(clause.field)
+                        : [...operatorsForField(clause.field), clause.operator]
+                      ).map((op) => (
+                        <option key={op} value={op}>
+                          {FILTER_OPERATOR_LABELS[op]}
+                        </option>
+                      ))}
+                    </select>
+                    <FilterClauseValueInput
+                      clause={clause}
+                      phases={phases}
+                      tags={tags}
+                      projects={projects}
+                      onChange={(value) => updateClause(index, { value })}
+                    />
+                    <button
+                      type="button"
+                      className="btn ghost task-list-filter-modal__remove"
+                      aria-label="Remove condition"
+                      onClick={() => removeClause(index)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="btn-row task-list-filter-modal__add">

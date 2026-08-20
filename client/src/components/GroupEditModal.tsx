@@ -2,15 +2,15 @@ import { useEffect, useId, useState } from "react";
 import { ColorPopover } from "./shared/ColorPopover";
 import { FilterClauseValueInput } from "./TaskListFilterBar";
 import {
-  FILTER_FIELDS,
   FILTER_FIELD_LABELS,
   FILTER_JOIN_LABELS,
-  FILTER_OPERATORS,
   FILTER_OPERATOR_LABELS,
-  defaultValueForField,
+  applyClausePatch,
   emptyTaskListFilter,
+  filterFieldsForScope,
   isFilterActive,
   newFilterClause,
+  operatorsForField,
   parseTaskListFilterValue,
   type FilterClause,
   type FilterField,
@@ -19,6 +19,7 @@ import {
   type TaskListFilter,
 } from "../lib/taskListFilter";
 import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
+import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
 import type { TaskGroup } from "../types";
 
 type Props = {
@@ -42,7 +43,9 @@ function draftFromGroup(group: TaskGroup): TaskListFilter {
 
 export function GroupEditModal({ group, onClose, onSave }: Props) {
   const titleId = useId();
+  const fields = filterFieldsForScope(false);
   const { phases } = usePhaseFilterOptions(group.projectId);
+  const { tags } = useTaskFilterLookups({ includeProjects: false });
   const [name, setName] = useState(group.name);
   const [color, setColor] = useState<string | null>(group.color);
   const [draft, setDraft] = useState<TaskListFilter>(() => draftFromGroup(group));
@@ -59,17 +62,10 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
   }, [onClose]);
 
   const updateClause = (index: number, patch: Partial<FilterClause>) => {
-    setDraft((prev) => {
-      const clauses = prev.clauses.map((c, i) => {
-        if (i !== index) return c;
-        const next = { ...c, ...patch };
-        if (patch.field && patch.field !== c.field) {
-          next.value = defaultValueForField(patch.field);
-        }
-        return next;
-      });
-      return { ...prev, clauses };
-    });
+    setDraft((prev) => ({
+      ...prev,
+      clauses: prev.clauses.map((c, i) => (i === index ? applyClausePatch(c, patch) : c)),
+    }));
   };
 
   const addClause = (join: FilterJoin) => {
@@ -177,7 +173,7 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
                 value={clause.field}
                 onChange={(e) => updateClause(index, { field: e.target.value as FilterField })}
               >
-                {FILTER_FIELDS.map((f) => (
+                {fields.map((f) => (
                   <option key={f} value={f}>
                     {FILTER_FIELD_LABELS[f]}
                   </option>
@@ -188,7 +184,10 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
                 value={clause.operator}
                 onChange={(e) => updateClause(index, { operator: e.target.value as FilterOperator })}
               >
-                {FILTER_OPERATORS.map((op) => (
+                {(operatorsForField(clause.field).includes(clause.operator)
+                  ? operatorsForField(clause.field)
+                  : [...operatorsForField(clause.field), clause.operator]
+                ).map((op) => (
                   <option key={op} value={op}>
                     {FILTER_OPERATOR_LABELS[op]}
                   </option>
@@ -197,6 +196,7 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
               <FilterClauseValueInput
                 clause={clause}
                 phases={phases}
+                tags={tags}
                 onChange={(value) => updateClause(index, { value })}
               />
               <button

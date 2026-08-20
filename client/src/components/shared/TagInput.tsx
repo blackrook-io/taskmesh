@@ -59,7 +59,7 @@ export function TagInput({ entityType, entityId, disabled, readOnly, className }
   }, [open]);
 
   const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: tagsKey });
+    void qc.invalidateQueries({ queryKey: ["taggings", entityType] });
     void qc.invalidateQueries({ queryKey: ["tags"] });
     void qc.invalidateQueries({ queryKey: ["tags-suggest"] });
     void qc.invalidateQueries({ queryKey: ["search"] });

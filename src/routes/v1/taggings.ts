@@ -28,18 +28,26 @@ const attachBody = z
 
 export const taggingsRouter = Router();
 
-/** List tags attached to an entity. */
+/** List tags attached to an entity, or all taggings for an entity type when entityId is omitted. */
 taggingsRouter.get("/", async (req, res) => {
   try {
     const entityType = entityTypeSchema.parse(req.query.entityType);
-    const entityId = idParam.parse(req.query.entityId);
+    const entityIdRaw = req.query.entityId;
+    const entityId =
+      entityIdRaw == null || entityIdRaw === "" ? undefined : idParam.parse(entityIdRaw);
     if (!isTaggableEntityType(entityType)) {
       sendError(res, 400, "validation_error", `Entity type ${entityType} does not support tags yet`);
       return;
     }
 
+    const filters = [eq(schema.taggings.entityType, entityType)];
+    if (entityId != null) {
+      filters.push(eq(schema.taggings.entityId, entityId));
+    }
+
     const rows = await db
       .select({
+        entityId: schema.taggings.entityId,
         id: schema.tags.id,
         name: schema.tags.name,
         color: schema.tags.color,
@@ -47,13 +55,8 @@ taggingsRouter.get("/", async (req, res) => {
       })
       .from(schema.taggings)
       .innerJoin(schema.tags, eq(schema.taggings.tagId, schema.tags.id))
-      .where(
-        and(
-          eq(schema.taggings.entityType, entityType),
-          eq(schema.taggings.entityId, entityId),
-        ),
-      )
-      .orderBy(asc(schema.tags.name));
+      .where(and(...filters))
+      .orderBy(asc(schema.taggings.entityId), asc(schema.tags.name));
 
     res.json({ data: rows });
   } catch (err) {
