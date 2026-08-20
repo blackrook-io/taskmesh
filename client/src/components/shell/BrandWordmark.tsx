@@ -2,11 +2,16 @@ import { Link } from "react-router-dom";
 
 type Props = {
   compact?: boolean;
+  title?: string;
 };
 
-export function BrandWordmark({ compact = false }: Props) {
+export function BrandWordmark({ compact = false, title }: Props) {
   return (
-    <Link to="/" className={`brand-wordmark${compact ? " brand-wordmark--compact" : ""}`}>
+    <Link
+      to="/"
+      className={`brand-wordmark${compact ? " brand-wordmark--compact" : ""}`}
+      title={title}
+    >
       <span className="brand-wordmark__title">
         <span className="brand-wordmark__task">Task</span>
         <span className="brand-wordmark__mesh">Mesh</span>

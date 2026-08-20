@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { db, pool } from "./db/client.js";
 import { getClientDistDir, ensureUploadDir, ensureBackupDir } from "./lib/paths.js";
 import { sendError } from "./lib/httpError.js";
+import { attachApiVersionMeta } from "./middleware/apiVersionMeta.js";
 import { v1Router } from "./routes/v1/index.js";
 import { startBackupScheduler, stopBackupScheduler } from "./services/backups.js";
 
@@ -15,6 +16,7 @@ ensureBackupDir();
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
+app.use("/api", attachApiVersionMeta);
 
 app.get("/api/health", async (_req, res) => {
   try {

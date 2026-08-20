@@ -1,0 +1,47 @@
+---
+description: Semantic version bumps on finish-up (MINOR for schema changes, PATCH otherwise)
+alwaysApply: true
+---
+
+# App versioning
+
+TaskMesh uses SemVer `MAJOR.MINOR.PATCH` in root `package.json`, mirrored in `src/lib/appVersion.ts` (`APP_VERSION_CREATED_AT`) and `client/src/lib/appVersion.ts` (`APP_VERSION` + `APP_VERSION_CREATED_AT`).
+
+**MAJOR stays `0`** until an explicit breaking public API / incompatible data migration (ask the user if unclear).
+
+## Historical baseline (T0076)
+
+As of T0076, MINOR was set from the number of Drizzle SQL migrations on disk (`drizzle/*.sql`): **22 files** (`0000_init` … `0021_default_theme`). This Task itself is a non-schema enhancement, so PATCH is **1** → **`0.22.1`**.
+
+That catch-up applies **once**. From this merge onward, **do not re-count migrations**. Increment from the current `package.json` version using the table below on **each finished Task** (Issue or Enhancement), including `/worktask` and ad-hoc `phase-*` work.
+
+## When to bump (finish-up only)
+
+Bump **once** when the user asks to **finish up** (the commit that merges to `main`), not on every WIP commit. QA-only follow-ups on the same unreleased branch do not get an extra bump.
+
+Every finished Task that ships to `main` must bump **exactly one** of MINOR or PATCH (or, rarely, MAJOR):
+
+| Change | Bump |
+|--------|------|
+| Feature that **changes DB schema** (new Drizzle migration file(s) in this work) | **MINOR** +1, reset PATCH to `0` |
+| Feature enhancement or issue/bug fix **without** a new migration | **PATCH** +1 |
+| Breaking public API / incompatible data migration | **MAJOR** +1, reset MINOR and PATCH to `0` (rare; ask if unclear) |
+
+Schema-changing work is MINOR only — do not also increment PATCH. Multiple new SQL files in one Task still count as **one** MINOR bump for that finish-up.
+
+## Fields to update together
+
+1. Root `package.json` `version` (and the matching `version` entries at the top of `package-lock.json`)
+2. `APP_VERSION_CREATED_AT` in `src/lib/appVersion.ts` — UTC ISO datetime of this finish-up merge to `main` (`YYYY-MM-DDTHH:mm:ss.sssZ`)
+3. `APP_VERSION` and `APP_VERSION_CREATED_AT` in `client/src/lib/appVersion.ts` (same strings)
+
+Do **not** set `releasedAt` in git. `deploy/deploy-prod.sh` writes `data/prod-release.json` after PRODUCTION health checks succeed. The API exposes `releasedAt` only when that sidecar’s `version` matches the running `package.json` version.
+
+## Workflows and skills
+
+- [development-rules.mdc](development-rules.mdc) finish-up step 1 **must** bump version (or confirm this branch already has the bump).
+- [/worktask](../skills/worktask/SKILL.md) finish-up **must** do the same bump in the merge commit, and mention the new version in the completion comment.
+
+## API / UI
+
+JSON under `/api` includes `meta: { version, createdAt, releasedAt }`. `releasedAt` is `null` until this version is deployed to PROD. The shell shows `vMAJOR.MINOR.PATCH` (e.g. `v0.22.1`).

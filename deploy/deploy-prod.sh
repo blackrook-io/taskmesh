@@ -124,6 +124,17 @@ curl -fsS http://127.0.0.1:3000/api/health >/dev/null || fail "health check fail
 echo "==> health check HTTPS :443 (via nginx; -k for self-signed)"
 curl -fsSk https://127.0.0.1/api/health >/dev/null || fail "health check failed on https://127.0.0.1/ (nginx)"
 
+echo "==> stamp production release time"
+node --input-type=module -e '
+import fs from "node:fs";
+const version = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
+fs.mkdirSync("data", { recursive: true });
+fs.writeFileSync(
+  "data/prod-release.json",
+  JSON.stringify({ version, releasedAt: new Date().toISOString() }, null, 2) + "\n",
+);
+' || fail "failed to write data/prod-release.json"
+
 echo ""
 echo "Deploy OK — $BRANCH @ $SHA ($DIRTY)"
 echo "  https://127.0.0.1/          (LAN: https://<server-ip>/ ; HTTP :80 redirects)"

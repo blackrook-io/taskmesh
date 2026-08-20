@@ -27,6 +27,7 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 4. State values: `new` (UI: Draft) | `ready` (UI: Ready) | `in_progress` | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`.
 5. Follow repo plan + git + finish-up rules; this skill **adds** task bookkeeping and **replaces** `phase-N-*` branch naming with `T####-*` for this workstream.
 6. **Never** update git config (`user.name` / `user.email`). If commit fails for missing identity, set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for that command only (see [reference.md](reference.md)).
+7. **App version** — on finish-up, bump SemVer per [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) in the merge commit (MINOR if this Task added a Drizzle migration, otherwise PATCH). Mention the new version in the completion comment. Do not skip the bump.
 
 ## Workflow checklist
 
@@ -42,7 +43,7 @@ Worktask:
 - [ ] 5. User approves plan → branch + In Progress + start comment
 - [ ] 6. Implement + QA checklist
 - [ ] 6b. QA follow-ups → update plan + Task comment + commit message
-- [ ] 7. User “finish up” → merge/deploy + Complete + finish comment
+- [ ] 7. User “finish up” → version bump + merge/deploy + Complete + finish comment
 ```
 
 ### 1. Load context (PROD)
@@ -116,12 +117,12 @@ When the user requests **new functionality or corrections** during QA:
 
 Do **all** of the following in order (same as development-rules, with Task bookkeeping last):
 
-1. **Commit** remaining work on the feature branch (HEREDOC message; author env vars if needed). If QA follow-ups shipped, mention them in the message.
+1. **Commit** remaining work on the feature branch (HEREDOC message; author env vars if needed). If QA follow-ups shipped, mention them in the message. **Bump app version** in this commit if it is not already on the branch — follow [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) (MINOR +1 / PATCH reset if this Task added a new `drizzle/*.sql` file; otherwise PATCH +1; set `createdAt` to UTC now; keep MAJOR at `0` unless breaking). T0076 ships `0.22.1`; increment from current `package.json`, do not re-count migrations.
 2. **Merge** into `main` (ff-only when possible); delete local (and remote if exists) `T####-*` branch after merge.
 3. **Publish** — push `main` (SSH URL if HTTPS origin fails: `git push git@github.com:blackrook-io/taskmesh.git main`).
 4. **Archive** the plan — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/`, commit on `main`, push again. Archived plan must include any QA follow-up notes.
-5. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed.
-6. **PROD Task** — completion comment (include original scope **and** QA follow-ups), then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
+5. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed (script also stamps `data/prod-release.json`).
+6. **PROD Task** — completion comment (include original scope, **shipped version**, and QA follow-ups), then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
 
 If the user wants finish-up **without** closing the Task (follow-ups remain), ask once and skip the Complete transition / still add a progress comment if useful.
 

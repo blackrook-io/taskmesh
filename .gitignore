@@ -6,5 +6,6 @@ dist/
 data/backups/
 !data/backups/.gitkeep
 data/backup-schedule.json
+data/prod-release.json
 data/uploads/
 !data/uploads/.gitkeep

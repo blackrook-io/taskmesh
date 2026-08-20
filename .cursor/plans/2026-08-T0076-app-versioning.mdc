@@ -1,0 +1,114 @@
+---
+description: T0076 — show TaskMesh version in the app nav, return it on API responses, and bump semver on features/fixes
+---
+
+# T0076 — App versioning (UI + API + policy)
+
+**Task:** T0076 · id `88` · state Ready · project 4 (TaskMesh) · due 2026-08-21  
+**Branch (after approval):** `T0076-app-versioning`
+
+## Goal
+
+Make the current TaskMesh version obvious in the shell, expose it on API JSON, and keep Semantic Versioning current as features and fixes ship.
+
+## Current state
+
+- Root `package.json` is `0.1.0`. Client `client/src/lib/appVersion.ts` duplicates that string; expanded App Nav footer already shows `v0.1.0`.
+- Top-left brand (`BrandWordmark` / collapsed `MeshMark`) has no version tooltip.
+- JSON responses are `{ data }` / `{ error }` with no version metadata.
+- No agent/dev rule for when to bump MAJOR/MINOR/PATCH.
+
+## Scope
+
+### 1. Version fields (two timestamps)
+
+| Field | Meaning | Where it is stored |
+|-------|---------|-------------------|
+| `version` | Semver string (lockstep with root `package.json`) | Git-tracked (`src/lib/appVersion.ts` + client mirror) |
+| `createdAt` | When **this version string** landed on `main` (merge/push), ISO datetime UTC | Git-tracked, set in the version-bump commit during finish-up immediately before merge |
+| `releasedAt` | When **this build** was successfully deployed to **PRODUCTION** (health checks OK) | **Not** guessed at develop time. Written by `deploy/deploy-prod.sh` after `:3000` + nginx HTTPS health succeed |
+
+`releasedAt` is a sidecar file (e.g. `data/prod-release.json`, gitignored) so it records real PROD deploy time, not DEV work or the merge clock. The API reads it at request time (so the file can be written *after* the process has already started).
+
+DEV (`:3001`): `releasedAt` is `null` unless that process happens to see a leftover sidecar (ignore / only write from `deploy:prod`). UI shows version + `createdAt`; omit or label “not deployed” for release time.
+
+Client chrome **loads `meta` from the API** (`/api/health` is enough) so the logo tooltip and footer reflect PROD `releasedAt`. Bundled `version` / `createdAt` are fallbacks if health is down.
+
+This T0076 ships as **`0.22.1`**: MAJOR `0`, MINOR = 22 Drizzle migrations on disk (`0000`–`0021`), PATCH `1` for this non-schema enhancement. Subsequent Tasks increment from this version (do not re-count migrations). `createdAt` is set on finish-up merge; `releasedAt` is stamped by that finish-up’s `npm run deploy:prod`.
+
+### 2. App Nav UI
+
+- **Bottom left (expanded App Nav):** keep the existing `v{version}` in `.app-nav__brand-foot`. Also show a compact `v{version}` in **less** (icon rail) mode so the leftmost column always has it.
+- **Logo tooltip:** native `title` on `BrandWordmark` (full) and the top `MeshMark` home link (less), two lines worth of text, e.g.  
+  `TaskMesh v0.1.1 — on main 20 Aug 2026, 12:01 UTC — deployed 20 Aug 2026, 12:04 UTC`  
+  (`createdAt` / `releasedAt` pretty-printed; if `releasedAt` is null, say `not deployed to production`).
+- Footer `v{version}` tooltip uses the same string.
+
+### 3. API response metadata
+
+Express middleware on `/api` that wraps `res.json` so **all** JSON bodies (success and error, including `/api/health`) include:
+
+```json
+"meta": {
+  "version": "0.1.1",
+  "createdAt": "2026-08-20T16:01:00.000Z",
+  "releasedAt": "2026-08-20T16:04:12.000Z"
+}
+```
+
+`releasedAt` may be `null` when no successful PROD deploy stamp exists.
+
+If a handler already set `meta`, merge rather than overwrite. Do not change `data` / `error` shapes. Client `apiJson` continues to ignore unknown keys.
+
+### 4. Semver policy (Cursor rule)
+
+Add an always-applied (or development-rules) note so finish-up / worktask completion bumps version:
+
+| Change | Bump |
+|--------|------|
+| Feature that **changes DB schema** (new/changed Drizzle migration) | **MINOR**, reset PATCH to `0` |
+| Feature enhancement or issue fix **without** schema change | **PATCH** |
+| Breaking public API / incompatible data migration | **MAJOR** (rare; ask if unclear) |
+
+Rules:
+
+- Bump **once per finish-up** (not every WIP commit). In the bump commit: new `version` + `createdAt` = UTC now (that commit is what lands on `main`).
+- Do **not** set `releasedAt` in git. `deploy:prod` writes it after both health checks.
+- Update root `package.json`, `src/lib/appVersion.ts`, and `client/src/lib/appVersion.ts` together.
+- Schema-changing work is MINOR only (do not also +1 PATCH).
+- QA-only follow-ups on the same unreleased branch: no extra bump until finish-up.
+
+## Out of scope
+
+- Changelog UI / release notes feed
+- Git tags / GitHub Releases automation
+- Encoding version in the database
+- Changing existing `data` payload fields
+
+## Interview defaults (confirm or adjust)
+
+1. Native `title` tooltips (not a custom popover).
+2. `createdAt` = UTC datetime of the version-bump commit that is merged to `main` (finish-up).
+3. `releasedAt` = UTC datetime written by `deploy:prod` only after PROD health checks pass (`null` until then).
+4. Metadata on every `/api` JSON response, including errors and health.
+5. This task itself ships **`0.22.1`**.
+
+## QA follow-ups
+
+- **Historical MINOR from migrations:** Counted 22 Drizzle SQL files (`drizzle/0000_init.sql` … `0021_default_theme.sql`). Set app version to **`0.22.1`** (MAJOR stays 0; MINOR 22 from migrations; PATCH 1 for this T0076 enhancement). Later Tasks increment MINOR or PATCH from `package.json` rather than recounting files.
+- **Ship as `0.22.1`:** User requested this merge use PATCH 1 rather than `0.22.0`.
+- **Rules/skills:** Expanded `.cursor/rules/versioning.mdc`; finish-up in `development-rules.mdc`, `AGENTS.md`, and `/worktask` SKILL + reference now require a SemVer bump every finished Task and the shipped version on the completion comment.
+
+## Files (expected)
+
+- `src/lib/appVersion.ts` (new) — `version` + `createdAt`; read sidecar for `releasedAt`
+- `data/prod-release.json` (runtime, gitignored) — written by deploy script
+- `deploy/deploy-prod.sh` — stamp sidecar after health OK
+- `src/index.ts` or `src/middleware/` — json meta wrapper
+- `package.json` version
+- `client/src/lib/appVersion.ts` + App Nav fetching health `meta`
+- `client/src/components/shell/AppNav.tsx`, `BrandWordmark.tsx`
+- `client/src/index.css` (less-mode version if needed)
+- `.gitignore` for the sidecar
+- `.cursor/rules/development-rules.mdc` (or a small `versioning.mdc`)
+- `AGENTS.md` one-liner pointing at the bump table

@@ -13,6 +13,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **platform-rules.mdc** — product vision, stack, UI, security (always applied).
 - **coding-rules.mdc** — code quality expectations when editing `**/*.ts`.
 - **development-rules.mdc** — plan files under `.cursor/plans/`, archive to `executed/`, feature git workflow (start/approve/merge), and QA checklists.
+- **versioning.mdc** — SemVer bump on finish-up (MINOR for schema-changing features, PATCH otherwise); `createdAt` vs PROD `releasedAt`.
 - **schema-docs.mdc** — keep `docs/database/` in sync when `schema.ts` / migrations change.
 - **`/worktask` skill** — [.cursor/skills/worktask/SKILL.md](.cursor/skills/worktask/SKILL.md): explicit Task Number → plan → `T####-*` branch → PROD task In Progress / Complete bookkeeping.
 
@@ -26,7 +27,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Canvases** — Excalidraw (`@excalidraw/excalidraw`, MIT) in `CanvasEditor`; scene JSON in `canvases.document`. Fonts copied on client `postinstall` to `public/excalidraw-assets/`.
 - **Command palette** — Ctrl/Cmd+K (Phase 9a); see `client/src/components/CommandPalette.tsx`.
 - **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks). **QA follow-ups** (new work or corrections during review): update the active plan, mention them in the commit message, and for `/worktask` post a PROD Task comment (also include them in the completion comment).
-- **Feature git** — on start: branch `T####-short-slug` (worktask) or `phase-N-short-slug` (ad-hoc) from updated `main`. **Finish up** (user approval to close): commit → merge into `main` → push `main` → archive the plan under `.cursor/plans/executed/` (commit + push) → delete local/remote feature branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks) → for `/worktask`, mark the PROD Task `complete` and add a completion comment.
+- **Feature git** — on start: branch `T####-short-slug` (worktask) or `phase-N-short-slug` (ad-hoc) from updated `main`. **Finish up** (user approval to close): commit (including SemVer bump per [versioning.mdc](.cursor/rules/versioning.mdc)) → merge into `main` → push `main` → archive the plan under `.cursor/plans/executed/` (commit + push) → delete local/remote feature branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks) → for `/worktask`, mark the PROD Task `complete` and add a completion comment.
 
 ## Common commands
 

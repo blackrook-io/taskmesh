@@ -77,8 +77,8 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | `HOST` | API bind address (default `127.0.0.1`; use nginx for LAN) |
 | `PORT` | PROD API listen port (default `3000`; used by systemd / `npm start`) |
 | `DEV_API_PORT` | DEV API port for `npm run dev` / `dev:web` (default `3001`) |
-| `UPLOAD_DIR` | Image upload directory (default `data/uploads/`) |
-| `UPLOAD_MAX_BYTES` | Max upload size (default 5 MiB) |
+| `BACKUP_SCHEDULE_PATH` | Backup schedule JSON path (default `./data/backup-schedule.json`) |
+| `PROD_RELEASE_PATH` | Sidecar JSON with last PROD deploy stamp (default `./data/prod-release.json`; written by `deploy:prod`) |
 | `OPENAI_API_KEY` | Enables embedded assistant (optional) |
 | `ASSISTANT_DEFAULT_MODEL` | OpenAI model id (default `gpt-4.1-mini`) |
 

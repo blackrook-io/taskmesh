@@ -96,6 +96,7 @@ Post when implementing new functionality or corrections during QA (not only at C
 - Merged branch `T0036-example-slug` → `main`
 - Plan archived: `.cursor/plans/executed/2026-08-T0036-example-slug.mdc`
 - Deployed to PROD (health checks OK)
+- App version: `0.22.1` (example)
 
 <summary of what shipped>
 

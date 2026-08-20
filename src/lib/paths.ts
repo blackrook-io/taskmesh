@@ -28,3 +28,8 @@ export function getBackupSchedulePath(): string {
     path.join(process.cwd(), "data", "backup-schedule.json")
   );
 }
+
+/** Sidecar written by `deploy:prod` after PRODUCTION health checks succeed. */
+export function getProdReleasePath(): string {
+  return process.env.PROD_RELEASE_PATH ?? path.join(process.cwd(), "data", "prod-release.json");
+}

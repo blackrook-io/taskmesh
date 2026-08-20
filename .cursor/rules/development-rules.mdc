@@ -14,11 +14,11 @@ alwaysApply: true
   - **`/worktask`:** branch `T####-short-slug` (e.g. `T0036-wiki-search`). Follow [.cursor/skills/worktask/SKILL.md](../skills/worktask/SKILL.md).
   - **Ad-hoc (no Task Number):** branch `phase-N-short-slug` (legacy naming still OK).
 * **On approval / “finish up”:** when the user says **finish up** (or equivalent approval to close the implementation), do all of the following in order:
-  1. **Commit** any remaining work on the feature branch(es). If QA follow-ups shipped, name them in the commit message.
+  1. **Commit** any remaining work on the feature branch(es). If QA follow-ups shipped, name them in the commit message. **Bump app version** in this commit if it is not already on the branch — required for every finished Task ([versioning.mdc](versioning.mdc): MINOR +1 and PATCH `0` if this work added a new `drizzle/*.sql` file; otherwise PATCH +1; MAJOR stays `0` unless breaking). Increment from current `package.json`; do not re-count migrations. Set `createdAt` to UTC now.
   2. **Merge** into `main` (ff-only when possible) and delete local (and remote if exists) feature branch(es) after merge.
   3. **Publish** — push `main` to `origin` (and any other remotes the repo normally uses).
   4. **Archive** the plan — move the active `.cursor/plans/*.mdc` into `.cursor/plans/executed/` (same filename), commit that move on `main`, and push again. Archived plan must include any QA follow-up notes.
-  5. **Deploy to PROD** — from repo root on the app host, run `npm run deploy:prod` (install → migrate → `build:all` → restart `taskmesh` → health checks on `:3000` and nginx HTTPS). Confirm both health checks succeed before considering finish-up complete.
+  5. **Deploy to PROD** — from repo root on the app host, run `npm run deploy:prod` (install → migrate → `build:all` → restart `taskmesh` → health checks on `:3000` and nginx HTTPS → stamp `data/prod-release.json`). Confirm both health checks succeed before considering finish-up complete.
   6. **`/worktask` only** — after deploy succeeds: add a **completion Comment** on the PROD Task via API (include original scope **and** any QA follow-ups), set Task **state** to `complete`, and leave `dueDate` unchanged (see worktask skill).
 
 # Delivery

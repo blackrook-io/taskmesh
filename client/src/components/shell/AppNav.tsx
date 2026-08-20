@@ -17,7 +17,11 @@ import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { apiJson } from "../../api/client";
-import { APP_VERSION } from "../../lib/appVersion";
+import {
+  bundledAppVersionMeta,
+  formatVersionTooltip,
+  type AppVersionMeta,
+} from "../../lib/appVersion";
 import { lastProjectPath, type AppNavMode } from "../../lib/appNavMode";
 import { useAdministration } from "../../lib/administration";
 import { useSettings } from "../../lib/settings";
@@ -92,6 +96,25 @@ export function AppNav({
   useEffect(() => {
     if (section === "projects") setProjectsOpen(true);
   }, [section]);
+
+  const healthQuery = useQuery({
+    queryKey: ["api-health"],
+    queryFn: async () =>
+      apiJson<{
+        ok?: boolean;
+        meta?: Partial<AppVersionMeta>;
+      }>("/api/health"),
+    staleTime: 60_000,
+  });
+
+  const bundled = bundledAppVersionMeta();
+  const apiMeta = healthQuery.data?.meta;
+  const versionMeta: AppVersionMeta = {
+    version: apiMeta?.version ?? bundled.version,
+    createdAt: apiMeta?.createdAt !== undefined ? (apiMeta.createdAt ?? null) : bundled.createdAt,
+    releasedAt: apiMeta?.releasedAt ?? null,
+  };
+  const versionTooltip = formatVersionTooltip(versionMeta);
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -168,11 +191,11 @@ export function AppNav({
 
       <div className="app-nav__top">
         {less ? (
-          <Link to="/" className="app-nav__mark-link" title="TaskMesh home" onClick={onNavigate}>
-            <MeshMark className="app-nav__mark" />
+          <Link to="/" className="app-nav__mark-link" title={versionTooltip} onClick={onNavigate}>
+            <MeshMark className="app-nav__mark" title="" />
           </Link>
         ) : (
-          <BrandWordmark />
+          <BrandWordmark title={versionTooltip} />
         )}
       </div>
 
@@ -324,6 +347,9 @@ export function AppNav({
             >
               <NavIcon icon={shellIcons.settings} />
             </button>
+            <span className="app-nav__version app-nav__version--less" title={versionTooltip}>
+              v{versionMeta.version}
+            </span>
           </div>
         ) : (
           <>
@@ -377,9 +403,9 @@ export function AppNav({
               <span className="app-nav__label">Settings</span>
             </button>
             <div className="app-nav__brand-foot">
-              <MeshMark className="app-nav__mesh-mark" />
-              <span className="app-nav__version" title={`TaskMesh ${APP_VERSION}`}>
-                v{APP_VERSION}
+              <MeshMark className="app-nav__mesh-mark" title="" />
+              <span className="app-nav__version" title={versionTooltip}>
+                v{versionMeta.version}
               </span>
             </div>
             <SystemClock />
