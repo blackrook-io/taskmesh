@@ -28,8 +28,9 @@ import {
   listApiRequestLogs,
   type ApiLogLevel,
   type ApiLogOutcome,
-  type UsageRange,
 } from "../../services/apiRequestLogs.js";
+import { getDatabaseStatsSummary } from "../../services/dbStats.js";
+import { isUsageRange } from "../../lib/usageRange.js";
 import { THEME_IDS } from "../../lib/theme.js";
 import {
   getSystemProperties,
@@ -285,12 +286,25 @@ adminRouter.patch("/system-properties", async (req, res) => {
 
 adminRouter.get("/api-usage/summary", async (req, res) => {
   try {
-    const range = (String(req.query.range ?? "1d") as UsageRange);
-    if (!["1h", "1d", "1w"].includes(range)) {
-      sendError(res, 400, "invalid_range", "range must be 1h, 1d, or 1w");
+    const range = String(req.query.range ?? "1d");
+    if (!isUsageRange(range)) {
+      sendError(res, 400, "invalid_range", "range must be 1h, 1d, 1w, or 1m");
       return;
     }
     res.json({ data: await getApiUsageSummary(db, range) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.get("/database-stats/summary", async (req, res) => {
+  try {
+    const range = String(req.query.range ?? "1d");
+    if (!isUsageRange(range)) {
+      sendError(res, 400, "invalid_range", "range must be 1h, 1d, 1w, or 1m");
+      return;
+    }
+    res.json({ data: await getDatabaseStatsSummary(db, range) });
   } catch (err) {
     handleRouteError(res, err);
   }

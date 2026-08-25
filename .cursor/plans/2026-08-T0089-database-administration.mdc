@@ -1,0 +1,106 @@
+# T0089 — Database Administration
+
+**Task:** T0089 — Database Administration  
+**Branch (on approval):** `T0089-database-admin`  
+**PROD task id:** 101 · **State at plan:** Ready · **Priority:** Low  
+**Parent:** none · **Depends on:** none
+
+## Context
+
+Administration already has **APIs** usage graphs (`1h` / `1d` / `1w`) over `api_request_logs`. There is no Database section and no historical store for Postgres size / I/O — live `pg_*` views only show the current instant.
+
+This Task asks for an admin page with critical DB stats as **elegant graphs over time** (1 month, 1 week, 1 day, 1 hour), matching the API graphs, including:
+
+- Data in and out (egress estimates)
+- Database size
+- Total API requests in/out (same numbers as the APIs page)
+- Number of tables in use
+- Number of databases in use
+
+## Decisions (approved)
+
+1. **Surface:** Administration → **Database** (modal section + `/admin/database` + command palette).
+2. **Time ranges:** `1h` / `1d` / `1w` / `1m` on Database **and** APIs.
+3. **Billing-style data volume (Supabase analog):**
+   - **Database size:** `pg_database_size(current_database())` — same idea as Supabase billed *database size* (data + indexes + matviews), not full disk/WAL.
+   - **Egress (out):** bytes transmitted **to the client** — HTTP response body bytes on `/api/v1` (unified “network out” like Supabase egress). Stored on `api_request_logs`.
+   - **Ingress (in):** request `Content-Length` (shown for completeness; providers typically bill egress only).
+4. **API request graph:** Reuse `api_request_logs`; total = sum of the four APIs-page outcome series for the same range.
+5. **Snapshots:** Every **5 minutes**, retain **~35 days**, for size / table count / database count (gauges). Traffic series come from request logs, not snapshots.
+6. **Tables in use:** User tables in the **app** database (`pg_stat_user_tables`).
+7. **Databases in use:** **Only the connected app database** (count is 1; show `datname`). Do not count `postgres` / templates / other cluster DBs.
+8. **Live headline:** Current size, table count, database name, last sample time.
+
+## Goals
+
+- Administration → **Database** with range toggle and line charts in the existing `admin-usage-chart` style.
+- Charts: DB size, estimated bytes in, estimated bytes out, API request total, table count, database count.
+- `GET /api/v1/admin/database-stats/summary?range=1h|1d|1w|1m`
+- Snapshot collector started with the API process; first sample on boot.
+- Schema docs (`docs/database/platform.md`) + `npm run docs:sync-schema` when this ships.
+
+## Non-goals
+
+- Exact NIC/HTTP payload accounting (true network egress).
+- Per-table size explorer, vacuum/analyze, replication lag, connection pool dashboards.
+- Changing backup or restore flows.
+- Auth / admin-role gating (same as other Administration sections).
+
+## Architecture
+
+```
+API process timer (5m)
+  → read pg_database_size(current_database), user table count
+  → insert db_stats_snapshots (app DB only; database_count = 1)
+
+GET /admin/database-stats/summary
+  → snapshots (last-in-bucket, forward-fill) for size / tables / databases
+  → api_request_logs for request total + request/response bytes
+
+AdministrationModal section "database"
+  → AdminDatabasePanel (charts + range + current stats)
+```
+
+### Schema
+
+`api_request_logs` gains `request_bytes` and `response_bytes` (integers, default 0).
+
+`db_stats_snapshots`:
+
+| Column | Notes |
+|--------|--------|
+| `id` | serial PK |
+| `sampled_at` | timestamptz, indexed |
+| `database_size_bytes` | bigint |
+| `table_count` | int |
+| `database_count` | int (always 1 — app DB only) |
+| `datname` | text (connected DB name) |
+
+Migration: new Drizzle SQL file → **MINOR** version bump on finish-up.
+
+### UI
+
+- Reuse APIs range toggle / stat row / SVG line charts; format bytes with compact units (KiB/MiB/GiB).
+- Empty-state copy: graphs fill in as samples accumulate; API request series still works immediately from existing logs.
+
+### Shared range helper
+
+Extend `UsageRange` with `1m` (bucket ~1 day). APIs summary uses the same helper so counts stay aligned.
+
+## Implementation notes
+
+- Exclude the summary endpoint from inflating graphs the same way `api-usage` is excluded from request logging, if that pattern applies.
+- Collector must not crash the process on a failed `pg_stat` query; log and retry next tick.
+- Tests: bucket math for deltas; invalid `range` → 400.
+
+## QA (preview)
+
+- Open Administration → Database; current size / table / database counts look sane vs `psql`.
+- Range toggles 1h / 1d / 1w / 1m; API-request total for a range matches APIs page sum for the same range.
+- After waiting or triggering a sample, size and I/O series are non-empty.
+- APIs page also has 1m and still matches 1h/1d/1w behavior.
+
+## QA follow-ups
+
+- **Climbing totals:** API request and egress charts plot running totals for the selected range (not per-bucket rates). Ingress / size / table / database charts stay as-is.
+- **Headline layout:** `Database: {datname}` with values in theme `--accent`. Size, Tables, Databases, API requests (range), Egress (range), and Ingress (range) sit in a small unbordered table indented under that heading. Range toggle is one line below the table.

@@ -11,6 +11,7 @@ import { attachApiVersionMeta } from "./middleware/apiVersionMeta.js";
 import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
 import { startBackupScheduler, stopBackupScheduler } from "./services/backups.js";
+import { startDbStatsSampler, stopDbStatsSampler } from "./services/dbStats.js";
 
 ensureUploadDir();
 ensureBackupDir();
@@ -73,11 +74,13 @@ const host = process.env.HOST || "127.0.0.1";
 const server = app.listen(port, host, () => {
   console.log(`TaskMesh API listening on http://${host}:${port}`);
   startBackupScheduler();
+  startDbStatsSampler(db);
 });
 
 async function shutdown(signal: string) {
   console.log(`Received ${signal}, closing…`);
   stopBackupScheduler();
+  stopDbStatsSampler();
   server.close();
   await pool.end();
   process.exit(0);

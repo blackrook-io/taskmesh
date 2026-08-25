@@ -3280,6 +3280,45 @@ textarea.raw-md {
   margin-bottom: 0.85rem;
 }
 
+.admin-db-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.admin-db-heading__name {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.admin-db-stats {
+  margin: 0 0 0 1.25rem;
+  border: none;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-db-stats th,
+.admin-db-stats td {
+  border: none;
+  padding: 0.12rem 1rem 0.12rem 0;
+  font-weight: 400;
+  text-align: left;
+  vertical-align: baseline;
+  color: var(--text-muted);
+}
+
+.admin-db-stats__value {
+  color: var(--accent);
+  font-weight: 650;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-db-range {
+  margin-top: 1.35em;
+  margin-bottom: 0.85rem;
+}
+
 .admin-stat {
   display: flex;
   align-items: center;

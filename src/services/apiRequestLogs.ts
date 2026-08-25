@@ -3,6 +3,12 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { ilikeEscaped } from "../lib/ilike.js";
 import { formatUserNumber } from "../lib/userFields.js";
+import {
+  emptyTimeBuckets,
+  type UsageRange,
+} from "../lib/usageRange.js";
+
+export type { UsageRange } from "../lib/usageRange.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -14,8 +20,6 @@ export type ApiLogOutcome =
 
 export type ApiLogLevel = "info" | "warn" | "error";
 
-export type UsageRange = "1h" | "1d" | "1w";
-
 export type ApiRequestLogInput = {
   outcome: ApiLogOutcome;
   method: string;
@@ -26,6 +30,8 @@ export type ApiRequestLogInput = {
   apiKeyId?: number | null;
   message?: string | null;
   adminKey?: boolean;
+  requestBytes?: number;
+  responseBytes?: number;
 };
 
 const LEVEL_OUTCOMES: Record<ApiLogLevel, ApiLogOutcome[]> = {
@@ -44,6 +50,11 @@ export function outcomesForLevel(level: ApiLogLevel): ApiLogOutcome[] {
   return LEVEL_OUTCOMES[level];
 }
 
+function clampBytes(n: number | undefined): number {
+  if (n == null || !Number.isFinite(n) || n < 0) return 0;
+  return Math.min(Math.floor(n), 2147483647);
+}
+
 export async function insertApiRequestLog(
   db: Db,
   input: ApiRequestLogInput,
@@ -58,6 +69,8 @@ export async function insertApiRequestLog(
     apiKeyId: input.apiKeyId ?? null,
     message: input.message?.slice(0, 500) ?? null,
     adminKey: input.adminKey ?? false,
+    requestBytes: clampBytes(input.requestBytes),
+    responseBytes: clampBytes(input.responseBytes),
   });
 }
 
@@ -74,71 +87,53 @@ export function recordSystemLog(
   });
 }
 
-function rangeMs(range: UsageRange): number {
-  switch (range) {
-    case "1h":
-      return 60 * 60 * 1000;
-    case "1d":
-      return 24 * 60 * 60 * 1000;
-    case "1w":
-      return 7 * 24 * 60 * 60 * 1000;
-  }
-}
-
-function bucketMs(range: UsageRange): number {
-  switch (range) {
-    case "1h":
-      return 5 * 60 * 1000; // 5m buckets
-    case "1d":
-      return 60 * 60 * 1000; // 1h
-    case "1w":
-      return 6 * 60 * 60 * 1000; // 6h
-  }
-}
-
 export type UsageSeriesPoint = {
   t: string;
   success: number;
   apiFailure: number;
   authFailure: number;
   accessViolation: number;
+  requestBytes: number;
+  responseBytes: number;
 };
 
 export async function getApiUsageSummary(
   db: Db,
   range: UsageRange,
+  now = Date.now(),
 ): Promise<{ range: UsageRange; series: UsageSeriesPoint[] }> {
-  const now = Date.now();
-  const since = new Date(now - rangeMs(range));
-  const step = bucketMs(range);
-
-  const rows = await db
-    .select({
-      createdAt: schema.apiRequestLogs.createdAt,
-      outcome: schema.apiRequestLogs.outcome,
-    })
-    .from(schema.apiRequestLogs)
-    .where(gte(schema.apiRequestLogs.createdAt, since))
-    .orderBy(asc(schema.apiRequestLogs.createdAt));
-
-  const bucketStart = Math.floor(since.getTime() / step) * step;
-  const bucketCount = Math.ceil((now - bucketStart) / step) + 1;
-  const series: UsageSeriesPoint[] = [];
-  for (let i = 0; i < bucketCount; i++) {
-    const t = new Date(bucketStart + i * step);
-    series.push({
+  const { bucketStart, step, series } = emptyTimeBuckets(
+    range,
+    (t) => ({
       t: t.toISOString(),
       success: 0,
       apiFailure: 0,
       authFailure: 0,
       accessViolation: 0,
-    });
-  }
+      requestBytes: 0,
+      responseBytes: 0,
+    }),
+    now,
+  );
+  const since = new Date(bucketStart);
+
+  const rows = await db
+    .select({
+      createdAt: schema.apiRequestLogs.createdAt,
+      outcome: schema.apiRequestLogs.outcome,
+      requestBytes: schema.apiRequestLogs.requestBytes,
+      responseBytes: schema.apiRequestLogs.responseBytes,
+    })
+    .from(schema.apiRequestLogs)
+    .where(gte(schema.apiRequestLogs.createdAt, since))
+    .orderBy(asc(schema.apiRequestLogs.createdAt));
 
   for (const row of rows) {
     const idx = Math.floor((row.createdAt.getTime() - bucketStart) / step);
     if (idx < 0 || idx >= series.length) continue;
     const point = series[idx]!;
+    point.requestBytes += row.requestBytes ?? 0;
+    point.responseBytes += row.responseBytes ?? 0;
     switch (row.outcome) {
       case "success":
         point.success += 1;

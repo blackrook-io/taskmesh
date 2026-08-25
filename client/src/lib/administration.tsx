@@ -12,6 +12,7 @@ export const ADMIN_SECTIONS = [
   "users",
   "keys",
   "apis",
+  "database",
   "backups",
   "logging",
   "system-properties",
@@ -25,6 +26,7 @@ export const ADMIN_SECTION_LABELS: Record<AdminSection, string> = {
   users: "Users",
   keys: "Keys",
   apis: "APIs",
+  database: "Database",
   backups: "Backups",
   logging: "System Logs",
   "system-properties": "System Properties",
@@ -41,6 +43,7 @@ export function adminSectionFromPath(pathname: string): AdminSection | null {
   if (pathname === "/admin/users") return "users";
   if (pathname === "/admin/keys") return "keys";
   if (pathname === "/admin/apis") return "apis";
+  if (pathname === "/admin/database") return "database";
   if (pathname === "/admin/logging" || pathname === "/admin/system-logs") {
     return "logging";
   }

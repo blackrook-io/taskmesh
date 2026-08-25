@@ -1,7 +1,9 @@
 import { relations } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   date,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -182,7 +184,32 @@ export const apiRequestLogs = pgTable("api_request_logs", {
   message: text("message"),
   /** True when request used an admin-owned key (audit flag). */
   adminKey: boolean("admin_key").notNull().default(false),
+  /** Request Content-Length (ingress estimate), bytes. */
+  requestBytes: integer("request_bytes").notNull().default(0),
+  /** Response body bytes sent to the client (egress estimate). */
+  responseBytes: integer("response_bytes").notNull().default(0),
 });
+
+/** Periodic Postgres gauges for Administration → Database charts. */
+export const dbStatsSnapshots = pgTable(
+  "db_stats_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    sampledAt: timestamp("sampled_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** pg_database_size of the connected app database. */
+    databaseSizeBytes: bigint("database_size_bytes", { mode: "number" }).notNull(),
+    /** User tables in the app database (pg_stat_user_tables). */
+    tableCount: integer("table_count").notNull(),
+    /** Always 1 — only the connected app database is counted. */
+    databaseCount: integer("database_count").notNull(),
+    datname: text("datname").notNull(),
+  },
+  (t) => ({
+    sampledAtIdx: index("db_stats_snapshots_sampled_at_idx").on(t.sampledAt),
+  }),
+);
 
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
