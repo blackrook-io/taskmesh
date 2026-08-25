@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { matchPath, useLocation } from "react-router-dom";
 import { apiJson } from "../api/client";
 import {
+  applyInstanceFavicon,
+  isViteDevInstance,
+  resolveSystemDefaultFromConfig,
+  viteDevSystemDefault,
+} from "./instanceBrand";
+import {
   applyTheme,
-  DEFAULT_THEME,
   getProjectThemeFromMap,
-  isThemeId,
   persistProjectThemes,
   persistSeparateProjectThemes,
   persistStickyProjectTheme,
@@ -33,11 +37,11 @@ function useRouteProjectId(): number | null {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const routeProjectId = useRouteProjectId();
 
-  const [systemDefaultTheme, setSystemDefaultTheme] = useState<ThemeId>(DEFAULT_THEME);
+  const [systemDefaultTheme, setSystemDefaultTheme] = useState<ThemeId>(viteDevSystemDefault);
 
   const [platformTheme, setPlatformThemeState] = useState<ThemeId>(() => {
-    if (typeof document === "undefined") return DEFAULT_THEME;
-    return resolvePlatformTheme(readPersonalTheme(), DEFAULT_THEME);
+    if (typeof document === "undefined") return viteDevSystemDefault();
+    return resolvePlatformTheme(readPersonalTheme(), viteDevSystemDefault());
   });
 
   const [separateProjectThemes, setSeparateState] = useState(() => {
@@ -57,8 +61,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   const [theme, setThemeState] = useState<ThemeId>(() => {
-    if (typeof document === "undefined") return DEFAULT_THEME;
-    const platform = resolvePlatformTheme(readPersonalTheme(), DEFAULT_THEME);
+    if (typeof document === "undefined") return viteDevSystemDefault();
+    const platform = resolvePlatformTheme(readPersonalTheme(), viteDevSystemDefault());
     const separate = readSeparateProjectThemes();
     const stickyVal = separate ? readStickyProjectTheme() : null;
     const applied = resolveAppliedTheme(separate, stickyVal, platform);
@@ -80,14 +84,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyTheme(theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (isViteDevInstance()) applyInstanceFavicon("dev");
+  }, []);
+
   // Load system default when no personal preference is stored.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await apiJson<{ data: { defaultTheme: string } }>("/api/v1/config");
-        const next = isThemeId(res.data.defaultTheme) ? res.data.defaultTheme : DEFAULT_THEME;
+        const res = await apiJson<{
+          data: { defaultTheme: string; instance?: string; instanceTheme?: string | null };
+        }>("/api/v1/config");
+        const next = resolveSystemDefaultFromConfig(res.data);
         if (cancelled) return;
+        if (res.data.instance === "dev" || res.data.instance === "prod") {
+          applyInstanceFavicon(res.data.instance);
+        }
         setSystemDefaultTheme(next);
         if (readPersonalTheme() != null) return;
         const platform = resolvePlatformTheme(null, next);
@@ -96,7 +109,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         const stickyVal = separate ? readStickyProjectTheme() : null;
         setApplied(resolveAppliedTheme(separate, stickyVal, platform));
       } catch {
-        /* keep hardcoded green fallback */
+        /* keep Vite/PROD hardcoded fallback */
       }
     })();
     return () => {

@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { instanceBrand } from "../lib/instanceBrand.js";
 import { DEFAULT_THEME, isThemeId, type ThemeId } from "../lib/theme.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -23,6 +24,10 @@ export type SystemProperties = {
 /** Public subset safe to expose without admin auth. */
 export type PublicSystemConfig = {
   defaultTheme: ThemeId;
+  /** Runtime instance; not stored in the database. */
+  instance: "dev" | "prod";
+  /** Overlay default for DEV (yellow). Null on PROD — use `defaultTheme`. */
+  instanceTheme: ThemeId | null;
 };
 
 const DEFAULTS: {
@@ -94,7 +99,12 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
 
 export async function getPublicSystemConfig(db: Db): Promise<PublicSystemConfig> {
   const props = await getSystemProperties(db);
-  return { defaultTheme: props.defaultTheme };
+  const brand = instanceBrand();
+  return {
+    defaultTheme: props.defaultTheme,
+    instance: brand.instance,
+    instanceTheme: brand.instanceTheme,
+  };
 }
 
 export async function patchSystemProperties(

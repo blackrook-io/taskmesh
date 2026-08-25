@@ -1,0 +1,78 @@
+---
+description: T0090 — DEV instance yellow favicon + default theme, preserved across PROD deploys
+---
+
+# T0090 — DEV instance branding
+
+**Task:** T0090 · id `102` · state Ready · priority Low · project 4 (TaskMesh) · no parent · no depends-on  
+**Branch (after approval):** `T0090-dev-instance-branding`
+
+## Goal
+
+Make the **DEV** instance visually distinct from **PROD**: yellow favicon and yellow as the default accent theme. That distinction must survive `npm run deploy:prod` (same git tree, shared `DATABASE_URL`).
+
+## Current state
+
+- Favicon is a single green SVG at `client/public/favicon.svg` (`#7dd87d`), linked from `client/index.html`.
+- Platform default theme is `green` (hardcoded `DEFAULT_THEME` plus `system_properties.default_theme` via `GET /api/v1/config`).
+- DEV = Vite `:5173` + API `:3001` (`npm run dev` sets `PORT=${DEV_API_PORT:-3001}`). PROD = systemd Express `:3000` / nginx HTTPS.
+- Both processes typically share one Postgres DB, so writing `default_theme=yellow` in the DB would also change PROD.
+
+## Approach (runtime identity, not git/DB)
+
+Do **not** bake DEV branding into the production SPA bundle or into `system_properties`. Detect instance at runtime:
+
+| Signal | DEV | PROD |
+|--------|-----|------|
+| Optional env `TASKMESH_INSTANCE` | `dev` | `prod` |
+| Else `PORT` | not `3000` (DEV API uses `3001`) | `3000` |
+| Vite | `import.meta.env.DEV` / `vite` serve | `vite build` → Express static |
+
+Optional env override is for odd ports; defaulting from **port** matches the task suggestion and survives deploys because systemd vs `npm run dev` already set different `PORT`s. Document `TASKMESH_INSTANCE` in `.env.example`.
+
+### 1. Public config
+
+Extend `GET /api/v1/config` with instance branding (no schema/migration):
+
+- `instance`: `"dev"` | `"prod"`
+- `instanceTheme`: `"yellow"` on DEV, `null` on PROD
+
+`defaultTheme` stays the DB/admin value (PROD system default). Clients treat **instance theme as the system default when set**, so DEV yellow does not mutate shared `system_properties`.
+
+### 2. Favicon
+
+- Keep current green mark as `favicon.svg` (PROD / production build).
+- Add `favicon-dev.svg` — same geometry, strokes/fills `#e8c84a` (yellow theme accent).
+- **Vite serve:** inject `/favicon-dev.svg` via `index.html` transform or a tiny inline script keyed on `import.meta.env.DEV` so `:5173` is yellow immediately.
+- **Production build:** always `/favicon.svg` (green). A DEV-only production build is out of scope; DEV is the Vite app.
+- SPA can also swap `rel=icon` from config if the API reports `instance === "dev"` (covers any future client talking to `:3001`).
+
+### 3. Default color scheme
+
+- **FOUC script** in `client/index.html`: if no personal `taskmesh.theme`, default `data-theme` to `yellow` when the page is Vite/dev (port `5173` or `import.meta.env` injection), else `green` as today.
+- **ThemeProvider:** when config returns `instanceTheme`, use it as `systemDefaultTheme` instead of `defaultTheme`. Personal / per-project theme still wins.
+- **Favicon** stays yellow on DEV even if the user picks another accent (instance identity, not theme picker).
+
+### 4. Admin
+
+Leave Admin “system default theme” as the **shared DB** value (typically green for PROD). DEV chrome continues to use `instanceTheme` when no personal preference is set. Do not auto-write yellow into `system_properties`.
+
+## Out of scope
+
+- Separate DEV database
+- Changing PROD favicon or green default
+- Document title suffix (e.g. “TaskMesh (DEV)”) unless requested in QA
+- Schema / Drizzle migration
+
+## Version (finish-up)
+
+PATCH +1 (no new `drizzle/*.sql`). Increment from current `package.json` then.
+
+## QA (after implement)
+
+1. `npm run dev:web`: Vite `:5173` shows **yellow** favicon and **yellow** accent with a clean profile / no `taskmesh.theme`.
+2. Set a personal theme (e.g. blue) on DEV — UI follows it; favicon stays yellow.
+3. Clear personal theme — UI returns to yellow.
+4. PROD (HTTPS / `:3000`): **green** favicon and green system default unchanged.
+5. After a simulated deploy (`build:all` / existing PROD process): DEV Vite still yellow; PROD still green.
+6. Admin system default on PROD still green; editing it does not turn DEV green (instance overlay).

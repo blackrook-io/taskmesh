@@ -1,5 +1,16 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+
+/** Yellow favicon only while `vite` is serving; production builds keep green. */
+function devInstanceFavicon(): Plugin {
+  return {
+    name: "taskmesh-dev-favicon",
+    transformIndexHtml(html, ctx) {
+      if (!ctx.server) return html;
+      return html.replace('href="/favicon.svg"', 'href="/favicon-dev.svg"');
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -8,7 +19,7 @@ export default defineConfig(({ mode }) => {
   const apiPort = env.DEV_API_PORT || process.env.DEV_API_PORT || "3001";
 
   return {
-    plugins: [react()],
+    plugins: [react(), devInstanceFavicon()],
     optimizeDeps: {
       include: ["@excalidraw/excalidraw"],
     },

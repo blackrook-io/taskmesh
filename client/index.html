@@ -19,9 +19,10 @@
             /* ignore sticky parse */
           }
         }
-        document.documentElement.dataset.theme = ok[t] ? t : "green";
+        var devDefault = location.port === "5173" ? "yellow" : "green";
+        document.documentElement.dataset.theme = ok[t] ? t : devDefault;
       } catch (e) {
-        document.documentElement.dataset.theme = "green";
+        document.documentElement.dataset.theme = location.port === "5173" ? "yellow" : "green";
       }
     </script>
   </head>
