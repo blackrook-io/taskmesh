@@ -112,7 +112,18 @@ echo "==> restart taskmesh.service"
 restart_taskmesh
 
 echo "==> waiting for listen…"
-sleep 1
+# Unit can be "active" before Express binds :3000 (esp. after on-failure restart).
+ready=0
+for i in $(seq 1 60); do
+  if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 0.5
+done
+if [[ "$ready" -ne 1 ]]; then
+  fail "API did not become healthy on :3000 within 30s after restart"
+fi
 
 if ! systemctl is-active --quiet taskmesh; then
   fail "taskmesh.service is not active after restart"
