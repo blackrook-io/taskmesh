@@ -7,7 +7,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -15,36 +15,61 @@ import { apiJson } from "../api/client";
 import { formatEntityRef } from "../lib/entityRef";
 import { sanitizePlainText } from "../lib/plainText";
 import {
+  INLINE_TODO_LIST_STATES,
+  evaluateTodoListFilter,
+  isTodoFilterActive,
+  reorderVisibleAmongAll,
+  storageKeyForTodoList,
+} from "../lib/todoListFilter";
+import { usePersistedTodoListFilter } from "../lib/usePersistedTodoListFilter";
+import { useTodoListFilterLookups } from "../lib/useTodoListFilterLookups";
+import {
   SELECTABLE_TASK_STATES,
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
   TASK_STATE_LABELS,
   formatTaskNumber,
+  isSelectableTaskState,
+  taskPriorityClass,
+  taskStateClass,
   type SelectableTaskState,
   type TaskPriority,
+  type TaskState,
 } from "../lib/taskFields";
 import { patchTaskRecord } from "../lib/patchTask";
 import type { Project, Task, Todo, TodoListDetail, TodoListItem } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { TodoListFilterBar } from "./TodoListFilterBar";
 import { TaskEditorFields } from "./TaskBoard";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
+import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
+
+function inlineStateOptions(current: string | undefined): readonly string[] {
+  if (current === "pending") return ["pending", ...INLINE_TODO_LIST_STATES];
+  return INLINE_TODO_LIST_STATES;
+}
 
 function SortableItem({
   item,
+  dragDisabled,
   onToggle,
   onOpen,
   onRemove,
+  onPatchEntity,
 }: {
   item: TodoListItem;
+  dragDisabled?: boolean;
   onToggle: () => void;
   onOpen: () => void;
   onRemove: () => void;
+  onPatchEntity: (patch: Record<string, unknown>) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
+    disabled: dragDisabled || !!item.virtual,
   });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -53,20 +78,25 @@ function SortableItem({
 
   const typeLabel =
     item.entityType === "todo" ? "ToDo" : item.entityType === "task" ? "Task" : "Idea";
+  const canInline = item.entityType === "todo" || item.entityType === "task";
+  const stateValue = (item.state && isSelectableTaskState(item.state) ? item.state : "new") as TaskState;
+  const priorityValue = (TASK_PRIORITIES.includes((item.priority ?? "none") as TaskPriority)
+    ? item.priority
+    : "none") as TaskPriority;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`todo-item${isDragging ? " dragging" : ""}${item.checked ? " is-checked" : ""}`}
+      className={`todo-item${canInline ? "" : " todo-item--compact"}${isDragging ? " dragging" : ""}${item.checked ? " is-checked" : ""}`}
       onDoubleClick={onOpen}
     >
-      {!item.virtual ? (
+      {!item.virtual && !dragDisabled ? (
         <span className="task-drag-handle" {...attributes} {...listeners} title="Drag to reorder">
           ::
         </span>
       ) : (
-        <span className="task-drag-handle" style={{ visibility: "hidden" }}>
+        <span className="task-drag-handle" style={{ visibility: "hidden" }} aria-hidden>
           ::
         </span>
       )}
@@ -77,20 +107,60 @@ function SortableItem({
         aria-label={`Mark ${item.title} ${item.checked ? "incomplete" : "complete"}`}
         onChange={onToggle}
       />
+      <span className="todo-item__type muted">{typeLabel}</span>
       <button type="button" className="todo-item__title" onClick={onOpen} onDoubleClick={onOpen}>
-        <span className="todo-item__type muted">{typeLabel}</span>
-        {item.title}
-        {item.state ? <span className="muted"> · {item.state}</span> : null}
-        {item.dueDate ? <span className="muted"> · {item.dueDate}</span> : null}
-        {item.actionBy ? (
-          <span className="muted"> · by {new Date(item.actionBy).toLocaleString()}</span>
+        <span className="todo-item__title-text">{item.title}</span>
+        {canInline ? (
+          <RowTagChips entityType={item.entityType} entityId={item.entityId} />
+        ) : item.entityType === "idea" ? (
+          <RowTagChips entityType="idea" entityId={item.entityId} />
         ) : null}
       </button>
+      {canInline ? (
+        <>
+          <select
+            className={taskStateClass("task-list-row__state", stateValue)}
+            value={stateValue}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onPatchEntity({ state: e.target.value })}
+            aria-label="State"
+          >
+            {inlineStateOptions(item.state).map((s) => (
+              <option key={s} value={s}>
+                {TASK_STATE_LABELS[s as TaskState]}
+              </option>
+            ))}
+          </select>
+          <select
+            className={taskPriorityClass("task-list-row__priority", priorityValue)}
+            value={priorityValue}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onPatchEntity({ priority: e.target.value })}
+            aria-label="Priority"
+          >
+            {TASK_PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {TASK_PRIORITY_LABELS[p]}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            className="task-list-row__date"
+            value={item.dueDate ?? ""}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onPatchEntity({ dueDate: e.target.value || null })}
+            aria-label="Due date"
+          />
+        </>
+      ) : null}
       {!item.virtual ? (
         <button type="button" className="task-card-dismiss" aria-label="Remove from list" onClick={onRemove}>
           ×
         </button>
-      ) : null}
+      ) : (
+        <span aria-hidden />
+      )}
     </div>
   );
 }
@@ -288,6 +358,15 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const [linkType, setLinkType] = useState<"todo" | "task">("todo");
   const [pickId, setPickId] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+
+  const filterStorageKey = storageKeyForTodoList(listId);
+  const {
+    filter: listFilter,
+    applyFilter,
+    clearFilter,
+  } = usePersistedTodoListFilter(filterStorageKey);
+  const { filterCtx } = useTodoListFilterLookups();
 
   const detailQuery = useQuery({
     queryKey: ["todo-list", listId],
@@ -343,6 +422,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     void qc.invalidateQueries({ queryKey: ["todos-for-link"] });
     void qc.invalidateQueries({ queryKey: ["tasks"] });
     void qc.invalidateQueries({ queryKey: ["ideas"] });
+    void qc.invalidateQueries({ queryKey: ["taggings"] });
   };
 
   const createItem = useMutation({
@@ -394,6 +474,34 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
       });
     },
     onSuccess: () => invalidate(),
+  });
+
+  const patchEntity = useMutation({
+    mutationFn: async ({
+      item,
+      patch,
+    }: {
+      item: TodoListItem;
+      patch: Record<string, unknown>;
+    }) => {
+      if (item.entityType === "todo") {
+        await apiJson(`/api/v1/todos/${item.entityId}`, {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        });
+        return;
+      }
+      if (item.entityType === "task") {
+        await patchTaskRecord(item.entityId, patch, null);
+        return;
+      }
+      throw new Error("Inline edit is only supported for ToDos and Tasks");
+    },
+    onSuccess: () => {
+      setInlineError(null);
+      invalidate();
+    },
+    onError: (err: Error) => setInlineError(err.message),
   });
 
   const reorder = useMutation({
@@ -453,16 +561,19 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
 
   const list = detailQuery.data;
   const items = list?.items ?? [];
-  const ids = useMemo(() => items.map((i) => i.id), [items]);
+  const visibleItems = useMemo(
+    () => evaluateTodoListFilter(items, listFilter, filterCtx),
+    [items, listFilter, filterCtx],
+  );
+  const visibleIds = useMemo(() => visibleItems.map((i) => i.id), [visibleItems]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const filterActive = isTodoFilterActive(listFilter);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = ids.indexOf(Number(active.id));
-    const newIndex = ids.indexOf(Number(over.id));
-    if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(items, oldIndex, newIndex);
+    const next = reorderVisibleAmongAll(items, visibleItems, Number(active.id), Number(over.id));
+    if (!next) return;
     await reorder.mutateAsync(next.map((i) => i.id));
   };
 
@@ -519,6 +630,24 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         ? "idea"
         : "task";
 
+  const renderItem = (item: TodoListItem, opts?: { readOnlyMembership?: boolean }) => (
+    <SortableItem
+      key={item.id}
+      item={item}
+      dragDisabled={list.kind === "inbox" || !!opts?.readOnlyMembership}
+      onToggle={() => {
+        if (opts?.readOnlyMembership) return;
+        patchItem.mutate({ itemId: item.id, checked: !item.checked });
+      }}
+      onOpen={() => setOpenItem(item)}
+      onRemove={() => {
+        if (opts?.readOnlyMembership) return;
+        setPendingRemove(item);
+      }}
+      onPatchEntity={(patch) => patchEntity.mutate({ item, patch })}
+    />
+  );
+
   return (
     <div className="todo-list-view">
       <div className="todo-create-row">
@@ -556,34 +685,27 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         </p>
       ) : null}
 
+      <TodoListFilterBar filter={listFilter} onApply={applyFilter} onClear={clearFilter} />
+      {inlineError ? (
+        <p className="tag-input__error" role="alert">
+          {inlineError}
+        </p>
+      ) : null}
+
       {list.kind !== "inbox" ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-            {items.map((item) => (
-              <SortableItem
-                key={item.id}
-                item={item}
-                onToggle={() => patchItem.mutate({ itemId: item.id, checked: !item.checked })}
-                onOpen={() => setOpenItem(item)}
-                onRemove={() => setPendingRemove(item)}
-              />
-            ))}
+          <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
+            {visibleItems.map((item) => renderItem(item))}
           </SortableContext>
         </DndContext>
       ) : (
-        <div>
-          {items.map((item) => (
-            <SortableItem
-              key={item.id}
-              item={item}
-              onToggle={() => undefined}
-              onOpen={() => setOpenItem(item)}
-              onRemove={() => undefined}
-            />
-          ))}
-        </div>
+        <div>{visibleItems.map((item) => renderItem(item, { readOnlyMembership: true }))}</div>
       )}
-      {items.length === 0 ? <p className="muted">No items yet — create one above.</p> : null}
+      {items.length === 0 ? (
+        <p className="muted">No items yet — create one above.</p>
+      ) : visibleItems.length === 0 && filterActive ? (
+        <p className="muted">No items match this filter.</p>
+      ) : null}
 
       {list.kind !== "inbox" ? (
         <div className="todo-link-existing">
@@ -723,9 +845,44 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
                 </p>
                 <div className="field">
                   <label>Title</label>
-                  <input type="text" defaultValue={openIdeaQuery.data.title} readOnly />
+                  <input
+                    type="text"
+                    defaultValue={openIdeaQuery.data.title}
+                    onBlur={(e) => {
+                      const title = sanitizePlainText(e.target.value).trim();
+                      if (title && title !== openIdeaQuery.data!.title) {
+                        void apiJson(`/api/v1/ideas/${openIdeaQuery.data!.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ title }),
+                        }).then(() => {
+                          invalidate();
+                          void qc.invalidateQueries({ queryKey: ["idea", openIdeaQuery.data!.id] });
+                        });
+                      }
+                    }}
+                  />
                 </div>
-                <TagInput entityType="idea" entityId={openIdeaQuery.data.id} />
+                <div className="field">
+                  <label>Description</label>
+                  <MarkdownEditor
+                    value={openIdeaQuery.data.body ?? ""}
+                    onChange={() => {}}
+                    height={180}
+                    placeholder="Idea description…"
+                    onBlur={(v) => {
+                      void apiJson(`/api/v1/ideas/${openIdeaQuery.data!.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ body: v.trim() ? v : null }),
+                      }).then(() => {
+                        invalidate();
+                        void qc.invalidateQueries({ queryKey: ["idea", openIdeaQuery.data!.id] });
+                      });
+                    }}
+                  />
+                </div>
+                <div className="field field--tags-below">
+                  <TagInput entityType="idea" entityId={openIdeaQuery.data.id} />
+                </div>
               </div>
             ) : (
               <p className="muted">Idea not found.</p>

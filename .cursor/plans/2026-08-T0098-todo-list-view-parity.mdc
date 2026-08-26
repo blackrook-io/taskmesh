@@ -1,0 +1,92 @@
+# T0098 — To Do list view parity (filters, tags, DnD)
+
+**Status:** Complete — finishing up  
+**Branch:** `T0098-todo-list-view-parity`  
+**PROD Task:** T0098 (`id` 110), child of T0093; Depends-on T0104 ✅ complete  
+**App version:** `0.29.1` (PATCH; no migration)
+
+## Interview decisions (locked)
+
+| # | Decision |
+|---|----------|
+| A | Extra filters: **title**, **checked**, **entityType** (plus tags/priority/due/state) |
+| B | Due filter: operators **IS / IS NOT / BEFORE / AFTER**; values **Today / Soon / This Week / This Month** |
+| C | Inline **State** select (like Task labels): Draft, Ready, In Progress, Complete, Canceled, On Hold |
+| D | DnD same as Task list/board: keep working on visible rows when filtered (reorder among shown; stitch into full membership order) |
+| E | No column sort — membership `sortOrder` only |
+| F | Persist filters per list id |
+
+## Context
+
+T0104 shipped first-class **ToDo** records (`D####`) with state/priority/due/actionBy and editor tags. To Do **list view** (`TodoListView`) is still a flat checklist: membership DnD exists; no filter bar, no row tag chips, no inline priority/due.
+
+Task List View (`TasksListPage` / `TaskBoard` + `TaskListFilterBar` / `taskListFilter.ts`) is the reuse target. T0097 (hierarchy) is still Ready — not shipped → **flat** reorder only.
+
+## Goals / acceptance
+
+1. **Tags in list** — `RowTagChips` on ToDo and Task rows (same patterns as Task list).
+2. **Filters** — compound filter bar comparable to Task List: at least tags, priority, due date, state; persist per list.
+3. **Inline fields** — priority and due date editable on the row without opening the modal (ToDo → `PATCH /todos/:id`; Task → `PATCH /tasks/:id`).
+4. **DnD** — keep existing list-item reorder; when filters hide rows, reorder among **visible** membership and stitch into full order (TaskBoard-style). No hierarchy/chains until T0097.
+
+## Out of scope
+
+- Due-date presets (T0099), recurrence (T0100), row tinting (T0102), extra action fields (T0101)
+- ToDo record type / schema (T0104 done)
+- Nested ToDos / completion rollup (T0097)
+- New Drizzle migration (tags already polymorphic for `todo`)
+
+## Recommended approach
+
+### 1. Filter model + persistence
+
+- Add a thin To Do list filter module (or generalize `taskListFilter` with a field set for list scope):
+  - Fields: **state**, **priority**, **dueDate** (and/or relative due buckets if cheap), **tags**, **title**, **checked** (list item), optionally **entityType** (`todo` | `task`)
+  - Drop Task-only: **phase**, **project** (list already scoped); keep title search for triage
+- Reuse `TaskListFilterBar` UI with a field-list prop / scope, or a `TodoListFilterBar` wrapper sharing styles
+- Persist: `taskmesh.todoListFilter.list:{listId}` via hook patterned on `usePersistedTaskListFilter`
+- Evaluate client-side over hydrated list items (+ taggings loaded for visible entities)
+
+### 2. Tags on rows
+
+- Load taggings for items in the list (batch or existing tag lookup hooks)
+- Render `RowTagChips` for `entityType` `todo` | `task`
+- Tag filter clauses match either entity type’s tags
+
+### 3. Inline state / priority / due
+
+- Compact row controls: state `<select>` (Draft, Ready, In Progress, Complete, Canceled, On Hold), priority `<select>`, due `<input type="date">`
+- Patch correct API by `item.entityType`; refresh list hydration on success
+- List checkbox (`checked`) remains separate from entity state
+
+### 4. DnD polish
+
+- Keep `@dnd-kit` membership reorder → `PATCH …/items/reorder`
+- When filter is active: DnD among **visible** rows; stitch into full membership order (`reorderVisibleAmongAll`)
+- No entity-level `todos.sortOrder` reorder API in this Task
+
+### 5. Surface priority / state on compact row
+
+- Inline controls replace muted text cues so triage works without expanding
+
+## Implementation sketch (files)
+
+- `client/src/components/TodoListView.tsx` — filter bar, chips, inline state/priority/due, DnD on filtered visible rows
+- New: `client/src/lib/todoListFilter.ts`, `usePersistedTodoListFilter.ts`, `TodoListFilterBar.tsx` (or shared bar with field set)
+- Due presets: Today = calendar day; Soon = today through +2 days (3-day window); This Week = calendar week (Mon–Sun); This Month = calendar month. BEFORE/AFTER use window start/end.
+- Reuse: `RowTagChips.tsx`; taggings for `todo` + `task` in filter context
+- API: client-side filter only; PATCH todos/tasks for inline fields
+
+## QA follow-ups
+
+- **Row layout** — ToDo list rows used flex + global `select`/`date` `width: 100%`, so State/Priority/Due stacked vertically. Switched `.todo-item` to a Task-like CSS grid so fields stay on one compact row.
+- **Tag chips** — same implementation as Task list: `RowTagChips` inside the title cell (title text · chips · State). Shared `.row-tag-chips` only; spacing via `margin-right: 20px` (not padding inside `overflow: hidden`, which clipped pill corners).
+- **Idea modal Description** — T0104 had stripped the To Do list Idea modal to read-only title + tags. Restored editable Title + Description (`MarkdownEditor` on `body`) + tags, keeping the legacy convert note.
+
+## Test plan (for QA checklist after implement)
+
+- Filters: tags / priority / due presets / state / title / checked / entityType; persistence per list
+- Row tags; filter-by-tag for ToDo and Task members
+- Inline state, priority, due on ToDo and Task rows
+- DnD with and without filter (visible-row reorder)
+- Editor / create / convert still work
