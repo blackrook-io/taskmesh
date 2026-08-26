@@ -1,0 +1,67 @@
+# T0067 — Edit Task form fixes
+
+**Task:** T0067 — Edit Task form fixes  
+**Branch (proposed):** `T0067-edit-task-form-fixes`  
+**State at plan:** `ready` · priority `low` · projectId `4` · no parent · no Depends-on
+
+## Goal
+
+Two polish items on the shared Edit Task form (`TaskEditorFields`):
+
+1. Move the autosave/keyboard hint to the **top of the form**, **far right of Title**, in **accent** color.
+2. Persist a user-chosen **Description editor height** (resize bar) in UI preferences so the next open restores it.
+
+## Context
+
+- Hint today sits in the tags row near the bottom: `Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes` (`.task-editor-hint.muted`).
+- Title is the first field: stacked `<label>Title</label>` + input.
+- Description uses shared `MarkdownEditor` with `fill` + `height={280}`. Dragging the resize handle locks a pixel height (`heightLocked`) for that mount only. The resizable-editor plan explicitly left persistence out of scope.
+- Other UI prefs in this app (list sort, nav density, theme) use **localStorage**, not a server table.
+
+## Decisions (approved)
+
+1. **Hint layout:** Same row as the Title **label** (not beside the input): “Title” left, hint right-aligned, `color: var(--accent)`. Full copy stays. Remove it from the tags row.
+2. **Hint surfaces:** All `TaskEditorFields` hosts (project board modal, global `/tasks` modal, kanban, todo-list task modal).
+3. **Height storage:** Device **localStorage** only (`taskmesh.taskDescriptionEditorHeight`). One global value for all task editors — not per-task, not per-project, no Settings panel, no API/schema.
+4. **When to save:** After the user finishes a resize (pointer-up / keyboard step) that **locks** height. Restore that locked height on next open. No stored value → keep current fill + 280 default.
+5. **Reset:** Out of scope (no double-click-to-reset, no Settings control). Clearing the browser’s site data restores fill.
+
+## Approach
+
+### 1. Hint move
+
+- Wrap Title label + hint in a flex header (mirror `.task-expand__notes-head`).
+- Style hint with accent; keep existing copy.
+- Drop the hint `<span>` from `.task-editor-tags-row`. Tags stay right-aligned in that row.
+
+### 2. Description height preference
+
+- Small helper (`client/src/lib/taskDescriptionEditorHeight.ts`): parse/validate a positive integer in editor min/max range; `load` / `save` / `clear`.
+- Extend `MarkdownEditor` with optional `onHeightChange?: (height: number) => void`, fired when the user commits a locked height (end of drag + keyboard resize). Do not fire on prop-driven init.
+- In `TaskEditorFields`: load stored height; if present, pass it as `height` and treat as locked (either a `lockedHeight` prop or skip `fill` when a pref exists). On `onHeightChange`, save.
+- Other `MarkdownEditor` call sites unchanged.
+
+No API, schema, or migration.
+
+## Out of scope
+
+- Persisting height for Ideas, Wiki, Kanban notes, Todo items, or History diffs.
+- Server-side user preferences.
+- Changing autosave / History behavior.
+- Horizontal resize or focus-mode height.
+
+## QA checklist (after implement)
+
+- [ ] Open a task modal: hint is on the Title row, right side, accent color; not in the tags row.
+- [ ] Copy still reads: Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes.
+- [ ] Same hint on project Tasks, global Tasks, Kanban task modal, and a todo-linked task if applicable.
+- [ ] Resize Description taller → close modal → reopen (same or another task) → height matches.
+- [ ] Reload the app → restored height still applies.
+- [ ] Never resized (or cleared storage) → Description still fills as today.
+- [ ] Idea / wiki / other markdown editors do not pick up the task height pref.
+- [ ] Mobile-width modal: Title + hint wrap or truncate without overlapping the input.
+
+## Branch / plan names
+
+- Branch: `T0067-edit-task-form-fixes`
+- Plan: `.cursor/plans/2026-08-T0067-edit-task-form-fixes.mdc`

@@ -57,6 +57,10 @@ type Props = {
   maxHeight?: number;
   /** Grow to fill a flex parent instead of a fixed height (until the user resizes). */
   fill?: boolean;
+  /** Start locked at this pixel height (restored UI preference). */
+  initialLockedHeight?: number;
+  /** Fired when the user commits a locked height (resize pointer-up or keyboard step). */
+  onHeightChange?: (height: number) => void;
   /**
    * Size the surface to content (no fixed height / resize handle).
    * Page/viewport scrolls when content is long. Focus mode still uses an inner scrollbar.
@@ -137,6 +141,8 @@ export function MarkdownEditor({
   minHeight: minHeightProp,
   maxHeight: maxHeightProp = DEFAULT_MAX_HEIGHT,
   fill = false,
+  initialLockedHeight,
+  onHeightChange,
   autoHeight = false,
   enableImageUpload = true,
   placeholder = "Write Markdown…",
@@ -144,16 +150,17 @@ export function MarkdownEditor({
   className,
 }: Props) {
   const navigate = useNavigate();
-  const minHeight = Math.min(minHeightProp ?? DEFAULT_MIN_HEIGHT, height);
-  const maxHeight = Math.max(maxHeightProp, height);
+  const preferredHeight = initialLockedHeight ?? height;
+  const minHeight = Math.min(minHeightProp ?? DEFAULT_MIN_HEIGHT, preferredHeight);
+  const maxHeight = Math.max(maxHeightProp, preferredHeight);
   const [mode, setMode] = useState<Mode>("preview");
   const [focusMode, setFocusMode] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [surfaceHeight, setSurfaceHeight] = useState(() =>
-    clampEditorHeight(height, Math.min(minHeightProp ?? DEFAULT_MIN_HEIGHT, height), Math.max(maxHeightProp, height)),
+    clampEditorHeight(preferredHeight, minHeight, maxHeight),
   );
   /** After the user drags, prefer explicit height over flex `fill`. */
-  const [heightLocked, setHeightLocked] = useState(false);
+  const [heightLocked, setHeightLocked] = useState(() => initialLockedHeight != null);
   const [dragging, setDragging] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -162,10 +169,13 @@ export function MarkdownEditor({
   const modeRef = useRef(mode);
   const onChangeRef = useRef(onChange);
   const onBlurRef = useRef(onBlur);
+  const onHeightChangeRef = useRef(onHeightChange);
   const navigateRef = useRef(navigate);
+  const liveHeightRef = useRef(surfaceHeight);
   modeRef.current = mode;
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
+  onHeightChangeRef.current = onHeightChange;
   navigateRef.current = navigate;
 
   useEffect(() => {
@@ -371,12 +381,16 @@ export function MarkdownEditor({
     const handle = e.currentTarget;
     const startY = e.clientY;
     const startHeight = surfaceRef.current?.offsetHeight ?? surfaceHeight;
+    liveHeightRef.current = startHeight;
+    setSurfaceHeight(startHeight);
     setHeightLocked(true);
     setDragging(true);
     handle.setPointerCapture(e.pointerId);
 
     const onMove = (ev: PointerEvent) => {
-      setSurfaceHeight(clampEditorHeight(startHeight + (ev.clientY - startY), minHeight, maxHeight));
+      const next = clampEditorHeight(startHeight + (ev.clientY - startY), minHeight, maxHeight);
+      liveHeightRef.current = next;
+      setSurfaceHeight(next);
     };
     const onUp = (ev: PointerEvent) => {
       handle.releasePointerCapture(ev.pointerId);
@@ -384,6 +398,7 @@ export function MarkdownEditor({
       handle.removeEventListener("pointerup", onUp);
       handle.removeEventListener("pointercancel", onUp);
       setDragging(false);
+      onHeightChangeRef.current?.(liveHeightRef.current);
     };
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onUp);
@@ -443,8 +458,11 @@ export function MarkdownEditor({
             e.preventDefault();
             const delta = e.key === "ArrowUp" ? -24 : 24;
             const base = surfaceRef.current?.offsetHeight ?? surfaceHeight;
+            const next = clampEditorHeight(base + delta, minHeight, maxHeight);
             setHeightLocked(true);
-            setSurfaceHeight(clampEditorHeight(base + delta, minHeight, maxHeight));
+            liveHeightRef.current = next;
+            setSurfaceHeight(next);
+            onHeightChangeRef.current?.(next);
           }}
         />
       ) : null}

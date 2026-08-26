@@ -46,6 +46,10 @@ import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
+import {
+  loadTaskDescriptionEditorHeight,
+  saveTaskDescriptionEditorHeight,
+} from "../lib/taskDescriptionEditorHeight";
 import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
 import { TaskDescriptionTemplatesMenu } from "./shared/TaskDescriptionTemplatesMenu";
@@ -345,6 +349,7 @@ export function TaskEditorFields({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
+  const [descriptionEditorHeight] = useState(() => loadTaskDescriptionEditorHeight());
 
   // One History line for the whole time this task editor is open (survives remounts).
   ensureTaskEditSession(task.id, {
@@ -582,7 +587,12 @@ export function TaskEditorFields({
   return (
     <div className="task-expand" ref={containerRef}>
       <div className="field">
-        <label htmlFor={`t-title-${task.id}`}>Title</label>
+        <div className="task-expand__title-head">
+          <label htmlFor={`t-title-${task.id}`}>Title</label>
+          <span className="task-editor-hint">
+            Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes
+          </span>
+        </div>
         <input
           id={`t-title-${task.id}`}
           type="text"
@@ -760,6 +770,8 @@ export function TaskEditorFields({
           onChange={setDescription}
           fill
           height={280}
+          initialLockedHeight={descriptionEditorHeight ?? undefined}
+          onHeightChange={saveTaskDescriptionEditorHeight}
           placeholder="Task description…"
           onBlur={(v) => {
             setDescription(v);
@@ -774,10 +786,7 @@ export function TaskEditorFields({
         />
       </div>
       <TaskTimeline task={task} />
-      <div className="field field--tags-below task-editor-tags-row">
-        <span className="task-editor-hint muted">
-          Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes
-        </span>
+      <div className="field field--tags-below">
         <TagInput entityType="task" entityId={task.id} />
       </div>
       <TaskDependencyLists taskId={task.id} onOpenTask={onOpenTask} />
