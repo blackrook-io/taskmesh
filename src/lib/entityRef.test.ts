@@ -10,11 +10,15 @@ describe("entityRef", () => {
   it("formats padded refs", () => {
     assert.equal(formatEntityRef("task", 58), "T0058");
     assert.equal(formatEntityRef("idea", 1), "I0001");
+    assert.equal(formatEntityRef("todo", 3), "D0003");
+    assert.equal(formatEntityRef("document", 12), "N0012");
     assert.equal(formatEntityRef("image_board", 12), "M0012");
   });
 
   it("maps prefixes", () => {
     assert.equal(entityTypeFromPrefix("T"), "task");
+    assert.equal(entityTypeFromPrefix("D"), "todo");
+    assert.equal(entityTypeFromPrefix("N"), "document");
     assert.equal(entityTypeFromPrefix("m"), "image_board");
     assert.equal(entityTypeFromPrefix("Z"), null);
   });

@@ -6,7 +6,7 @@ import type { EntityType } from "../lib/entityType.js";
 type Db = typeof DbType;
 
 /** Entity types that currently support tagging / search. */
-export const TAGGABLE_ENTITY_TYPES = ["idea", "project", "task", "document"] as const;
+export const TAGGABLE_ENTITY_TYPES = ["idea", "project", "task", "todo", "document"] as const;
 export type TaggableEntityType = (typeof TAGGABLE_ENTITY_TYPES)[number];
 
 export function isTaggableEntityType(value: string): value is TaggableEntityType {
@@ -38,6 +38,13 @@ export async function entityExists(
         .select({ id: schema.tasks.id })
         .from(schema.tasks)
         .where(eq(schema.tasks.id, entityId));
+      return Boolean(row);
+    }
+    case "todo": {
+      const [row] = await database
+        .select({ id: schema.todos.id })
+        .from(schema.todos)
+        .where(eq(schema.todos.id, entityId));
       return Boolean(row);
     }
     case "document": {

@@ -96,6 +96,21 @@ export function IdeaEditPage() {
     },
   });
 
+  const convertToTodo = useMutation({
+    mutationFn: async () => {
+      const res = await apiJson<{ data: { id: number } }>(`/api/v1/todos/from-idea/${ideaId}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["ideas"] });
+      void qc.invalidateQueries({ queryKey: ["todos"] });
+      navigate("/todos");
+    },
+  });
+
   if (!isNew && (ideaId == null || Number.isNaN(ideaId))) {
     return <p className="muted">Invalid idea id.</p>;
   }
@@ -115,14 +130,24 @@ export function IdeaEditPage() {
             Back
           </Link>
           {!isNew ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => convert.mutate()}
-              disabled={convert.isPending}
-            >
-              Convert to project
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => convertToTodo.mutate()}
+                disabled={convertToTodo.isPending}
+              >
+                Convert to ToDo
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => convert.mutate()}
+                disabled={convert.isPending}
+              >
+                Convert to project
+              </button>
+            </>
           ) : null}
           {!isNew ? (
             <button type="button" className="btn danger" onClick={() => setDeleteOpen(true)}>
@@ -157,6 +182,7 @@ export function IdeaEditPage() {
       </div>
       {save.isError ? <p role="alert">{(save.error as Error).message}</p> : null}
       {convert.isError ? <p role="alert">{(convert.error as Error).message}</p> : null}
+      {convertToTodo.isError ? <p role="alert">{(convertToTodo.error as Error).message}</p> : null}
 
       <ConfirmDialog
         open={deleteOpen}

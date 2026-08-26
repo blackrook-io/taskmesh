@@ -21,7 +21,7 @@ export const MODULE_LABELS: Record<ProjectModuleKey, string> = {
 export const MODULE_BLURBS: Record<ProjectModuleKey, string> = {
   tasks: "Phased task list with descriptions, due dates, and drag reorder.",
   documents: "Standalone Markdown documents for this project.",
-  todo_lists: "Mix ideas and tasks in project To Do lists.",
+  todo_lists: "To Do lists of ToDo items and Tasks (Ideas live under Ideas).",
   boards: "Kanban planning boards for tasks.",
   wiki: "Nested wiki TOC for Markdown pages.",
   canvases: "Freeform diagrams and mood boards (Excalidraw).",

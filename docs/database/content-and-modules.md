@@ -97,14 +97,14 @@ Polymorphic targets (`taggings`, `todo_list_items`, `board_cards`, `wiki_nodes`)
 
 ## `project_documents`
 
-Standalone Markdown documents owned by a project. Display number → **D####**.
+Standalone Markdown documents owned by a project. Display number → **N####** (documents previously used D####; D is now ToDos).
 
 ### Columns
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|--------|
 | `id` | serial | no | — | Primary key |
-| `number` | integer | no | — | Display number (D####) |
+| `number` | integer | no | — | Display number (N####) |
 | `project_id` | integer | no | — | FK → `projects.id` |
 | `title` | text | no | — | |
 | `body` | text | yes | — | Markdown |
@@ -178,9 +178,40 @@ Global tag catalog plus polymorphic attachments.
 
 ---
 
+## `todos`
+
+First-class **ToDo** records (UI label “ToDo”). Display number → **D####**. Lighter than Task: due date, priority, Task-parity state, and `action_by` datetime. Optional `project_id` and `source_idea_id` (when converted from an Idea). Soft-delete via `state = 'deleted'`.
+
+### Columns
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `project_id` | integer | yes | — | FK → `projects.id`; null = unassigned |
+| `number` | integer | no | — | Display number (D####) |
+| `title` | text | no | — | |
+| `description` | text | yes | — | Markdown notes |
+| `state` | text | no | `'new'` | Same values as `tasks.state` |
+| `priority` | text | no | `'none'` | Same values as `tasks.priority` |
+| `due_date` | date | yes | — | Date-only due |
+| `action_by` | timestamptz | yes | — | When to act |
+| `color` | text | yes | — | |
+| `sort_order` | integer | no | `0` | |
+| `source_idea_id` | integer | yes | — | FK → `ideas.id` · ON DELETE SET NULL |
+| `created_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
+| `updated_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
+| `created_at` | timestamptz | no | `now()` | |
+| `updated_at` | timestamptz | no | `now()` | |
+
+**Constraints:** PK `id`; UNIQUE `number`; FKs as above.
+
+---
+
 ## `todo_lists` / `todo_list_items`
 
-Checklist containers (standalone or project-scoped) with polymorphic rows (typically idea or task). Display number → **L####**.
+Checklist containers (standalone or project-scoped) with polymorphic rows. Display number → **L####**.
+
+New memberships use **`todo`** or **`task`**. Legacy **`idea`** rows may remain (no automatic migration); Ideas are managed on the Ideas UI.
 
 ### `todo_lists` columns
 
@@ -202,7 +233,7 @@ Checklist containers (standalone or project-scoped) with polymorphic rows (typic
 |--------|------|----------|---------|--------|
 | `id` | serial | no | — | Primary key |
 | `list_id` | integer | no | — | FK → `todo_lists.id` |
-| `entity_type` | text | no | — | Polymorphic type |
+| `entity_type` | text | no | — | Polymorphic type (`todo` \| `task`; legacy `idea`) |
 | `entity_id` | integer | no | — | Polymorphic id |
 | `sort_order` | integer | no | `0` | |
 | `checked` | boolean | no | `false` | |

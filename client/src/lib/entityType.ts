@@ -3,6 +3,7 @@ export const ENTITY_TYPES = [
   "idea",
   "project",
   "task",
+  "todo",
   "document",
   "todo_list",
   "board",

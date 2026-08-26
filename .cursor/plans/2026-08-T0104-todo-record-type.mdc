@@ -1,0 +1,105 @@
+# T0104 — New record type: ToDo Item
+
+## Status
+
+Implemented on branch `T0104-todo-record-type`. Awaiting QA / finish-up.
+
+## Context
+
+- PROD Task **T0104** (`id` 116), child of **T0093**, blocks T0097–T0102.
+- Today To Do lists are polymorphic membership of **idea | task** (`todo_list_items`).
+- Product model: **Idea** (jot) → **ToDo** (scheduled lighter item) → **Task** (full work). UI label **ToDo**; display numbers **D####**.
+
+## Interview decisions (locked)
+
+| Topic | Decision |
+|-------|----------|
+| Data migration | **None.** Do not convert existing idea/task rows into ToDos. Leave Ideas as Ideas, Tasks as Tasks. |
+| Display prefix | **D####** (documents move to **N####** — `D` was already document) |
+| State | **Same enum as Task** (`new`, `ready`, `in_progress`, `pending`, `complete`, `canceled`, `on_hold`, …) |
+| Action field | **`actionBy`** — datetime (timestamptz), not free-text “next action” |
+| List membership | To Do lists may contain **ToDo items and Tasks**. **Ideas** are not added to To Do lists; Ideas stay on their own list view (`IdeasListPage` / Ideas UI). |
+| Project scope (default; confirm if wrong) | ToDos mirror Tasks: **nullable `projectId`**. |
+
+## Goals (MVP)
+
+1. First-class **`todos`** table + API + EntityType **`todo`**.
+2. To Do lists: create/link **todo** and **task** only (remove idea from add/link UX).
+3. Existing `todo_list_items` rows unchanged (ideas/tasks remain as stored; ideas still render if present until user removes membership).
+4. Conversions: **Idea → ToDo**, **ToDo → Task**; keep/align existing **Idea → Task** (list convert + any standalone paths).
+5. Basic editor UI for ToDo (title, description/notes, due date, priority, state, actionBy, color, tags).
+6. Schema docs + `docs:sync-schema`.
+
+## Out of scope (siblings)
+
+Hierarchy/rollups (T0097), filter/tags list parity polish (T0098), due presets (T0099), recurrence (T0100), Last action / Current / chaining (T0101), row tinting (T0102).
+
+## Technical approach
+
+### Schema
+
+- New `todos` table roughly:
+  - `id`, `number` (unique → D####), `project_id` nullable FK
+  - `title`, `description` (markdown text, nullable)
+  - `state` (Task parity, default `new`), `priority` (Task parity, default `none`)
+  - `due_date` (date), `action_by` (timestamptz, nullable)
+  - `color`, `sort_order`, `created_by_id`, `updated_by_id`, timestamps
+- `todo_list_items.entity_type` continues polymorphic text; allowed values for **new** membership: `todo` | `task` (validate in API). Keep accepting existing `idea` rows for read/delete only.
+- Add `todo` to `ENTITY_TYPES` (server + client), taggable types, search, etc. as needed for MVP.
+- Drizzle migration (finish-up → **MINOR** bump per versioning rules).
+
+### API
+
+- CRUD under `/api/v1/todos` (and/or project-scoped where consistent with tasks).
+- List item create: `{ entityType: "todo" | "task", ... }` — create-new ToDo or link existing Task/ToDo.
+- Convert endpoints:
+  - Idea → ToDo (copy title/body/tags; do **not** delete Idea unless user confirms — prefer convert that leaves Idea or archives; **confirm in implement**: match Idea→Project / Idea→Task patterns).
+  - ToDo → Task (copy fields including due/priority/state; map `actionBy` → Task description note or drop with UI warning).
+  - Existing list `convert-to-task` for ideas: keep working; optionally also offer convert-to-todo.
+- Hydrate list items for `todo` with state, dueDate, priority, actionBy.
+
+### UI
+
+- `TodoListView`: create/link types **ToDo | Task**; editor modal for ToDo; Task path unchanged.
+- Ideas: rely on existing Ideas list/page; no “add Idea to this To Do list”.
+- Format refs: `formatEntityRef("todo", number)` → `D####`.
+- Inbox/unsorted: decide whether inbox virtual rows stay task/idea-only or include ToDos — prefer **create ToDo into named lists**; inbox behavior documented in QA if touched lightly.
+
+### Docs
+
+- Update `docs/database/` for `todos` + list membership semantics; run `npm run docs:sync-schema`.
+
+## Implementation order
+
+1. Schema + migration + entity type + docs skeleton  
+2. Todos CRUD API + list item validation/hydration  
+3. Conversions  
+4. TodoListView + ToDo editor UI  
+5. Search/nav/tagging touch-ups for `todo`  
+6. QA pass  
+
+## Open points (resolve during implement if user silent)
+
+- Exact Idea→ToDo UX: delete Idea vs keep both vs soft-link `sourceIdeaId` on ToDo (prefer **`sourceIdeaId`** like projects if low cost).
+- Whether `actionBy` is shown on list rows in MVP (yes, muted suffix if cheap).
+
+## QA checklist (draft; finalize after implement)
+
+- Create/edit/delete ToDo; D#### visible  
+- Add ToDo and Task to a list; cannot add Idea from list UI  
+- Existing idea-on-list row still visible/removable without data rewrite  
+- Idea → ToDo; ToDo → Task; Idea → Task still works  
+- dueDate, priority, state, actionBy persist  
+- Tags on ToDo  
+- Confirm dialogs on delete  
+- PROD docs sync after migrate  
+- Document refs show **N####** (prefix change)  
+
+## Implementation notes
+
+- Migration: `drizzle/0028_unknown_doomsday.sql`
+- Branch: `T0104-todo-record-type`
+- Finish-up will need **MINOR** bump (schema migration)
+## QA follow-ups
+
+- **ToDo editor layout** — Match Task edit form: Title → `task-editor-grid` (State / Priority / Due+color / Action by) → Description (`task-expand__notes`) → `field--tags-below` TagInput (same as Task).

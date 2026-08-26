@@ -18,7 +18,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Main domain** (full physical documentation):
 
-`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `tasks`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
+`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `tasks`, `todos`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
 
 **Non-main** (inventory + minimal on diagrams):
 
@@ -26,16 +26,18 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 ## Conceptual model
 
-At a high level, a **Project** is the hub. An **Idea** can become a project. Projects own task groups, project phases, tasks, documents, module toggles, boards, wiki nodes, and canvases. Tasks may also exist outside a project (unsorted / list-only). Tags and todo-list rows attach to entities via polymorphic `(entity_type, entity_id)` pairs. Users and API keys support authorship and future auth; they are not the focus of product modeling.
+At a high level, a **Project** is the hub. An **Idea** can become a project or a **ToDo**. **ToDos** (display **D####**) are first-class scheduled items lighter than Tasks. Projects own task groups, project phases, tasks, todos, documents, module toggles, boards, wiki nodes, and canvases. Tasks and ToDos may also exist outside a project. **To Do lists** hold ToDo and Task memberships (legacy Idea rows may remain). Tags attach via polymorphic `(entity_type, entity_id)` pairs. Users and API keys support authorship and future auth; they are not the focus of product modeling.
 
 ```mermaid
 erDiagram
   ideas ||--o| projects : "sourceIdea"
+  ideas ||--o{ todos : "sourceIdea"
   projects ||--o{ task_groups : has
   task_groups ||--o{ task_group_members : "manual members"
   tasks ||--o{ task_group_members : "manual groups"
   projects ||--o{ project_phases : has
   projects ||--o{ tasks : "may own"
+  projects ||--o{ todos : "may own"
   projects ||--o{ project_documents : has
   projects ||--o{ todo_lists : "may own"
   projects ||--o{ project_modules : has
@@ -58,6 +60,7 @@ erDiagram
   wiki_nodes ||--o{ wiki_nodes : "parent"
 
   users ||--o{ tasks : "createdBy / updatedBy"
+  users ||--o{ todos : "createdBy / updatedBy"
   users ||--o{ api_keys : has
   api_keys ||--o{ api_request_logs : "optional"
   users ||--o{ api_request_logs : "optional"

@@ -19,7 +19,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 
 ## Shared conventions (Phase 0+)
 
-- **Entity types** — polymorphic ids use `EntityType` in [`src/lib/entityType.ts`](src/lib/entityType.ts) and [`client/src/lib/entityType.ts`](client/src/lib/entityType.ts) (`idea` | `project` | `task` | `document` | `todo_list` | `board` | `canvas` | `wiki_node`). Prefer `(entityType, entityId)` joins for tags/boards/wiki later.
+- **Entity types** — polymorphic ids use `EntityType` in [`src/lib/entityType.ts`](src/lib/entityType.ts) and [`client/src/lib/entityType.ts`](client/src/lib/entityType.ts) (`idea` | `project` | `task` | `todo` | `document` | `todo_list` | `board` | `canvas` | `wiki_node` | `image_board`). Prefer `(entityType, entityId)` joins for tags/boards/wiki later.
 - **Shared UI** — put reusable chrome under `client/src/components/shared/` (`ColorPopover`, `ElementShell`). Modes: `card` | `modal` | `page`.
 - **Markdown** — shared TipTap `MarkdownEditor` (`client/src/components/shared/MarkdownEditor.tsx`); clipboard image paste → `/api/v1/uploads`.
 - **Colors** — default 16-swatch palette in `client/src/lib/palette.ts`; store accents as CSS hex strings.

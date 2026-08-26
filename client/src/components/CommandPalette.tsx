@@ -191,6 +191,15 @@ function flattenSearch(data: SearchResults): PaletteItem[] {
       path: `/tasks?open=${t.id}`,
     });
   }
+  for (const t of data.todos ?? []) {
+    out.push({
+      id: `todo-${t.id}`,
+      group: "ToDos",
+      label: t.title,
+      hint: t.projectId != null ? `Project #${t.projectId}` : "Unassigned",
+      path: t.projectId != null ? `/projects/${t.projectId}?tab=todo_lists` : "/todos",
+    });
+  }
   for (const d of data.documents) {
     out.push({
       id: `doc-${d.id}`,

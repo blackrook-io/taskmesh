@@ -6,10 +6,11 @@ import * as schema from "../../db/schema.js";
 import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
-import { allocateIdeaNumber, allocateTodoListNumber } from "../../services/entityNumbers.js";
+import { allocateTodoListNumber, allocateTodoNumber } from "../../services/entityNumbers.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
 import { getCurrentUserId } from "../../services/users.js";
+import { copyTaggings } from "../../services/copyTaggings.js";
 
 const listBody = z.object({
   title: plainTitle(500),
@@ -20,7 +21,8 @@ const listPatch = z.object({
   title: optionalPlainTitle(500),
 });
 
-const itemEntity = z.enum(["idea", "task"]);
+/** New memberships: todo | task. Legacy idea rows remain readable. */
+const itemEntity = z.enum(["todo", "task"]);
 
 const itemBody = z.object({
   entityType: itemEntity,
@@ -49,6 +51,11 @@ const convertBody = z.object({
   title: optionalPlainTitle(2000),
 });
 
+const convertToTodoBody = z.object({
+  projectId: z.number().int().positive().optional().nullable(),
+  title: optionalPlainTitle(2000),
+});
+
 const idParam = z.coerce.number().int().positive();
 
 export const todoListsRouter = Router();
@@ -58,7 +65,10 @@ async function loadList(listId: number) {
   return list ?? null;
 }
 
-/** Ideas/tasks not on any named list; tasks also must have no project. */
+/**
+ * Unsorted inbox: unassigned tasks + ToDos not on any named list.
+ * Ideas live on the Ideas UI — not shown here.
+ */
 async function hydrateUnsortedItems(inboxListId: number) {
   const namedLists = await db
     .select({ id: schema.todoLists.id })
@@ -77,14 +87,18 @@ async function hydrateUnsortedItems(inboxListId: number) {
           .from(schema.todoListItems)
           .where(inArray(schema.todoListItems.listId, namedIds));
 
-  const listedIdeas = new Set(
-    listed.filter((r) => r.entityType === "idea").map((r) => r.entityId),
+  const listedTodos = new Set(
+    listed.filter((r) => r.entityType === "todo").map((r) => r.entityId),
   );
   const listedTasks = new Set(
     listed.filter((r) => r.entityType === "task").map((r) => r.entityId),
   );
 
-  const ideas = await db.select().from(schema.ideas).orderBy(asc(schema.ideas.id));
+  const todos = await db
+    .select()
+    .from(schema.todos)
+    .where(and(isNull(schema.todos.projectId), ne(schema.todos.state, "deleted")))
+    .orderBy(asc(schema.todos.id));
   const tasks = await db
     .select()
     .from(schema.tasks)
@@ -93,20 +107,24 @@ async function hydrateUnsortedItems(inboxListId: number) {
 
   const out = [];
   let sort = 0;
-  for (const idea of ideas) {
-    if (listedIdeas.has(idea.id)) continue;
+  for (const todo of todos) {
+    if (listedTodos.has(todo.id)) continue;
     out.push({
       id: -(sort + 1),
       listId: inboxListId,
-      entityType: "idea" as const,
-      entityId: idea.id,
+      entityType: "todo" as const,
+      entityId: todo.id,
       sortOrder: sort++,
       checked: false,
-      createdAt: idea.createdAt,
-      updatedAt: idea.updatedAt,
-      title: idea.title,
-      href: `/ideas/${idea.id}`,
+      createdAt: todo.createdAt,
+      updatedAt: todo.updatedAt,
+      title: todo.title,
+      href: null as string | null,
       virtual: true,
+      state: todo.state,
+      dueDate: todo.dueDate,
+      priority: todo.priority,
+      actionBy: todo.actionBy?.toISOString() ?? null,
     });
   }
   for (const task of tasks) {
@@ -125,6 +143,7 @@ async function hydrateUnsortedItems(inboxListId: number) {
       virtual: true,
       state: task.state,
       dueDate: task.dueDate,
+      priority: task.priority,
     });
   }
   return out;
@@ -148,11 +167,26 @@ async function hydrateItems(listId: number) {
     let href: string | null = null;
     let state: string | undefined;
     let dueDate: string | null | undefined;
+    let priority: string | undefined;
+    let actionBy: string | null | undefined;
     if (row.entityType === "idea") {
       const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, row.entityId));
       if (idea) {
         title = idea.title;
         href = `/ideas/${idea.id}`;
+      }
+    } else if (row.entityType === "todo") {
+      const [todo] = await db.select().from(schema.todos).where(eq(schema.todos.id, row.entityId));
+      if (todo && todo.state !== "deleted") {
+        title = todo.title;
+        href = null;
+        state = todo.state;
+        dueDate = todo.dueDate;
+        priority = todo.priority;
+        actionBy = todo.actionBy?.toISOString() ?? null;
+      } else if (todo?.state === "deleted") {
+        title = `${todo.title} (deleted)`;
+        state = todo.state;
       }
     } else if (row.entityType === "task") {
       const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, row.entityId));
@@ -161,9 +195,10 @@ async function hydrateItems(listId: number) {
         href = task.projectId != null ? `/projects/${task.projectId}?tab=tasks` : null;
         state = task.state;
         dueDate = task.dueDate;
+        priority = task.priority;
       }
     }
-    out.push({ ...row, title, href, state, dueDate });
+    out.push({ ...row, title, href, state, dueDate, priority, actionBy });
   }
   return out;
 }
@@ -323,15 +358,15 @@ todoListsRouter.post("/:id/items", async (req, res) => {
       return;
     }
     const parsed = itemBody.parse(req.body);
-    if (parsed.entityType === "idea") {
-      const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, parsed.entityId));
-      if (!idea) {
-        sendError(res, 404, "not_found", "Idea not found");
+    if (parsed.entityType === "todo") {
+      const [todo] = await db.select().from(schema.todos).where(eq(schema.todos.id, parsed.entityId));
+      if (!todo || todo.state === "deleted") {
+        sendError(res, 404, "not_found", "ToDo not found");
         return;
       }
     } else {
       const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parsed.entityId));
-      if (!task) {
+      if (!task || task.state === "deleted") {
         sendError(res, 404, "not_found", "Task not found");
         return;
       }
@@ -372,7 +407,7 @@ todoListsRouter.post("/:id/items", async (req, res) => {
   }
 });
 
-/** Create a new idea or task and append it to this list. */
+/** Create a new ToDo or task and append it to this list. */
 todoListsRouter.post("/:id/items/create", async (req, res) => {
   try {
     const listId = idParam.parse(req.params.id);
@@ -386,17 +421,33 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
     let entityType = parsed.entityType;
     let entityId: number;
 
-    if (entityType === "idea") {
-      const ideaNumber = await allocateIdeaNumber(db);
-      const [idea] = await db
-        .insert(schema.ideas)
-        .values({ number: ideaNumber, title, body: null })
+    if (entityType === "todo") {
+      const projectId = parsed.projectId ?? list.projectId ?? null;
+      if (projectId != null) {
+        const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
+        if (!proj) {
+          sendError(res, 404, "not_found", "Project not found");
+          return;
+        }
+      }
+      const number = await allocateTodoNumber(db);
+      const actorId = await getCurrentUserId(db);
+      const [todo] = await db
+        .insert(schema.todos)
+        .values({
+          projectId,
+          number,
+          title,
+          sortOrder: 0,
+          createdById: actorId,
+          updatedById: actorId,
+        })
         .returning();
-      if (!idea) {
-        sendError(res, 500, "insert_failed", "Could not create idea");
+      if (!todo) {
+        sendError(res, 500, "insert_failed", "Could not create ToDo");
         return;
       }
-      entityId = idea.id;
+      entityId = todo.id;
     } else {
       const projectId = parsed.projectId ?? list.projectId ?? null;
       let phaseId: number | null = null;
@@ -558,7 +609,10 @@ todoListsRouter.delete("/:id/items/:itemId", async (req, res) => {
   }
 });
 
-/** Create a task from an idea on this list (or a title) and replace/add as task item. */
+/**
+ * Convert a list item to a Task and rewrite the membership row.
+ * Supports legacy idea items and ToDo items.
+ */
 todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
   try {
     const listId = idParam.parse(req.params.id);
@@ -577,13 +631,8 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       sendError(res, 404, "not_found", "Item not found");
       return;
     }
-    if (item.entityType !== "idea") {
-      sendError(res, 400, "invalid_item", "Only idea items can convert to tasks");
-      return;
-    }
-    const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, item.entityId));
-    if (!idea) {
-      sendError(res, 404, "not_found", "Idea not found");
+    if (item.entityType !== "idea" && item.entityType !== "todo") {
+      sendError(res, 400, "invalid_item", "Only idea or ToDo items can convert to tasks");
       return;
     }
     const [proj] = await db
@@ -594,16 +643,60 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
+
     const number = await allocateTaskNumber(db);
     const actorId = await getCurrentUserId(db);
+    let title: string;
+    let description: string | null = null;
+    let priority = "none";
+    let state = "new";
+    let dueDate: string | null = null;
+    let color: string | null = null;
+    let sourceType: "idea" | "todo" = "idea";
+    let sourceId = item.entityId;
+
+    if (item.entityType === "idea") {
+      const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, item.entityId));
+      if (!idea) {
+        sendError(res, 404, "not_found", "Idea not found");
+        return;
+      }
+      title = parsed.title?.trim() || idea.title;
+      description = idea.body;
+      sourceType = "idea";
+      sourceId = idea.id;
+    } else {
+      const [todo] = await db.select().from(schema.todos).where(eq(schema.todos.id, item.entityId));
+      if (!todo || todo.state === "deleted") {
+        sendError(res, 404, "not_found", "ToDo not found");
+        return;
+      }
+      title = parsed.title?.trim() || todo.title;
+      description = todo.description;
+      if (todo.actionBy) {
+        const note = `Action by: ${todo.actionBy.toISOString()}`;
+        description = description ? `${description}\n\n${note}` : note;
+      }
+      priority = todo.priority;
+      state = todo.state;
+      dueDate = todo.dueDate;
+      color = todo.color;
+      sourceType = "todo";
+      sourceId = todo.id;
+    }
+
     const [task] = await db
       .insert(schema.tasks)
       .values({
         projectId: parsed.projectId,
         phaseId: null,
         number,
-        title: parsed.title?.trim() || idea.title,
-        description: idea.body,
+        title,
+        description,
+        priority,
+        state,
+        dueDate,
+        color,
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
@@ -613,6 +706,11 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create task");
       return;
     }
+    await copyTaggings(
+      db,
+      { entityType: sourceType, entityId: sourceId },
+      { entityType: "task", entityId: task.id },
+    );
     await db
       .update(schema.todoListItems)
       .set({
@@ -623,6 +721,85 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       .where(eq(schema.todoListItems.id, itemId));
     const match = (await hydrateItems(listId)).find((i) => i.id === itemId);
     res.json({ data: { item: match, task } });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+/** Convert a legacy idea list item to a ToDo and rewrite the membership row. */
+todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
+  try {
+    const listId = idParam.parse(req.params.id);
+    const itemId = idParam.parse(req.params.itemId);
+    const parsed = convertToTodoBody.parse(req.body ?? {});
+    const list = await loadList(listId);
+    if (!list) {
+      sendError(res, 404, "not_found", "List not found");
+      return;
+    }
+    const [item] = await db
+      .select()
+      .from(schema.todoListItems)
+      .where(eq(schema.todoListItems.id, itemId));
+    if (!item || item.listId !== listId) {
+      sendError(res, 404, "not_found", "Item not found");
+      return;
+    }
+    if (item.entityType !== "idea") {
+      sendError(res, 400, "invalid_item", "Only idea items can convert to ToDos");
+      return;
+    }
+    const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, item.entityId));
+    if (!idea) {
+      sendError(res, 404, "not_found", "Idea not found");
+      return;
+    }
+    const projectId =
+      parsed.projectId !== undefined ? parsed.projectId : list.projectId;
+    if (projectId != null) {
+      const [proj] = await db
+        .select()
+        .from(schema.projects)
+        .where(eq(schema.projects.id, projectId));
+      if (!proj) {
+        sendError(res, 404, "not_found", "Project not found");
+        return;
+      }
+    }
+    const number = await allocateTodoNumber(db);
+    const actorId = await getCurrentUserId(db);
+    const [todo] = await db
+      .insert(schema.todos)
+      .values({
+        projectId,
+        number,
+        title: parsed.title?.trim() || idea.title,
+        description: idea.body,
+        sourceIdeaId: idea.id,
+        sortOrder: 0,
+        createdById: actorId,
+        updatedById: actorId,
+      })
+      .returning();
+    if (!todo) {
+      sendError(res, 500, "insert_failed", "Could not create ToDo");
+      return;
+    }
+    await copyTaggings(
+      db,
+      { entityType: "idea", entityId: idea.id },
+      { entityType: "todo", entityId: todo.id },
+    );
+    await db
+      .update(schema.todoListItems)
+      .set({
+        entityType: "todo",
+        entityId: todo.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.todoListItems.id, itemId));
+    const match = (await hydrateItems(listId)).find((i) => i.id === itemId);
+    res.json({ data: { item: match, todo } });
   } catch (err) {
     handleRouteError(res, err);
   }

@@ -43,6 +43,7 @@ export function SearchPage() {
       d.ideas.length +
       d.projects.length +
       d.tasks.length +
+      (d.todos?.length ?? 0) +
       d.documents.length +
       d.boards.length +
       d.canvases.length +
@@ -182,6 +183,15 @@ export function SearchPage() {
                   label: t.title,
                   to: `/projects/${t.projectId}`,
                   hint: `project #${t.projectId}`,
+                }))}
+              />
+              <ResultGroup
+                title="ToDos"
+                items={(searchQuery.data.todos ?? []).map((t) => ({
+                  key: t.id,
+                  label: t.title,
+                  to: t.projectId != null ? `/projects/${t.projectId}?tab=todo_lists` : "/todos",
+                  hint: t.projectId != null ? `project #${t.projectId}` : "global",
                 }))}
               />
               <ResultGroup

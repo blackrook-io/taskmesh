@@ -31,6 +31,8 @@ function hrefFor(
   switch (entityType) {
     case "task":
       return `/tasks?open=${id}`;
+    case "todo":
+      return `/todos?open=${id}`;
     case "idea":
       return `/ideas/${id}`;
     case "project":
@@ -133,6 +135,32 @@ export async function searchEntityReferences(
         ),
       )
       .orderBy(asc(schema.tasks.number))
+      .limit(limit);
+    return toHits(entityType, rows);
+  }
+
+  if (entityType === "todo") {
+    const rows = await db
+      .select({
+        id: schema.todos.id,
+        number: schema.todos.number,
+        title: schema.todos.title,
+        projectId: schema.todos.projectId,
+      })
+      .from(schema.todos)
+      .where(
+        and(
+          ne(schema.todos.state, "deleted"),
+          matchNumberOrTitle({
+            numberCol: schema.todos.number,
+            titleCol: schema.todos.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
+      )
+      .orderBy(asc(schema.todos.number))
       .limit(limit);
     return toHits(entityType, rows);
   }

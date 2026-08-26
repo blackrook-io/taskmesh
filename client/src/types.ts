@@ -120,10 +120,30 @@ export type Tag = {
   usageCount?: number;
 };
 
+export type Todo = {
+  id: number;
+  number: number;
+  projectId: number | null;
+  title: string;
+  description: string | null;
+  state: string;
+  priority: string;
+  dueDate: string | null;
+  actionBy: string | null;
+  color: string | null;
+  sortOrder: number;
+  sourceIdeaId: number | null;
+  createdById: number;
+  updatedById: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type SearchResults = {
   ideas: Idea[];
   projects: Project[];
   tasks: Task[];
+  todos: Todo[];
   documents: ProjectDocument[];
   boards: Board[];
   canvases: CanvasSummary[];
@@ -145,7 +165,7 @@ export type TodoList = {
 export type TodoListItem = {
   id: number;
   listId: number;
-  entityType: "idea" | "task";
+  entityType: "idea" | "todo" | "task";
   entityId: number;
   sortOrder: number;
   checked: boolean;
@@ -155,6 +175,8 @@ export type TodoListItem = {
   href: string | null;
   state?: string;
   dueDate?: string | null;
+  priority?: string;
+  actionBy?: string | null;
   virtual?: boolean;
 };
 

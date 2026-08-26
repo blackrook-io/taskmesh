@@ -5,7 +5,9 @@ export const ENTITY_REF_PREFIXES = {
   idea: "I",
   project: "P",
   task: "T",
-  document: "D",
+  /** ToDo items (UI: ToDo). Documents previously used D; now N. */
+  todo: "D",
+  document: "N",
   todo_list: "L",
   board: "B",
   canvas: "C",

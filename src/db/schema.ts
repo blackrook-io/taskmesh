@@ -408,6 +408,48 @@ export const taggings = pgTable(
   }),
 );
 
+/**
+ * First-class ToDo records (UI: "ToDo"; display D####).
+ * Lighter than Task: scheduled work without full task hierarchy/phases.
+ */
+export const todos = pgTable("todos", {
+  id: serial("id").primaryKey(),
+  /** Null when not project-scoped (same idea as tasks). */
+  projectId: integer("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  /** App-wide unique display number → D####. */
+  number: integer("number").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description"),
+  /** Same values as tasks.state (including soft-delete `deleted`). */
+  state: text("state").notNull().default("new"),
+  /** none | low | medium | high | urgent */
+  priority: text("priority").notNull().default("none"),
+  /** Date-only due date (YYYY-MM-DD). */
+  dueDate: date("due_date", { mode: "string" }),
+  /** When this ToDo should be acted on. */
+  actionBy: timestamp("action_by", { withTimezone: true }),
+  color: text("color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  /** Set when created by converting an Idea. */
+  sourceIdeaId: integer("source_idea_id").references(() => ideas.id, {
+    onDelete: "set null",
+  }),
+  createdById: integer("created_by_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  updatedById: integer("updated_by_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 /** Standalone or project-scoped checklist containers. */
 export const todoLists = pgTable("todo_lists", {
   id: serial("id").primaryKey(),
@@ -426,7 +468,10 @@ export const todoLists = pgTable("todo_lists", {
     .defaultNow(),
 });
 
-/** Polymorphic list rows: idea or task. */
+/**
+ * Polymorphic list rows. New memberships: `todo` | `task`.
+ * Legacy `idea` rows may remain (no data migration); read/remove only.
+ */
 export const todoListItems = pgTable(
   "todo_list_items",
   {
@@ -639,6 +684,7 @@ export const imageBoards = pgTable("image_boards", {
 
 export const ideasRelations = relations(ideas, ({ many }) => ({
   projects: many(projects),
+  todos: many(todos),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -649,6 +695,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   taskGroups: many(taskGroups),
   phases: many(projectPhases),
   tasks: many(tasks),
+  todos: many(todos),
   documents: many(projectDocuments),
   todoLists: many(todoLists),
   modules: many(projectModules),
@@ -656,6 +703,27 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   wikiNodes: many(wikiNodes),
   canvases: many(canvases),
   imageBoards: many(imageBoards),
+}));
+
+export const todosRelations = relations(todos, ({ one }) => ({
+  project: one(projects, {
+    fields: [todos.projectId],
+    references: [projects.id],
+  }),
+  sourceIdea: one(ideas, {
+    fields: [todos.sourceIdeaId],
+    references: [ideas.id],
+  }),
+  createdBy: one(users, {
+    fields: [todos.createdById],
+    references: [users.id],
+    relationName: "todo_created_by",
+  }),
+  updatedBy: one(users, {
+    fields: [todos.updatedById],
+    references: [users.id],
+    relationName: "todo_updated_by",
+  }),
 }));
 
 export const taskGroupsRelations = relations(taskGroups, ({ one, many }) => ({
@@ -696,6 +764,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   createdTasks: many(tasks, { relationName: "task_created_by" }),
   updatedTasks: many(tasks, { relationName: "task_updated_by" }),
+  createdTodos: many(todos, { relationName: "todo_created_by" }),
+  updatedTodos: many(todos, { relationName: "todo_updated_by" }),
   createdTaskDescriptionTemplates: many(taskDescriptionTemplates, {
     relationName: "task_description_templates_created_by",
   }),

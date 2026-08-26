@@ -12,6 +12,7 @@ const emptyResults = {
   ideas: [] as const,
   projects: [] as const,
   tasks: [] as const,
+  todos: [] as const,
   documents: [] as const,
   boards: [] as const,
   canvases: [] as const,
@@ -110,6 +111,7 @@ searchRouter.get("/", async (req, res) => {
       ideaIds,
       projectIds,
       taskIds,
+      todoIds,
       documentIds,
       boardIds,
       canvasIds,
@@ -119,6 +121,7 @@ searchRouter.get("/", async (req, res) => {
       idsForType("idea"),
       idsForType("project"),
       idsForType("task"),
+      idsForType("todo"),
       idsForType("document"),
       idsForType("board"),
       idsForType("canvas"),
@@ -192,6 +195,32 @@ searchRouter.get("/", async (req, res) => {
               ),
             )
             .orderBy(desc(schema.tasks.updatedAt))
+            .limit(50);
+
+    const todos =
+      todoIds != null && todoIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(schema.todos)
+            .where(
+              and(
+                ne(schema.todos.state, "deleted"),
+                todoIds != null ? inArray(schema.todos.id, todoIds) : sql`true`,
+                q
+                  ? or(
+                      ilikeEscaped(schema.todos.title, q),
+                      ilikeEscaped(schema.todos.description, q),
+                      ilikeEscaped(sql`CAST(${schema.todos.number} AS TEXT)`, q),
+                      ilikeEscaped(
+                        sql`('D' || LPAD(CAST(${schema.todos.number} AS TEXT), 4, '0'))`,
+                        q,
+                      ),
+                    )
+                  : sql`true`,
+              ),
+            )
+            .orderBy(desc(schema.todos.updatedAt))
             .limit(50);
 
     const documents =
@@ -325,6 +354,7 @@ searchRouter.get("/", async (req, res) => {
         ideas,
         projects,
         tasks,
+        todos,
         documents,
         boards,
         canvases,

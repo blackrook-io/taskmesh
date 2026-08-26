@@ -21,7 +21,8 @@ Most user-facing entities store an app-wide unique integer `number` and format i
 | P | `projects` | P0007 |
 | U | `users` | U0001 |
 | T | `tasks` | T0065 |
-| D | `project_documents` | D0012 |
+| D | `todos` | D0012 |
+| N | `project_documents` | N0012 |
 | L | `todo_lists` | L0003 |
 | B | `boards` | B0001 |
 | W | `wiki_nodes` | W0008 |
@@ -29,6 +30,8 @@ Most user-facing entities store an app-wide unique integer `number` and format i
 | M | `image_boards` | M0002 |
 
 Internal joins still use surrogate `id` primary keys. Display numbers are for humans and stable references in conversation (for example `/worktask T0065`).
+
+**Note (T0104):** ToDo items use **D####**. Project documents moved from D to **N####**.
 
 ## Polymorphic entity links
 
@@ -41,7 +44,7 @@ Several tables store **`entity_type`** (text) + **`entity_id`** (integer) instea
 
 Canonical `entity_type` values (`EntityType`):
 
-`idea` · `project` · `task` · `document` · `todo_list` · `board` · `canvas` · `wiki_node` · `image_board`
+`idea` · `project` · `task` · `todo` · `document` · `todo_list` · `board` · `canvas` · `wiki_node` · `image_board`
 
 There is **no database FK** enforcing that `entity_id` exists in the target table; integrity is an application concern. Unique indexes usually prevent duplicate attachments of the same entity in the same parent (tag, list, board, or project wiki).
 
