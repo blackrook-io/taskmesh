@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
+import { CHILD_TITLE_INDENT_PX, StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
 import { RowTagChips } from "../components/shared/RowTagChips";
@@ -41,8 +41,20 @@ import type { Project, Task } from "../types";
 
 type SortCol = TaskListSortCol;
 
+type DisplayRow = {
+  task: Task;
+  depth: number;
+  hasChildren: boolean;
+};
+
 function taskDue(task: Task): string | null {
   return task.dueDate ?? (task.dueAt ? task.dueAt.slice(0, 10) : null);
+}
+
+function childrenOf(tasks: Task[], parentId: number): Task[] {
+  return tasks
+    .filter((t) => t.parentId === parentId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 }
 
 function sortTasks(list: Task[], col: SortCol | null, dir: 1 | -1, projectName: (id: number | null) => string) {
@@ -72,6 +84,27 @@ function sortTasks(list: Task[], col: SortCol | null, dir: 1 | -1, projectName: 
   });
 }
 
+function buildGlobalDisplayRows(
+  filtered: Task[],
+  collapsedParents: Set<number>,
+  sortCol: SortCol | null,
+  sortDir: 1 | -1,
+  projectName: (id: number | null) => string,
+): DisplayRow[] {
+  const matchedIds = new Set(filtered.map((t) => t.id));
+  const visualRoots = filtered.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
+  const sortedRoots = sortTasks(visualRoots, sortCol, sortDir, projectName);
+  const rows: DisplayRow[] = [];
+  const walk = (t: Task, depth: number) => {
+    const visibleKids = childrenOf(filtered, t.id).filter((c) => matchedIds.has(c.id));
+    rows.push({ task: t, depth, hasChildren: visibleKids.length > 0 });
+    if (collapsedParents.has(t.id)) return;
+    for (const c of visibleKids) walk(c, depth + 1);
+  };
+  for (const root of sortedRoots) walk(root, 0);
+  return rows;
+}
+
 export function TasksListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
@@ -85,6 +118,7 @@ export function TasksListPage() {
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
+  const [collapsedParents, setCollapsedParents] = useState<Set<number>>(() => new Set());
   const sortStorageKey = storageKeyForGlobalTaskSort(filter);
   const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
     sortStorageKey,
@@ -138,10 +172,27 @@ export function TasksListPage() {
     [tagProjectCtx, phaseNames],
   );
 
-  const tasks = useMemo(() => {
-    const filtered = evaluateTaskListFilter(tasksQuery.data ?? [], taskListFilter, filterCtx);
-    return sortTasks(filtered, sortCol, sortDir, projectLabel);
-  }, [tasksQuery.data, sortCol, sortDir, projectNameById, taskListFilter, filterCtx]);
+  const filteredTasks = useMemo(() => {
+    return evaluateTaskListFilter(tasksQuery.data ?? [], taskListFilter, filterCtx);
+  }, [tasksQuery.data, taskListFilter, filterCtx]);
+
+  const displayRows = useMemo(
+    () =>
+      buildGlobalDisplayRows(filteredTasks, collapsedParents, sortCol, sortDir, projectLabel),
+    [filteredTasks, collapsedParents, sortCol, sortDir, projectNameById],
+  );
+
+  /** Flat filtered list still used for modal lookup / editor “all tasks”. */
+  const tasks = filteredTasks;
+
+  const toggleParentCollapse = (taskId: number) => {
+    setCollapsedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
 
   const modalTaskFromList =
     modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
@@ -357,15 +408,15 @@ export function TasksListPage() {
           </TaskListSortHeaderBtn>
         </div>
 
-        {tasks.length === 0 ? (
+        {displayRows.length === 0 ? (
           <p className="muted" style={{ padding: "0.75rem 0.5rem" }}>
             {isFilterActive(taskListFilter) ? "No tasks match this filter." : "No tasks yet."}
           </p>
         ) : (
-          tasks.map((task) => (
+          displayRows.map(({ task, depth, hasChildren }) => (
             <div
               key={task.id}
-              className={`task-list-row${task.parentId != null ? " task-list-row--child" : ""}`}
+              className={`task-list-row${depth > 0 ? " task-list-row--child" : ""}`}
               onDoubleClick={() => openModal(task.id)}
             >
               <span
@@ -401,11 +452,35 @@ export function TasksListPage() {
                   });
                 }}
               />
-              <span className="task-list-row__num muted">
-                {task.parentId != null ? "↳ " : ""}
-                {formatTaskNumber(task.number)}
+              <span className="task-list-row__num">
+                <span className="muted">{formatTaskNumber(task.number)}</span>
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    className="task-list-row__twist"
+                    aria-expanded={!collapsedParents.has(task.id)}
+                    aria-label={
+                      collapsedParents.has(task.id) ? "Expand child tasks" : "Collapse child tasks"
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleParentCollapse(task.id);
+                    }}
+                  >
+                    {collapsedParents.has(task.id) ? "▸" : "▾"}
+                  </button>
+                ) : null}
               </span>
               <span className="task-list-row__title">
+                {depth > 0 ? (
+                  <span
+                    className="task-list-row__child-indent"
+                    style={{ width: depth * CHILD_TITLE_INDENT_PX }}
+                    aria-hidden
+                  >
+                    <span className="task-list-row__child-mark">↳</span>
+                  </span>
+                ) : null}
                 <span className="task-list-row__title-text">{task.title}</span>
                 <RowTagChips entityType="task" entityId={task.id} />
               </span>

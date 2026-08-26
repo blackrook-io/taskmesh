@@ -171,7 +171,18 @@ function childrenOf(tasks: Task[], parentId: number): Task[] {
 
 type FlatRow =
   | { kind: "group"; group: TaskGroup | null; key: string; taskCount: number }
-  | { kind: "task"; task: Task; depth: number; key: string; groupKey: number | "none"; duplicate: boolean };
+  | {
+      kind: "task";
+      task: Task;
+      depth: number;
+      key: string;
+      groupKey: number | "none";
+      duplicate: boolean;
+      hasChildren: boolean;
+    };
+
+/** Pixels of title indent per nesting depth (T0103). */
+export const CHILD_TITLE_INDENT_PX = 30;
 
 function groupFilter(group: TaskGroup): TaskListFilter {
   return parseTaskListFilterValue(group.filter) ?? emptyTaskListFilter();
@@ -182,6 +193,7 @@ function buildRows(
   tasks: Task[],
   listFilter: TaskListFilter,
   collapsed: Set<number | "none">,
+  collapsedParents: Set<number>,
   sortCol: SortCol | null,
   sortDir: 1 | -1,
   navListView: boolean,
@@ -194,6 +206,7 @@ function buildRows(
     const matchedIds = new Set(matched.map((t) => t.id));
     const visualRoots = matched.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
     const walk = (t: Task, depth: number) => {
+      const visibleKids = childrenOf(tasks, t.id).filter((c) => matchedIds.has(c.id));
       rows.push({
         kind: "task",
         task: t,
@@ -201,9 +214,11 @@ function buildRows(
         key: `task-nav-${t.id}`,
         groupKey: "none",
         duplicate: false,
+        hasChildren: visibleKids.length > 0,
       });
-      for (const c of childrenOf(tasks, t.id)) {
-        if (matchedIds.has(c.id)) walk(c, depth + 1);
+      if (collapsedParents.has(t.id)) return;
+      for (const c of visibleKids) {
+        walk(c, depth + 1);
       }
     };
     for (const root of sortRoots(visualRoots, sortCol, sortDir)) {
@@ -243,6 +258,7 @@ function buildRows(
     });
     if (collapsed.has(groupKey)) return;
     const pushTree = (t: Task, depth: number) => {
+      const kids = childrenOf(tasks, t.id);
       rows.push({
         kind: "task",
         task: t,
@@ -250,8 +266,10 @@ function buildRows(
         key: `task-${groupKey}-${t.id}`,
         groupKey,
         duplicate: (appearCount.get(t.id) ?? 0) > 1,
+        hasChildren: kids.length > 0,
       });
-      for (const c of childrenOf(tasks, t.id)) {
+      if (collapsedParents.has(t.id)) return;
+      for (const c of kids) {
         pushTree(c, depth + 1);
       }
     };
@@ -893,6 +911,9 @@ function SortableTaskRow({
   depth,
   duplicate,
   groupKey,
+  hasChildren,
+  collapsed,
+  onToggleCollapse,
   onOpen,
   onCycleState,
   onPatch,
@@ -901,6 +922,9 @@ function SortableTaskRow({
   depth: number;
   duplicate: boolean;
   groupKey: number | "none";
+  hasChildren: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onOpen: () => void;
   onCycleState: () => void;
   onPatch: (patch: TaskPatch) => void;
@@ -932,11 +956,34 @@ function SortableTaskRow({
         ::
       </span>
       <StateCheckbox state={task.state} onCycle={onCycleState} />
-      <span className="task-list-row__num muted" style={{ paddingLeft: depth * 12 }}>
-        {depth > 0 ? "↳ " : ""}
-        {formatTaskNumber(task.number)}
+      <span className="task-list-row__num">
+        <span className="muted">{formatTaskNumber(task.number)}</span>
+        {hasChildren ? (
+          <button
+            type="button"
+            className="task-list-row__twist"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand child tasks" : "Collapse child tasks"}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse();
+            }}
+          >
+            {collapsed ? "▸" : "▾"}
+          </button>
+        ) : null}
       </span>
       <span className="task-list-row__title">
+        {depth > 0 ? (
+          <span
+            className="task-list-row__child-indent"
+            style={{ width: depth * CHILD_TITLE_INDENT_PX }}
+            aria-hidden
+          >
+            <span className="task-list-row__child-mark">↳</span>
+          </span>
+        ) : null}
         <span className="task-list-row__title-text">{task.title}</span>
         {duplicate ? (
           <span className="task-list-row__duplicate" title="Also shown in another group">
@@ -1189,6 +1236,7 @@ export function TaskBoard({
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [collapsed, setCollapsed] = useState<Set<number | "none">>(() => new Set());
+  const [collapsedParents, setCollapsedParents] = useState<Set<number>>(() => new Set());
   const sortStorageKey = storageKeyForProjectTaskSort(projectId);
   const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
     sortStorageKey,
@@ -1201,6 +1249,15 @@ export function TaskBoard({
   const [pendingAutoTagDrop, setPendingAutoTagDrop] = useState<PendingAutoTagDrop | null>(null);
   const [dndInfo, setDndInfo] = useState<{ title: string; message: string } | null>(null);
 
+  const toggleParentCollapse = (taskId: number) => {
+    setCollapsedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
   const rows = useMemo(() => {
     const boardSortCol: SortCol | null = sortCol === "project" ? null : sortCol;
     return buildRows(
@@ -1208,12 +1265,13 @@ export function TaskBoard({
       tasks,
       listFilter,
       collapsed,
+      collapsedParents,
       boardSortCol,
       sortDir,
       navListView,
       filterCtx,
     );
-  }, [groups, tasks, listFilter, collapsed, sortCol, sortDir, navListView, filterCtx]);
+  }, [groups, tasks, listFilter, collapsed, collapsedParents, sortCol, sortDir, navListView, filterCtx]);
 
   const displayRows = useMemo(() => {
     if (!navListView) return rows;
@@ -1516,6 +1574,9 @@ export function TaskBoard({
       depth={row.depth}
       duplicate={row.duplicate}
       groupKey={row.groupKey}
+      hasChildren={row.hasChildren}
+      collapsed={collapsedParents.has(row.task.id)}
+      onToggleCollapse={() => toggleParentCollapse(row.task.id)}
       onOpen={() => setModalTaskId(row.task.id)}
       onCycleState={() => cycleTaskState(row.task)}
       onPatch={(patch) => void onPatchTask(row.task.id, patch)}

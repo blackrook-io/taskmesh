@@ -1,0 +1,67 @@
+# T0103 — Child Task List View enhancements
+
+**Task:** T0103 (id `115`) — Child Task List View enhancements  
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)  
+**Branch (after approval):** `T0103-child-task-list-view`
+
+## Goal
+
+Make parent/child tasks easier to scan in the Task List View: clearer child indent, a theme-aware lighter child row tint, and a parent-row twistie (accent-colored) to collapse/expand children — similar to Task Group headers.
+
+## Decisions (approved)
+
+1. **Surfaces:** Project TaskBoard **and** global Tasks list
+2. **Indent:** ~30px per depth on the title — yes
+3. **Collapse:** default expanded; session-only (like groups) — yes
+4. **↳ prefix:** keep; style in theme primary/accent so it stands out
+
+## Scope
+
+**In scope**
+
+1. **Project TaskBoard list** (`client/src/components/TaskBoard.tsx` + `client/src/index.css`)
+   - Deeper child **title** indent (~30px per depth)
+   - Theme-adaptive lighter child row background (replace hardcoded `#000` mix)
+   - Accent-colored ▸/▾ twistie on parent rows that have children, placed to the right of the Task Number (before title)
+   - In-memory collapse `Set` of parent task ids (default **expanded**), mirroring Task Group collapse behavior
+   - Hide descendants when a parent is collapsed (all depths under that parent)
+   - Keep `↳` on child numbers; color with `var(--accent)` / theme primary
+
+2. **Global Tasks list** (`client/src/pages/TasksListPage.tsx`) — same visual + collapse behavior (depth-aware where hierarchy is available)
+
+3. **Shared row CSS** so child tint / ↳ accent apply on both surfaces
+
+**Out of scope**
+
+- Persisting collapse state (localStorage / API)
+- Schema / API changes
+- Changing Task Group twistie behavior
+
+## Implementation outline
+
+1. **`buildRows` / row model** — pass `hasChildren` (and keep `depth`) into `SortableTaskRow`; when walking the tree, skip emitting descendants of collapsed parent ids.
+2. **`SortableTaskRow`** — render twistie button when `hasChildren`; toggle parent id in `collapsedParents` state in `TaskBoard`; apply title indent for `depth > 0`.
+3. **CSS** — `.task-list-row--child` background via `color-mix` with theme tokens (e.g. mix `--bg` toward `--surface` / white so dark themes get a lighter strip); style parent twistie with `var(--accent)` (reuse group/wiki glyph pattern).
+4. **Grid** — fit twistie beside `__num` without breaking the existing column layout (small control in/after number cell).
+
+## Acceptance
+
+- Child rows are visibly indented (~25–35px) and lightly tinted vs parents; tint tracks theme changes.
+- Parents with children show an accent twistie right of the Task Number; click collapses/expands that subtree.
+- Group collapse and DnD / filters still behave; no API/schema changes.
+- QA checklist delivered at end of implement pass.
+
+## Implementation notes
+
+- `TaskBoard.tsx`: `collapsedParents` Set; `hasChildren` on flat rows; twistie after number; title `paddingLeft: depth * 30`
+- `TasksListPage.tsx`: tree walk + same visuals/collapse (roots sorted by column; children stay under parents)
+- `index.css`: theme-adaptive child tint (`--bg`/`--surface`); accent `↳` + twistie; number column sized for twistie
+
+## QA follow-ups
+
+- Doubled parent-row twistie size (`font-size` 0.85rem → 1.7rem, control width 1.1rem → 2.2rem); widened number column to `6.75rem` so number + twistie still fit.
+- Moved accent `↳` from the Task Number column into the Title column, centered in the left indent gutter (`depth * 30px`).
+
+## Versioning note
+
+No DB migration expected → **PATCH** bump on finish-up.
