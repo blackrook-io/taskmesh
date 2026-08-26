@@ -76,6 +76,7 @@ import {
 /** T0078: nav sub-list is a flat filtered list (no group bars). */
 import {
   emptyTaskListFilter,
+  evaluateMergedListAndGroupFilter,
   evaluateTaskListFilter,
   formatFilterBreadcrumb,
   isFilterActive,
@@ -215,8 +216,12 @@ function buildRows(
   for (const g of orderedGroups) {
     const gf = groupFilter(g);
     const match = isFilterActive(gf)
-      ? evaluateTaskListFilter(allRoots, gf, filterCtx)
-      : allRoots.filter((t) => (g.memberTaskIds ?? []).includes(t.id));
+      ? evaluateMergedListAndGroupFilter(allRoots, listFilter, gf, filterCtx)
+      : evaluateTaskListFilter(
+          allRoots.filter((t) => (g.memberTaskIds ?? []).includes(t.id)),
+          listFilter,
+          filterCtx,
+        );
     byGroup.set(g.id, match);
     for (const t of match) {
       appearCount.set(t.id, (appearCount.get(t.id) ?? 0) + 1);

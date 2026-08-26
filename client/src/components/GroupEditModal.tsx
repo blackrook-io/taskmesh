@@ -180,8 +180,9 @@ export function GroupEditModal({ group, onClose, onSave }: Props) {
           <GroupAutoTagPicker tag={autoTag} onChange={setAutoTag} disabled={busy} />
         </div>
         <p className="muted task-list-filter-modal__hint" style={{ marginTop: "1rem" }}>
-          Group filter overrides the list filter for this section. No filter means this group stays
-          empty. Use AND / OR to add conditions.
+          The list Filter is the base for this section. This group’s filter is ANDed on; if it sets
+          the same field as the list Filter, that field comes from the group only. No filter means
+          manual membership (still limited by the list Filter). Use AND / OR to add conditions.
         </p>
         <div className="task-list-filter-modal__rows">
           {draft.clauses.map((clause, index) => (

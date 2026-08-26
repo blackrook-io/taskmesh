@@ -1,0 +1,114 @@
+---
+description: "T0088 — List View filter cascade (list base + group AND, field-level override)"
+todos:
+  - id: merge-helper
+    content: Add mergeListAndGroupFilter (strip overridden fields, AND remainder with group)
+  - id: board
+    content: Use merged filter in TaskBoard buildRows (filtered groups + manual groups)
+  - id: copy-docs
+    content: Update GroupEditModal hint and docs/database task_groups filter semantics
+  - id: tests
+    content: Unit tests for the two T0088 examples plus strip/join edge cases
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0088 — Filter rule cascade
+
+**Task:** T0088 · id `100` · Ready · Medium · project 4 (TaskMesh)  
+**Parent:** none  
+**Depends on:** none  
+**Branch (after approval):** `T0088-filter-rule-cascade`
+
+**Out of scope:** Auto-tag matching (stays group-filter-only) · changing nav `?group=` overlay (group filter remains the list filter for that view) · default list filters · new filter fields/operators · schema/API
+
+## Goal
+
+On the **grouped Project Tasks list**, the **entire-list Filter bar** is the base for every section. A Task Group **filter** is **AND**ed onto that base, except when the group filter names a **field** the list already filters — then the group’s clauses for that field **replace** the list’s clauses for that field (this group only).
+
+Canonical examples from the Task:
+
+1. List: `State is not Complete AND State is not Canceled`. Group: `State is Complete` → that group shows **Complete** tasks (state clauses from the list are dropped for this section).
+2. List: same state pair. Group: `Priority is Urgent` → that group shows Urgent tasks that are **also** not Complete/Canceled (no field conflict → full AND).
+
+## Decisions (confirmed)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| A | **Conflict = same field** | If the group filter has **any** clause on field `X`, **all** list clauses on `X` are dropped for that group. Not operator-vs-operator matching. Two list `state is_not` clauses both go away when the group sets `state is Complete`. |
+| B | **AND between blocks** | After stripping, evaluate `match(listRemainder) && match(group)`. Empty remainder → group filter only. Empty list filter → group filter only (today’s group-only behavior). |
+| C | **Manual groups** | No group filter → **list filter still applies** to members (`match(list) && in memberTaskIds`). Matches “list filter applies to ALL tasks on the list.” A manual bucket does not reveal Complete tasks if the list hides them, unless the group gets a state override filter. |
+| D | **Unassigned** | Unchanged: list filter only, on roots not claimed by any group’s **result set**. After merge, a Complete task can be claimed by a Complete-override group and therefore leave Unassigned. |
+| E | **Nav `?group=` (T0078)** | **No extra cascade.** In that view the Filter bar **is** the group filter (list overlay). There is no second group section. Editing Apply/Clear still take over localStorage and drop `group`. |
+| F | **Auto-tag (T0077)** | **Unchanged** — membership/tagging uses the **group filter only**. List filter is a view preference (`localStorage`), not part of the group definition. |
+| G | **“Phase Group”** | There are no list Phase sections anymore (T0075/T0080). Cascade applies to **Task Groups** only. Project Phase remains a filter **field**. |
+| H | **Child tasks** | Keep today’s rule: group/list matching is on **roots**; shown roots still include their children in the section. |
+| I | **Global `/tasks`** | No groups — list filter only. No change. |
+
+## Current vs desired
+
+Today `TaskBoard.buildRows` evaluates a **filtered** group with `evaluateTaskListFilter(allRoots, groupFilter)` and **ignores** the list filter. Manual groups ignore it too. Unassigned uses the list filter.
+
+Desired: filtered group → `evaluateTaskListFilter(allRoots, mergeListAndGroupFilter(listFilter, groupFilter))`.
+
+## Scope
+
+**In**
+
+- `mergeListAndGroupFilter` / field-strip helper in `client/src/lib/taskListFilter.ts`
+- `TaskBoard.buildRows` (and any other grouped-board match sites that should follow the same rule, e.g. drag-into-filter-group checks — **only if** those are view-filter questions; drag membership should keep using the **group** filter, not the list)
+- `GroupEditModal` hint (today: “Group filter overrides the list filter…”)
+- Short semantics note in `docs/database/projects-and-ideas.md` (`task_groups.filter` / list placement); `npm run docs:sync-schema` if that file changes
+- Unit tests for merge (see Tests)
+
+**Out**
+
+- Auto-tag / `taskListFilterMatch.ts` eval of group membership
+- Persisting list filters on the server
+- Changing Filter bar UI (clause editor, breadcrumb format)
+- Filtering Ideas / To Dos / other entity lists
+
+## Approach
+
+### Merge algorithm
+
+```
+overriddenFields = set of fields appearing in group.clauses
+listRemainder    = list filter with those fields’ clauses removed (joins repaired)
+effective        = listRemainder AND group   (if remainder empty, group only)
+```
+
+Join repair when dropping clauses: keep remaining clauses in order; `joins[i]` still sits between remaining `clauses[i]` and `clauses[i+1]` (drop a join when its left or right clause was removed; left-to-right, no parentheses — same as today).
+
+Do **not** rewrite OR-heavy list filters into CNF. Stripping a field from the middle of an OR chain can change meaning; that is acceptable and should be covered by a test so behavior is explicit.
+
+### `TaskBoard`
+
+In the grouped (`!navListView`) loop:
+
+- Active group filter → evaluate **merged** filter on roots
+- Manual group → members ∩ list-filter matches
+- Unassigned → list filter on roots not in `claimed`
+
+`navListView` branch unchanged (evaluate `listFilter` only; caller already passes the group filter).
+
+### Copy
+
+Replace the modal hint with something like: the list Filter is the base; this group’s filter is ANDed unless it sets the same field, in which case that field comes from the group. Empty filter = manual membership, still limited by the list Filter.
+
+### Tests
+
+Repo tests are `tsx --test src/**/*.test.ts`. Add a small **shared-algorithm** test (either a tiny isomorphic helper under `src/lib/` imported by the client, or a server-side copy of merge used only for tests — prefer **one function** in `client/src/lib/taskListFilter.ts` plus a `src/` test that duplicates the spec cases if the client file cannot be imported cleanly). Prefer extracting a dependency-free `mergeTaskListFilters(list, group)` so `src/lib/mergeTaskListFilters.test.ts` can import it.
+
+Cases:
+
+- Example 1 (state override → Complete visible in that group)
+- Example 2 (priority AND leftover state)
+- Empty list + group → group only
+- Empty group (caller uses membership path; merge not required)
+- Strip one field from a three-clause list; remaining join is AND
+- List `state is_not complete OR priority is urgent` + group `state is complete` (document result)
+
+## Version
+
+No new `drizzle/*.sql` → **PATCH +1** on finish-up (from current `package.json`).

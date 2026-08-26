@@ -330,6 +330,85 @@ export function evaluateTaskListFilter(
   return tasks.filter((t) => taskMatchesFilter(t, filter, ctx));
 }
 
+/** Fields present in any clause of `filter`. */
+export function fieldsInFilter(filter: TaskListFilter): Set<FilterField> {
+  return new Set(filter.clauses.map((c) => c.field));
+}
+
+/**
+ * Drop clauses whose field is in `fields`. Joins between remaining clauses:
+ * for consecutive kept indices i < j, use joins[j - 1] (join immediately before the right clause).
+ * Mirrored in `src/lib/mergeTaskListFilters.ts` (T0088).
+ */
+export function stripFilterFields(
+  filter: TaskListFilter,
+  fields: ReadonlySet<string>,
+): TaskListFilter {
+  if (filter.clauses.length === 0 || fields.size === 0) {
+    return {
+      clauses: filter.clauses.map((c) => ({ ...c })),
+      joins: [...filter.joins],
+    };
+  }
+
+  const keptIndices: number[] = [];
+  for (let i = 0; i < filter.clauses.length; i++) {
+    if (!fields.has(filter.clauses[i]!.field)) keptIndices.push(i);
+  }
+
+  const clauses = keptIndices.map((i) => ({ ...filter.clauses[i]! }));
+  const joins: FilterJoin[] = [];
+  for (let k = 1; k < keptIndices.length; k++) {
+    const right = keptIndices[k]!;
+    joins.push(filter.joins[right - 1] ?? "and");
+  }
+  return { clauses, joins };
+}
+
+/**
+ * List remainder (overridden fields stripped) + group filter.
+ * Effective match is `match(listRemainder) && match(group)` — see `taskMatchesMergedListAndGroupFilter`.
+ */
+export function mergeListAndGroupFilter(
+  list: TaskListFilter,
+  group: TaskListFilter,
+): { listRemainder: TaskListFilter; group: TaskListFilter } {
+  const overridden = fieldsInFilter(group);
+  return {
+    listRemainder: stripFilterFields(list, overridden),
+    group: {
+      clauses: group.clauses.map((c) => ({ ...c })),
+      joins: [...group.joins],
+    },
+  };
+}
+
+/** T0088 cascade: list base AND group, with field-level override from the group. */
+export function taskMatchesMergedListAndGroupFilter(
+  task: Task,
+  list: TaskListFilter,
+  group: TaskListFilter,
+  ctx?: FilterMatchContext,
+): boolean {
+  const { listRemainder, group: g } = mergeListAndGroupFilter(list, group);
+  return taskMatchesFilter(task, listRemainder, ctx) && taskMatchesFilter(task, g, ctx);
+}
+
+export function evaluateMergedListAndGroupFilter(
+  tasks: Task[],
+  list: TaskListFilter,
+  group: TaskListFilter,
+  ctx?: FilterMatchContext,
+): Task[] {
+  if (!isFilterActive(group)) {
+    return evaluateTaskListFilter(tasks, list, ctx);
+  }
+  if (!isFilterActive(list)) {
+    return evaluateTaskListFilter(tasks, group, ctx);
+  }
+  return tasks.filter((t) => taskMatchesMergedListAndGroupFilter(t, list, group, ctx));
+}
+
 function clauseValueLabel(clause: FilterClause, ctx?: FilterMatchContext): string {
   if (clause.field === "state" && (TASK_STATES as readonly string[]).includes(clause.value)) {
     return TASK_STATE_LABELS[clause.value as TaskState];
