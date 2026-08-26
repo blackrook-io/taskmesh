@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "../api/client";
@@ -9,6 +9,7 @@ import { TagInput } from "../components/shared/TagInput";
 import { PhaseManager } from "../components/PhaseManager";
 import { TaskBoard } from "../components/TaskBoard";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
+import { TodoListTabBar } from "../components/TodoListTabBar";
 import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
@@ -26,7 +27,16 @@ import { formatEntityRef } from "../lib/entityRef";
 import { sanitizePlainText } from "../lib/plainText";
 import { storageKeyForProjectTasks, emptyTaskListFilter, isFilterActive, parseTaskListFilterValue } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
-import type { Project, ProjectDocument, ProjectModule, ProjectPhase, Task, TaskGroup, TodoList } from "../types";
+import type {
+  Project,
+  ProjectDocument,
+  ProjectModule,
+  ProjectPhase,
+  Task,
+  TaskGroup,
+  TodoList,
+  TodoListDetail,
+} from "../types";
 
 type Tab = "overview" | "images" | "settings" | ProjectModuleKey;
 
@@ -110,7 +120,7 @@ export function ProjectDetailPage() {
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [newDocTitle, setNewDocTitle] = useState("");
   const [projectListId, setProjectListId] = useState<number | null>(null);
-  const [newTodoListTitle, setNewTodoListTitle] = useState("");
+  const [pendingDeleteTodoList, setPendingDeleteTodoList] = useState<TodoList | null>(null);
 
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [pendingDocDelete, setPendingDocDelete] = useState<number | null>(null);
@@ -199,18 +209,69 @@ export function ProjectDetailPage() {
     },
   });
 
+  const projectTodoLists = todoListsQuery.data ?? [];
+
+  const todoListItemCountQueries = useQueries({
+    queries: projectTodoLists.map((l) => ({
+      queryKey: ["todo-list", l.id],
+      queryFn: async () => {
+        const res = await apiJson<{ data: TodoListDetail }>(`/api/v1/todo-lists/${l.id}`);
+        return res.data.items.length;
+      },
+      staleTime: 30_000,
+    })),
+  });
+
+  const todoListItemCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    projectTodoLists.forEach((list, index) => {
+      const count = todoListItemCountQueries[index]?.data;
+      if (count !== undefined) counts[list.id] = count;
+    });
+    return counts;
+  }, [projectTodoLists, todoListItemCountQueries]);
+
   const createTodoList = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (title: string) => {
       const res = await apiJson<{ data: TodoList }>("/api/v1/todo-lists", {
         method: "POST",
-        body: JSON.stringify({ title: newTodoListTitle.trim(), projectId }),
+        body: JSON.stringify({ title: title.trim(), projectId }),
       });
       return res.data;
     },
     onSuccess: (list) => {
-      setNewTodoListTitle("");
       setProjectListId(list.id);
       void qc.invalidateQueries({ queryKey: ["todo-lists", projectId] });
+    },
+  });
+
+  const renameTodoList = useMutation({
+    mutationFn: async ({ id, title }: { id: number; title: string }) => {
+      const res = await apiJson<{ data: TodoList }>(`/api/v1/todo-lists/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title: title.trim() }),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["todo-lists", projectId] });
+    },
+  });
+
+  const deleteTodoList = useMutation({
+    mutationFn: async (id: number) => {
+      await apiJson(`/api/v1/todo-lists/${id}`, { method: "DELETE" });
+    },
+    onSuccess: (_data, deletedId) => {
+      setPendingDeleteTodoList(null);
+      void qc.invalidateQueries({ queryKey: ["todo-lists", projectId] });
+      void qc.removeQueries({ queryKey: ["todo-list", deletedId] });
+      setProjectListId((current) => {
+        if (current !== deletedId) return current;
+        const lists = qc.getQueryData<TodoList[]>(["todo-lists", projectId]) ?? [];
+        const remaining = lists.filter((l) => l.id !== deletedId);
+        return remaining[0]?.id ?? null;
+      });
     },
   });
 
@@ -731,50 +792,23 @@ export function ProjectDetailPage() {
 
       {tab === "todo_lists" ? (
         <div>
-          <div className="card" style={{ marginBottom: "1rem" }}>
-            <h3>Project To Do lists</h3>
-            <div className="btn-row" style={{ marginBottom: "0.75rem", flexWrap: "wrap" }}>
-              {(todoListsQuery.data ?? []).map((l) => (
-                <button
-                  key={l.id}
-                  type="button"
-                  className={`btn small${(projectListId ?? todoListsQuery.data?.[0]?.id) === l.id ? " primary" : " ghost"}`}
-                  onClick={() => setProjectListId(l.id)}
-                >
-                  <span className="muted">{formatEntityRef("todo_list", l.number)} </span>
-                  {l.title}
-                </button>
-              ))}
-            </div>
-            <div className="todo-add-row">
-              <input
-                type="text"
-                placeholder="New list for this project"
-                value={newTodoListTitle}
-                onChange={(e) => setNewTodoListTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newTodoListTitle.trim()) createTodoList.mutate();
-                }}
-              />
-              <button
-                type="button"
-                className="btn primary"
-                disabled={!newTodoListTitle.trim() || createTodoList.isPending}
-                onClick={() => createTodoList.mutate()}
-              >
-                Create list
-              </button>
-            </div>
-          </div>
-          {(projectListId ?? todoListsQuery.data?.[0]?.id) != null ? (
-            <div className="card">
-              <TodoListView
-                listId={(projectListId ?? todoListsQuery.data![0]!.id)!}
-                defaultProjectId={projectId}
-              />
-            </div>
+          <TodoListTabBar
+            lists={projectTodoLists}
+            activeId={projectListId ?? projectTodoLists[0]?.id ?? null}
+            itemCounts={todoListItemCounts}
+            creating={createTodoList.isPending}
+            onSelect={setProjectListId}
+            onCreate={(title) => createTodoList.mutate(title)}
+            onRename={(id, title) => renameTodoList.mutate({ id, title })}
+            onRequestDelete={setPendingDeleteTodoList}
+          />
+          {(projectListId ?? projectTodoLists[0]?.id) != null ? (
+            <TodoListView
+              listId={(projectListId ?? projectTodoLists[0]!.id)!}
+              defaultProjectId={projectId}
+            />
           ) : (
-            <p className="muted">Create a To Do list for this project to get started.</p>
+            <p className="muted">Click +New to create a To Do list for this project.</p>
           )}
         </div>
       ) : null}
@@ -872,6 +906,17 @@ export function ProjectDetailPage() {
           const did = pendingDocDelete;
           setPendingDocDelete(null);
           if (did != null) void deleteDocument.mutateAsync(did);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteTodoList != null}
+        title="Delete list?"
+        message={`Delete “${pendingDeleteTodoList?.title}”? Items are not deleted — only list membership.`}
+        confirmLabel="Delete"
+        onCancel={() => setPendingDeleteTodoList(null)}
+        onConfirm={() => {
+          if (pendingDeleteTodoList) deleteTodoList.mutate(pendingDeleteTodoList.id);
         }}
       />
     </div>

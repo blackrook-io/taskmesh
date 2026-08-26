@@ -1,0 +1,92 @@
+# T0105 — To Do List Tabs
+
+**Task:** T0105 (id `117`) — To Do List Tabs  
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)  
+**Branch (after approval):** `T0105-todo-list-tabs`
+
+## Context
+
+Project **To Do lists** tab (`ProjectDetailPage`, `tab === "todo_lists"`) currently shows list switchers as a row of **buttons** inside a card, plus a separate **input + Create list** row below.
+
+T0105 asks for **horizontal tabs** (see task attachment): selected tab uses **theme primary/accent** text + underline; **+New** tab on the far right opens inline title entry to create a list; **double-click** a tab to rename.
+
+Kanban boards already ship a close match: `.board-tabs` / `.board-tab` with accent active state, double-click rename, `+` add tab, and × delete on **empty** boards only.
+
+## Depends-on gate
+
+**T0093** (*To Do list functionality enhancements*) — state **`pending`** (parent work done; does not block). Proceed.
+
+## Size / split
+
+Single UI pass on one surface. No schema. Suitable as one worktask. No split.
+
+## Interview (confirmed)
+
+| Topic | Decision |
+|-------|----------|
+| Surfaces | **Project To Do tab only** — not global `/todos` |
+| Tab pattern | **Match Kanban `.board-tabs`** — accent underline, double-click rename, +New on the right; **no drag-reorder** |
+| List numbers | **On hover only** — `title` attribute / tooltip shows `L####`; tab label is title only |
+| Delete | **Empty lists only** — × on tab when list has **zero items** (Kanban empty-board pattern); confirm before delete |
+| Active highlight | Theme **primary/accent** color + bottom border (existing `.board-tab.active`) |
+
+## Goal
+
+Replace the button row + separate create row with a **tab bar above the list view** that feels consistent with Kanban board tabs.
+
+## Scope
+
+**In scope**
+
+1. **Extract or share tab UI** for project To Do lists
+   - Reuse `.board-tabs` / `.board-tab` styles (may add a shared `TodoListTabs` or generalize a thin wrapper around the board-tab row pattern)
+   - Tabs: title only; `title={formatEntityRef("todo_list", n)}` for hover tooltip
+   - Active tab selects which list’s `TodoListView` renders below
+   - Double-click → inline rename → `PATCH /api/v1/todo-lists/:id` `{ title }`
+
+2. **+New tab** (far right, label **+New** per task — not bare `+` unless it fits visually)
+   - Click toggles inline title input in the tab bar (or replaces the +New tab with an input until create/cancel)
+   - Enter or blur-with-value → `POST /api/v1/todo-lists` with `projectId`; select the new tab
+   - Escape / empty cancel → back to +New
+
+3. **Delete empty list**
+   - When active list detail has **0 items**, show × on that tab (fetch item count from list query or tab metadata)
+   - Confirm dialog; `DELETE /api/v1/todo-lists/:id`; select another list if the active one was deleted
+
+4. **Layout cleanup**
+   - Remove the “Project To Do lists” card wrapper / button row / separate create row
+   - Tab bar sits directly above `TodoListView` (still in project tab content area)
+
+**Out of scope**
+
+- Global `/todos` page / middle nav
+- Tab drag-reorder
+- Schema / API changes (rename + delete already exist)
+- Inbox semantics (project lists are `kind: "list"` only)
+
+## Implementation outline
+
+1. Add `TodoListTabBar` component (or adapt board-tab subcomponents) under `client/src/components/` — props: lists, activeId, onSelect, onCreate, onRename, onDeleteEmpty, itemCounts or list details for empty check.
+2. Wire in `ProjectDetailPage` todo_lists section — replace lines ~734–768 card/button/create UI with tab bar + `TodoListView`.
+3. CSS: reuse `.board-tabs`; add `.board-tab--add` variant text **+New** if needed; ensure accent active state uses `var(--accent)`.
+4. Invalidate `["todo-lists", projectId]` and `["todo-list", listId]` on create/rename/delete.
+
+No Drizzle migration.
+
+## Acceptance
+
+- Project To Do tab shows horizontal tabs; selected tab has accent text + underline.
+- Hovering a tab shows list number (L####) without cluttering the label.
+- +New on the right creates a list from inline input and selects it.
+- Double-click renames a tab (PATCH).
+- Empty lists show ×; delete with confirm; non-empty lists have no delete on the tab.
+- List view below switches with the active tab.
+- QA checklist at end of implement pass.
+
+## Versioning note
+
+No DB migration → **PATCH** bump on finish-up.
+
+## QA follow-ups
+
+- Tab row showed a tiny vertical scrollbar on the far right (tab border overlap with `overflow-x: auto`). Fixed with `overflow-y: hidden` on `.board-tabs`.

@@ -4449,6 +4449,7 @@ a:focus-visible {
   border-bottom: 1px solid var(--border);
   padding-bottom: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
 }
@@ -4535,6 +4536,29 @@ a:focus-visible {
 
 .board-tab--add:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.board-tab--static {
+  cursor: default;
+}
+
+.board-tab--static:active {
+  cursor: default;
+}
+
+.board-tab--new-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.board-tab--new-input {
+  cursor: default;
+  min-width: 8rem;
+}
+
+.board-tab__rename--wide {
+  max-width: 16rem;
 }
 
 .kanban-carousel {
