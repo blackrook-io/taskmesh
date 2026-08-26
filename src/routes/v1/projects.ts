@@ -9,6 +9,7 @@ import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
+import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
@@ -180,7 +181,7 @@ projectsRouter.get("/:id/groups", async (req, res) => {
       .from(schema.taskGroups)
       .where(eq(schema.taskGroups.projectId, id))
       .orderBy(asc(schema.taskGroups.sortOrder));
-    res.json({ data: rows });
+    res.json({ data: await attachMemberTaskIds(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }

@@ -34,6 +34,7 @@ export function RowTagChips({ entityType, entityId, className }: Props) {
     <span
       className={`row-tag-chips${className ? ` ${className}` : ""}`}
       onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
       {visible.map((tag) => (

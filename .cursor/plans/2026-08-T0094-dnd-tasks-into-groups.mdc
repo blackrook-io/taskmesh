@@ -1,0 +1,92 @@
+# T0094 — List View drag-and-drop (reorder + Auto-tag confirm)
+
+**Task:** T0094 (id 106) — *DnD of Tasks into Groups not working*  
+**Branch (pending approval):** `T0094-dnd-tasks-into-groups`  
+**State at start:** `ready` · Priority: medium · No depends-on · No parent
+
+## Interview (answered)
+
+1. Some groups have **no Auto-tag**. User still wants **reorder of any List View** via DnD. Auto-tag is a special case for *entering* those groups, not a reason to disable reorder. Persist drop position via the existing hidden `tasks.sort_order` (no new column). **Precedence:** Groups → column sort (if active) → `sort_order`.
+2. **A + confirm:** dragging a task **into** a group that has Auto-tag → **Confirm / Cancel** dialog (warn that Auto-tag will be applied). Confirm attaches the tag; Cancel leaves the task where it was.
+3. Reorder fails **both** onto existing tasks **and** onto empty groups — DnD reorder appears **broken in general**.
+4. Happens consistently (not a one-off group/filter).
+
+## Problem
+
+`TaskBoard` List View DnD is unreliable:
+
+- Same-section reorder updates `sort_order` but often **does not stick visually** (column sort overrides; collision hits a **group header** and is treated as cross-group; empty groups have **no droppable body**).
+- Cross-group drop is a **silent no-op** unless the target has `autoTagId`, then it attaches the tag with **no confirmation**.
+
+Groups remain **filter sections** (T0075/T0077). Membership is not an FK. Drag-into a group without Auto-tag cannot make a task appear there unless it already matches the filter.
+
+## Approach
+
+No schema change. Use existing `tasks.sort_order` as the manual order field.
+
+### 1. Reliable within-section reorder
+
+- Treat drop on **another task in the same group** (or Unassigned) as reorder: write `sort_order` via existing `PATCH .../tasks/reorder`.
+- Treat drop on **that group’s header / empty body** as insert at a sensible index (top of empty section, or relative to pointer) — **not** as a failed cross-group move.
+- Add **droppable** targets for group sections (including empty/collapsed headers) so `closestCenter` is not the only hit test. Prefer `pointerWithin` / `closestCorners` or a custom collision that prefers task rows, then the group under the pointer.
+- After a successful manual reorder: **clear column sort** for that project list (`col: null`) so the dropped position is what the user sees. Column headers still sort when double-clicked (those rules then take precedence until the next DnD).
+- Keep child-task DnD as **sibling reorder only**.
+
+### 2. Cross-group → Auto-tag (Confirm / Cancel)
+
+When a **root** task is dropped on a **different** group that has `autoTagId`:
+
+- Show `ConfirmDialog`: dropping will apply Auto-tag `{name}` to the task (and it will appear in this group if the group filter matches).
+- **Confirm** → `POST /api/v1/taggings` (existing `onAttachTaskTag`) + invalidate taggings so `buildRows` moves the row.
+- **Cancel** → no tag change, no reorder.
+
+Same-group reorder on an Auto-tag group does **not** prompt.
+
+### 3. Cross-group without Auto-tag
+
+Cannot join a filter-only group by dragging. Show a short message (dialog or toast) that this group is filter-based and has no Auto-tag — **not** a silent no-op. Do not invent membership FKs.
+
+### 4. Sort precedence (display)
+
+1. Group sections (and Unassigned leftover)
+2. If a column sort is active → sort roots by that column
+3. Else → `sort_order` (then `id`)
+
+DnD writes (3) and resets (2) so the drop sticks.
+
+## Out of scope
+
+- New group-membership table / API
+- Per-group independent order (one `sort_order` is shared; duplicate filter matches stay as today)
+- Nav flat list (`?group=`) moving between groups
+- Child-task moving to a new parent via List View DnD
+
+## Files (expected)
+
+- `client/src/components/TaskBoard.tsx` — collision, droppables, confirm, reorder vs auto-tag
+- `client/src/pages/ProjectDetailPage.tsx` — only if attach/reorder wiring needs a confirm callback
+- CSS as needed for empty-section drop targets
+- No `drizzle/*.sql` unless investigation forces it (not expected)
+
+## Acceptance
+
+- Drag a root task **within** a group (onto another task or empty area): it stays where dropped; order persists after refresh.
+- Drag **into an empty group** that already matches (or Unassigned): reorder/insert works; empty sections are valid drop targets.
+- Drag **into a different Auto-tag group**: Confirm/Cancel; Confirm applies tag and the row appears when the filter matches; Cancel does nothing.
+- Drag **into a group with no Auto-tag** (and the task does not already match): user gets feedback; no silent no-op.
+- Group-bar reorder and child sibling reorder still work.
+- Column sort still works; after a DnD reorder the list returns to manual `sort_order` so the drop is visible.
+
+## QA follow-ups
+
+### Manual membership for empty-filter groups
+
+Dragging into “New Features” (no Auto-tag, no filter) was blocked with a message that implied Auto-tag was required. Empty-filter groups previously always showed zero tasks (T0075).
+
+**Fix:** Groups with **no active filter** are manual buckets via new `task_group_members`. Dragging a task into such a group adds membership (and removes it from another manual group when moving). Filter groups still use filters; Auto-tag groups still Confirm. Saving an active filter on a group clears its manual members. Schema migration `0027_fearless_sabra.sql` (MINOR bump on finish-up).
+
+### Drop-target highlight vs gap mismatch
+
+Dragging to the bottom of a group opened a gap before the *next* group header, but collision snapped to that next header (yellow outline + wrong group / filter error).
+
+**Fix:** Task-drag collision ignores group headers; only task rows and section `drop-group-*` zones are targets. Drop zones always render (including collapsed) and are taller so end-of-group drops hit the previous section.

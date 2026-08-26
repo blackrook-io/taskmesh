@@ -12,6 +12,8 @@ erDiagram
   projects ||--o{ task_groups : "project_id"
   projects ||--o{ project_phases : "project_id"
   tags ||--o{ task_groups : "auto_tag_id"
+  task_groups ||--o{ task_group_members : "group_id"
+  tasks ||--o{ task_group_members : "task_id"
   users ||--o{ projects : "authorship elsewhere"
   ideas {
     int id PK
@@ -37,6 +39,11 @@ erDiagram
     jsonb filter
     boolean show_in_nav
     int auto_tag_id FK
+  }
+  task_group_members {
+    int id PK
+    int group_id FK
+    int task_id FK
   }
   project_phases {
     int id PK
@@ -111,7 +118,7 @@ Projects are parents of task groups, project phases, tasks (optional), documents
 
 ## `task_groups`
 
-Named list-view sections within a project (T0075). Optional saved filter and bar color. Groups do **not** own tasks via FK; the list UI matches tasks with the stored filter. Empty filter → empty section. `show_in_nav` (T0078) opts the group into the Project menu under Tasks when a filter is active. Optional `auto_tag_id` (T0077) names a tag that is applied to matching tasks (add-only), including drag-into the group in List View. Filter clause fields: State, Priority, Title, Number, Phase (T0080), Tags, Project.
+Named list-view sections within a project (T0075). Optional saved filter and bar color. When a **filter is active**, list placement is filter-only (a task may appear in multiple groups). When the filter is **empty**, the group is a **manual bucket**: tasks are linked via `task_group_members` and can be drag-dropped in List View (T0094). `show_in_nav` (T0078) opts the group into the Project menu under Tasks when a filter is active. Optional `auto_tag_id` (T0077) names a tag applied to matching tasks (add-only), including drag-into a filter group after Confirm. Filter clause fields: State, Priority, Title, Number, Phase (T0080), Tags, Project.
 
 ### Columns
 
@@ -122,7 +129,7 @@ Named list-view sections within a project (T0075). Optional saved filter and bar
 | `name` | text | no | — | |
 | `sort_order` | integer | no | `0` | List ordering |
 | `color` | text | yes | — | Accent on the group bar (CSS hex) |
-| `filter` | jsonb | yes | — | T0053-shaped `{ clauses, joins }`; null/empty = no matches |
+| `filter` | jsonb | yes | — | T0053-shaped `{ clauses, joins }`; null/empty = manual membership |
 | `show_in_nav` | boolean | no | `false` | When true and filter is active, appear under Tasks in the Project menu |
 | `auto_tag_id` | integer | yes | — | FK → `tags.id`; auto-applied to matching tasks (T0077) |
 | `created_at` | timestamptz | no | `now()` | |
@@ -136,7 +143,33 @@ Named list-view sections within a project (T0075). Optional saved filter and bar
 
 ### Relationships
 
-- Owned by `projects`. Not referenced by `tasks` (list placement is filter-only). Optional auto-tag via `auto_tag_id`. Project **Phases** (`project_phases`) are a separate table; tasks associate via `tasks.phase_id`.
+- Owned by `projects`. Filter groups do not FK tasks; manual groups use `task_group_members`. Optional auto-tag via `auto_tag_id`. Project **Phases** (`project_phases`) are a separate table; tasks associate via `tasks.phase_id`.
+
+---
+
+## `task_group_members`
+
+Manual membership for Task Groups that have **no active filter** (T0094). Saving an active filter on a group clears its members. Deleting a group or task cascades.
+
+### Columns
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `group_id` | integer | no | — | FK → `task_groups.id` |
+| `task_id` | integer | no | — | FK → `tasks.id` |
+| `created_at` | timestamptz | no | `now()` | |
+
+### Constraints
+
+- **PK:** `id`
+- **UNIQUE:** `(group_id, task_id)`
+- **FK:** `group_id` → `task_groups.id` · **ON DELETE CASCADE**
+- **FK:** `task_id` → `tasks.id` · **ON DELETE CASCADE**
+
+### Relationships
+
+- Join between `task_groups` and `tasks` for empty-filter (manual) groups only.
 
 ---
 

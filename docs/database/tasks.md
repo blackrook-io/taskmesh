@@ -75,7 +75,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 | `due_date` | date | yes | — | Date-only (`YYYY-MM-DD` string mode in Drizzle) |
 | `due_at` | timestamptz | yes | — | **Deprecated**; prefer `due_date` |
 | `color` | text | yes | — | Accent (CSS hex string in app) |
-| `sort_order` | integer | no | `0` | |
+| `sort_order` | integer | no | `0` | Manual List View order among siblings. Groups and column sort take precedence in the UI; drag-and-drop writes this field and clears column sort so the drop position sticks. |
 | `created_by_id` | integer | no | — | FK → `users.id` |
 | `updated_by_id` | integer | no | — | FK → `users.id` |
 | `created_at` | timestamptz | no | `now()` | |

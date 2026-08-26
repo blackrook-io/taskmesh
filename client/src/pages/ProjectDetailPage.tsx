@@ -687,8 +687,21 @@ export function ProjectDetailPage() {
                   method: "POST",
                   body: JSON.stringify({ entityType: "task", entityId: taskId, tagId }),
                 });
-                void qc.invalidateQueries({ queryKey: ["taggings", "task"] });
+                await qc.invalidateQueries({ queryKey: ["taggings", "task"] });
                 void qc.invalidateQueries({ queryKey: ["tags"] });
+              }}
+              onAddGroupMember={async (groupId, taskId) => {
+                await apiJson(`/api/v1/projects/${projectId}/groups/${groupId}/members`, {
+                  method: "POST",
+                  body: JSON.stringify({ taskId }),
+                });
+                await qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
+              }}
+              onRemoveGroupMember={async (groupId, taskId) => {
+                await apiJson(`/api/v1/projects/${projectId}/groups/${groupId}/members/${taskId}`, {
+                  method: "DELETE",
+                });
+                await qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
               }}
               onCreateGroup={async (name) => {
                 await apiJson(`/api/v1/projects/${projectId}/groups`, {

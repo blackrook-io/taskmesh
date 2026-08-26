@@ -59,7 +59,7 @@ export const taskGroups = pgTable("task_groups", {
   sortOrder: integer("sort_order").notNull().default(0),
   /** Accent on the group bar (CSS hex). */
   color: text("color"),
-  /** T0053-shaped filter JSON; null/empty = no tasks under this group. */
+  /** T0053-shaped filter JSON; null/empty = manual membership via task_group_members. */
   filter: jsonb("filter").$type<{
     clauses: { field: string; operator: string; value: string }[];
     joins: string[];
@@ -251,6 +251,26 @@ export const tasks = pgTable("tasks", {
     .notNull()
     .defaultNow(),
 });
+
+/** Manual members for Task Groups with no active filter (List View drag-into). */
+export const taskGroupMembers = pgTable(
+  "task_group_members",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => taskGroups.id, { onDelete: "cascade" }),
+    taskId: integer("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    groupTaskUniq: unique("task_group_members_group_task_uidx").on(t.groupId, t.taskId),
+  }),
+);
 
 /** Reusable Markdown bodies for Task Description (project-scoped or Global). */
 export const taskDescriptionTemplates = pgTable("task_description_templates", {
@@ -638,7 +658,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   imageBoards: many(imageBoards),
 }));
 
-export const taskGroupsRelations = relations(taskGroups, ({ one }) => ({
+export const taskGroupsRelations = relations(taskGroups, ({ one, many }) => ({
   project: one(projects, {
     fields: [taskGroups.projectId],
     references: [projects.id],
@@ -646,6 +666,18 @@ export const taskGroupsRelations = relations(taskGroups, ({ one }) => ({
   autoTag: one(tags, {
     fields: [taskGroups.autoTagId],
     references: [tags.id],
+  }),
+  members: many(taskGroupMembers),
+}));
+
+export const taskGroupMembersRelations = relations(taskGroupMembers, ({ one }) => ({
+  group: one(taskGroups, {
+    fields: [taskGroupMembers.groupId],
+    references: [taskGroups.id],
+  }),
+  task: one(tasks, {
+    fields: [taskGroupMembers.taskId],
+    references: [tasks.id],
   }),
 }));
 

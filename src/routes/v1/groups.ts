@@ -12,6 +12,12 @@ import {
   applyTaskGroupAutoTags,
   assertAutoTagId,
 } from "../../services/taskGroupAutoTag.js";
+import {
+  addGroupMember,
+  attachMemberTaskIds,
+  clearGroupMembers,
+  removeGroupMember,
+} from "../../services/taskGroupMembers.js";
 
 const groupBody = z.object({
   name: plainTitle(200),
@@ -33,6 +39,10 @@ const groupPatch = z.object({
 
 const reorderBody = z.object({
   orderedGroupIds: z.array(z.number().int().positive()).min(1),
+});
+
+const memberBody = z.object({
+  taskId: z.number().int().positive(),
 });
 
 export const groupsRouter = Router({ mergeParams: true });
@@ -89,7 +99,8 @@ groupsRouter.post("/", async (req, res) => {
       return;
     }
     await applyTaskGroupAutoTags(db, { projectId });
-    res.status(201).json({ data: row });
+    const [withMembers] = await attachMemberTaskIds(db, [row]);
+    res.status(201).json({ data: withMembers });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -133,7 +144,53 @@ groupsRouter.patch("/reorder", async (req, res) => {
       .from(schema.taskGroups)
       .where(eq(schema.taskGroups.projectId, projectId))
       .orderBy(asc(schema.taskGroups.sortOrder));
-    res.json({ data: rows });
+    res.json({ data: await attachMemberTaskIds(db, rows) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+groupsRouter.post("/:groupId/members", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    const groupId = parseRouteId(req, "groupId");
+    const { taskId } = memberBody.parse(req.body);
+    if (!(await requireProject(projectId))) {
+      sendError(res, 404, "not_found", "Project not found");
+      return;
+    }
+    const result = await addGroupMember(db, { projectId, groupId, taskId });
+    if (!result.ok) {
+      sendError(res, result.status, result.code, result.message);
+      return;
+    }
+    const [group] = await db.select().from(schema.taskGroups).where(eq(schema.taskGroups.id, groupId));
+    if (!group) {
+      sendError(res, 404, "not_found", "Group not found");
+      return;
+    }
+    const [withMembers] = await attachMemberTaskIds(db, [group]);
+    res.status(201).json({ data: withMembers });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+groupsRouter.delete("/:groupId/members/:taskId", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    const groupId = parseRouteId(req, "groupId");
+    const taskId = parseRouteId(req, "taskId");
+    if (!(await requireProject(projectId))) {
+      sendError(res, 404, "not_found", "Project not found");
+      return;
+    }
+    const result = await removeGroupMember(db, { projectId, groupId, taskId });
+    if (!result.ok) {
+      sendError(res, result.status, result.code, result.message);
+      return;
+    }
+    res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -189,8 +246,12 @@ groupsRouter.patch("/:groupId", async (req, res) => {
       })
       .where(eq(schema.taskGroups.id, groupId))
       .returning();
+    if (nextFilter !== undefined && !isEmptyTaskGroupFilter(nextFilter)) {
+      await clearGroupMembers(db, groupId);
+    }
     await applyTaskGroupAutoTags(db, { projectId });
-    res.json({ data: row });
+    const [withMembers] = await attachMemberTaskIds(db, row ? [row] : []);
+    res.json({ data: withMembers ?? row });
   } catch (err) {
     handleRouteError(res, err);
   }

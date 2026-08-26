@@ -28,6 +28,8 @@ export type TaskGroup = {
   filter: { clauses: { field: string; operator: string; value: string }[]; joins: string[] } | null;
   showInNav: boolean;
   autoTagId: number | null;
+  /** Manual members when the group has no active filter. */
+  memberTaskIds?: number[];
   createdAt: string;
   updatedAt: string;
 };

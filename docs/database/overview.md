@@ -18,7 +18,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Main domain** (full physical documentation):
 
-`ideas`, `projects`, `task_groups`, `project_phases`, `tasks`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
+`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `tasks`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
 
 **Non-main** (inventory + minimal on diagrams):
 
@@ -32,6 +32,8 @@ At a high level, a **Project** is the hub. An **Idea** can become a project. Pro
 erDiagram
   ideas ||--o| projects : "sourceIdea"
   projects ||--o{ task_groups : has
+  task_groups ||--o{ task_group_members : "manual members"
+  tasks ||--o{ task_group_members : "manual groups"
   projects ||--o{ project_phases : has
   projects ||--o{ tasks : "may own"
   projects ||--o{ project_documents : has

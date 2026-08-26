@@ -1865,8 +1865,9 @@ textarea.raw-md {
 
 .task-list-row {
   font-size: 0.9rem;
-  cursor: default;
+  cursor: grab;
   background: var(--bg);
+  touch-action: none;
 }
 
 .task-list-row:hover {
@@ -2389,6 +2390,36 @@ textarea.raw-md {
   padding: 0.2rem 0.25rem;
   color: var(--text-muted);
   user-select: none;
+  touch-action: none;
+  min-width: 1.25rem;
+  text-align: center;
+}
+
+.task-group-drop {
+  min-height: 1.35rem;
+  flex-shrink: 0;
+}
+
+.task-group-drop--empty {
+  min-height: 2.4rem;
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem 0.45rem 2.4rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.task-group-drop.is-over {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+}
+
+/* Group headers only highlight when reordering groups (task drags ignore them). */
+.task-phase-header.is-over {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated, var(--bg)) 86%);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
 }
 
 .task-body {

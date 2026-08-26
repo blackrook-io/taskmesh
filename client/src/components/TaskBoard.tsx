@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   PointerSensor,
-  closestCenter,
   type DragEndEvent,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -63,6 +63,16 @@ import {
   type TaskListSortCol,
 } from "../lib/taskListSort";
 import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
+import {
+  ancestorInSection,
+  insertDraggedIntoSection,
+  reorderSectionRoots,
+  resolveOverTarget,
+  taskBoardCollisionDetection,
+  type DndItemData,
+  type DndPlacement,
+  type GroupKey,
+} from "../lib/taskBoardDnd";
 /** T0078: nav sub-list is a flat filtered list (no group bars). */
 import {
   emptyTaskListFilter,
@@ -204,7 +214,9 @@ function buildRows(
 
   for (const g of orderedGroups) {
     const gf = groupFilter(g);
-    const match = isFilterActive(gf) ? evaluateTaskListFilter(allRoots, gf, filterCtx) : [];
+    const match = isFilterActive(gf)
+      ? evaluateTaskListFilter(allRoots, gf, filterCtx)
+      : allRoots.filter((t) => (g.memberTaskIds ?? []).includes(t.id));
     byGroup.set(g.id, match);
     for (const t of match) {
       appearCount.set(t.id, (appearCount.get(t.id) ?? 0) + 1);
@@ -281,6 +293,7 @@ export function StateCheckbox({
         e.stopPropagation();
         onCycle();
       }}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       {glyph}
     </button>
@@ -893,13 +906,15 @@ function SortableTaskRow({
       style={style}
       className={`task-list-row${isDragging ? " dragging" : ""}${depth > 0 ? " task-list-row--child" : ""}`}
       onDoubleClick={onOpen}
+      {...attributes}
+      {...listeners}
     >
       <span
         className="task-list-row__stripe"
         style={{ background: task.color ?? "transparent" }}
         aria-hidden
       />
-      <span className="task-drag-handle" {...attributes} {...listeners} title="Drag to reorder">
+      <span className="task-drag-handle" title="Drag to reorder">
         ::
       </span>
       <StateCheckbox state={task.state} onCycle={onCycleState} />
@@ -922,6 +937,7 @@ function SortableTaskRow({
       <select
         className={taskPriorityClass("task-list-row__priority", task.priority)}
         value={task.priority}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => onPatch({ priority: e.target.value as TaskPriority })}
         aria-label="Priority"
@@ -936,6 +952,7 @@ function SortableTaskRow({
         type="date"
         className="task-list-row__date"
         value={taskDue(task) ?? ""}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => onPatch({ dueDate: e.target.value || null })}
         aria-label="Due date"
@@ -962,10 +979,9 @@ function SortableGroupHeader({
   filterCtx?: FilterMatchContext;
 }) {
   const sortableId = group ? `group-${group.id}` : "group-none";
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: sortableId,
     data: { type: "group", groupId: group?.id ?? null },
-    disabled: group == null,
   });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -982,7 +998,7 @@ function SortableGroupHeader({
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-phase-header${group == null ? " task-phase-header--unassigned" : ""}${isDragging ? " dragging" : ""}`}
+      className={`task-phase-header${group == null ? " task-phase-header--unassigned" : ""}${isDragging ? " dragging" : ""}${isOver ? " is-over" : ""}`}
     >
       <button type="button" className="task-phase-header__collapse" onClick={onToggle} aria-expanded={!collapsed}>
         {collapsed ? "▸" : "▾"}
@@ -1044,6 +1060,62 @@ function SortableGroupHeader({
   );
 }
 
+function GroupDropZone({
+  groupKey,
+  empty,
+}: {
+  groupKey: GroupKey;
+  empty: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `drop-group-${groupKey}`,
+    data: { type: "group-drop", groupId: groupKey === "none" ? null : groupKey },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`task-group-drop${empty ? " task-group-drop--empty" : ""}${isOver ? " is-over" : ""}`}
+    >
+      {empty ? <span className="muted">Drop tasks here</span> : null}
+    </div>
+  );
+}
+
+type BoardSection = {
+  header: Extract<FlatRow, { kind: "group" }> | null;
+  groupKey: GroupKey;
+  tasks: Extract<FlatRow, { kind: "task" }>[];
+};
+
+function chunkDisplayRows(rows: FlatRow[]): BoardSection[] {
+  const sections: BoardSection[] = [];
+  for (const row of rows) {
+    if (row.kind === "group") {
+      sections.push({ header: row, groupKey: row.group?.id ?? "none", tasks: [] });
+      continue;
+    }
+    const last = sections[sections.length - 1];
+    if (!last || last.groupKey !== row.groupKey) {
+      sections.push({ header: null, groupKey: row.groupKey, tasks: [row] });
+    } else {
+      last.tasks.push(row);
+    }
+  }
+  return sections;
+}
+
+type PendingAutoTagDrop = {
+  taskId: number;
+  taskTitle: string;
+  groupId: number;
+  groupName: string;
+  tagId: number;
+  tagLabel: string;
+  addMembership: boolean;
+  removeFromGroupId: number | null;
+  insert: { placement: DndPlacement; overTaskId?: number };
+};
+
 type Props = {
   projectId: number;
   groups: TaskGroup[];
@@ -1069,6 +1141,8 @@ type Props = {
   onCreateGroup: (name: string) => Promise<void>;
   onDeleteGroup: (groupId: number) => Promise<void>;
   onAttachTaskTag: (taskId: number, tagId: number) => Promise<void>;
+  onAddGroupMember: (groupId: number, taskId: number) => Promise<void>;
+  onRemoveGroupMember: (groupId: number, taskId: number) => Promise<void>;
   onPatchTask: (
     taskId: number,
     patch: Record<string, unknown>,
@@ -1090,6 +1164,8 @@ export function TaskBoard({
   onCreateGroup,
   onDeleteGroup,
   onAttachTaskTag,
+  onAddGroupMember,
+  onRemoveGroupMember,
   onPatchTask,
 }: Props) {
   const { phaseNames } = usePhaseFilterOptions(projectId);
@@ -1108,6 +1184,8 @@ export function TaskBoard({
   const [pendingGroupDelete, setPendingGroupDelete] = useState<TaskGroup | null>(null);
   const [editGroup, setEditGroup] = useState<TaskGroup | null>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
+  const [pendingAutoTagDrop, setPendingAutoTagDrop] = useState<PendingAutoTagDrop | null>(null);
+  const [dndInfo, setDndInfo] = useState<{ title: string; message: string } | null>(null);
 
   const rows = useMemo(() => {
     const boardSortCol: SortCol | null = sortCol === "project" ? null : sortCol;
@@ -1154,6 +1232,7 @@ export function TaskBoard({
   const modalTask = fromList ?? (modalTaskId != null ? modalTaskHeld : null);
 
   const sortableIds = useMemo(() => displayRows.map((r) => r.key), [displayRows]);
+  const sections = useMemo(() => chunkDisplayRows(displayRows), [displayRows]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -1163,89 +1242,271 @@ export function TaskBoard({
     );
   };
 
+  const parentIdOf = (id: number) => tasks.find((t) => t.id === id)?.parentId ?? null;
+
+  const sectionRootIds = (groupKey: GroupKey): number[] =>
+    displayRows
+      .filter(
+        (r): r is Extract<FlatRow, { kind: "task" }> =>
+          r.kind === "task" && r.groupKey === groupKey && r.depth === 0,
+      )
+      .map((r) => r.task.id);
+
+  const persistRootOrder = async (orderedTaskIds: number[]) => {
+    if (sortCol != null) setSort({ col: null, dir: 1 });
+    await onReorder({ orderedTaskIds });
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const activeData = active.data.current as
-      | { type?: string; taskId?: number; groupKey?: number | "none"; groupId?: number | null }
-      | undefined;
-    const overData = over.data.current as
-      | { type?: string; taskId?: number; groupKey?: number | "none"; groupId?: number | null }
-      | undefined;
+    const activeData = active.data.current as DndItemData | undefined;
+    const overData = over.data.current as DndItemData | undefined;
+    const overTarget = resolveOverTarget(overData, over.id);
 
     if (activeData?.type === "group" && typeof activeData.groupId === "number") {
       const groupIds = groups.map((g) => g.id);
       const from = groupIds.indexOf(activeData.groupId);
       let to = from;
-      if (overData?.type === "group" && typeof overData.groupId === "number") {
-        to = groupIds.indexOf(overData.groupId);
-      } else if (overData?.type === "task" && typeof overData.groupKey === "number") {
-        to = groupIds.indexOf(overData.groupKey);
+      if (overTarget && typeof overTarget.groupKey === "number") {
+        to = groupIds.indexOf(overTarget.groupKey);
       }
       if (from < 0 || to < 0 || from === to) return;
-      await onReorderGroups(arrayMove(groupIds, from, to));
+      try {
+        await onReorderGroups(arrayMove(groupIds, from, to));
+      } catch (err) {
+        setDndInfo({
+          title: "Could not reorder groups",
+          message: (err as Error).message || "The drop could not be saved.",
+        });
+      }
       return;
     }
 
     if (activeData?.type === "task" && activeData.taskId != null) {
       const task = tasks.find((t) => t.id === activeData.taskId);
       if (!task || task.parentId != null) {
-        // Child reorder among siblings only
         if (!task?.parentId) return;
         const siblings = childrenOf(tasks, task.parentId).map((t) => t.id);
         const oldIndex = siblings.indexOf(task.id);
         let newIndex = oldIndex;
-        if (overData?.type === "task" && overData.taskId != null) {
-          const overTask = tasks.find((t) => t.id === overData.taskId);
+        if (overTarget?.placement === "before-task" && overTarget.taskId != null) {
+          const overTask = tasks.find((t) => t.id === overTarget.taskId);
           if (overTask?.parentId === task.parentId) {
             newIndex = siblings.indexOf(overTask.id);
           }
         }
         if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
-        await onReorder({
-          orderedTaskIds: arrayMove(siblings, oldIndex, newIndex),
-          parentId: task.parentId,
-        });
-        return;
-      }
-
-      const fromKey = activeData.groupKey;
-      let toKey: number | "none" | undefined = fromKey;
-      if (overData?.type === "group") {
-        toKey = overData.groupId ?? "none";
-      } else if (overData?.type === "task") {
-        toKey = overData.groupKey;
-      }
-      if (toKey !== fromKey) {
-        if (typeof toKey === "number") {
-          const target = groups.find((g) => g.id === toKey);
-          if (target?.autoTagId != null) {
-            await onAttachTaskTag(task.id, target.autoTagId);
-          }
+        try {
+          await onReorder({
+            orderedTaskIds: arrayMove(siblings, oldIndex, newIndex),
+            parentId: task.parentId,
+          });
+        } catch (err) {
+          setDndInfo({
+            title: "Could not reorder tasks",
+            message: (err as Error).message || "The drop could not be saved.",
+          });
         }
         return;
       }
 
-      const sectionRoots = rows
-        .filter(
-          (r): r is Extract<FlatRow, { kind: "task" }> =>
-            r.kind === "task" && r.groupKey === fromKey && r.depth === 0,
-        )
-        .map((r) => r.task.id);
+      const fromKey = activeData.groupKey;
+      if (fromKey == null || !overTarget) return;
+      const toKey = overTarget.groupKey;
 
-      const without = sectionRoots.filter((id) => id !== task.id);
-      let insertAt = without.length;
-      if (overData?.type === "task" && overData.taskId != null) {
-        const idx = without.indexOf(overData.taskId);
-        if (idx >= 0) insertAt = idx;
+      if (toKey !== fromKey) {
+        const sourceManualId =
+          typeof fromKey === "number"
+            ? (() => {
+                const source = groups.find((g) => g.id === fromKey);
+                return source && !isFilterActive(groupFilter(source)) ? source.id : null;
+              })()
+            : null;
+
+        const applyInsertOrder = async (sectionKey: GroupKey) => {
+          const ids = sectionRootIds(sectionKey);
+          const overRootId =
+            overTarget.placement === "before-task" && overTarget.taskId != null
+              ? ancestorInSection(overTarget.taskId, parentIdOf, ids)
+              : null;
+          const next = insertDraggedIntoSection({
+            sectionRootIds: ids,
+            draggedId: task.id,
+            overTaskId: overRootId,
+            placement: overTarget.placement,
+          });
+          await persistRootOrder(next);
+        };
+
+        if (toKey === "none") {
+          if (sourceManualId != null) {
+            try {
+              await onRemoveGroupMember(sourceManualId, task.id);
+              await applyInsertOrder("none");
+            } catch (err) {
+              setDndInfo({
+                title: "Could not move task",
+                message: (err as Error).message || "The drop could not be saved.",
+              });
+            }
+            return;
+          }
+          setDndInfo({
+            title: "Cannot move to Unassigned",
+            message:
+              "Unassigned only shows tasks that do not match a group filter. Dragging here does not remove tags or change filters.",
+          });
+          return;
+        }
+
+        const target = groups.find((g) => g.id === toKey);
+        if (!target) return;
+        const targetManual = !isFilterActive(groupFilter(target));
+
+        if (target.autoTagId != null) {
+          const tagLabel = filterCtx.tagNames?.get(target.autoTagId) ?? `#${target.autoTagId}`;
+          setPendingAutoTagDrop({
+            taskId: task.id,
+            taskTitle: task.title,
+            groupId: target.id,
+            groupName: target.name,
+            tagId: target.autoTagId,
+            tagLabel,
+            addMembership: targetManual,
+            removeFromGroupId: sourceManualId,
+            insert: {
+              placement: overTarget.placement,
+              overTaskId: overTarget.taskId,
+            },
+          });
+          return;
+        }
+
+        if (targetManual) {
+          try {
+            await onAddGroupMember(target.id, task.id);
+            if (sourceManualId != null && sourceManualId !== target.id) {
+              await onRemoveGroupMember(sourceManualId, task.id);
+            }
+            await applyInsertOrder(target.id);
+          } catch (err) {
+            setDndInfo({
+              title: "Could not move task",
+              message: (err as Error).message || "The drop could not be saved.",
+            });
+          }
+          return;
+        }
+
+        if (taskMatchesFilter(task, groupFilter(target), filterCtx)) {
+          try {
+            await applyInsertOrder(target.id);
+          } catch (err) {
+            setDndInfo({
+              title: "Could not reorder tasks",
+              message: (err as Error).message || "The drop could not be saved.",
+            });
+          }
+          return;
+        }
+
+        setDndInfo({
+          title: "Task does not match this group",
+          message: `“${target.name}” uses a filter that this task does not match. Edit the task or the group filter, or set an Auto-tag to apply a tag when dropping tasks here.`,
+        });
+        return;
       }
-      const next = [...without.slice(0, insertAt), task.id, ...without.slice(insertAt)];
-      await onReorder({
-        orderedTaskIds: next,
-        parentId: null,
+
+      const ids = sectionRootIds(fromKey);
+      const overRootId =
+        overTarget.placement === "before-task" && overTarget.taskId != null
+          ? ancestorInSection(overTarget.taskId, parentIdOf, ids)
+          : null;
+      const next = reorderSectionRoots({
+        sectionRootIds: ids,
+        draggedId: task.id,
+        overTaskId: overRootId,
+        placement: overTarget.placement,
       });
+      if (!next) return;
+      try {
+        await persistRootOrder(next);
+      } catch (err) {
+        setDndInfo({
+          title: "Could not reorder tasks",
+          message: (err as Error).message || "The drop could not be saved.",
+        });
+      }
     }
   };
+
+  const confirmAutoTagDrop = () => {
+    const pending = pendingAutoTagDrop;
+    setPendingAutoTagDrop(null);
+    if (!pending) return;
+    void (async () => {
+      try {
+        await onAttachTaskTag(pending.taskId, pending.tagId);
+        if (pending.addMembership) {
+          await onAddGroupMember(pending.groupId, pending.taskId);
+        }
+        if (pending.removeFromGroupId != null && pending.removeFromGroupId !== pending.groupId) {
+          await onRemoveGroupMember(pending.removeFromGroupId, pending.taskId);
+        }
+        const ids = sectionRootIds(pending.groupId);
+        const overRootId =
+          pending.insert.overTaskId != null
+            ? ancestorInSection(pending.insert.overTaskId, parentIdOf, ids)
+            : null;
+        const next = insertDraggedIntoSection({
+          sectionRootIds: ids,
+          draggedId: pending.taskId,
+          overTaskId: overRootId,
+          placement: pending.insert.placement,
+        });
+        await persistRootOrder(next);
+      } catch (err) {
+        setDndInfo({
+          title: "Could not move task",
+          message: (err as Error).message || "The drop could not be saved.",
+        });
+      }
+    })();
+  };
+
+  const cycleTaskState = (task: Task) => {
+    const next = nextTaskState(task.state);
+    if (next === "complete") {
+      void (async () => {
+        try {
+          const blockers = await fetchOpenDependsOn(task.id);
+          if (blockers.length > 0) {
+            setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
+            return;
+          }
+          await onPatchTask(task.id, { state: next });
+        } catch (err) {
+          setCompleteBlockMsg((err as Error).message);
+        }
+      })();
+      return;
+    }
+    void onPatchTask(task.id, { state: next });
+  };
+
+  const renderTaskRow = (row: Extract<FlatRow, { kind: "task" }>) => (
+    <SortableTaskRow
+      key={row.key}
+      task={row.task}
+      depth={row.depth}
+      duplicate={row.duplicate}
+      groupKey={row.groupKey}
+      onOpen={() => setModalTaskId(row.task.id)}
+      onCycleState={() => cycleTaskState(row.task)}
+      onPatch={(patch) => void onPatchTask(row.task.id, patch)}
+    />
+  );
 
   return (
     <>
@@ -1291,63 +1552,43 @@ export function TaskBoard({
           </TaskListSortHeaderBtn>
         </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={taskBoardCollisionDetection}
+          onDragEnd={(e) => void handleDragEnd(e)}
+        >
           <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-            {displayRows.map((row) => {
-              if (row.kind === "group") {
-                if (navListView) return null;
-                const groupKey: number | "none" = row.group?.id ?? "none";
-                return (
+            {sections.map((section) => {
+              const group = section.header?.group ?? null;
+              return (
+              <Fragment key={section.header?.key ?? `sec-${section.groupKey}`}>
+                {section.header && !navListView ? (
                   <SortableGroupHeader
-                    key={row.key}
-                    group={row.group}
-                    collapsed={collapsed.has(groupKey)}
-                    taskCount={row.taskCount}
+                    group={group}
+                    collapsed={collapsed.has(section.groupKey)}
+                    taskCount={section.header.taskCount}
                     filterCtx={filterCtx}
                     onToggle={() => {
                       setCollapsed((prev) => {
                         const next = new Set(prev);
-                        if (next.has(groupKey)) next.delete(groupKey);
-                        else next.add(groupKey);
+                        if (next.has(section.groupKey)) next.delete(section.groupKey);
+                        else next.add(section.groupKey);
                         return next;
                       });
                     }}
-                    onOpenEdit={row.group ? () => setEditGroup(row.group) : undefined}
-                    onRequestDelete={
-                      row.group ? () => setPendingGroupDelete(row.group) : undefined
-                    }
+                    onOpenEdit={group ? () => setEditGroup(group) : undefined}
+                    onRequestDelete={group ? () => setPendingGroupDelete(group) : undefined}
                   />
-                );
-              }
-              return (
-                <SortableTaskRow
-                  key={row.key}
-                  task={row.task}
-                  depth={row.depth}
-                  duplicate={row.duplicate}
-                  groupKey={row.groupKey}
-                  onOpen={() => setModalTaskId(row.task.id)}
-                  onCycleState={() => {
-                    const next = nextTaskState(row.task.state);
-                    if (next === "complete") {
-                      void (async () => {
-                        try {
-                          const blockers = await fetchOpenDependsOn(row.task.id);
-                          if (blockers.length > 0) {
-                            setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
-                            return;
-                          }
-                          await onPatchTask(row.task.id, { state: next });
-                        } catch (err) {
-                          setCompleteBlockMsg((err as Error).message);
-                        }
-                      })();
-                      return;
-                    }
-                    void onPatchTask(row.task.id, { state: next });
-                  }}
-                  onPatch={(patch) => void onPatchTask(row.task.id, patch)}
+                ) : null}
+                {section.tasks.map(renderTaskRow)}
+                <GroupDropZone
+                  groupKey={section.groupKey}
+                  empty={
+                    !navListView &&
+                    (section.header?.taskCount ?? section.tasks.length) === 0
+                  }
                 />
+              </Fragment>
               );
             })}
           </SortableContext>
@@ -1438,6 +1679,28 @@ export function TaskBoard({
         confirmLabel="OK"
         onCancel={() => setCompleteBlockMsg(null)}
         onConfirm={() => setCompleteBlockMsg(null)}
+      />
+      <ConfirmDialog
+        open={pendingAutoTagDrop != null}
+        title="Apply Auto-tag?"
+        message={
+          pendingAutoTagDrop
+            ? `Group “${pendingAutoTagDrop.groupName}” applies Auto-tag “${pendingAutoTagDrop.tagLabel}” to tasks dropped here. Confirm to tag “${pendingAutoTagDrop.taskTitle}” and move it into this group if it matches the group filter.`
+            : ""
+        }
+        confirmLabel="Confirm"
+        confirmTone="primary"
+        onCancel={() => setPendingAutoTagDrop(null)}
+        onConfirm={confirmAutoTagDrop}
+      />
+      <ConfirmDialog
+        open={dndInfo != null}
+        title={dndInfo?.title ?? ""}
+        message={dndInfo?.message ?? ""}
+        alertOnly
+        confirmLabel="OK"
+        onCancel={() => setDndInfo(null)}
+        onConfirm={() => setDndInfo(null)}
       />
       <ConfirmDialog
         open={pendingGroupDelete != null}
