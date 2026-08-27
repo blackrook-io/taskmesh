@@ -59,7 +59,7 @@ async function profilePayload(user: typeof schema.users.$inferSelect) {
 
 export const usersRouter = Router();
 
-/** Current (sole) user until auth exists. */
+/** Authenticated profile for the session user. */
 usersRouter.get("/me", async (_req, res) => {
   try {
     const user = await getCurrentUser(db);

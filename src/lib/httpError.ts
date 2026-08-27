@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import { ZodError } from "zod";
+import { AuthenticationError } from "./authErrors.js";
 import { ImmutableFieldError } from "./immutableFields.js";
 
 export function sendError(
@@ -15,6 +16,10 @@ export function sendError(
 }
 
 export function handleRouteError(res: Response, err: unknown): void {
+  if (err instanceof AuthenticationError) {
+    sendError(res, err.status, err.code, err.message);
+    return;
+  }
   if (err instanceof ImmutableFieldError) {
     sendError(res, err.status, err.code, err.message);
     return;

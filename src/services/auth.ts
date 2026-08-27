@@ -48,7 +48,12 @@ export async function getSessionById(
     .from(schema.sessions)
     .where(eq(schema.sessions.id, sessionId))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  if (row.expiresAt.getTime() <= Date.now()) {
+    await destroySession(db, sessionId);
+    return null;
+  }
+  return row;
 }
 
 export async function createSession(

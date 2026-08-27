@@ -1,7 +1,8 @@
-import { asc, eq, max } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
-import { getRequestSessionUserId } from "../lib/requestAuthContext.js";
+import { AuthenticationError } from "../lib/authErrors.js";
+import { getRequestApiKeyUserId, getRequestSessionUserId } from "../lib/requestAuthContext.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
 
@@ -14,41 +15,31 @@ export async function allocateUserNumber(db: Db): Promise<number> {
 }
 
 /**
- * Current user: session user when logged in, else legacy U0001 fallback until T0084
- * requires auth on all API routes.
+ * Resolve the authenticated user from the current request session or API key (T0063).
+ * Throws {@link AuthenticationError} when no valid auth context is present.
  */
-export async function getCurrentUser(db: Db): Promise<typeof schema.users.$inferSelect> {
-  const sessionUserId = getRequestSessionUserId();
-  if (sessionUserId != null) {
-    const [bySession] = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, sessionUserId))
-      .limit(1);
-    if (bySession) return bySession;
+export async function getAuthenticatedUser(
+  db: Db,
+): Promise<typeof schema.users.$inferSelect> {
+  const actorUserId = getRequestApiKeyUserId() ?? getRequestSessionUserId();
+  if (actorUserId == null) {
+    throw new AuthenticationError();
   }
 
-  const [byNumber] = await db
+  const [user] = await db
     .select()
     .from(schema.users)
-    .where(eq(schema.users.number, 1));
-  if (byNumber) return byNumber;
-
-  const [first] = await db
-    .select()
-    .from(schema.users)
-    .orderBy(asc(schema.users.id))
+    .where(eq(schema.users.id, actorUserId))
     .limit(1);
-  if (first) return first;
-
-  const [created] = await db
-    .insert(schema.users)
-    .values({ number: 1, displayName: "Local User" })
-    .returning();
-  if (!created) {
-    throw new Error("Could not create default user");
+  if (!user) {
+    throw new AuthenticationError();
   }
-  return created;
+  return user;
+}
+
+/** Current authenticated user for mutating routes and profile APIs. */
+export async function getCurrentUser(db: Db): Promise<typeof schema.users.$inferSelect> {
+  return getAuthenticatedUser(db);
 }
 
 export async function getCurrentUserId(db: Db): Promise<number> {

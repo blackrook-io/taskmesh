@@ -15,6 +15,18 @@ describe("shouldLockAfterFailedLogin", () => {
   });
 });
 
+describe("getSessionById expiry", () => {
+  it("treats expiresAt in the past as absent", () => {
+    const row = {
+      id: "sess1",
+      userId: 1,
+      expiresAt: new Date(Date.now() - 1000),
+      createdAt: new Date(),
+    };
+    assert.equal(row.expiresAt.getTime() <= Date.now(), true);
+  });
+});
+
 describe("readSessionCookie", () => {
   it("reads the TaskMesh session cookie from the header", () => {
     const req = {

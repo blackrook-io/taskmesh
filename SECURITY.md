@@ -2,7 +2,7 @@
 
 Living record of input-path audits and hardening. Update this file when routes, query construction, uploads, or outbound fetch change.
 
-**Threat model (current):** single-user app on a private network. **No authentication** on the HTTP API. Anyone who can reach the process (typically `127.0.0.1:3000` behind nginx) can read and write all data, restore backups, and call admin routes. That is accepted until [T0084](#follow-up-tasks).
+**Threat model (current):** single-user app on a private network. The HTTP API requires a **valid browser session** (email/password login via T0096) or, when implemented, an **API key** (T0063) on `/api/v1/*`. Public exceptions: health check, login/logout/session bootstrap, and public theme config. Anyone who can reach the process without authenticating cannot read or mutate application data, but nginx/network exposure still matters — see [residual risks](#residual-risk-follow-up-tasks).
 
 **SQL stance:** use parameterized queries (Drizzle). Do **not** concatenate user strings into SQL. “Sanitizing” strings for SQL is not a substitute.
 
@@ -24,7 +24,7 @@ Living record of input-path audits and hardening. Update this file when routes, 
 | Canvas / image-board `document` JSON | Max 2 000 000 UTF-8 bytes | `express.json` remains 10 MB for the request envelope |
 | Uploads | UUID filenames; GET uses `path.basename`; **magic-byte** sniff (jpeg/png/gif/webp) | Stored MIME is sniffed, not client-claimed |
 | Assistant `fetchUrl` | http(s) only; DNS resolve; block private IPs; **manual** redirects (max 2) re-checked | No intranet/localhost fetch |
-| Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore still **unauthenticated** (T0084 / T0085) |
+| Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore requires authenticated session; rate limits still open (T0085) |
 | Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | DoS residual without rate limits |
 | Client text inputs | Capture-phase sanitizer on every `<input>` / `<textarea>` | Skips password/file/number/date/color and TipTap `contenteditable` |
 
@@ -50,7 +50,6 @@ Run after adding a route or query:
 
 | Task | Topic |
 |------|--------|
-| **T0084** | Authentication and session binding |
 | **T0085** | API rate limiting and abuse controls |
 | **T0086** | Automated security tests in CI (`npm audit`, SAST) |
 | **T0087** | Public-internet / multi-user hardening (CSRF, TLS review, CSP second pass) |

@@ -1,0 +1,110 @@
+# T0084 — Authentication and session binding
+
+**Task:** T0084 (id `96`) — Authentication and session binding  
+**Parent:** T0095 — Implement Multi-User  
+**State:** Ready (fresh start)  
+**Priority:** Urgent  
+**Depends on:** T0096 ✅ complete  
+**Required by:** T0063, T0085, T0087, T0111
+
+## Context
+
+T0096 shipped login/logout, PostgreSQL sessions, httpOnly cookie, SPA `AuthGate`, and optional `sessionLoader`. The HTTP API is still **unauthenticated**: no route middleware, and `getCurrentUser()` falls back to legacy U0001 when no session is present.
+
+This Task binds `/api/v1/*` to the local session from T0096. OIDC/federation stays in T0111; roles in T0108; API keys in T0063.
+
+## Size / split
+
+One cohesive middleware slice (auth gate + session hardening + `getCurrentUser` cleanup + docs/tests). No split recommended.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Public allowlist:** `GET /api/health`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/session`, `GET /api/v1/config`. Everything else under `/api/v1/*` requires a valid session. **Upload GET** requires auth (images load with cookie from SPA). OK?
+2. **Session expiry:** Enforce `sessions.expires_at` in `getSessionById` / loader — expired rows treated as no session (delete row + clear cookie on reject). Aligns cookie Max-Age with DB enforcement T0096 deferred.
+3. **`getCurrentUser`:** Remove U0001 auto-create fallback on protected routes. Split into `getAuthenticatedUser()` (throws 401) used after middleware, and keep internal-only fallback only if needed for migrations/scripts (none on HTTP path).
+4. **`GET /api/v1/users/me`:** Require session (401 without cookie) — same profile shape as `/auth/session`. Client keeps using `/users/me` for Profile; `/auth/session` stays bootstrap for `AuthProvider`.
+5. **`updatedById` / `createdById`:** Ensure existing call sites (`tasks`, `todos`, `importExport`, etc.) resolve actor from session via `getCurrentUserId`. **Do not** add actor columns to every entity route in this Task — only fix binding where tracking already exists. Broad audit is T0110.
+6. **API key hook:** Middleware chain `resolveAuth()` → session **or** (future) API key. T0063 implements key validation; this Task leaves a no-op/stub branch and `req.apiKeyId` placeholder for logging.
+7. **Auth failure logging:** Middleware 401 sets `res.locals.logMessage` (e.g. `"Unauthenticated API request"`). Existing `apiRequestLogger` + `outcomeFromStatus(401)` → `auth_failure`.
+8. **Admin routes:** Authenticated session sufficient for now (any logged-in user can hit admin APIs). Role 403 gating is **T0108**, not this Task.
+9. **No schema migration** expected → PATCH version bump on finish-up.
+
+## Goal
+
+Unauthenticated clients cannot read or mutate app data via the API. Authenticated SPA flows continue to work with the session cookie from Login.
+
+## Scope
+
+### Server — auth middleware
+
+| File | Change |
+|------|--------|
+| `src/middleware/requireAuth.ts` (new) | After `sessionLoader`: allow public paths; else require `req.sessionUserId` + valid user (`userCanAuthenticate`); 401 JSON `not_authenticated`; set `logMessage` |
+| `src/middleware/sessionLoader.ts` | Reject expired sessions (delete + no attach) |
+| `src/services/auth.ts` | `getSessionById` checks `expiresAt > now`; optional helper `isSessionValid` |
+| `src/routes/v1/index.ts` | Mount `requireAuth` after `sessionLoader`, before routers; public paths use prefix/method matching |
+| `src/lib/requestAuthContext.ts` | Optional: expose API-key user id slot for T0063 |
+
+Public path matcher (exact or prefix):
+
+- `POST /auth/login`, `POST /auth/logout`, `GET /auth/session`
+- `GET /config` (and subpaths if any)
+
+### Server — user resolution
+
+| File | Change |
+|------|--------|
+| `src/services/users.ts` | `getAuthenticatedUser()` — session only, 401 if missing/invalid; `getCurrentUser()` delegates to it (no U0001 fallback) |
+| `src/routes/v1/users.ts` | `/me` routes use authenticated user; 401 without session |
+
+### Server — logging
+
+- Failed middleware auth: `res.locals.logMessage`
+- Login already sets `logUserId` on success; failed login already 401
+
+### Docs
+
+| File | Change |
+|------|--------|
+| `SECURITY.md` | Threat model: session-authenticated API on private network; residual risks (rate limits T0085, CSRF T0087, API keys T0063, roles T0108); remove “no authentication” |
+| `docs/database/platform.md` | Note session expiry enforced at request time (if not already) |
+
+### Tests
+
+| File | Coverage |
+|------|----------|
+| `src/middleware/requireAuth.test.ts` (new) | Public routes pass; protected 401 without cookie; protected 200 with valid session cookie |
+| `src/services/auth.test.ts` | Expired session rejected |
+| Extend integration if existing pattern | `curl`/supertest style login → protected route |
+
+## Out of scope
+
+- OIDC / OAuth / passkeys (T0111)
+- MFA, forgot password
+- Rate limiting (T0085)
+- CSRF / cookie hardening beyond T0096 (T0087)
+- Role-based admin 403 (T0108)
+- Per-user data scoping (T0110)
+- API key validation (T0063 — hook only)
+- Adding `updatedById` to routes that never had it
+
+## Implementation order
+
+1. Session expiry in `getSessionById` / loader  
+2. `requireAuth` middleware + public allowlist + mount on v1 router  
+3. `getAuthenticatedUser` / remove U0001 fallback  
+4. `/users/me` 401 alignment  
+5. Auth failure logging polish  
+6. API-key middleware stub / types  
+7. SECURITY.md + docs  
+8. Tests  
+9. QA checklist
+
+## Done when
+
+- `curl` without cookie to e.g. `GET /api/v1/projects` → 401  
+- Login → cookie → same route → 200  
+- SPA login → browse → mutate → logout → API 401  
+- Expired session row → treated as logged out  
+- SECURITY.md reflects authenticated API  
+- QA checklist delivered; finish-up only on request
