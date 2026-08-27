@@ -218,6 +218,13 @@
       "when": 1787793289798,
       "tag": "0030_smart_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1787794744890,
+      "tag": "0031_romantic_ma_gnuci",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,93 @@
+# T0112 — Ownership — schema and helpers
+
+**Task:** T0112 (id `124`) — Ownership — schema and helpers  
+**Parent:** T0110 — Per-user record ownership (`pending`)  
+**Grandparent:** T0095 — Implement Multi-User  
+**State:** Ready · **Priority:** high  
+**Depends on:** T0108 ✅ complete  
+**Unblocks:** T0113 (project tree), T0114 (standalone/tags/uploads)
+
+## Context
+
+Multi-user auth (accounts, login, session binding, roles, API keys) is shipped. Domain data is still **global** for any authenticated user. T0110 was split into four children; this slice is **schema + shared helpers only**. Route-level enforcement lands in T0113–T0115.
+
+## Interview (confirmed)
+
+| Topic | Decision |
+|-------|----------|
+| Ownership column | Dedicated **`ownerId`** |
+| Transfer | **Admin-only** (T0115) |
+| Tags | **Per-user** |
+| Uploads | **Stamp + scope** (stamp here; scope T0114) |
+| Global description templates | **Creator-owned** |
+| Backfill | Existing rows → **U0001** |
+| Split | T0112–T0115 under T0110 |
+
+## Goal
+
+Persist ownership on top-level (and unsorted-capable) tables, backfill legacy rows to U0001, and ship reusable server helpers so T0113–T0115 can enforce access without redoing schema.
+
+## Scope
+
+### Schema / migration
+
+Add **`owner_id`** → `users.id` (`NOT NULL` after backfill; `ON DELETE RESTRICT`) to:
+
+| Table | Notes |
+|-------|--------|
+| `projects` | Top-level hub |
+| `ideas` | Top-level |
+| `tasks` | Needed for unsorted (`project_id` null); project-scoped still get a stamp |
+| `todos` | Same |
+| `todo_lists` | Same |
+| `image_boards` | Same |
+| `uploads` | Stamp + future GET scope |
+| `tags` | Per-user; change unique `name` → unique `(owner_id, name)` |
+| `task_description_templates` | Creator-owned via `ownerId` |
+
+Backfill SQL: `UPDATE … SET owner_id = 1 WHERE owner_id IS NULL` (or insert column nullable → backfill → set NOT NULL).
+
+Child tables under projects (documents, boards, wiki, canvases, phases, groups, modules, …) get **no** `ownerId` in this Task — access inherits in T0113.
+
+### Server helpers (new module, e.g. `src/services/ownership.ts` / `src/lib/ownership.ts`)
+
+- `getActorUserId()` / use existing `getCurrentUserId`
+- `userHasAdministrator` bypass already exists (`src/services/roles.ts`)
+- `isAdminOrOwner(db, userId, ownerId)`
+- `assertCanAccessOwned(db, userId, ownerId)` → 403 `access_denied` for non-admin non-owner
+- Optional Drizzle helper: `ownerScope(column, userId, isAdmin)` for list filters
+
+Wire **create stamps** (`ownerId = actor`) on insert paths that already exist for the tables above where cheap (projects, ideas, tasks, todos, lists, image boards, uploads, tags, templates). Full list/get 403 enforcement is **out of scope** here except smoke-level helper unit tests.
+
+### Docs
+
+- Update `docs/database/*` (projects-and-ideas, tasks, content, glossary, platform as needed)
+- Note T0110 residual → children in `SECURITY.md`
+- `npm run docs:sync-schema` on finish-up (with auth cookie)
+
+### Tests
+
+- Unit tests for ownership helpers (admin bypass, owner pass, non-owner deny)
+- Migration applies cleanly on empty + backfilled rows
+
+## Out of scope
+
+- Project-tree list/get/mutate enforcement (T0113)
+- Standalone / tags / uploads / template **API enforcement** beyond create stamp (T0114)
+- Search, assistant, import/export, admin transfer UI (T0115)
+- Sharing / team ownership / non-admin transfer
+
+## Branch
+
+- `T0112-ownership-schema-helpers` (after plan approval)
+
+## Version
+
+Schema migration → **MINOR** bump on finish-up (PATCH reset to 0).
+
+## Done when
+
+- Migration + backfill to U0001 applied
+- `ownerId` on listed tables; tags unique per owner
+- Helpers + tests green; creates stamp `ownerId` where wired
+- Docs updated; QA checklist delivered; finish-up only on request

@@ -86,6 +86,7 @@ export async function createTemplate(
       isGlobal: false,
       createdById: user.id,
       updatedById: user.id,
+      ownerId: user.id,
     })
     .returning();
   if (!row) {

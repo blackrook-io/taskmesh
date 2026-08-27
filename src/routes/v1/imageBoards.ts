@@ -8,6 +8,7 @@ import { optionalPlainTitle } from "../../lib/markdownFields.js";
 import { jsonDocumentSchema } from "../../lib/jsonDocument.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateImageBoardNumber } from "../../services/entityNumbers.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const emptyDocument = {
   camera: { x: 0, y: 0, zoom: 1 },
@@ -118,6 +119,7 @@ imageBoardsRouter.post("/", async (req, res) => {
     }
     const sortOrder = await nextSortOrder(projectId);
     const number = await allocateImageBoardNumber(db);
+    const ownerId = await getCurrentUserId(db);
     const [row] = await db
       .insert(schema.imageBoards)
       .values({
@@ -126,6 +128,7 @@ imageBoardsRouter.post("/", async (req, res) => {
         title: parsed.title?.trim() || "Untitled image board",
         sortOrder,
         document: parsed.document ?? emptyDocument,
+        ownerId,
       })
       .returning();
     if (!row) {

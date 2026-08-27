@@ -144,6 +144,7 @@ todosRouter.post("/", async (req, res) => {
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
+        ownerId: actorId,
       })
       .returning();
     if (!row) {
@@ -301,6 +302,7 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
+        ownerId: actorId,
       })
       .returning();
     if (!todo) {
@@ -365,6 +367,7 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
+        ownerId: actorId,
       })
       .returning();
     if (!task) {

@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { allocateTodoListNumber } from "./entityNumbers.js";
+import { getCurrentUserId } from "./users.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -23,6 +24,7 @@ export async function ensureInboxList(db: Db): Promise<number> {
   }
 
   const number = await allocateTodoListNumber(db);
+  const ownerId = await getCurrentUserId(db);
   const [row] = await db
     .insert(schema.todoLists)
     .values({
@@ -30,6 +32,7 @@ export async function ensureInboxList(db: Db): Promise<number> {
       title: "Unsorted",
       projectId: null,
       kind: "inbox",
+      ownerId,
     })
     .returning({ id: schema.todoLists.id });
   if (!row) throw new Error("Failed to create Unsorted list");

@@ -14,12 +14,14 @@ erDiagram
   tags ||--o{ task_groups : "auto_tag_id"
   task_groups ||--o{ task_group_members : "group_id"
   tasks ||--o{ task_group_members : "task_id"
-  users ||--o{ projects : "authorship elsewhere"
+  users ||--o{ ideas : "owner_id"
+  users ||--o{ projects : "owner_id"
   ideas {
     int id PK
     int number UK
     text title
     text body
+    int owner_id FK
   }
   projects {
     int id PK
@@ -29,6 +31,7 @@ erDiagram
     text status
     int sort_order
     int source_idea_id FK
+    int owner_id FK
   }
   task_groups {
     int id PK
@@ -56,7 +59,7 @@ erDiagram
   }
 ```
 
-`users` appears only as a stub; projects do not store `created_by` columns today. Task authorship FKs are documented under [tasks](tasks.md).
+`users` own ideas and projects via **`owner_id`** (T0112). Nested project content inherits project ownership for access (enforced in T0113+). Task authorship FKs (`created_by` / `updated_by`) remain under [tasks](tasks.md).
 
 ---
 
@@ -72,6 +75,7 @@ Captures early thoughts that may later convert into a project. Display number �
 | `number` | integer | no | — | App-wide unique display number (I####) |
 | `title` | text | no | — | |
 | `body` | text | yes | — | Markdown / notes |
+| `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -79,6 +83,7 @@ Captures early thoughts that may later convert into a project. Display number �
 
 - **PK:** `id`
 - **UNIQUE:** `number`
+- **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
 
 ### Relationships
 
@@ -101,6 +106,7 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 | `status` | text | no | `'idea'` | Lifecycle / status string used by the app |
 | `sort_order` | integer | no | `0` | Manual list order (left nav / project list) |
 | `source_idea_id` | integer | yes | — | FK → `ideas.id` |
+| `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112); nested content inherits for access |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -109,6 +115,7 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 - **PK:** `id`
 - **UNIQUE:** `number`
 - **FK:** `source_idea_id` → `ideas.id` · **ON DELETE SET NULL**
+- **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
 
 ### Relationships (outbound ownership)
 

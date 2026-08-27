@@ -21,6 +21,10 @@ export const ideas = pgTable("ideas", {
   number: integer("number").notNull().unique(),
   title: text("title").notNull(),
   body: text("body"),
+  /** Record owner (T0112). Access scoped in T0113–T0115. */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -42,6 +46,10 @@ export const projects = pgTable("projects", {
   sourceIdeaId: integer("source_idea_id").references(() => ideas.id, {
     onDelete: "set null",
   }),
+  /** Record owner (T0112). Nested project content inherits this for access. */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -290,6 +298,10 @@ export const tasks = pgTable("tasks", {
   updatedById: integer("updated_by_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  /** Record owner (T0112). Unsorted tasks use this; project tasks also stamped. */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -335,6 +347,10 @@ export const taskDescriptionTemplates = pgTable("task_description_templates", {
   updatedById: integer("updated_by_id").references(() => users.id, {
     onDelete: "set null",
   }),
+  /** Creator-owned (T0112). Global templates still scoped to owner (+ admin). */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -420,19 +436,33 @@ export const uploads = pgTable("uploads", {
   originalName: text("original_name").notNull(),
   mimeType: text("mime_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
+  /** Record owner (T0112). GET/delete scoped in T0114. */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
 
-export const tags = pgTable("tags", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  color: text("color"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const tags = pgTable(
+  "tags",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    color: text("color"),
+    /** Per-user tags (T0112). Uniqueness is (owner_id, name). */
+    ownerId: integer("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    ownerNameUniq: unique("tags_owner_id_name_uidx").on(t.ownerId, t.name),
+  }),
+);
 
 /** Polymorphic join: tag ↔ (entity_type, entity_id). */
 export const taggings = pgTable(
@@ -488,6 +518,10 @@ export const todos = pgTable("todos", {
   updatedById: integer("updated_by_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  /** Record owner (T0112). Unsorted todos use this; project todos also stamped. */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -506,6 +540,10 @@ export const todoLists = pgTable("todo_lists", {
   }),
   title: text("title").notNull(),
   kind: text("kind").notNull().default("list"),
+  /** Record owner (T0112). Standalone lists use this; project lists also stamped. */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -720,6 +758,10 @@ export const imageBoards = pgTable("image_boards", {
     .$type<Record<string, unknown>>()
     .notNull()
     .default({}),
+  /** Record owner (T0112). Standalone boards use this; project boards also stamped. */
+  ownerId: integer("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -728,7 +770,12 @@ export const imageBoards = pgTable("image_boards", {
     .defaultNow(),
 });
 
-export const ideasRelations = relations(ideas, ({ many }) => ({
+export const ideasRelations = relations(ideas, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [ideas.ownerId],
+    references: [users.id],
+    relationName: "idea_owner",
+  }),
   projects: many(projects),
   todos: many(todos),
 }));
@@ -737,6 +784,11 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   sourceIdea: one(ideas, {
     fields: [projects.sourceIdeaId],
     references: [ideas.id],
+  }),
+  owner: one(users, {
+    fields: [projects.ownerId],
+    references: [users.id],
+    relationName: "project_owner",
   }),
   taskGroups: many(taskGroups),
   phases: many(projectPhases),
@@ -769,6 +821,11 @@ export const todosRelations = relations(todos, ({ one }) => ({
     fields: [todos.updatedById],
     references: [users.id],
     relationName: "todo_updated_by",
+  }),
+  owner: one(users, {
+    fields: [todos.ownerId],
+    references: [users.id],
+    relationName: "todo_owner",
   }),
 }));
 
@@ -810,13 +867,24 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   createdTasks: many(tasks, { relationName: "task_created_by" }),
   updatedTasks: many(tasks, { relationName: "task_updated_by" }),
+  ownedTasks: many(tasks, { relationName: "task_owner" }),
   createdTodos: many(todos, { relationName: "todo_created_by" }),
   updatedTodos: many(todos, { relationName: "todo_updated_by" }),
+  ownedTodos: many(todos, { relationName: "todo_owner" }),
+  ownedIdeas: many(ideas, { relationName: "idea_owner" }),
+  ownedProjects: many(projects, { relationName: "project_owner" }),
+  ownedUploads: many(uploads, { relationName: "upload_owner" }),
+  ownedTags: many(tags, { relationName: "tag_owner" }),
+  ownedTodoLists: many(todoLists, { relationName: "todo_list_owner" }),
+  ownedImageBoards: many(imageBoards, { relationName: "image_board_owner" }),
   createdTaskDescriptionTemplates: many(taskDescriptionTemplates, {
     relationName: "task_description_templates_created_by",
   }),
   updatedTaskDescriptionTemplates: many(taskDescriptionTemplates, {
     relationName: "task_description_templates_updated_by",
+  }),
+  ownedTaskDescriptionTemplates: many(taskDescriptionTemplates, {
+    relationName: "task_description_templates_owner",
   }),
   apiKeys: many(apiKeys),
   userRoles: many(userRoles),
@@ -872,6 +940,11 @@ export const taskDescriptionTemplatesRelations = relations(
       references: [users.id],
       relationName: "task_description_templates_updated_by",
     }),
+    owner: one(users, {
+      fields: [taskDescriptionTemplates.ownerId],
+      references: [users.id],
+      relationName: "task_description_templates_owner",
+    }),
   }),
 );
 
@@ -899,6 +972,11 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     fields: [tasks.updatedById],
     references: [users.id],
     relationName: "task_updated_by",
+  }),
+  owner: one(users, {
+    fields: [tasks.ownerId],
+    references: [users.id],
+    relationName: "task_owner",
   }),
   activity: many(taskActivity),
   dependencies: many(taskDependencies, { relationName: "task_depends_on" }),
@@ -936,7 +1014,12 @@ export const projectDocumentsRelations = relations(projectDocuments, ({ one }) =
   }),
 }));
 
-export const tagsRelations = relations(tags, ({ many }) => ({
+export const tagsRelations = relations(tags, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [tags.ownerId],
+    references: [users.id],
+    relationName: "tag_owner",
+  }),
   taggings: many(taggings),
   taskGroups: many(taskGroups),
 }));
@@ -952,6 +1035,11 @@ export const todoListsRelations = relations(todoLists, ({ one, many }) => ({
   project: one(projects, {
     fields: [todoLists.projectId],
     references: [projects.id],
+  }),
+  owner: one(users, {
+    fields: [todoLists.ownerId],
+    references: [users.id],
+    relationName: "todo_list_owner",
   }),
   items: many(todoListItems),
 }));
@@ -1035,5 +1123,10 @@ export const imageBoardsRelations = relations(imageBoards, ({ one }) => ({
   project: one(projects, {
     fields: [imageBoards.projectId],
     references: [projects.id],
+  }),
+  owner: one(users, {
+    fields: [imageBoards.ownerId],
+    references: [users.id],
+    relationName: "image_board_owner",
   }),
 }));

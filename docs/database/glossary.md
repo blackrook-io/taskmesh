@@ -97,7 +97,7 @@ Do not conflate the two.
 |---------|-----------------|
 | **CASCADE** | Child rows disappear with the parent (project-owned content, board children, activity, …) |
 | **SET NULL** | Optional link cleared (parent task, source idea, avatar, optional image-board project, …) |
-| **RESTRICT** | Prevent deleting a user who still authors tasks (`created_by` / `updated_by`) |
+| **RESTRICT** | Prevent deleting a user who still owns or authors records (`owner_id`, `created_by` / `updated_by`) |
 
 Exact FK lists are on the domain pages.
 

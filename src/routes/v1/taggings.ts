@@ -11,6 +11,7 @@ import {
   isTaggableEntityType,
 } from "../../services/entities.js";
 import { applyTaskGroupAutoTagsForTask } from "../../services/taskGroupAutoTag.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -100,16 +101,17 @@ taggingsRouter.post("/", async (req, res) => {
       tag = found;
     } else {
       const name = parsed.name!.trim();
+      const ownerId = await getCurrentUserId(db);
       const [existing] = await db
         .select()
         .from(schema.tags)
-        .where(eq(schema.tags.name, name));
+        .where(and(eq(schema.tags.ownerId, ownerId), eq(schema.tags.name, name)));
       if (existing) {
         tag = existing;
       } else {
         const [created] = await db
           .insert(schema.tags)
-          .values({ name, color: parsed.color ?? null })
+          .values({ name, color: parsed.color ?? null, ownerId })
           .returning();
         tag = created;
       }

@@ -626,6 +626,7 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
             sortOrder: 0,
             createdById: actorId,
             updatedById: actorId,
+            ownerId: actorId,
           })
           .returning();
         if (!task) {
@@ -637,7 +638,11 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
         const ideaNumber = await allocateIdeaNumber(db);
         const [idea] = await db
           .insert(schema.ideas)
-          .values({ number: ideaNumber, title: parsed.title.trim() })
+          .values({
+            number: ideaNumber,
+            title: parsed.title.trim(),
+            ownerId: await getCurrentUserId(db),
+          })
           .returning();
         if (!idea) {
           sendError(res, 500, "insert_failed", "Could not create idea");

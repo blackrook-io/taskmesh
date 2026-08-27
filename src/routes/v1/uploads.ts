@@ -10,6 +10,7 @@ import { sniffImageMime } from "../../lib/imageMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { getUploadDir } from "../../lib/paths.js";
 import { uploadRateLimit } from "../../middleware/rateLimits.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 const MAX_BYTES = Number(process.env.UPLOAD_MAX_BYTES ?? 5 * 1024 * 1024);
@@ -62,6 +63,7 @@ uploadsRouter.post("/uploads", uploadRateLimit, upload.single("file"), async (re
     }
     const mimeType = sniffed;
 
+    const ownerId = await getCurrentUserId(db);
     const [row] = await db
       .insert(schema.uploads)
       .values({
@@ -69,6 +71,7 @@ uploadsRouter.post("/uploads", uploadRateLimit, upload.single("file"), async (re
         originalName: file.originalname,
         mimeType,
         sizeBytes: file.size,
+        ownerId,
       })
       .returning();
 

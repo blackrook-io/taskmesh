@@ -6,6 +6,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { ilikeEscaped } from "../../lib/ilike.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -87,10 +88,11 @@ tagsRouter.get("/", async (req, res) => {
 tagsRouter.post("/", async (req, res) => {
   try {
     const parsed = tagBody.parse(req.body);
+    const ownerId = await getCurrentUserId(db);
     const [existing] = await db
       .select()
       .from(schema.tags)
-      .where(eq(schema.tags.name, parsed.name));
+      .where(and(eq(schema.tags.ownerId, ownerId), eq(schema.tags.name, parsed.name)));
     if (existing) {
       sendError(res, 409, "conflict", "A tag with that name already exists");
       return;
@@ -100,6 +102,7 @@ tagsRouter.post("/", async (req, res) => {
       .values({
         name: parsed.name,
         color: parsed.color ?? null,
+        ownerId,
       })
       .returning();
     if (!row) {
@@ -211,7 +214,12 @@ tagsRouter.patch("/:id", async (req, res) => {
       const [dup] = await db
         .select()
         .from(schema.tags)
-        .where(eq(schema.tags.name, parsed.name));
+        .where(
+          and(
+            eq(schema.tags.ownerId, existing.ownerId),
+            eq(schema.tags.name, parsed.name),
+          ),
+        );
       if (dup) {
         sendError(res, 409, "conflict", "A tag with that name already exists");
         return;

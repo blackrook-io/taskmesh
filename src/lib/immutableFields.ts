@@ -16,6 +16,9 @@ export const IMMUTABLE_FIELD_KEYS = [
   "updated_by_id",
   "updatedBy",
   "updated_by",
+  "ownerId",
+  "owner_id",
+  "owner",
   "number",
 ] as const;
 

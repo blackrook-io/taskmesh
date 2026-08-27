@@ -244,6 +244,7 @@ todoListsRouter.post("/", async (req, res) => {
       }
     }
     const number = await allocateTodoListNumber(db);
+    const ownerId = await getCurrentUserId(db);
     const [row] = await db
       .insert(schema.todoLists)
       .values({
@@ -251,6 +252,7 @@ todoListsRouter.post("/", async (req, res) => {
         title: parsed.title,
         projectId: parsed.projectId ?? null,
         kind: "list",
+        ownerId,
       })
       .returning();
     if (!row) {
@@ -441,6 +443,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
           sortOrder: 0,
           createdById: actorId,
           updatedById: actorId,
+          ownerId: actorId,
         })
         .returning();
       if (!todo) {
@@ -470,6 +473,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
           sortOrder: 0,
           createdById: actorId,
           updatedById: actorId,
+          ownerId: actorId,
         })
         .returning();
       if (!task) {
@@ -700,6 +704,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
+        ownerId: actorId,
       })
       .returning();
     if (!task) {
@@ -779,6 +784,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
+        ownerId: actorId,
       })
       .returning();
     if (!todo) {

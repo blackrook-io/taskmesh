@@ -156,6 +156,7 @@ standaloneTasksRouter.post("/", async (req, res) => {
         sortOrder,
         createdById: actorId,
         updatedById: actorId,
+        ownerId: actorId,
       })
       .returning();
     if (!row) {

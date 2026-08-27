@@ -279,6 +279,7 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
     try {
       const number = await allocateProjectNumber(db);
       const sortOrder = await nextProjectSortOrder(db);
+      const ownerId = await getCurrentUserId(db);
       const [row] = await db
         .insert(schema.projects)
         .values({
@@ -288,6 +289,7 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
           status,
           sourceIdeaId: typeof sourceIdeaId === "number" ? sourceIdeaId : null,
           sortOrder,
+          ownerId,
         })
         .returning();
       if (!row) {
@@ -504,6 +506,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
           sortOrder,
           createdById: actorId,
           updatedById: actorId,
+          ownerId: actorId,
         })
         .returning();
       if (!row) {

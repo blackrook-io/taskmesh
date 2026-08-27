@@ -11,12 +11,12 @@ erDiagram
   projects ||--o{ tasks : "project_id"
   project_phases ||--o{ tasks : "phase_id"
   tasks ||--o{ tasks : "parent_id"
-  users ||--o{ tasks : "created_by / updated_by"
+  users ||--o{ tasks : "created_by / updated_by / owner"
   tasks ||--o{ task_activity : "task_id"
   tasks ||--o{ task_dependencies : "task_id"
   tasks ||--o{ task_dependencies : "depends_on_task_id"
   projects ||--o{ task_description_templates : "project_id"
-  users ||--o{ task_description_templates : "created / updated"
+  users ||--o{ task_description_templates : "created / updated / owner"
   users ||--o{ task_activity : "created_by"
 
   project_phases {
@@ -30,6 +30,7 @@ erDiagram
     text state
     text priority
     date due_date
+    int owner_id FK
   }
   task_activity {
     int id PK
@@ -78,6 +79,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 | `sort_order` | integer | no | `0` | Manual List View order among siblings. Groups and column sort take precedence in the UI; drag-and-drop writes this field and clears column sort so the drop position sticks. |
 | `created_by_id` | integer | no | — | FK → `users.id` |
 | `updated_by_id` | integer | no | — | FK → `users.id` |
+| `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112); unsorted tasks rely on this |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -90,6 +92,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 - **FK:** `parent_id` → `tasks.id` · **ON DELETE SET NULL**
 - **FK:** `created_by_id` → `users.id` · **ON DELETE RESTRICT**
 - **FK:** `updated_by_id` → `users.id` · **ON DELETE RESTRICT**
+- **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
 
 ---
 
@@ -158,6 +161,7 @@ Reusable Markdown bodies for task descriptions. May be project-scoped or **globa
 | `is_global` | boolean | no | `false` | When true, available on all tasks |
 | `created_by_id` | integer | yes | — | FK → `users.id` |
 | `updated_by_id` | integer | yes | — | FK → `users.id` |
+| `owner_id` | integer | no | — | FK → `users.id` — creator-owned (T0112); global templates still scoped to owner |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -167,3 +171,4 @@ Reusable Markdown bodies for task descriptions. May be project-scoped or **globa
 - **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
 - **FK:** `created_by_id` → `users.id` · **ON DELETE SET NULL**
 - **FK:** `updated_by_id` → `users.id` · **ON DELETE SET NULL**
+- **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**

@@ -10,6 +10,7 @@ import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
+import { getCurrentUserId } from "../../services/users.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
@@ -58,6 +59,7 @@ projectsRouter.post("/", async (req, res) => {
     const parsed = projectBody.parse(req.body);
     const number = await allocateProjectNumber(db);
     const sortOrder = await nextProjectSortOrder(db);
+    const ownerId = await getCurrentUserId(db);
     const [row] = await db
       .insert(schema.projects)
       .values({
@@ -66,6 +68,7 @@ projectsRouter.post("/", async (req, res) => {
         description: parsed.description ?? null,
         status: parsed.status ?? "idea",
         sortOrder,
+        ownerId,
       })
       .returning();
     if (!row) {

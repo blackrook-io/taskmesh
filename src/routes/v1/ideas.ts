@@ -8,6 +8,7 @@ import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/mark
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateIdeaNumber, allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const ideaBody = z.object({
   title: plainTitle(500),
@@ -36,12 +37,14 @@ ideasRouter.post("/", async (req, res) => {
   try {
     const parsed = ideaBody.parse(req.body);
     const number = await allocateIdeaNumber(db);
+    const ownerId = await getCurrentUserId(db);
     const [row] = await db
       .insert(schema.ideas)
       .values({
         number,
         title: parsed.title,
         body: parsed.body ?? null,
+        ownerId,
       })
       .returning();
     if (!row) {
@@ -121,6 +124,7 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
 
     const number = await allocateProjectNumber(db);
     const sortOrder = await nextProjectSortOrder(db);
+    const ownerId = await getCurrentUserId(db);
     const [project] = await db
       .insert(schema.projects)
       .values({
@@ -130,6 +134,7 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
         status: "idea",
         sourceIdeaId: idea.id,
         sortOrder,
+        ownerId,
       })
       .returning();
 

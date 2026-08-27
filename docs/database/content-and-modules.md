@@ -133,12 +133,14 @@ Stored image (and similar) files on disk. Metadata only in Postgres; bytes live 
 | `original_name` | text | no | — | Client filename |
 | `mime_type` | text | no | — | |
 | `size_bytes` | integer | no | — | |
+| `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `created_at` | timestamptz | no | `now()` | |
 
 ### Constraints
 
 - **PK:** `id`
 - **UNIQUE:** `stored_name`
+- **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
 
 ### Relationships
 
@@ -148,18 +150,19 @@ Stored image (and similar) files on disk. Metadata only in Postgres; bytes live 
 
 ## `tags` / `taggings`
 
-Global tag catalog plus polymorphic attachments.
+Per-user tag catalog (T0112) plus polymorphic attachments.
 
 ### `tags` columns
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|--------|
 | `id` | serial | no | — | Primary key |
-| `name` | text | no | — | Unique tag label |
+| `name` | text | no | — | Label unique **per owner** |
 | `color` | text | yes | — | Accent |
+| `owner_id` | integer | no | — | FK → `users.id` — tag owner (T0112) |
 | `created_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `name`. Referenced by `task_groups.auto_tag_id` (`ON DELETE SET NULL`).
+**Constraints:** PK `id`; UNIQUE `(owner_id, name)` — `tags_owner_id_name_uidx`; FK `owner_id` → `users.id` · **ON DELETE RESTRICT**. Referenced by `task_groups.auto_tag_id` (`ON DELETE SET NULL`).
 
 ### `taggings` columns
 
@@ -200,6 +203,7 @@ First-class **ToDo** records (UI label “ToDo”). Display number → **D####**
 | `source_idea_id` | integer | yes | — | FK → `ideas.id` · ON DELETE SET NULL |
 | `created_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
 | `updated_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
+| `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -222,10 +226,11 @@ New memberships use **`todo`** or **`task`**. Legacy **`idea`** rows may remain 
 | `project_id` | integer | yes | — | FK → `projects.id`; null = standalone |
 | `title` | text | no | — | |
 | `kind` | text | no | `'list'` | List kind discriminator |
+| `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `number`; FK `project_id` → `projects.id` · **ON DELETE CASCADE**.
+**Constraints:** PK `id`; UNIQUE `number`; FK `project_id` → `projects.id` · **ON DELETE CASCADE**; FK `owner_id` → `users.id` · **ON DELETE RESTRICT**.
 
 ### `todo_list_items` columns
 
@@ -386,6 +391,7 @@ PureRef-style image boards; optional project association. Display number → **M
 | `title` | text | no | — | |
 | `sort_order` | integer | no | `0` | |
 | `document` | jsonb | no | `{}` | Scene JSON (camera, items, …) |
+| `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `created_at` / `updated_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `number`.
+**Constraints:** PK `id`; UNIQUE `number`; FK `owner_id` → `users.id` · **ON DELETE RESTRICT**.

@@ -161,6 +161,7 @@ tasksRouter.post("/", async (req, res) => {
         sortOrder: nextSort,
         createdById: actorId,
         updatedById: actorId,
+        ownerId: actorId,
       })
       .returning();
     if (!row) {
