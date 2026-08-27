@@ -27,6 +27,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | 2026-08-27 | T0112 | `ownerId` columns + backfill U0001; ownership helpers; create stamps | Schema/helpers only; list/get enforcement → T0113–T0115 |
 | 2026-08-27 | T0113 | Project-tree list/get/mutate via `projects.ownerId`; nested inherit; dual-scope project branch | Standalone/unsorted/tags/uploads → T0114; search/import/transfer → T0115 |
 | 2026-08-27 | T0114 | Standalone ideas, unsorted dual-scope (`ownerId`), per-user tags, upload GET scope, creator-owned templates | Search/assistant/import/transfer → T0115 |
+| 2026-08-27 | T0115 | Search/assistant/import-export ownership scoping; admin ownership transfer API + UI | T0110 epic residual closed |
 
 ## Surfaces
 
@@ -74,9 +75,9 @@ Run after adding a route or query:
 | **T0112** | Ownership schema + helpers (`ownerId`, backfill) — complete |
 | **T0113** | Project-tree list/get/mutate ownership enforcement — complete |
 | **T0114** | Standalone entities, per-user tags, uploads, creator-owned templates — complete |
-| **T0115** | Search / assistant / import-export scoping + admin ownership transfer |
+| **T0115** | Search / assistant / import-export scoping + admin ownership transfer — complete |
 
-**T0110** is the parent epic for T0112–T0115. Project-tree and standalone/unsorted/tags/uploads/templates are scoped to owners (admins bypass). Search, assistant, and import/export remain residual until T0115.
+**T0110** is the parent epic for T0112–T0115. Ownership enforcement (project tree, standalone, search, assistant, import/export) and admin transfer are complete. Remaining multi-user residuals are outside this epic (sharing/teams, automated security CI).
 
 ## Secrets and host hardening (T0087)
 

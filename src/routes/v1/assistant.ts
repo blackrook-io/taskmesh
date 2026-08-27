@@ -8,6 +8,9 @@ import {
   resolveProvider,
   runAssistantWithTools,
 } from "../../services/assistant/index.js";
+import { db } from "../../db/client.js";
+import { userHasAdministrator } from "../../services/roles.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 export const assistantRouter = Router();
 
@@ -90,7 +93,12 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
       toolsEnabled: true,
     });
 
+    const actorUserId = await getCurrentUserId(db);
+    const isAdministrator = await userHasAdministrator(db, actorUserId);
+
     await runAssistantWithTools({
+      actorUserId,
+      isAdministrator,
       messages,
       model: parsed.model,
       signal: ac.signal,

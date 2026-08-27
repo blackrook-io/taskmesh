@@ -1,9 +1,18 @@
-import { and, asc, desc, eq, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { ilikeEscaped } from "../../lib/ilike.js";
 import { fetchUrlForAssistant } from "./fetchUrl.js";
+import {
+  assertCanAccessDualScoped,
+  assertCanAccessOwned,
+  assertCanAccessProject,
+  dualScopeListFilter,
+  ownerScope,
+  projectOwnedListFilter,
+  OwnershipAccessError,
+} from "../ownership.js";
 
 export type AssistantProposal = {
   id: string;
@@ -22,6 +31,9 @@ export type ToolHandlers = {
   onTool?: (info: { name: string; args: unknown }) => void;
   onProposal?: (proposal: AssistantProposal) => void;
   signal?: AbortSignal;
+  /** Authenticated actor for ownership scoping (required for DB tools). */
+  actorUserId?: number;
+  isAdministrator?: boolean;
 };
 
 /** OpenAI Chat Completions tool definitions */
@@ -205,6 +217,21 @@ function clip(s: string, max = 4000): string {
   return s.length <= max ? s : `${s.slice(0, max)}…`;
 }
 
+
+function requireActor(handlers: ToolHandlers): { actorUserId: number; isAdministrator: boolean } {
+  if (handlers.actorUserId == null) {
+    throw new Error("Assistant tool missing actor context");
+  }
+  return {
+    actorUserId: handlers.actorUserId,
+    isAdministrator: Boolean(handlers.isAdministrator),
+  };
+}
+
+function accessDeniedMessage(): string {
+  return JSON.stringify({ error: "Access denied" });
+}
+
 function proposalId(): string {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -225,11 +252,11 @@ export async function executeAssistantTool(
   try {
     switch (name) {
       case "search_records":
-        return await toolSearch(args);
+        return await toolSearch(args, handlers);
       case "get_entity":
-        return await toolGetEntity(args);
+        return await toolGetEntity(args, handlers);
       case "list_project_context":
-        return await toolListProject(args);
+        return await toolListProject(args, handlers);
       case "fetch_url":
         return await toolFetchUrl(args, handlers.signal);
       case "propose_idea_update":
@@ -266,20 +293,44 @@ async function toolFetchUrl(args: unknown, signal?: AbortSignal): Promise<string
   });
 }
 
-async function toolSearch(args: unknown): Promise<string> {
+async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string> {
   const { q } = z.object({ q: z.string().min(1).max(200) }).parse(args);
+  const { actorUserId, isAdministrator } = requireActor(handlers);
+  const ideaScope = ownerScope(schema.ideas.ownerId, actorUserId, isAdministrator);
+  const projectScope = ownerScope(schema.projects.ownerId, actorUserId, isAdministrator);
+  const taskScope = dualScopeListFilter(
+    db,
+    schema.tasks.projectId,
+    schema.tasks.ownerId,
+    actorUserId,
+    isAdministrator,
+  );
+  const documentScope = projectOwnedListFilter(
+    db,
+    schema.projectDocuments.projectId,
+    actorUserId,
+    isAdministrator,
+  );
   const [ideas, projects, tasks, documents] = await Promise.all([
     db
       .select({ id: schema.ideas.id, title: schema.ideas.title })
       .from(schema.ideas)
-      .where(or(ilikeEscaped(schema.ideas.title, q), ilikeEscaped(schema.ideas.body, q)))
+      .where(
+        and(
+          or(ilikeEscaped(schema.ideas.title, q), ilikeEscaped(schema.ideas.body, q)),
+          ideaScope ?? sql`true`,
+        ),
+      )
       .orderBy(desc(schema.ideas.updatedAt))
       .limit(8),
     db
       .select({ id: schema.projects.id, name: schema.projects.name })
       .from(schema.projects)
       .where(
-        or(ilikeEscaped(schema.projects.name, q), ilikeEscaped(schema.projects.description, q)),
+        and(
+          or(ilikeEscaped(schema.projects.name, q), ilikeEscaped(schema.projects.description, q)),
+          projectScope ?? sql`true`,
+        ),
       )
       .orderBy(desc(schema.projects.updatedAt))
       .limit(8),
@@ -294,6 +345,7 @@ async function toolSearch(args: unknown): Promise<string> {
         and(
           ne(schema.tasks.state, "deleted"),
           or(ilikeEscaped(schema.tasks.title, q), ilikeEscaped(schema.tasks.description, q)),
+          taskScope ?? sql`true`,
         ),
       )
       .orderBy(desc(schema.tasks.updatedAt))
@@ -306,9 +358,12 @@ async function toolSearch(args: unknown): Promise<string> {
       })
       .from(schema.projectDocuments)
       .where(
-        or(
-          ilikeEscaped(schema.projectDocuments.title, q),
-          ilikeEscaped(schema.projectDocuments.body, q),
+        and(
+          or(
+            ilikeEscaped(schema.projectDocuments.title, q),
+            ilikeEscaped(schema.projectDocuments.body, q),
+          ),
+          documentScope ?? sql`true`,
         ),
       )
       .orderBy(desc(schema.projectDocuments.updatedAt))
@@ -317,93 +372,103 @@ async function toolSearch(args: unknown): Promise<string> {
   return JSON.stringify({ ideas, projects, tasks, documents });
 }
 
-async function toolGetEntity(args: unknown): Promise<string> {
+async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<string> {
   const parsed = z
     .object({
       entityType: z.enum(["idea", "project", "document", "task"]),
       entityId: z.number().int().positive(),
     })
     .parse(args);
+  const { actorUserId } = requireActor(handlers);
 
-  if (parsed.entityType === "idea") {
-    const [row] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, parsed.entityId));
-    if (!row) return JSON.stringify({ error: "Idea not found" });
+  try {
+    if (parsed.entityType === "idea") {
+      const [row] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, parsed.entityId));
+      if (!row) return JSON.stringify({ error: "Idea not found" });
+      await assertCanAccessOwned(db, actorUserId, row.ownerId);
+      return JSON.stringify({
+        type: "idea",
+        id: row.id,
+        title: row.title,
+        body: clip(row.body ?? "", 8000),
+      });
+    }
+    if (parsed.entityType === "project") {
+      const row = await assertCanAccessProject(db, actorUserId, parsed.entityId);
+      return JSON.stringify({
+        type: "project",
+        id: row.id,
+        name: row.name,
+        description: clip(row.description ?? "", 4000),
+        status: row.status,
+      });
+    }
+    if (parsed.entityType === "document") {
+      const [row] = await db
+        .select()
+        .from(schema.projectDocuments)
+        .where(eq(schema.projectDocuments.id, parsed.entityId));
+      if (!row) return JSON.stringify({ error: "Document not found" });
+      await assertCanAccessProject(db, actorUserId, row.projectId);
+      return JSON.stringify({
+        type: "document",
+        id: row.id,
+        projectId: row.projectId,
+        title: row.title,
+        body: clip(row.body ?? "", 8000),
+      });
+    }
+    const [row] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parsed.entityId));
+    if (!row) return JSON.stringify({ error: "Task not found" });
+    await assertCanAccessDualScoped(db, actorUserId, row);
     return JSON.stringify({
-      type: "idea",
-      id: row.id,
-      title: row.title,
-      body: clip(row.body ?? "", 8000),
-    });
-  }
-  if (parsed.entityType === "project") {
-    const [row] = await db
-      .select()
-      .from(schema.projects)
-      .where(eq(schema.projects.id, parsed.entityId));
-    if (!row) return JSON.stringify({ error: "Project not found" });
-    return JSON.stringify({
-      type: "project",
-      id: row.id,
-      name: row.name,
-      description: clip(row.description ?? "", 4000),
-      status: row.status,
-    });
-  }
-  if (parsed.entityType === "document") {
-    const [row] = await db
-      .select()
-      .from(schema.projectDocuments)
-      .where(eq(schema.projectDocuments.id, parsed.entityId));
-    if (!row) return JSON.stringify({ error: "Document not found" });
-    return JSON.stringify({
-      type: "document",
+      type: "task",
       id: row.id,
       projectId: row.projectId,
       title: row.title,
-      body: clip(row.body ?? "", 8000),
+      description: clip(row.description ?? "", 4000),
+      dueDate: row.dueDate ?? null,
+      number: row.number,
+      state: row.state,
+      priority: row.priority,
+      parentId: row.parentId,
+      color: row.color,
+      phaseId: row.phaseId,
     });
+  } catch (err) {
+    if (err instanceof OwnershipAccessError) return accessDeniedMessage();
+    throw err;
   }
-  const [row] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parsed.entityId));
-  if (!row) return JSON.stringify({ error: "Task not found" });
-  return JSON.stringify({
-    type: "task",
-    id: row.id,
-    projectId: row.projectId,
-    title: row.title,
-    description: clip(row.description ?? "", 4000),
-    dueDate: row.dueDate ?? null,
-    number: row.number,
-    state: row.state,
-    priority: row.priority,
-    parentId: row.parentId,
-    color: row.color,
-    phaseId: row.phaseId,
-  });
 }
 
-async function toolListProject(args: unknown): Promise<string> {
+async function toolListProject(args: unknown, handlers: ToolHandlers): Promise<string> {
   const { projectId } = z.object({ projectId: z.number().int().positive() }).parse(args);
-  const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
-  if (!proj) return JSON.stringify({ error: "Project not found" });
-  const [docs, tasks] = await Promise.all([
-    db
-      .select({ id: schema.projectDocuments.id, title: schema.projectDocuments.title })
-      .from(schema.projectDocuments)
-      .where(eq(schema.projectDocuments.projectId, projectId))
-      .orderBy(schema.projectDocuments.position)
-      .limit(40),
-    db
-      .select({ id: schema.tasks.id, title: schema.tasks.title })
-      .from(schema.tasks)
-      .where(eq(schema.tasks.projectId, projectId))
-      .orderBy(schema.tasks.sortOrder)
-      .limit(40),
-  ]);
-  return JSON.stringify({
-    project: { id: proj.id, name: proj.name, status: proj.status },
-    documents: docs,
-    tasks,
-  });
+  const { actorUserId } = requireActor(handlers);
+  try {
+    const proj = await assertCanAccessProject(db, actorUserId, projectId);
+    const [docs, tasks] = await Promise.all([
+      db
+        .select({ id: schema.projectDocuments.id, title: schema.projectDocuments.title })
+        .from(schema.projectDocuments)
+        .where(eq(schema.projectDocuments.projectId, projectId))
+        .orderBy(schema.projectDocuments.position)
+        .limit(40),
+      db
+        .select({ id: schema.tasks.id, title: schema.tasks.title })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.projectId, projectId))
+        .orderBy(schema.tasks.sortOrder)
+        .limit(40),
+    ]);
+    return JSON.stringify({
+      project: { id: proj.id, name: proj.name, status: proj.status },
+      documents: docs,
+      tasks,
+    });
+  } catch (err) {
+    if (err instanceof OwnershipAccessError) return accessDeniedMessage();
+    throw err;
+  }
 }
 
 async function toolProposeIdeaUpdate(args: unknown, handlers: ToolHandlers): Promise<string> {
@@ -420,6 +485,12 @@ async function toolProposeIdeaUpdate(args: unknown, handlers: ToolHandlers): Pro
     .from(schema.ideas)
     .where(eq(schema.ideas.id, parsed.ideaId));
   if (!existing) return JSON.stringify({ error: "Idea not found" });
+  try {
+    await assertCanAccessOwned(db, requireActor(handlers).actorUserId, existing.ownerId);
+  } catch (err) {
+    if (err instanceof OwnershipAccessError) return accessDeniedMessage();
+    throw err;
+  }
   const fields: Record<string, unknown> = {};
   if (parsed.title !== undefined) fields.title = parsed.title;
   if (parsed.body !== undefined) fields.body = parsed.body;
@@ -464,6 +535,12 @@ async function toolProposeDocumentUpdate(args: unknown, handlers: ToolHandlers):
       ),
     );
   if (!existing) return JSON.stringify({ error: "Document not found" });
+  try {
+    await assertCanAccessProject(db, requireActor(handlers).actorUserId, parsed.projectId);
+  } catch (err) {
+    if (err instanceof OwnershipAccessError) return accessDeniedMessage();
+    throw err;
+  }
   const fields: Record<string, unknown> = {};
   if (parsed.title !== undefined) fields.title = parsed.title;
   if (parsed.body !== undefined) fields.body = parsed.body;
@@ -508,6 +585,12 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
     .from(schema.tasks)
     .where(and(eq(schema.tasks.id, parsed.taskId), eq(schema.tasks.projectId, parsed.projectId)));
   if (!existing) return JSON.stringify({ error: "Task not found" });
+  try {
+    await assertCanAccessDualScoped(db, requireActor(handlers).actorUserId, existing);
+  } catch (err) {
+    if (err instanceof OwnershipAccessError) return accessDeniedMessage();
+    throw err;
+  }
   const fields: Record<string, unknown> = {};
   if (parsed.title !== undefined) fields.title = parsed.title;
   if (parsed.description !== undefined) fields.description = parsed.description;
@@ -578,6 +661,12 @@ async function toolProposeDocumentCreate(args: unknown, handlers: ToolHandlers):
     .from(schema.projects)
     .where(eq(schema.projects.id, parsed.projectId));
   if (!proj) return JSON.stringify({ error: "Project not found" });
+  try {
+    await assertCanAccessOwned(db, requireActor(handlers).actorUserId, proj.ownerId);
+  } catch (err) {
+    if (err instanceof OwnershipAccessError) return accessDeniedMessage();
+    throw err;
+  }
   const fields: Record<string, unknown> = { title: parsed.title };
   if (parsed.body !== undefined) fields.body = parsed.body;
   const proposal: AssistantProposal = {
@@ -614,6 +703,12 @@ async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Pro
     .from(schema.projects)
     .where(eq(schema.projects.id, parsed.projectId));
   if (!proj) return JSON.stringify({ error: "Project not found" });
+  try {
+    await assertCanAccessOwned(db, requireActor(handlers).actorUserId, proj.ownerId);
+  } catch (err) {
+    if (err instanceof OwnershipAccessError) return accessDeniedMessage();
+    throw err;
+  }
   const fields: Record<string, unknown> = { title: parsed.title };
   if (parsed.description !== undefined) fields.description = parsed.description;
   if (parsed.dueDate !== undefined && parsed.dueDate !== null) fields.dueDate = parsed.dueDate;

@@ -60,6 +60,10 @@ import {
 } from "../../services/taskDescriptionTemplates.js";
 import { recordTaskChanges } from "../../services/tasks.js";
 import {
+  OwnershipTransferValidationError,
+  transferOwnership,
+} from "../../services/ownershipTransfer.js";
+import {
   attachTaskActor,
   getCurrentUser,
   getCurrentUserId,
@@ -692,6 +696,41 @@ adminRouter.post("/deleted-tasks/:id/restore", async (req, res) => {
     });
     res.json({ data: await attachTaskActor(db, row) });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const ownershipTransferBody = z
+  .object({
+    entityType: z.enum([
+      "project",
+      "idea",
+      "task",
+      "todo",
+      "todo_list",
+      "image_board",
+      "upload",
+      "tag",
+      "template",
+    ]),
+    entityId: z.number().int().positive(),
+    newOwnerId: z.number().int().positive(),
+  })
+  .strict();
+
+adminRouter.post("/ownership/transfer", async (req, res) => {
+  try {
+    const body = ownershipTransferBody.parse(req.body);
+    const data = await transferOwnership(db, body);
+    const actor = await getCurrentUser(db);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Ownership transfer: ${data.entityType} #${data.entityId} ${data.previousOwnerId}→${data.newOwnerId}`;
+    res.json({ data });
+  } catch (err) {
+    if (err instanceof OwnershipTransferValidationError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
     handleRouteError(res, err);
   }
 });

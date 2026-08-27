@@ -6,6 +6,13 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ilikeEscaped } from "../../lib/ilike.js";
 import { searchRateLimit } from "../../middleware/rateLimits.js";
+import {
+  dualScopeListFilter,
+  ownerScope,
+  projectOwnedListFilter,
+} from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 export const searchRouter = Router();
 
@@ -62,12 +69,44 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
       return;
     }
 
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const ideaScope = ownerScope(schema.ideas.ownerId, actorId, isAdmin) ?? sql`true`;
+    const projectScope = ownerScope(schema.projects.ownerId, actorId, isAdmin) ?? sql`true`;
+    const taskScope =
+      dualScopeListFilter(db, schema.tasks.projectId, schema.tasks.ownerId, actorId, isAdmin) ??
+      sql`true`;
+    const todoScope =
+      dualScopeListFilter(db, schema.todos.projectId, schema.todos.ownerId, actorId, isAdmin) ??
+      sql`true`;
+    const todoListScope =
+      dualScopeListFilter(
+        db,
+        schema.todoLists.projectId,
+        schema.todoLists.ownerId,
+        actorId,
+        isAdmin,
+      ) ?? sql`true`;
+    const documentScope =
+      projectOwnedListFilter(db, schema.projectDocuments.projectId, actorId, isAdmin) ?? sql`true`;
+    const boardScope =
+      projectOwnedListFilter(db, schema.boards.projectId, actorId, isAdmin) ?? sql`true`;
+    const canvasScope =
+      projectOwnedListFilter(db, schema.canvases.projectId, actorId, isAdmin) ?? sql`true`;
+    const wikiScope =
+      projectOwnedListFilter(db, schema.wikiNodes.projectId, actorId, isAdmin) ?? sql`true`;
+
     let filterTagId = tagId;
     if (tagName && filterTagId == null) {
+      const tagOwner = ownerScope(schema.tags.ownerId, actorId, isAdmin);
       const [tagRow] = await db
         .select()
         .from(schema.tags)
-        .where(eq(schema.tags.name, tagName));
+        .where(
+          tagOwner
+            ? and(eq(schema.tags.name, tagName), tagOwner)
+            : eq(schema.tags.name, tagName),
+        );
       if (!tagRow) {
         res.json({ data: { ...emptyResults } });
         return;
@@ -77,6 +116,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
 
     let tagMeta: { id: number; name: string; color: string | null } | null = null;
     if (filterTagId != null) {
+      const tagOwner = ownerScope(schema.tags.ownerId, actorId, isAdmin);
       const [t] = await db
         .select({
           id: schema.tags.id,
@@ -84,7 +124,11 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
           color: schema.tags.color,
         })
         .from(schema.tags)
-        .where(eq(schema.tags.id, filterTagId));
+        .where(
+          tagOwner
+            ? and(eq(schema.tags.id, filterTagId), tagOwner)
+            : eq(schema.tags.id, filterTagId),
+        );
       tagMeta = t ?? null;
       if (!tagMeta) {
         res.json({ data: { ...emptyResults } });
@@ -145,6 +189,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                       ilikeEscaped(schema.ideas.body, q),
                     )
                   : sql`true`,
+                ideaScope
               ),
             )
             .orderBy(desc(schema.ideas.updatedAt))
@@ -167,6 +212,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                       ilikeEscaped(schema.projects.description, q),
                     )
                   : sql`true`,
+                projectScope
               ),
             )
             .orderBy(desc(schema.projects.updatedAt))
@@ -193,6 +239,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                       ),
                     )
                   : sql`true`,
+                taskScope
               ),
             )
             .orderBy(desc(schema.tasks.updatedAt))
@@ -219,6 +266,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                       ),
                     )
                   : sql`true`,
+                todoScope
               ),
             )
             .orderBy(desc(schema.todos.updatedAt))
@@ -241,6 +289,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                       ilikeEscaped(schema.projectDocuments.body, q),
                     )
                   : sql`true`,
+                documentScope
               ),
             )
             .orderBy(desc(schema.projectDocuments.updatedAt))
@@ -256,6 +305,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
               and(
                 boardIds != null ? inArray(schema.boards.id, boardIds) : sql`true`,
                 q ? ilikeEscaped(schema.boards.name, q) : sql`true`,
+                boardScope
               ),
             )
             .orderBy(desc(schema.boards.updatedAt))
@@ -278,6 +328,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
               and(
                 canvasIds != null ? inArray(schema.canvases.id, canvasIds) : sql`true`,
                 q ? ilikeEscaped(schema.canvases.title, q) : sql`true`,
+                canvasScope
               ),
             )
             .orderBy(desc(schema.canvases.updatedAt))
@@ -295,6 +346,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                   ? inArray(schema.todoLists.id, todoListIds)
                   : sql`true`,
                 q ? ilikeEscaped(schema.todoLists.title, q) : sql`true`,
+                todoListScope
               ),
             )
             .orderBy(desc(schema.todoLists.updatedAt))
@@ -345,6 +397,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                   ? inArray(schema.wikiNodes.id, wikiNodeIdFilter)
                   : sql`true`,
                 q ? ilikeEscaped(schema.wikiNodes.title, q) : sql`true`,
+                wikiScope,
               ),
             )
             .orderBy(desc(schema.wikiNodes.updatedAt))

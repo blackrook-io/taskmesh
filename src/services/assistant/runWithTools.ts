@@ -36,6 +36,8 @@ export async function runAssistantWithTools(args: {
   model?: string;
   signal?: AbortSignal;
   handlers: RunAssistantHandlers;
+  actorUserId: number;
+  isAdministrator: boolean;
 }): Promise<void> {
   const cfg = getAssistantConfig();
   const apiKey = cfg.openaiKey;
@@ -87,6 +89,8 @@ export async function runAssistantWithTools(args: {
               onTool: args.handlers.onTool,
               onProposal: args.handlers.onProposal,
               signal: args.signal,
+              actorUserId: args.actorUserId,
+              isAdministrator: args.isAdministrator,
             },
           );
           messages.push({

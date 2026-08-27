@@ -201,3 +201,23 @@ export function dualScopeListFilter(
     inArray(projectIdColumn, ownedProjectIds),
   );
 }
+
+/**
+ * List filter for project-nested rows (documents, boards, canvases, wiki):
+ * - Admins: no filter
+ * - Others: `project_id` in projects owned by actor
+ */
+export function projectOwnedListFilter(
+  db: Db,
+  projectIdColumn: AnyPgColumn,
+  actorUserId: number,
+  isAdministrator: boolean,
+): SQL | undefined {
+  if (isAdministrator) return undefined;
+  const ownedProjectIds = db
+    .select({ id: schema.projects.id })
+    .from(schema.projects)
+    .where(eq(schema.projects.ownerId, actorUserId));
+  return inArray(projectIdColumn, ownedProjectIds);
+}
+

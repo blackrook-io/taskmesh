@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
@@ -14,6 +14,8 @@ import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { allocateTaskNumber, assertPhaseForProject } from "../../services/tasks.js";
+import { assertCanAccessProject, ownerScope } from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
 import {
   objectsToCsv,
@@ -99,7 +101,12 @@ function sendDownload(
 importExportRouter.get("/export/projects", async (req, res) => {
   try {
     const format = formatQuery.parse(req.query.format ?? "csv");
-    const rows = await db.select().from(schema.projects);
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
+    const rows = scope
+      ? await db.select().from(schema.projects).where(scope)
+      : await db.select().from(schema.projects);
     sendDownload(
       res,
       format,
@@ -115,16 +122,42 @@ importExportRouter.get("/export/projects", async (req, res) => {
 importExportRouter.get("/export/tasks", async (req, res) => {
   try {
     const format = formatQuery.parse(req.query.format ?? "csv");
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
     const projectIdRaw = req.query.projectId;
     let rows;
     if (projectIdRaw != null && projectIdRaw !== "") {
       const projectId = z.coerce.number().int().positive().parse(projectIdRaw);
+      await assertCanAccessProject(db, actorId, projectId);
       rows = await db
         .select()
         .from(schema.tasks)
         .where(eq(schema.tasks.projectId, projectId));
     } else {
-      rows = await db.select().from(schema.tasks);
+      const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
+      if (scope) {
+        const ownedProjects = await db
+          .select({ id: schema.projects.id })
+          .from(schema.projects)
+          .where(scope);
+        const ids = ownedProjects.map((p) => p.id);
+        rows = ids.length
+          ? await db.select().from(schema.tasks).where(inArray(schema.tasks.projectId, ids))
+          : [];
+        // Also include unsorted tasks owned by actor
+        const unsorted = await db
+          .select()
+          .from(schema.tasks)
+          .where(
+            and(
+              isNull(schema.tasks.projectId),
+              eq(schema.tasks.ownerId, actorId),
+            ),
+          );
+        rows = [...rows, ...unsorted];
+      } else {
+        rows = await db.select().from(schema.tasks);
+      }
     }
     sendDownload(res, format, "taskmesh-tasks", rows.map(taskExportRow), "tasks");
   } catch (err) {
@@ -135,8 +168,26 @@ importExportRouter.get("/export/tasks", async (req, res) => {
 importExportRouter.get("/export/bundle", async (req, res) => {
   try {
     const format = formatQuery.parse(req.query.format ?? "xlsx");
-    const projects = await db.select().from(schema.projects);
-    const tasks = await db.select().from(schema.tasks);
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
+    const projects = scope
+      ? await db.select().from(schema.projects).where(scope)
+      : await db.select().from(schema.projects);
+    let tasks;
+    if (scope) {
+      const ids = projects.map((p) => p.id);
+      const projectTasks = ids.length
+        ? await db.select().from(schema.tasks).where(inArray(schema.tasks.projectId, ids))
+        : [];
+      const unsorted = await db
+        .select()
+        .from(schema.tasks)
+        .where(and(isNull(schema.tasks.projectId), eq(schema.tasks.ownerId, actorId)));
+      tasks = [...projectTasks, ...unsorted];
+    } else {
+      tasks = await db.select().from(schema.tasks);
+    }
     const projectRows = projects.map(projectExportRow);
     const taskRows = tasks.map(taskExportRow);
 
@@ -375,6 +426,16 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
         row: rowNum,
         code: "invalid_data",
         reason: `projectId ${projectId} does not exist (import projects first)`,
+      });
+      continue;
+    }
+    try {
+      await assertCanAccessProject(db, await getCurrentUserId(db), projectId);
+    } catch {
+      discarded.push({
+        row: rowNum,
+        code: "invalid_data",
+        reason: `projectId ${projectId} is not accessible to the importing user`,
       });
       continue;
     }

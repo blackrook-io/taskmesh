@@ -1,0 +1,87 @@
+# T0115 — Ownership — search, import, admin transfer
+
+**Task:** T0115 (id `127`) — Ownership — search, import, admin transfer  
+**Parent:** T0110 — Per-user record ownership (`pending`)  
+**Grandparent:** T0095 — Implement Multi-User  
+**State:** implemented on `T0115-ownership-search-import-transfer`, awaiting QA / finish-up  
+**Priority:** medium  
+**Depends on:** T0113 ✅, T0114 ✅  
+
+## Context
+
+T0112–T0114 shipped `ownerId`, helpers, project-tree enforcement, and standalone/tags/uploads/templates scoping. Residual leak surfaces: **global search**, **assistant tools**, **import/export**, plus **admin-only ownership transfer** UI/API. This slice closes the T0110 epic.
+
+## Interview (confirmed)
+
+| # | Topic | Proposed decision |
+|---|-------|-------------------|
+| 1 | Transfer entity types | Admin can reassign `ownerId` on all tables that have it: **projects, ideas, tasks, todos, todo_lists, image_boards, uploads, tags, templates**. Nested project children (docs/boards/wiki/…) inherit via project — no separate transfer. |
+| 2 | Project transfer cascade | Change **`projects.ownerId` only**. Project-scoped child rows keep their stamped `ownerId` (access already gates on project owner). Optional bulk rewrite of child `ownerId`s **out of scope** unless you want it. |
+| 3 | Transfer API | Admin-only `PATCH /api/v1/admin/ownership` (or per-type under `/admin/…`) with `{ entityType, entityId, newOwnerId }`. Non-admin → 403. Validate target user exists + active. |
+| 4 | Transfer UI | New **Administration** section (“Ownership”) — pick entity type, id/search, new owner user. No per-record chrome on Project/Idea pages this Task. |
+| 5 | Search / tag filter | Non-admin: filter each result set with existing `ownerScope` / project ownership / dual-scope rules. Tag by name/`tagId`: only actor’s tags (admin: any). Nested types (docs, boards, …) → join/assert via project owner. |
+| 6 | Assistant tools | Same filters/asserts as search/get routes: `search_records`, `get_entity`, `list_project_context`, and `propose_*` (deny propose if actor cannot access target / project). |
+| 7 | Export | Non-admin: only owned projects + tasks they can access (project-owned tree + unsorted they own). Admin: all (current behavior). |
+| 8 | Import | Keep stamp `ownerId = actor`. Non-admin importing tasks: **must** target a project they own (or unsorted); discard/403 otherwise. Admin may import into any project. |
+| 9 | Activity / audit | Log transfer as admin activity or simple comment-less audit via existing admin logging if cheap; otherwise skip dedicated audit table. |
+
+## Goal
+
+Non-admins cannot discover or export another user’s data via search/assistant/import-export. Admins can transfer ownership of top-level owned records. SECURITY.md residuals for T0110 cleared.
+
+## Scope
+
+### Search (`src/routes/v1/search.ts`)
+
+- Resolve actor + admin flag.
+- Scope tag lookup to actor’s tags (unless admin).
+- Apply ownership filters to ideas/projects/tasks/todos/lists and project-backed nested entities (documents, boards, canvases, wiki) consistent with T0113/T0114 helpers.
+
+### Assistant (`src/services/assistant/tools.ts`)
+
+- Thread actor user id into tool execution (from request context already available on assistant route).
+- Scope `search_records` / `get_entity` / `list_project_context` / propose tools with ownership asserts; return tool-level errors (not raw foreign rows).
+
+### Import/export (`src/routes/v1/importExport.ts`)
+
+- Export: `ownerScope` / project access filters for non-admins.
+- Import: stamp actor; assert project access when `projectId` set; unsorted stamps actor `ownerId`.
+
+### Admin ownership transfer
+
+- API under `admin` router + `requireAdministrator`.
+- SPA: `AdminOwnershipPanel` + new admin section.
+- Confirmation before apply; show old/new owner.
+
+### Docs / SECURITY
+
+- Mark T0115 complete; clear T0110 residual search/assistant/import/transfer notes.
+- No schema migration / no `docs/database` churn unless API surface is documented elsewhere.
+
+### Tests
+
+- Search: non-admin does not see foreign projects/ideas/tasks/tag hits; admin does.
+- Assistant tools: foreign get/search denied or empty.
+- Export: non-admin limited; import into foreign project discarded/denied for non-admin.
+- Transfer: admin OK; non-admin 403; invalid user rejected.
+
+## Out of scope
+
+- Sharing / team ownership / non-admin transfer
+- Rewriting nested child `ownerId` on project transfer
+- Per-record ownership chrome outside Administration
+- New migration
+
+## Branch
+
+- `T0115-ownership-search-import-transfer` (after plan approval)
+
+## Version
+
+No new migration → **PATCH** bump on finish-up.
+
+## Done when
+
+- Search + assistant + import/export respect ownership (admin bypass)
+- Admin can transfer ownership via API + Administration UI
+- SECURITY.md updated; tests + QA checklist; finish-up only on request
