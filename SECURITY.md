@@ -6,7 +6,9 @@ Living record of input-path audits and hardening. Update this file when routes, 
 
 **CSRF (T0087):** mutating `/api/v1/*` requests that carry a session cookie must include `X-TaskMesh-Client: ui` (SPA) and pass same-origin `Origin`/`Referer` checks when those headers are sent. `POST /auth/login` is exempt. API keys bypass CSRF when T0063 ships.
 
-Anyone who can reach the process without authenticating cannot read or mutate application data, but **TLS/nginx exposure** and **rate limits** still matter — see [residual risks](#residual-risk-follow-up-tasks).
+**Rate limits (T0085):** in-process `express-rate-limit` budgets keyed by session user (or API key id when present), else client IP. Tight caps on login, backup run/restore, import, uploads, assistant chat, and search; loose global ceiling on `/api/v1/*`. Exceeded requests return **429** `rate_limited` with `Retry-After`. Store is memory-only (single Node process); multi-instance would need a shared store later.
+
+Anyone who can reach the process without authenticating cannot read or mutate application data, but **TLS/nginx exposure** still matters — see [host hardening](#secrets-and-host-hardening-t0087).
 
 **SQL stance:** use parameterized queries (Drizzle). Do **not** concatenate user strings into SQL. “Sanitizing” strings for SQL is not a substitute.
 
@@ -16,6 +18,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 |------|------|-------------------|---------|
 | 2026-08-20 | T0073 | All `/api/v1` input paths, Drizzle `sql` / `ILIKE`, uploads, backup `execFile`, assistant URL fetch, Markdown editor links, HTTP headers | Hardening below; residuals → follow-up Tasks |
 | 2026-08-27 | T0087 | CSRF for cookie sessions, CSP second pass, nginx/TLS template sync, secrets/host checklist | CSRF middleware + SPA header; prod CSP `https:` images + wasm; deploy/ssl docs |
+| 2026-08-27 | T0085 | Rate limits on login + expensive routes; global API ceiling | `express-rate-limit` in-memory; 429 `rate_limited` |
 
 ## Surfaces
 
@@ -29,10 +32,11 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | Canvas / image-board `document` JSON | Max 2 000 000 UTF-8 bytes | `express.json` remains 10 MB for the request envelope |
 | Uploads | UUID filenames; GET uses `path.basename`; **magic-byte** sniff (jpeg/png/gif/webp) | Stored MIME is sniffed, not client-claimed |
 | Assistant `fetchUrl` | http(s) only; DNS resolve; block private IPs; **manual** redirects (max 2) re-checked | No intranet/localhost fetch |
-| Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore requires authenticated session; rate limits still open (T0085) |
+| Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore/run rate-limited (T0085) |
 | Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production | CSRF: SPA client header + Origin/Referer on mutating routes (T0087) |
 | TLS | nginx terminates HTTPS :443; Express on loopback only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); certbot path for public hosts |
-| Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | DoS residual without rate limits |
+| Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | Import rate-limited (T0085) |
+| Rate limits | Per-route + global `express-rate-limit` (memory store) | Login IP; user/key for authenticated; see threat model |
 | Client text inputs | Capture-phase sanitizer on every `<input>` / `<textarea>` | Skips password/file/number/date/color and TipTap `contenteditable` |
 
 ## HTTP headers
@@ -57,7 +61,6 @@ Run after adding a route or query:
 
 | Task | Topic |
 |------|--------|
-| **T0085** | API rate limiting and abuse controls |
 | **T0086** | Automated security tests in CI (`npm audit`, SAST) |
 | **T0063** | API key auth (second auth path; bypasses CSRF header gate) |
 | **T0108** | Role-based Administration 403 |

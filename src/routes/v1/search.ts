@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ilikeEscaped } from "../../lib/ilike.js";
+import { searchRateLimit } from "../../middleware/rateLimits.js";
 
 export const searchRouter = Router();
 
@@ -26,7 +27,7 @@ const emptyResults = {
  * Query params: `q` (text), `tag` (tag name) and/or `tagId` (number).
  * At least one of q / tag / tagId is required.
  */
-searchRouter.get("/", async (req, res) => {
+searchRouter.get("/", searchRateLimit, async (req, res) => {
   try {
     const qRaw = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (qRaw.length > 200) {

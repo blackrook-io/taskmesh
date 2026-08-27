@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { assistantChatRateLimit } from "../../middleware/rateLimits.js";
 import {
   buildMessages,
   getAssistantConfig,
@@ -45,7 +46,7 @@ const chatBody = z.object({
   model: z.string().min(1).max(120).optional(),
 });
 
-assistantRouter.post("/chat", async (req, res) => {
+assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
   try {
     const provider = resolveProvider();
     if (!provider) {

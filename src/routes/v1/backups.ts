@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { heavyWriteRateLimit } from "../../middleware/rateLimits.js";
 import {
   deleteBackup,
   listBackups,
@@ -28,7 +29,7 @@ backupsRouter.get("/", (_req, res) => {
   }
 });
 
-backupsRouter.post("/run", async (_req, res) => {
+backupsRouter.post("/run", heavyWriteRateLimit, async (_req, res) => {
   try {
     const manifest = await runBackup();
     res.json({ data: manifest });
@@ -69,7 +70,7 @@ const restoreBody = z
   })
   .optional();
 
-backupsRouter.post("/:id/restore", async (req, res) => {
+backupsRouter.post("/:id/restore", heavyWriteRateLimit, async (req, res) => {
   try {
     const id = z.string().min(1).max(64).parse(req.params.id);
     const body = restoreBody.parse(req.body ?? {});

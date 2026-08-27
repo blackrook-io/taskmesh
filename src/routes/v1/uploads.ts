@@ -9,6 +9,7 @@ import * as schema from "../../db/schema.js";
 import { sniffImageMime } from "../../lib/imageMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { getUploadDir } from "../../lib/paths.js";
+import { uploadRateLimit } from "../../middleware/rateLimits.js";
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 const MAX_BYTES = Number(process.env.UPLOAD_MAX_BYTES ?? 5 * 1024 * 1024);
@@ -38,7 +39,7 @@ const upload = multer({
 
 export const uploadsRouter = Router();
 
-uploadsRouter.post("/uploads", upload.single("file"), async (req, res) => {
+uploadsRouter.post("/uploads", uploadRateLimit, upload.single("file"), async (req, res) => {
   try {
     const file = req.file;
     if (!file) {

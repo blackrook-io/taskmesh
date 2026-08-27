@@ -25,6 +25,7 @@ import { apiRequestLogger } from "../../middleware/apiRequestLogger.js";
 import { apiKeyAuth } from "../../middleware/apiKeyAuth.js";
 import { csrfProtection } from "../../middleware/csrfProtection.js";
 import { requireAuth } from "../../middleware/requireAuth.js";
+import { globalApiRateLimit } from "../../middleware/rateLimits.js";
 import { sessionLoader } from "../../middleware/sessionLoader.js";
 import { sanitizeIncomingStrings } from "../../middleware/sanitizeIncomingStrings.js";
 import { rejectImmutableBody } from "../../middleware/rejectImmutableBody.js";
@@ -38,6 +39,7 @@ v1Router.use(apiKeyAuth);
 v1Router.use(sessionLoader);
 v1Router.use(csrfProtection);
 v1Router.use(requireAuth);
+v1Router.use(globalApiRateLimit);
 
 v1Router.use("/auth", authRouter);
 v1Router.use("/admin", adminRouter);

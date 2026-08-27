@@ -1,0 +1,91 @@
+# T0085 — API rate limiting and abuse controls
+
+**Task:** T0085 (id `97`) — API rate limiting and abuse controls  
+**Parent:** T0084 — Authentication and session binding (`pending` — own work done)  
+**Grandparent:** T0095 — Implement Multi-User  
+**State:** Ready · **Priority:** urgent  
+**Depends on:** T0084 ✅ `pending` (satisfied)  
+**Required by:** T0063 — Implement API Keys (`ready`)
+
+## Context
+
+Auth (T0084) and CSRF/TLS (T0087) ship in `0.30.x`. Residual DoS risk: authenticated (or public-login) callers can still hammer expensive routes — backup restore, import, uploads, assistant chat, search — burning CPU, disk, Postgres, and OpenAI spend.
+
+No rate-limit middleware exists today. `trust proxy` is already set for correct client IP behind nginx.
+
+## Size / split
+
+One cohesive middleware + per-route budgets + tests + SECURITY update. No schema. Suitable as a single worktask. No split.
+
+## Proposed approach
+
+### 1. Library + store
+
+- Add **`express-rate-limit`** (mature, Express 4, TypeScript-friendly).
+- **In-memory store** (single Node process / one systemd unit). Document that multi-instance would need a shared store later — out of scope.
+- Key primarily by **authenticated user id** when `req.userId` is set; else **client IP** (login / pre-auth). When T0063 lands, API-key identity can share the same key helper.
+
+### 2. Limit tiers (defaults)
+
+| Tier | Routes | Window | Max |
+|------|--------|--------|-----|
+| **Auth login** | `POST /auth/login` | 15 min | 20 / IP |
+| **Heavy write** | backup restore, backup run, import | 1 hour | 5 / user |
+| **Uploads** | `POST /uploads` | 15 min | 60 / user |
+| **Assistant** | `POST /assistant/chat` | 1 min | 10 / user |
+| **Search** | `GET /search` | 1 min | 60 / user |
+| **Global API** (optional baseline) | all `/api/v1/*` after auth stack | 1 min | 300 / user-or-IP |
+
+Exact numbers adjustable in interview. Prefer constants in one module (`src/middleware/rateLimits.ts`) rather than system properties for this Task (avoids Admin UI + migration).
+
+### 3. Wiring
+
+- Export named limiters from `src/middleware/rateLimits.ts`.
+- Attach **per-route** on the expensive handlers (backups restore/run, import, uploads POST, assistant chat, search GET).
+- Attach **login** limiter on `POST /auth/login` (public; IP-keyed) — credential stuffing / lockout amplification.
+- Optional thin **global** limiter on `v1Router` after `requireAuth` (or before) so miscellaneous CRUD cannot unbounded-flood.
+- On exceed: **429** via existing `sendError` shape (`code: "rate_limited"`), plus `Retry-After` when the library provides it.
+- Skip or relax in unit tests via `skip` / env if needed so `npm test` stays stable.
+
+### 4. Docs / SECURITY
+
+- Move T0085 from residual risks → shipped surfaces; note in-memory / single-process caveat.
+- Brief mention in audit log row for this Task.
+
+### 5. Tests
+
+- Unit/middleware tests: under limit → next(); over limit → 429 + error code.
+- Keying: same IP/user shares bucket; different identities do not.
+- Confirm login limiter is IP-based and does not require a session.
+
+### 6. Non-goals
+
+- Redis / distributed store
+- Admin-configurable limits / system properties
+- Per-role budgets (T0108)
+- nginx `limit_req` (can document as optional host-level complement, not required)
+- Changing backup/import business logic beyond attaching limits
+
+### 7. Version
+
+No new Drizzle migration → **PATCH** bump on finish-up (from current `0.30.2`).
+
+## Interview (confirmed)
+
+1. **Library:** `express-rate-limit` + in-memory store — approved.
+2. **Login limits:** yes — IP-keyed on `POST /auth/login`.
+3. **Global baseline:** yes — 300 / min / user-or-IP on `/api/v1/*`.
+4. **Default budgets:** as proposed in the tiers table.
+5. **Config:** hard-coded constants in one module — no Admin UI / system properties.
+
+## Branch
+
+- `T0085-api-rate-limiting`
+
+## Done when
+
+- Named expensive routes + login enforce rate limits
+- 429 responses use consistent API error shape
+- Tests cover limiter behavior
+- `SECURITY.md` updated
+- QA checklist passed; finish-up only on user request

@@ -7,6 +7,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { clearSessionCookie, readSessionCookie, setSessionCookie } from "../../lib/sessionCookie.js";
 import { toUserProfile } from "../../lib/userFields.js";
 import { userCanAuthenticate } from "../../lib/userAuth.js";
+import { loginRateLimit } from "../../middleware/rateLimits.js";
 import {
   createSession,
   destroySession,
@@ -52,7 +53,7 @@ function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boole
 
 export const authRouter = Router();
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", loginRateLimit, async (req, res) => {
   try {
     const { email, password } = loginBody.parse(req.body);
     const user = await loginWithEmailPassword(db, email, password);
