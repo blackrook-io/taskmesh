@@ -6,6 +6,7 @@ import { toUserRef, type UserRef } from "../lib/userFields.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
 import { deleteUserDeniedReason } from "../lib/userAuth.js";
 import { allocateUserNumber } from "./users.js";
+import { archiveCurrentPasswordHash } from "./passwordHistory.js";
 import { guardLastAdministrator, listRolesByUserIds } from "./roles.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -201,6 +202,8 @@ export async function resetUserPassword(
   if (!existing) {
     throw Object.assign(new Error("User not found"), { status: 404, code: "not_found" });
   }
+  // Admin recovery: bypass reuse check; still archive the previous hash (T0109).
+  await archiveCurrentPasswordHash(db, userId, existing.passwordHash);
   const passwordHash = await hashPassword(password);
   const [row] = await db
     .update(schema.users)

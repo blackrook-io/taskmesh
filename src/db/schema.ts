@@ -153,6 +153,27 @@ export const sessions = pgTable(
   (t) => [index("sessions_user_id_idx").on(t.userId)],
 );
 
+/**
+ * Prior password hashes for reuse rejection (T0109).
+ * Current hash lives on `users.password_hash`; this table holds up to 4 older hashes
+ * so Profile change rejects any of the last 5 passwords (current + 4 prior).
+ */
+export const passwordHistory = pgTable(
+  "password_history",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** scrypt hash (same format as users.password_hash). */
+    passwordHash: text("password_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("password_history_user_created_idx").on(t.userId, t.createdAt)],
+);
+
 /** Named roles. System `administrator` is seeded and protected (T0108). */
 export const roles = pgTable("roles", {
   id: serial("id").primaryKey(),
@@ -888,6 +909,14 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   apiKeys: many(apiKeys),
   userRoles: many(userRoles),
+  passwordHistory: many(passwordHistory),
+}));
+
+export const passwordHistoryRelations = relations(passwordHistory, ({ one }) => ({
+  user: one(users, {
+    fields: [passwordHistory.userId],
+    references: [users.id],
+  }),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({

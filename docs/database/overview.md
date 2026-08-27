@@ -22,7 +22,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Non-main** (inventory + minimal on diagrams):
 
-`users`, `sessions`, `roles`, `user_roles`, `api_keys`, `system_properties`, `api_request_logs`, `db_stats_snapshots`
+`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `api_request_logs`, `db_stats_snapshots`
 
 ## Conceptual model
 
@@ -95,7 +95,7 @@ erDiagram
   }
 ```
 
-Non-main entities (`users`, `sessions`, `roles`, `user_roles`, `api_keys`, `system_properties`, `api_request_logs`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
+Non-main entities (`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `api_request_logs`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
 
 ## Domain pages
 

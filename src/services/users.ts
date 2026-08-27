@@ -3,9 +3,16 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { AuthenticationError } from "../lib/authErrors.js";
 import { getRequestApiKeyUserId, getRequestSessionUserId } from "../lib/requestAuthContext.js";
-import { hashPassword, validatePassword } from "../lib/password.js";
+import { hashPassword, validatePassword, verifyPassword } from "../lib/password.js";
 import { userCanAuthenticate } from "../lib/userAuth.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
+import {
+  archiveCurrentPasswordHash,
+  assertPasswordNotReused,
+  INVALID_CURRENT_PASSWORD_CODE,
+  INVALID_CURRENT_PASSWORD_MESSAGE,
+  listPriorPasswordHashes,
+} from "./passwordHistory.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -55,16 +62,40 @@ export async function getCurrentUserRef(db: Db): Promise<UserRef> {
 /**
  * Set or replace the current user's password hash.
  * Plaintext is never stored or returned — only a scrypt hash is written.
+ * When a password already exists, `currentPassword` must match (T0109).
+ * New password cannot reuse any of the last 5 (current + 4 prior).
  */
 export async function setCurrentUserPassword(
   db: Db,
   password: string,
+  currentPassword?: string | null,
 ): Promise<typeof schema.users.$inferSelect> {
   const err = validatePassword(password);
   if (err) {
     throw Object.assign(new Error(err), { status: 400, code: "invalid_password" });
   }
   const current = await getCurrentUser(db);
+
+  if (current.passwordHash) {
+    if (!currentPassword) {
+      throw Object.assign(new Error(INVALID_CURRENT_PASSWORD_MESSAGE), {
+        status: 400,
+        code: INVALID_CURRENT_PASSWORD_CODE,
+      });
+    }
+    const ok = await verifyPassword(currentPassword, current.passwordHash);
+    if (!ok) {
+      throw Object.assign(new Error(INVALID_CURRENT_PASSWORD_MESSAGE), {
+        status: 400,
+        code: INVALID_CURRENT_PASSWORD_CODE,
+      });
+    }
+  }
+
+  const prior = await listPriorPasswordHashes(db, current.id);
+  await assertPasswordNotReused(password, current.passwordHash, prior);
+  await archiveCurrentPasswordHash(db, current.id, current.passwordHash);
+
   const passwordHash = await hashPassword(password);
   const [row] = await db
     .update(schema.users)

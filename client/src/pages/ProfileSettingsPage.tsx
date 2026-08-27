@@ -25,6 +25,7 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
   const [emailTouched, setEmailTouched] = useState(false);
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
 
@@ -78,10 +79,10 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
   });
 
   const savePasswordMutation = useMutation({
-    mutationFn: async (nextPassword: string) => {
+    mutationFn: async (payload: { password: string; currentPassword?: string }) => {
       const res = await apiJson<{ data: UserProfile }>("/api/v1/users/me/password", {
         method: "POST",
-        body: JSON.stringify({ password: nextPassword }),
+        body: JSON.stringify(payload),
       });
       return res.data;
     },
@@ -89,6 +90,7 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
       qc.setQueryData(["users", "me"], data);
       setPassword("");
       setPassword2("");
+      setCurrentPassword("");
       setPasswordFocused(false);
       flash("Password saved.");
     },
@@ -100,13 +102,22 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
   const emailCanSave =
     !emailError && emailDirty && email.trim().length > 0 && !saveEmailMutation.isPending;
 
+  const hasPassword = Boolean(profileQuery.data?.hasPassword);
   const passwordsMatch = password.length > 0 && password2.length > 0 && password === password2;
   const passwordsMismatch = password.length > 0 && password2.length > 0 && password !== password2;
   const passwordRuleError =
     password.length > 0 ? validatePasswordClient(password) : null;
-  const showPasswordHelp = passwordFocused || password.length > 0 || password2.length > 0;
+  const showPasswordHelp =
+    passwordFocused ||
+    password.length > 0 ||
+    password2.length > 0 ||
+    currentPassword.length > 0;
+  const currentPasswordOk = !hasPassword || currentPassword.length > 0;
   const passwordCanSave =
-    passwordsMatch && !passwordRuleError && !savePasswordMutation.isPending;
+    passwordsMatch &&
+    !passwordRuleError &&
+    currentPasswordOk &&
+    !savePasswordMutation.isPending;
 
   const body = (
     <div className="settings-panel">
@@ -190,13 +201,27 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
           <div className="profile-settings__section">
             <h3 className="profile-settings__heading">Password</h3>
             <p className="muted small" style={{ marginTop: 0 }}>
-              {profileQuery.data.hasPassword
-                ? "A password is set. Enter a new one below to change it."
+              {hasPassword
+                ? "A password is set. Enter your current password and a new one to change it."
                 : "No password set yet."}{" "}
-              Passwords cannot be viewed after saving.
+              Passwords cannot be viewed after saving. You cannot reuse any of your last 5
+              passwords.
             </p>
             {showPasswordHelp ? (
               <p className="profile-settings__help">{PASSWORD_GUIDELINES}</p>
+            ) : null}
+            {hasPassword ? (
+              <div className="field">
+                <label htmlFor="profile-current-password">Current password</label>
+                <input
+                  id="profile-current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  onFocus={() => setPasswordFocused(true)}
+                />
+              </div>
             ) : null}
             <div className="field">
               <label htmlFor="profile-password">New password</label>
@@ -240,7 +265,12 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
                 <button
                   type="button"
                   className="btn primary small"
-                  onClick={() => void savePasswordMutation.mutateAsync(password)}
+                  onClick={() =>
+                    void savePasswordMutation.mutateAsync({
+                      password,
+                      ...(hasPassword ? { currentPassword } : {}),
+                    })
+                  }
                 >
                   Save
                 </button>

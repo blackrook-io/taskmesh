@@ -8,8 +8,9 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 
 | Table | Purpose | Notable relationships |
 |-------|---------|------------------------|
-| `users` | App users. Display → **U####**. Email + scrypt password hash for login; avatar upload; lockout / last-login fields. Admins create users (next `U####`, required email + password), **lock** / **unlock** (`locked_at`, distinct from deactivate), and **hard-delete** when the user is not last remaining, not the signed-in user, not the last **Administrator**, and has no RESTRICT authorship/ownership (tasks/ToDos/`owner_id` on domain rows). Deactivate remains the path for users who have authored or own records. Failed sign-in increments `failed_login_count`; at `login_failure_threshold` the account is locked. | Avatar → `uploads` (`ON DELETE SET NULL`). Referenced by `sessions`, `user_roles`, domain `owner_id` (T0112), tasks (`created_by` / `updated_by`, **RESTRICT**), activity, templates, API keys, request logs. |
+| `users` | App users. Display → **U####**. Email + scrypt password hash for login; avatar upload; lockout / last-login fields. Admins create users (next `U####`, required email + password), **lock** / **unlock** (`locked_at`, distinct from deactivate), and **hard-delete** when the user is not last remaining, not the signed-in user, not the last **Administrator**, and has no RESTRICT authorship/ownership (tasks/ToDos/`owner_id` on domain rows). Deactivate remains the path for users who have authored or own records. Failed sign-in increments `failed_login_count`; at `login_failure_threshold` the account is locked. Profile password change requires the current password and rejects reuse of any of the last **5** passwords (current + up to 4 rows in `password_history`). Admin reset-password **bypasses** reuse checks but still archives the previous hash. | Avatar → `uploads` (`ON DELETE SET NULL`). Referenced by `sessions`, `password_history`, `user_roles`, domain `owner_id` (T0112), tasks (`created_by` / `updated_by`, **RESTRICT**), activity, templates, API keys, request logs. |
 | `sessions` | Browser login sessions: opaque `id` (httpOnly cookie), `user_id`, `expires_at` (enforced at request time; idle timeout from `session_timeout_minutes`), `created_at`. | FK `user_id` → `users` · **CASCADE**. |
+| `password_history` | Prior scrypt password hashes for reuse rejection (T0109). Up to **4** rows per user (newest kept); current hash stays on `users.password_hash`. | FK `user_id` → `users` · **CASCADE**. |
 | `roles` | Named roles. Unique `name` and `slug`. System role **Administrator** (`slug: administrator`, `is_system`) is seeded and cannot be renamed or deleted. Custom roles are labels only (T0108); they do not grant Administration. | Referenced by `user_roles`. |
 | `user_roles` | User ↔ role membership (composite PK). U0001 is seeded as Administrator. Removing the last Administrator assignment is blocked, as are lock / deactivate / delete of the last Administrator. | FKs `user_id` → `users` · **CASCADE**; `role_id` → `roles` · **CASCADE**. |
 | `api_keys` | Programmatic API keys (`taskmesh_{ro\|rw}_…`). Prefix for display; **SHA-256** of full secret in `key_hash`. Access `readonly` \| `readwrite`; status `active` \| `suspended` \| `expired` \| `revoked`. Max **3 active** per user; default/max expiry **60 days**. Request auth via Bearer / X-API-Key (T0063). | FK `user_id` → `users` · **CASCADE**. Referenced by `api_request_logs`. |
@@ -23,6 +24,7 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 erDiagram
   users ||--o{ api_keys : owns
   users ||--o{ sessions : "login"
+  users ||--o{ password_history : "prior hashes"
   users ||--o{ user_roles : has
   roles ||--o{ user_roles : granted
   users ||--o{ api_request_logs : "optional"
@@ -46,6 +48,10 @@ erDiagram
   }
   sessions {
     text id PK
+    int user_id FK
+  }
+  password_history {
+    int id PK
     int user_id FK
   }
   system_properties {

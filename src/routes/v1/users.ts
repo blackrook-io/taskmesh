@@ -32,6 +32,8 @@ const patchBody = z
 const passwordBody = z
   .object({
     password: z.string().min(1).max(200),
+    /** Required when the user already has a password (T0109). */
+    currentPassword: z.string().min(1).max(200).optional(),
   })
   .strict();
 
@@ -138,8 +140,8 @@ usersRouter.patch("/me", async (req, res) => {
 /** Set or change password for the current user. Never returns the secret. */
 usersRouter.post("/me/password", async (req, res) => {
   try {
-    const { password } = passwordBody.parse(req.body);
-    const row = await setCurrentUserPassword(db, password);
+    const { password, currentPassword } = passwordBody.parse(req.body);
+    const row = await setCurrentUserPassword(db, password, currentPassword);
     res.json({ data: await profilePayload(row) });
   } catch (err) {
     if (serviceError(res, err)) return;

@@ -628,6 +628,10 @@ export function AdminUsersPanel() {
         <div className="admin-form-card" role="dialog" aria-label="Reset password">
           <h3 className="admin-form-card__title">Reset password</h3>
           <p className="muted small">{PASSWORD_HELP}</p>
+          <p className="muted small">
+            Admin reset may set a previously used password (bypasses password history).
+            Complexity rules still apply.
+          </p>
           <label className="field">
             <span>New password</span>
             <input

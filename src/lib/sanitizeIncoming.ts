@@ -1,7 +1,13 @@
 import { sanitizeMarkdown } from "./sanitizeMarkdown.js";
 import { sanitizePlainText } from "./plainText.js";
 
-const SKIP_KEYS = new Set(["password", "password2", "passwordhash", "rawkey"]);
+const SKIP_KEYS = new Set([
+  "password",
+  "password2",
+  "passwordhash",
+  "currentpassword",
+  "rawkey",
+]);
 const MARKDOWN_KEYS = new Set(["body", "description", "message", "pagecontext", "content"]);
 const MAX_DEPTH = 16;
 
