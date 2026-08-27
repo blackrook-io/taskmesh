@@ -1,0 +1,112 @@
+# T0096 — Implement User Login screen
+
+**Task:** T0096 (id `108`) — Implement User Login screen  
+**Parent:** T0095 — Implement Multi-User  
+**State:** implemented on `T0096-user-login`, awaiting QA / finish-up  
+**Depends on:** T0107 ✅ complete  
+**Required by:** T0084 — Authentication and session binding
+
+## Context
+
+Second slice of the multi-user epic. T0107 shipped admin user CRUD, lock/unlock, and `userCanAuthenticate()`. The app still auto-serves as **U0001** via `getCurrentUser()` with no login gate.
+
+This Task owns **local email/password login**, **httpOnly session cookie**, **Login UI**, **logout**, and the **SPA auth gate**. T0084 will protect API routes and rewire remaining `getCurrentUser()` call sites; T0108 adds role-based Administration gating.
+
+## Size / split
+
+One cohesive auth slice (server routes + session store + Login page + gate + system properties). No split.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Session store:** PostgreSQL `sessions` table (random id → `user_id`, `expires_at` column present but **not enforced** until a later Task). httpOnly cookie holds opaque session id. **Migration required** → MINOR version bump on finish-up.
+2. **Generic login error:** Single message: *"Invalid email or password."* for wrong email, wrong password, locked, and deactivated (no account enumeration).
+3. **Lockout:** On failed attempt increment `failed_login_count`; when `>= login_failure_threshold`, set `locked_at`. Successful login resets count and clears lock only if lock was from failed attempts? **No** — admin lock stays until unlock (only increment path sets lock from threshold; success resets `failed_login_count` only, does **not** clear admin `locked_at`).
+4. **Logout placement:** **Settings → Profile** section — "Log out" button at bottom (task: shell/settings).
+5. **Login page theme:** Use system default from `GET /api/v1/config` (no personal theme yet — user is unauthenticated). TaskMesh title + `MeshMark`, centered card, dark grey + green tokens.
+6. **SPA gate:** Unauthenticated users hitting any app route → redirect to `/login?returnTo=…`. `/login` is outside main `Layout` / nav. API XHR without session → 401 JSON (existing client error handling).
+7. **`getCurrentUser`:** Introduce session-aware resolver used by auth routes and **update `getCurrentUser(req)`** to read session when cookie present (throws/401 when session expected but missing). Keeps Profile/logout correct before T0084 adds route middleware.
+8. **`SESSION_SECRET`:** Required env var (32+ bytes) for signing session cookie name/path options; document in `.env.example`. Cookie: `httpOnly`, `sameSite: lax`, `secure: true` when `NODE_ENV=production`.
+9. **System properties:** Add `session_timeout_minutes` (default **60**, stored only). Change `login_failure_threshold` default **5 → 3** (code default + Admin UI copy). Update Admin help text for both keys.
+10. **Existing U0001 without password:** Users without `password_hash` cannot log in (same generic error). Admin must set password via Users panel or Profile.
+
+## Goal
+
+Users authenticate with email + password, receive a session cookie, and reach the main app. Failed/locked/deactivated attempts show one generic error. Logout clears session. Lockout after configured failures.
+
+## Scope
+
+### Schema / migration
+
+- New table `sessions`: `id` (text PK, random), `user_id` FK → users CASCADE, `created_at`, `expires_at` (nullable / far-future placeholder — enforcement deferred).
+- Index on `user_id` for logout-all future use.
+
+### Server
+
+| Endpoint | Behavior |
+|----------|----------|
+| `POST /api/v1/auth/login` | `{ email, password }`. Lookup by normalized email. Reject with generic 401 if: no user, no hash, bad password, `!userCanAuthenticate()`. On success: create session row, set cookie, update `last_login_at`, reset `failed_login_count`. |
+| `POST /api/v1/auth/logout` | Destroy session row + clear cookie. Idempotent. |
+| `GET /api/v1/auth/session` | `{ data: UserProfile \| null }` or 401 when no valid session. |
+
+- `src/routes/v1/auth.ts` + mount on v1 router **before** other routes.
+- `src/services/auth.ts` — login, logout, session lookup, failed-attempt / lockout logic.
+- `src/middleware/session.ts` — parse cookie, attach `req.session` / `req.userId`.
+- Refactor `getCurrentUser(db, req?)` → session-first when `req` provided (incremental; full route protection is T0084).
+- Wire `cookie-parser` (or manual parse) in `src/index.ts`.
+
+### System properties
+
+- Add `session_timeout_minutes` to keys, defaults, admin GET/PATCH, Admin UI field + help text ("stored; enforcement in a later Task").
+- Default `login_failure_threshold`: **3**.
+- Admin panel: update threshold label/help (remove "locks API keys" if inaccurate for login-only lockout).
+
+### Client
+
+- `LoginPage` at `/login` — email, masked password, submit, generic error display, loading state.
+- `AuthProvider` + `useAuth()` — bootstrap via `GET /api/v1/auth/session`, expose `user`, `loading`, `logout`.
+- Route split in `main.tsx`: public `/login`; authenticated tree wrapped in gate (redirect when `!user`).
+- `apiJson`: `credentials: "include"` for cookie sessions.
+- Profile settings: **Log out** button → `POST /auth/logout`, clear client cache, navigate to `/login`.
+- Preserve `returnTo` query after successful login (default `/`).
+
+### Docs
+
+- Update `docs/database/platform.md` — `sessions` table + `session_timeout_minutes` key.
+- `npm run docs:sync-schema` after `/docs` edit.
+- `.env.example`: `SESSION_SECRET`.
+
+### Tests
+
+- `auth.test.ts`: login success/failure, lockout at threshold, locked/deactivated generic failure, logout clears session, `userCanAuthenticate` integration with lockout path.
+
+## Out of scope
+
+- MFA, passkeys, forgot password/username, OIDC (T0111)
+- Session timeout **enforcement**
+- Timed auto-unlock after lockout
+- API keys (T0063)
+- Route-level auth middleware / 403 roles (T0084, T0108)
+- Changing T0107 admin lock/deactivate semantics
+
+## Implementation order
+
+1. Migration + schema + docs  
+2. System properties (`session_timeout_minutes`, threshold default 3)  
+3. Auth service + session middleware + routes  
+4. Refactor `getCurrentUser` for session  
+5. Client: AuthProvider, LoginPage, gate, logout, `credentials: "include"`  
+6. Admin UI property updates  
+7. Tests  
+8. QA checklist
+
+## Done when
+
+- Valid credentials → main UI; invalid/locked/deactivated → generic error on Login.
+- Logout works; refresh requires login.
+- Lockout after configured failed attempts (`login_failure_threshold`, default 3).
+- `session_timeout_minutes` stored in Admin (not enforced).
+- QA checklist delivered; finish-up only on request.
+
+## QA follow-ups
+
+- **System properties on older API:** Admin panel only sends/shows `sessionTimeoutMinutes` when `GET /admin/system-properties` includes it (avoids Zod strict 400 when new UI hits pre-T0096 PROD API during QA).

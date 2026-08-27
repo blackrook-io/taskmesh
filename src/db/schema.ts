@@ -127,6 +127,23 @@ export const users = pgTable("users", {
     .defaultNow(),
 });
 
+/** Browser login sessions (opaque id in httpOnly cookie). */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Reserved for session timeout enforcement (T0096 stores; middleware enforces later). */
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("sessions_user_id_idx").on(t.userId)],
+);
+
 /** API keys (admin bridge; Profile CRUD + enforcement in T0063). */
 export const apiKeys = pgTable("api_keys", {
   id: serial("id").primaryKey(),

@@ -32,7 +32,7 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (!headers.has("X-TaskMesh-Client")) {
     headers.set("X-TaskMesh-Client", "ui");
   }
-  const res = await fetch(path, { ...init, headers });
+  const res = await fetch(path, { ...init, headers, credentials: "include" });
   if (res.status === 204) {
     return undefined as T;
   }

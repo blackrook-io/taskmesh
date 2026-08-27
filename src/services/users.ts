@@ -1,6 +1,7 @@
 import { asc, eq, max } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { getRequestSessionUserId } from "../lib/requestAuthContext.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
 
@@ -13,10 +14,20 @@ export async function allocateUserNumber(db: Db): Promise<number> {
 }
 
 /**
- * Current user until auth exists: prefer number=1, else lowest id.
- * Ensures a default row exists (U0001 / Local User) if the table is empty.
+ * Current user: session user when logged in, else legacy U0001 fallback until T0084
+ * requires auth on all API routes.
  */
 export async function getCurrentUser(db: Db): Promise<typeof schema.users.$inferSelect> {
+  const sessionUserId = getRequestSessionUserId();
+  if (sessionUserId != null) {
+    const [bySession] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, sessionUserId))
+      .limit(1);
+    if (bySession) return bySession;
+  }
+
   const [byNumber] = await db
     .select()
     .from(schema.users)

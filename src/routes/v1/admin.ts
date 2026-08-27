@@ -299,6 +299,7 @@ const patchPropsBody = z
   .object({
     apiRateLimitPerMinute: z.number().int().min(1).max(100_000).optional(),
     loginFailureThreshold: z.number().int().min(1).max(1000).optional(),
+    sessionTimeoutMinutes: z.number().int().min(1).max(10_080).optional(),
     defaultTheme: z.enum(THEME_IDS).optional(),
   })
   .strict();
@@ -309,6 +310,7 @@ adminRouter.patch("/system-properties", async (req, res) => {
     if (
       parsed.apiRateLimitPerMinute === undefined &&
       parsed.loginFailureThreshold === undefined &&
+      parsed.sessionTimeoutMinutes === undefined &&
       parsed.defaultTheme === undefined
     ) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
@@ -332,6 +334,14 @@ adminRouter.patch("/system-properties", async (req, res) => {
     ) {
       parts.push(
         `login_failure_threshold ${before.loginFailureThreshold}→${after.loginFailureThreshold}`,
+      );
+    }
+    if (
+      parsed.sessionTimeoutMinutes !== undefined &&
+      before.sessionTimeoutMinutes !== after.sessionTimeoutMinutes
+    ) {
+      parts.push(
+        `session_timeout_minutes ${before.sessionTimeoutMinutes}→${after.sessionTimeoutMinutes}`,
       );
     }
     if (

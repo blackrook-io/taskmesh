@@ -1,14 +1,12 @@
-import "express-serve-static-core";
+import "express";
 
-declare module "express-serve-static-core" {
-  interface Locals {
-    /** Prefer this message in api_request_logs over the default. */
-    logMessage?: string;
-    logUserId?: number | null;
-    logApiKeyId?: number | null;
-    logAdminKey?: boolean;
-    /** When true, apiRequestLogger skips inserting a row (caller already audited). */
-    skipRequestLog?: boolean;
+declare global {
+  namespace Express {
+    interface Request {
+      /** Set by session loader when a valid session cookie is present. */
+      sessionUserId?: number;
+      sessionId?: string;
+    }
   }
 }
 

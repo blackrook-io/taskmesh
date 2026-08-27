@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { adminRouter } from "./admin.js";
 import { assistantRouter } from "./assistant.js";
+import { authRouter } from "./auth.js";
 import { backupsRouter } from "./backups.js";
 import { configRouter } from "./config.js";
 import { ideasRouter } from "./ideas.js";
@@ -21,6 +22,7 @@ import { uploadsRouter } from "./uploads.js";
 import { usersRouter } from "./users.js";
 import { sendError } from "../../lib/httpError.js";
 import { apiRequestLogger } from "../../middleware/apiRequestLogger.js";
+import { sessionLoader } from "../../middleware/sessionLoader.js";
 import { sanitizeIncomingStrings } from "../../middleware/sanitizeIncomingStrings.js";
 import { rejectImmutableBody } from "../../middleware/rejectImmutableBody.js";
 
@@ -29,7 +31,9 @@ export const v1Router = Router();
 v1Router.use(sanitizeIncomingStrings);
 v1Router.use(rejectImmutableBody);
 v1Router.use(apiRequestLogger);
+v1Router.use(sessionLoader);
 
+v1Router.use("/auth", authRouter);
 v1Router.use("/admin", adminRouter);
 v1Router.use("/config", configRouter);
 v1Router.use("/ideas", ideasRouter);

@@ -5982,3 +5982,64 @@ a:focus-visible {
     min-height: 18rem;
   }
 }
+
+/* Login (T0096) */
+.auth-gate-loading,
+.login-page {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--canvas-bg, var(--bg));
+}
+
+.login-card {
+  width: min(100%, 22rem);
+  padding: 2rem 1.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.login-card__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.login-card__mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--accent);
+}
+
+.login-card__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.login-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.login-form__error {
+  margin: 0;
+}
+
+.login-form__submit {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.profile-settings__logout {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { useAuth } from "../lib/auth";
 import {
   PASSWORD_GUIDELINES,
   validateEmailClient,
@@ -14,6 +16,9 @@ type Props = {
 
 export function ProfileSettingsPage({ embedded = false }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
@@ -243,6 +248,22 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
           </div>
 
           {savedFlash ? <p className="muted">{savedFlash}</p> : null}
+
+          <div className="profile-settings__logout">
+            <button
+              type="button"
+              className="btn small"
+              disabled={loggingOut}
+              onClick={() => {
+                setLoggingOut(true);
+                void logout()
+                  .then(() => navigate("/login", { replace: true }))
+                  .finally(() => setLoggingOut(false));
+              }}
+            >
+              {loggingOut ? "Signing out…" : "Log out"}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>

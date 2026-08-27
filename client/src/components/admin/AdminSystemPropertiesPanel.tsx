@@ -7,14 +7,22 @@ import { isThemeId, type ThemeId } from "../../lib/theme";
 type SystemProperties = {
   apiRateLimitPerMinute: number;
   loginFailureThreshold: number;
+  sessionTimeoutMinutes?: number;
   defaultTheme: ThemeId;
   updatedAt: string | null;
 };
 
+function hasSessionTimeoutMinutes(
+  data: SystemProperties | undefined,
+): data is SystemProperties & { sessionTimeoutMinutes: number } {
+  return typeof data?.sessionTimeoutMinutes === "number";
+}
+
 export function AdminSystemPropertiesPanel() {
   const qc = useQueryClient();
   const [rate, setRate] = useState("60");
-  const [threshold, setThreshold] = useState("5");
+  const [threshold, setThreshold] = useState("3");
+  const [sessionTimeout, setSessionTimeout] = useState("60");
   const [defaultTheme, setDefaultTheme] = useState<ThemeId>("green");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -33,6 +41,9 @@ export function AdminSystemPropertiesPanel() {
     if (!propsQuery.data) return;
     setRate(String(propsQuery.data.apiRateLimitPerMinute));
     setThreshold(String(propsQuery.data.loginFailureThreshold));
+    if (hasSessionTimeoutMinutes(propsQuery.data)) {
+      setSessionTimeout(String(propsQuery.data.sessionTimeoutMinutes));
+    }
     if (isThemeId(propsQuery.data.defaultTheme)) {
       setDefaultTheme(propsQuery.data.defaultTheme);
     }
@@ -42,24 +53,41 @@ export function AdminSystemPropertiesPanel() {
     mutationFn: async () => {
       const apiRateLimitPerMinute = Number(rate);
       const loginFailureThreshold = Number(threshold);
+      const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
+      const sessionTimeoutMinutes = Number(sessionTimeout);
       if (!Number.isInteger(apiRateLimitPerMinute) || apiRateLimitPerMinute < 1) {
         throw new Error("API rate limit must be a positive integer");
       }
       if (!Number.isInteger(loginFailureThreshold) || loginFailureThreshold < 1) {
         throw new Error("Login failure threshold must be a positive integer");
       }
+      if (
+        supportsSessionTimeout &&
+        (!Number.isInteger(sessionTimeoutMinutes) || sessionTimeoutMinutes < 1)
+      ) {
+        throw new Error("Session timeout must be a positive integer (minutes)");
+      }
       if (!isThemeId(defaultTheme)) {
         throw new Error("Default theme is invalid");
+      }
+      const body: {
+        apiRateLimitPerMinute: number;
+        loginFailureThreshold: number;
+        defaultTheme: ThemeId;
+        sessionTimeoutMinutes?: number;
+      } = {
+        apiRateLimitPerMinute,
+        loginFailureThreshold,
+        defaultTheme,
+      };
+      if (supportsSessionTimeout) {
+        body.sessionTimeoutMinutes = sessionTimeoutMinutes;
       }
       const res = await apiJson<{ data: SystemProperties }>(
         "/api/v1/admin/system-properties",
         {
           method: "PATCH",
-          body: JSON.stringify({
-            apiRateLimitPerMinute,
-            loginFailureThreshold,
-            defaultTheme,
-          }),
+          body: JSON.stringify(body),
         },
       );
       return res.data;
@@ -73,12 +101,16 @@ export function AdminSystemPropertiesPanel() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
+
   return (
     <div className="settings-panel admin-panel">
       <p className="muted" style={{ marginTop: 0 }}>
         System-level defaults and thresholds. The default theme applies until a user sets a
-        personal preference on their device. Rate-limit and login thresholds are stored now;
-        auth and API-key middleware will enforce them in later work.
+        personal preference on their device. Login failure threshold is enforced at sign-in
+        {supportsSessionTimeout
+          ? ". Session timeout is stored for future middleware; changing it does not affect existing sessions until enforcement ships."
+          : "."}
       </p>
 
       {propsQuery.isLoading ? <p className="muted">Loading…</p> : null}
@@ -105,7 +137,7 @@ export function AdminSystemPropertiesPanel() {
       </label>
 
       <label className="field">
-        <span>Login failure threshold (locks account and API keys)</span>
+        <span>Login failure threshold (locks account after failed sign-in attempts)</span>
         <input
           type="number"
           min={1}
@@ -113,6 +145,24 @@ export function AdminSystemPropertiesPanel() {
           onChange={(e) => setThreshold(e.target.value)}
         />
       </label>
+
+      {supportsSessionTimeout ? (
+        <>
+          <label className="field">
+            <span>Session timeout (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              value={sessionTimeout}
+              onChange={(e) => setSessionTimeout(e.target.value)}
+            />
+          </label>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Stored for browser session cookie lifetime and future server enforcement. Idle timeout
+            middleware is not active yet.
+          </p>
+        </>
+      ) : null}
 
       {propsQuery.data?.updatedAt ? (
         <p className="muted small">

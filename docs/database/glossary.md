@@ -104,7 +104,8 @@ Exact FK lists are on the domain pages.
 - **`system_properties.value`** — arbitrary jsonb config values
 - **`system_properties` keys (current app)** —
   - `api_rate_limit_per_minute` — number
-  - `login_failure_threshold` — number
+  - `login_failure_threshold` — number (default **3**; locks account after failed sign-in attempts)
+  - `session_timeout_minutes` — number (default **60**; cookie lifetime and future idle timeout)
   - `default_theme` — accent theme string: `green` \| `blue` \| `orange` \| `yellow` \| `purple` \| `red` (default `green`). Personal UI preference in the browser overrides this until cleared.
 
 ## Uploads vs database

@@ -9,6 +9,7 @@ type Db = NodePgDatabase<typeof schema>;
 export const SYSTEM_PROPERTY_KEYS = [
   "api_rate_limit_per_minute",
   "login_failure_threshold",
+  "session_timeout_minutes",
   "default_theme",
 ] as const;
 
@@ -17,6 +18,7 @@ export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
 export type SystemProperties = {
   apiRateLimitPerMinute: number;
   loginFailureThreshold: number;
+  sessionTimeoutMinutes: number;
   defaultTheme: ThemeId;
   updatedAt: string | null;
 };
@@ -33,10 +35,12 @@ export type PublicSystemConfig = {
 const DEFAULTS: {
   api_rate_limit_per_minute: number;
   login_failure_threshold: number;
+  session_timeout_minutes: number;
   default_theme: ThemeId;
 } = {
   api_rate_limit_per_minute: 60,
-  login_failure_threshold: 5,
+  login_failure_threshold: 3,
+  session_timeout_minutes: 60,
   default_theme: DEFAULT_THEME,
 };
 
@@ -92,6 +96,10 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
       map.get("login_failure_threshold")?.value,
       DEFAULTS.login_failure_threshold,
     ),
+    sessionTimeoutMinutes: asNumber(
+      map.get("session_timeout_minutes")?.value,
+      DEFAULTS.session_timeout_minutes,
+    ),
     defaultTheme: asThemeId(map.get("default_theme")?.value, DEFAULTS.default_theme),
     updatedAt: latest?.toISOString() ?? null,
   };
@@ -112,6 +120,7 @@ export async function patchSystemProperties(
   patch: {
     apiRateLimitPerMinute?: number;
     loginFailureThreshold?: number;
+    sessionTimeoutMinutes?: number;
     defaultTheme?: ThemeId;
   },
 ): Promise<SystemProperties> {
@@ -140,6 +149,19 @@ export async function patchSystemProperties(
       .onConflictDoUpdate({
         target: schema.systemProperties.key,
         set: { value: patch.loginFailureThreshold, updatedAt: now },
+      });
+  }
+  if (patch.sessionTimeoutMinutes !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "session_timeout_minutes",
+        value: patch.sessionTimeoutMinutes,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.sessionTimeoutMinutes, updatedAt: now },
       });
   }
   if (patch.defaultTheme !== undefined) {
