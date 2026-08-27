@@ -385,16 +385,27 @@ Reference: [systemd.service](https://www.freedesktop.org/software/systemd/man/la
 
 ---
 
-## 15. nginx on port 80 (LAN)
+## 15. nginx + HTTPS (LAN)
 
-Bind TaskMesh to loopback (§9 / §14), then put **nginx** in front so phones/tablets open `http://<server-ip>/` with no port number.
+Bind TaskMesh to loopback (§9 / §14), then put **nginx** in front on **HTTPS :443**. HTTP **:80** redirects to HTTPS. Express stays on `127.0.0.1:3000` only.
+
+### TLS certificate
+
+Generate a self-signed cert (or use mkcert / certbot — see [`deploy/ssl/README.md`](deploy/ssl/README.md)):
+
+```bash
+sudo bash /srv/taskmesh/deploy/ssl/generate-self-signed.sh 192.168.x.x localhost 127.0.0.1
+```
+
+Replace `192.168.x.x` with this server's LAN IP.
+
+### nginx site
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y nginx
 sudo cp /srv/taskmesh/deploy/nginx-taskmesh.conf /etc/nginx/sites-available/taskmesh
 sudo ln -sf /etc/nginx/sites-available/taskmesh /etc/nginx/sites-enabled/taskmesh
-# Prefer TaskMesh as the only default site on this host:
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl enable --now nginx
@@ -404,12 +415,19 @@ sudo systemctl reload nginx
 Confirm:
 
 ```bash
-curl -sS http://127.0.0.1/api/health
+curl -fsSk https://127.0.0.1/api/health
+curl -sI http://127.0.0.1/api/health   # expect 301 → https
 # from another device on the LAN:
-# http://192.168.x.x/   (this server’s IP)
+# https://192.168.x.x/   (accept self-signed warning once, or use mkcert)
 ```
 
-Template notes live in [`deploy/nginx-taskmesh.conf`](deploy/nginx-taskmesh.conf) (`client_max_body_size 10m` for uploads).
+Template notes: [`deploy/nginx-taskmesh.conf`](deploy/nginx-taskmesh.conf) (`client_max_body_size 10m`, TLS 1.2+, proxy headers for Express `trust proxy`).
+
+### Secrets
+
+- Keep `.env` at mode **600**; never commit it.
+- `DATABASE_URL` holds the Postgres password; back up `.env` with your host secrets.
+- See [SECURITY.md](SECURITY.md) for OS/DB least-privilege checklist.
 
 ### Future: multi-app landing (docs only)
 
@@ -427,13 +445,14 @@ References: [Ubuntu nginx](https://ubuntu.com/server/docs/web-servers-nginx), [n
 
 ## 16. Firewall (UFW)
 
-Allow SSH and **HTTP :80**. Do **not** expose port 3000 on the LAN — only nginx should be reachable on the private network.
+Allow SSH and **HTTPS :443** (and **HTTP :80** for redirect). Do **not** expose port 3000 on the LAN — only nginx should be reachable.
 
 ```bash
 sudo apt-get install -y ufw
 sudo ufw allow OpenSSH
+sudo ufw allow from 192.168.0.0/16 to any port 443 proto tcp
 sudo ufw allow from 192.168.0.0/16 to any port 80 proto tcp
-# adjust CIDR to your LAN
+# adjust CIDR to your LAN; public internet hosts may use `ufw allow 443/tcp` instead
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw enable

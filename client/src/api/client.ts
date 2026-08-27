@@ -1,5 +1,14 @@
 import type { ApiErrorBody } from "../types";
 
+export const SPA_CLIENT_HEADER = "X-TaskMesh-Client";
+export const SPA_CLIENT_VALUE = "ui";
+
+export function applySpaClientHeaders(headers: Headers): void {
+  if (!headers.has(SPA_CLIENT_HEADER)) {
+    headers.set(SPA_CLIENT_HEADER, SPA_CLIENT_VALUE);
+  }
+}
+
 async function readJsonOrThrow(res: Response, path: string): Promise<unknown> {
   const text = await res.text();
   const trimmed = text.trimStart();
@@ -29,9 +38,7 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (!headers.has("X-TaskMesh-Client")) {
-    headers.set("X-TaskMesh-Client", "ui");
-  }
+  applySpaClientHeaders(headers);
   const res = await fetch(path, { ...init, headers, credentials: "include" });
   if (res.status === 204) {
     return undefined as T;
@@ -47,7 +54,14 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 export async function uploadFile(file: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch("/api/v1/uploads", { method: "POST", body: fd });
+  const headers = new Headers();
+  applySpaClientHeaders(headers);
+  const res = await fetch("/api/v1/uploads", {
+    method: "POST",
+    body: fd,
+    headers,
+    credentials: "include",
+  });
   const json = (await res.json()) as { data?: { url: string }; error?: { message: string } };
   if (!res.ok) {
     throw new Error(json.error?.message ?? "Upload failed");

@@ -1,0 +1,91 @@
+# T0087 — Public-internet and multi-user hardening
+
+**Task:** T0087 (id `99`) — Public-internet and multi-user hardening  
+**Parent:** T0084 — Authentication and session binding (`pending` — own work done)  
+**Grandparent:** T0095 — Implement Multi-User  
+**State:** Ready · **Priority:** urgent  
+**Depends on:** T0084 ✅ `pending` (satisfied — session binding shipped in `0.30.1`)  
+**Required by:** T0063 — Implement API Keys
+
+## Context
+
+T0084 (`0.30.1`) shipped `requireAuth`, session expiry, and an authenticated threat model in `SECURITY.md`. Residual risks explicitly deferred here:
+
+- CSRF for cookie-based session auth
+- TLS / nginx alignment (repo template drift vs live HTTPS)
+- Least-privilege OS/DB roles and secrets handling
+- CSP second pass (external Markdown images, Excalidraw wasm)
+
+Live host already runs **HTTPS :443** with HTTP→HTTPS redirect (`/etc/nginx/sites-available/taskmesh`), but git-tracked [`deploy/nginx-taskmesh.conf`](deploy/nginx-taskmesh.conf) is still HTTP-only and references missing `deploy/ssl/` assets.
+
+## Size / split
+
+One cohesive hardening pass across middleware, headers, deploy docs, and `SECURITY.md`. No split recommended unless you want TLS ops (certbot) as a follow-up Task.
+
+## Interview (confirmed)
+
+1. **CSRF:** `X-TaskMesh-Client: ui` + same-origin `Origin`/`Referer` on mutating session requests; login exempt; API keys bypass (T0063).
+2. **TLS:** Sync repo nginx template + `deploy/ssl/` docs to match live HTTPS.
+3. **CSP:** `img-src https:` + `wasm-unsafe-eval` for Excalidraw.
+4. **Secrets/OS/DB:** Document checklist in INSTALL + SECURITY; audit-only on host.
+5. **trust proxy:** `app.set("trust proxy", 1)` in production.
+6. **No schema migration** → PATCH bump on finish-up.
+
+## Goal
+
+Harden TaskMesh for exposure beyond a trusted LAN: CSRF-resistant cookie sessions, aligned TLS/nginx docs, tighter CSP without breaking Excalidraw or external note images, and documented secrets/OS/DB posture.
+
+## Scope
+
+### Server — CSRF
+
+| File | Change |
+|------|--------|
+| `src/middleware/csrfProtection.ts` (new) | After `sessionLoader`, before `requireAuth`: on mutating methods, if request has session cookie (or will auth via session), require `X-TaskMesh-Client: ui` and same-origin `Origin`/`Referer` when present; 403 `csrf_rejected` |
+| `src/routes/v1/index.ts` | Mount CSRF middleware in chain |
+| `src/middleware/csrfProtection.test.ts` (new) | Mutating without header → 403; with header → pass; GET unaffected; login exempt |
+
+### Server — trust proxy + headers
+
+| File | Change |
+|------|--------|
+| `src/index.ts` | `trust proxy` when `NODE_ENV=production` |
+| `src/middleware/securityHeaders.ts` | CSP: `img-src 'self' data: blob: https:`; add `wasm-unsafe-eval` (or minimal `'unsafe-eval'`) for Excalidraw; document in SECURITY |
+
+### Client
+
+| File | Change |
+|------|--------|
+| `client/src/api/client.ts` | Ensure all mutating fetches include CSRF header (already on `apiJson`; fix `uploadFile`) |
+| Audit stray `fetch("/api/…")` | Add header + credentials where missing |
+
+### Deploy / docs
+
+| File | Change |
+|------|--------|
+| `deploy/nginx-taskmesh.conf` | Match live HTTPS template (80→443 redirect, TLS 1.2+, proxy headers) |
+| `deploy/ssl/README.md` + `deploy/ssl/generate-self-signed.sh` (new) | Self-signed / mkcert instructions referenced by nginx comments |
+| `INSTALL.md` | §15 HTTPS/TLS, UFW allow 443, secrets handling; reconcile HTTP-only wording |
+| `SECURITY.md` | Move CSRF/TLS/CSP items from residual → shipped; note remaining T0085/T0063/T0108 |
+
+## Out of scope
+
+- API rate limiting (T0085)
+- CI SAST / npm audit gate (T0086)
+- API key auth enforcement (T0063)
+- Role-based admin 403 (T0108)
+- Per-user data scoping (T0110)
+- OIDC / federation (T0111)
+- Automatic certbot provisioning (document only unless interview opts in)
+
+## Branch
+
+- `T0087-public-internet-hardening` (after plan approval)
+
+## Done when
+
+- CSRF gate blocks cross-site cookie replay on mutating routes; SPA flows work
+- Prod CSP allows external note images + Excalidraw
+- Repo nginx/ssl docs match live HTTPS setup
+- SECURITY.md and INSTALL updated
+- Tests pass; QA checklist run; finish-up only on user request

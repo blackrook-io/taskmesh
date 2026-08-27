@@ -2,9 +2,9 @@ import type { NextFunction, Request, Response } from "express";
 
 const PROD_CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https:",
   "font-src 'self'",
   "connect-src 'self'",
   "worker-src 'self' blob:",

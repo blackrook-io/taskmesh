@@ -2,7 +2,11 @@
 
 Living record of input-path audits and hardening. Update this file when routes, query construction, uploads, or outbound fetch change.
 
-**Threat model (current):** single-user app on a private network. The HTTP API requires a **valid browser session** (email/password login via T0096) or, when implemented, an **API key** (T0063) on `/api/v1/*`. Public exceptions: health check, login/logout/session bootstrap, and public theme config. Anyone who can reach the process without authenticating cannot read or mutate application data, but nginx/network exposure still matters — see [residual risks](#residual-risk-follow-up-tasks).
+**Threat model (current):** multi-user app with **email/password login** and **httpOnly session cookies** (T0096/T0084). The HTTP API requires a valid session or, when implemented, an **API key** (T0063) on `/api/v1/*`. Public exceptions: health check, login/logout/session bootstrap, and public theme config.
+
+**CSRF (T0087):** mutating `/api/v1/*` requests that carry a session cookie must include `X-TaskMesh-Client: ui` (SPA) and pass same-origin `Origin`/`Referer` checks when those headers are sent. `POST /auth/login` is exempt. API keys bypass CSRF when T0063 ships.
+
+Anyone who can reach the process without authenticating cannot read or mutate application data, but **TLS/nginx exposure** and **rate limits** still matter — see [residual risks](#residual-risk-follow-up-tasks).
 
 **SQL stance:** use parameterized queries (Drizzle). Do **not** concatenate user strings into SQL. “Sanitizing” strings for SQL is not a substitute.
 
@@ -11,6 +15,7 @@ Living record of input-path audits and hardening. Update this file when routes, 
 | Date | Task | What was reviewed | Outcome |
 |------|------|-------------------|---------|
 | 2026-08-20 | T0073 | All `/api/v1` input paths, Drizzle `sql` / `ILIKE`, uploads, backup `execFile`, assistant URL fetch, Markdown editor links, HTTP headers | Hardening below; residuals → follow-up Tasks |
+| 2026-08-27 | T0087 | CSRF for cookie sessions, CSP second pass, nginx/TLS template sync, secrets/host checklist | CSRF middleware + SPA header; prod CSP `https:` images + wasm; deploy/ssl docs |
 
 ## Surfaces
 
@@ -25,6 +30,8 @@ Living record of input-path audits and hardening. Update this file when routes, 
 | Uploads | UUID filenames; GET uses `path.basename`; **magic-byte** sniff (jpeg/png/gif/webp) | Stored MIME is sniffed, not client-claimed |
 | Assistant `fetchUrl` | http(s) only; DNS resolve; block private IPs; **manual** redirects (max 2) re-checked | No intranet/localhost fetch |
 | Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore requires authenticated session; rate limits still open (T0085) |
+| Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production | CSRF: SPA client header + Origin/Referer on mutating routes (T0087) |
+| TLS | nginx terminates HTTPS :443; Express on loopback only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); certbot path for public hosts |
 | Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | DoS residual without rate limits |
 | Client text inputs | Capture-phase sanitizer on every `<input>` / `<textarea>` | Skips password/file/number/date/color and TipTap `contenteditable` |
 
@@ -32,7 +39,7 @@ Living record of input-path audits and hardening. Update this file when routes, 
 
 Always: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`.
 
-**Production only** (`NODE_ENV=production`): Content-Security-Policy with `script-src 'self'`, `style-src 'self' 'unsafe-inline'` (TipTap/Excalidraw), `img-src 'self' data: blob:`, `worker-src 'self' blob:`, `object-src 'none'`, `frame-ancestors 'none'`. DEV omits CSP so Vite HMR works.
+**Production only** (`NODE_ENV=production`): Content-Security-Policy with `script-src 'self' 'wasm-unsafe-eval'` (Excalidraw wasm), `style-src 'self' 'unsafe-inline'` (TipTap/Excalidraw), `img-src 'self' data: blob: https:` (external note images), `worker-src 'self' blob:`, `object-src 'none'`, `frame-ancestors 'none'`. DEV omits CSP so Vite HMR works.
 
 ## Re-audit checklist
 
@@ -52,9 +59,18 @@ Run after adding a route or query:
 |------|--------|
 | **T0085** | API rate limiting and abuse controls |
 | **T0086** | Automated security tests in CI (`npm audit`, SAST) |
-| **T0087** | Public-internet / multi-user hardening (CSRF, TLS review, CSP second pass) |
+| **T0063** | API key auth (second auth path; bypasses CSRF header gate) |
+| **T0108** | Role-based Administration 403 |
+| **T0110** | Per-user record ownership / data scoping |
 
-Not done by design in T0073: Zod `.strict()` on every body (SPA extra keys would 400); shrinking wiki/docs 500k caps; disabling assistant fetch.
+## Secrets and host hardening (T0087)
+
+- **`.env`:** mode `600`, owned by the service user; never commit. Contains `DATABASE_URL` and optional `OPENAI_API_KEY`.
+- **Postgres:** dedicated `taskmesh` role with least privilege on the `taskmesh` database only (not superuser).
+- **OS:** run systemd unit as a non-root user; only nginx (:443/:80) exposed on the LAN/internet, not Express `:3000`.
+- **TLS:** prefer HTTPS via nginx; see [`deploy/ssl/README.md`](deploy/ssl/README.md). For public hosts, use certbot/Let's Encrypt (manual setup documented there).
+
+Not done by design in T0073/T0087: Zod `.strict()` on every body (SPA extra keys would 400); shrinking wiki/docs 500k caps; automatic certbot in deploy scripts.
 
 ## Usability trade-offs (T0073)
 

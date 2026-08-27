@@ -23,6 +23,7 @@ import { usersRouter } from "./users.js";
 import { sendError } from "../../lib/httpError.js";
 import { apiRequestLogger } from "../../middleware/apiRequestLogger.js";
 import { apiKeyAuth } from "../../middleware/apiKeyAuth.js";
+import { csrfProtection } from "../../middleware/csrfProtection.js";
 import { requireAuth } from "../../middleware/requireAuth.js";
 import { sessionLoader } from "../../middleware/sessionLoader.js";
 import { sanitizeIncomingStrings } from "../../middleware/sanitizeIncomingStrings.js";
@@ -35,6 +36,7 @@ v1Router.use(rejectImmutableBody);
 v1Router.use(apiRequestLogger);
 v1Router.use(apiKeyAuth);
 v1Router.use(sessionLoader);
+v1Router.use(csrfProtection);
 v1Router.use(requireAuth);
 
 v1Router.use("/auth", authRouter);

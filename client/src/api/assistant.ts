@@ -1,3 +1,5 @@
+import { applySpaClientHeaders } from "./client";
+
 export type AssistantStatus = {
   enabled: boolean;
   provider: string;
@@ -24,7 +26,7 @@ export type AssistantProposal = {
 };
 
 export async function fetchAssistantStatus(): Promise<AssistantStatus> {
-  const res = await fetch("/api/v1/assistant/status");
+  const res = await fetch("/api/v1/assistant/status", { credentials: "include" });
   const json = (await res.json()) as { data?: AssistantStatus; error?: { message: string } };
   if (!res.ok) {
     throw new Error(json.error?.message ?? "Failed to load assistant status");
@@ -46,14 +48,20 @@ export async function streamAssistantChat(args: {
   onTool?: (info: { name: string; args: unknown }) => void;
   onProposal?: (proposal: AssistantProposal) => void;
 }): Promise<void> {
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  });
+  applySpaClientHeaders(headers);
   const res = await fetch("/api/v1/assistant/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    headers,
     body: JSON.stringify({
       message: args.message,
       history: args.history,
       pageContext: args.pageContext ?? null,
     }),
+    credentials: "include",
     signal: args.signal,
   });
 
