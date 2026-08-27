@@ -8,9 +8,10 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateTodoListNumber, allocateTodoNumber } from "../../services/entityNumbers.js";
 import {
+  assertCanAccessDualScoped,
   assertCanAccessProject,
-  assertCanAccessViaProject,
   dualScopeListFilter,
+  ownerScope,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
@@ -75,11 +76,25 @@ async function loadList(listId: number) {
  * Unsorted inbox: unassigned tasks + ToDos not on any named list.
  * Ideas live on the Ideas UI — not shown here.
  */
-async function hydrateUnsortedItems(inboxListId: number) {
+async function hydrateUnsortedItems(
+  inboxListId: number,
+  actorId: number,
+  isAdmin: boolean,
+) {
+  const namedFilters = [eq(schema.todoLists.kind, "list")];
+  const listScope = dualScopeListFilter(
+    db,
+    schema.todoLists.projectId,
+    schema.todoLists.ownerId,
+    actorId,
+    isAdmin,
+  );
+  if (listScope) namedFilters.push(listScope);
+
   const namedLists = await db
     .select({ id: schema.todoLists.id })
     .from(schema.todoLists)
-    .where(eq(schema.todoLists.kind, "list"));
+    .where(and(...namedFilters));
   const namedIds = namedLists.map((l) => l.id);
 
   const listed =
@@ -100,15 +115,26 @@ async function hydrateUnsortedItems(inboxListId: number) {
     listed.filter((r) => r.entityType === "task").map((r) => r.entityId),
   );
 
+  const todoFilters = [
+    isNull(schema.todos.projectId),
+    ne(schema.todos.state, "deleted"),
+  ];
+  if (!isAdmin) todoFilters.push(eq(schema.todos.ownerId, actorId));
   const todos = await db
     .select()
     .from(schema.todos)
-    .where(and(isNull(schema.todos.projectId), ne(schema.todos.state, "deleted")))
+    .where(and(...todoFilters))
     .orderBy(asc(schema.todos.id));
+
+  const taskFilters = [
+    isNull(schema.tasks.projectId),
+    ne(schema.tasks.state, "deleted"),
+  ];
+  if (!isAdmin) taskFilters.push(eq(schema.tasks.ownerId, actorId));
   const tasks = await db
     .select()
     .from(schema.tasks)
-    .where(and(isNull(schema.tasks.projectId), ne(schema.tasks.state, "deleted")))
+    .where(and(...taskFilters))
     .orderBy(asc(schema.tasks.id));
 
   const out = [];
@@ -155,10 +181,10 @@ async function hydrateUnsortedItems(inboxListId: number) {
   return out;
 }
 
-async function hydrateItems(listId: number) {
+async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
   const list = await loadList(listId);
   if (list?.kind === "inbox") {
-    return hydrateUnsortedItems(listId);
+    return hydrateUnsortedItems(listId, actorId, isAdmin);
   }
 
   const rows = await db
@@ -217,10 +243,13 @@ todoListsRouter.get("/", async (req, res) => {
     const projectIdRaw = req.query.projectId;
     let rows;
     if (projectIdRaw === "null" || projectIdRaw === "") {
+      const filters = [isNull(schema.todoLists.projectId)];
+      const os = ownerScope(schema.todoLists.ownerId, actorId, isAdmin);
+      if (os) filters.push(os);
       rows = await db
         .select()
         .from(schema.todoLists)
-        .where(isNull(schema.todoLists.projectId))
+        .where(and(...filters))
         .orderBy(asc(schema.todoLists.id));
     } else if (projectIdRaw != null) {
       const projectId = idParam.parse(projectIdRaw);
@@ -231,7 +260,13 @@ todoListsRouter.get("/", async (req, res) => {
         .where(eq(schema.todoLists.projectId, projectId))
         .orderBy(asc(schema.todoLists.id));
     } else {
-      const scope = dualScopeListFilter(db, schema.todoLists.projectId, actorId, isAdmin);
+      const scope = dualScopeListFilter(
+        db,
+        schema.todoLists.projectId,
+        schema.todoLists.ownerId,
+        actorId,
+        isAdmin,
+      );
       rows = await db
         .select()
         .from(schema.todoLists)
@@ -281,8 +316,9 @@ todoListsRouter.get("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
-    const items = await hydrateItems(id);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
+    const items = await hydrateItems(id, actorId, isAdmin);
     res.json({ data: { ...list, items } });
   } catch (err) {
     handleRouteError(res, err);
@@ -303,7 +339,7 @@ todoListsRouter.patch("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    await assertCanAccessDualScoped(db, actorId, list);
     if (list.kind === "inbox" && parsed.title !== undefined && parsed.title !== list.title) {
       // allow rename of inbox
     }
@@ -330,7 +366,7 @@ todoListsRouter.delete("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    await assertCanAccessDualScoped(db, actorId, list);
     if (list.kind === "inbox") {
       sendError(res, 400, "protected_list", "Cannot delete the Unsorted list");
       return;
@@ -351,8 +387,9 @@ todoListsRouter.get("/:id/items", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
-    res.json({ data: await hydrateItems(id) });
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
+    res.json({ data: await hydrateItems(id, actorId, isAdmin) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -367,7 +404,8 @@ todoListsRouter.post("/:id/items", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
     if (list.kind === "inbox") {
       sendError(
         res,
@@ -412,7 +450,7 @@ todoListsRouter.post("/:id/items", async (req, res) => {
         sendError(res, 500, "insert_failed", "Could not add item");
         return;
       }
-      const match = (await hydrateItems(listId)).find((i) => i.id === row.id);
+      const match = (await hydrateItems(listId, actorId, isAdmin)).find((i) => i.id === row.id);
       res.status(201).json({ data: match ?? row });
     } catch (insertErr) {
       const pg = insertErr as { code?: string };
@@ -437,7 +475,8 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
     const parsed = createItemBody.parse(req.body);
     const title = parsed.title.trim();
     let entityType = parsed.entityType;
@@ -495,7 +534,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
 
     if (list.kind === "inbox") {
       // Unsorted is virtual — entity appears automatically when unlisted / unassigned.
-      const match = (await hydrateItems(listId)).find(
+      const match = (await hydrateItems(listId, actorId, isAdmin)).find(
         (i) => i.entityType === entityType && i.entityId === entityId,
       );
       res.status(201).json({ data: match ?? { entityType, entityId, title } });
@@ -521,7 +560,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not add item");
       return;
     }
-    const match = (await hydrateItems(listId)).find((i) => i.id === row.id);
+    const match = (await hydrateItems(listId, actorId, isAdmin)).find((i) => i.id === row.id);
     res.status(201).json({ data: match ?? row });
   } catch (err) {
     handleRouteError(res, err);
@@ -537,7 +576,8 @@ todoListsRouter.patch("/:id/items/reorder", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
     if (list.kind === "inbox") {
       sendError(res, 400, "virtual_list", "Unsorted order is not persisted");
       return;
@@ -566,7 +606,7 @@ todoListsRouter.patch("/:id/items/reorder", async (req, res) => {
         .set({ sortOrder: i, updatedAt: new Date() })
         .where(eq(schema.todoListItems.id, iid));
     }
-    res.json({ data: await hydrateItems(listId) });
+    res.json({ data: await hydrateItems(listId, actorId, isAdmin) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -587,7 +627,8 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
     const [existing] = await db
       .select()
       .from(schema.todoListItems)
@@ -605,7 +646,7 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
       })
       .where(eq(schema.todoListItems.id, itemId))
       .returning();
-    const match = (await hydrateItems(listId)).find((i) => i.id === itemId);
+    const match = (await hydrateItems(listId, actorId, isAdmin)).find((i) => i.id === itemId);
     res.json({ data: match ?? row });
   } catch (err) {
     handleRouteError(res, err);
@@ -622,7 +663,7 @@ todoListsRouter.delete("/:id/items/:itemId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    await assertCanAccessDualScoped(db, actorId, list);
     const deleted = await db
       .delete(schema.todoListItems)
       .where(
@@ -654,7 +695,8 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
     const [item] = await db
       .select()
       .from(schema.todoListItems)
@@ -744,7 +786,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
         updatedAt: new Date(),
       })
       .where(eq(schema.todoListItems.id, itemId));
-    const match = (await hydrateItems(listId)).find((i) => i.id === itemId);
+    const match = (await hydrateItems(listId, actorId, isAdmin)).find((i) => i.id === itemId);
     res.json({ data: { item: match, task } });
   } catch (err) {
     handleRouteError(res, err);
@@ -763,7 +805,8 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, list.projectId);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    await assertCanAccessDualScoped(db, actorId, list);
     const [item] = await db
       .select()
       .from(schema.todoListItems)
@@ -818,7 +861,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
         updatedAt: new Date(),
       })
       .where(eq(schema.todoListItems.id, itemId));
-    const match = (await hydrateItems(listId)).find((i) => i.id === itemId);
+    const match = (await hydrateItems(listId, actorId, isAdmin)).find((i) => i.id === itemId);
     res.json({ data: { item: match, todo } });
   } catch (err) {
     handleRouteError(res, err);

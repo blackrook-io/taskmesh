@@ -8,7 +8,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import { dueDateSchema } from "../../lib/taskFields.js";
 import { recordTaskChanges, type TaskLike } from "../../services/tasks.js";
-import { assertCanAccessViaProject } from "../../services/ownership.js";
+import { assertCanAccessDualScoped } from "../../services/ownership.js";
 import { getCurrentUserId, loadUserMap } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -56,7 +56,7 @@ taskActivityRouter.get("/:taskId/activity", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, task.projectId);
+    await assertCanAccessDualScoped(db, actorId, task);
     const rows = await db
       .select()
       .from(schema.taskActivity)
@@ -82,7 +82,7 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, task.projectId);
+    await assertCanAccessDualScoped(db, actorId, task);
     const before: TaskLike = {
       title: parsed.before.title,
       description: parsed.before.description,
@@ -129,7 +129,7 @@ taskActivityRouter.post("/:taskId/activity", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, task.projectId);
+    await assertCanAccessDualScoped(db, actorId, task);
     const parsed = commentBody.parse(req.body);
     const [row] = await db
       .insert(schema.taskActivity)
@@ -162,7 +162,7 @@ taskActivityRouter.patch("/:taskId/activity/:entryId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, task.projectId);
+    await assertCanAccessDualScoped(db, actorId, task);
     const parsed = commentBody.parse(req.body);
     const [existing] = await db
       .select()

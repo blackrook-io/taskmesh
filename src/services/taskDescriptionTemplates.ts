@@ -1,6 +1,11 @@
-import { asc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import {
+  assertCanAccessProject,
+  ownerScope,
+} from "./ownership.js";
+import { userHasAdministrator } from "./roles.js";
 import { getCurrentUser } from "./users.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -33,20 +38,33 @@ function serialize(
   };
 }
 
-/** Templates available for a task: Global ∪ matching projectId (incl. null). */
+/**
+ * Templates available for a task: Global ∪ matching projectId (incl. null).
+ * Non-admins only see templates they own; admins see all matching.
+ */
 export async function listApplicableTemplates(
   db: Db,
   projectId: number | null,
+  actorUserId: number,
 ): Promise<TaskDescriptionTemplate[]> {
+  const isAdmin = await userHasAdministrator(db, actorUserId);
   const scope =
     projectId == null
       ? isNull(schema.taskDescriptionTemplates.projectId)
       : eq(schema.taskDescriptionTemplates.projectId, projectId);
 
+  const filters = [or(eq(schema.taskDescriptionTemplates.isGlobal, true), scope)!];
+  const own = ownerScope(
+    schema.taskDescriptionTemplates.ownerId,
+    actorUserId,
+    isAdmin,
+  );
+  if (own) filters.push(own);
+
   const rows = await db
     .select()
     .from(schema.taskDescriptionTemplates)
-    .where(or(eq(schema.taskDescriptionTemplates.isGlobal, true), scope))
+    .where(and(...filters))
     .orderBy(
       asc(schema.taskDescriptionTemplates.name),
       asc(schema.taskDescriptionTemplates.id),
@@ -61,20 +79,7 @@ export async function createTemplate(
 ): Promise<TaskDescriptionTemplate> {
   const user = await getCurrentUser(db);
   if (input.projectId != null) {
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(eq(schema.projects.id, input.projectId))
-      .limit(1);
-    if (!project) {
-      const err = new Error("Project not found") as Error & {
-        status: number;
-        code: string;
-      };
-      err.status = 404;
-      err.code = "not_found";
-      throw err;
-    }
+    await assertCanAccessProject(db, user.id, input.projectId);
   }
 
   const [row] = await db

@@ -10,6 +10,7 @@ import { sniffImageMime } from "../../lib/imageMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { getUploadDir } from "../../lib/paths.js";
 import { uploadRateLimit } from "../../middleware/rateLimits.js";
+import { assertCanAccessOwned } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
@@ -119,6 +120,8 @@ uploadsRouter.get("/files/:storedName", async (req, res) => {
       sendError(res, 404, "not_found", "File not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessOwned(db, actorId, row.ownerId);
     const filePath = path.join(getUploadDir(), storedName);
     if (!fs.existsSync(filePath)) {
       sendError(res, 404, "not_found", "File missing on disk");
@@ -127,7 +130,7 @@ uploadsRouter.get("/files/:storedName", async (req, res) => {
     res.setHeader("Content-Type", row.mimeType);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Disposition", `inline; filename="${storedName.replace(/"/g, "")}"`);
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cache-Control", "private, max-age=86400");
     res.sendFile(path.resolve(filePath));
   } catch (err) {
     handleRouteError(res, err);

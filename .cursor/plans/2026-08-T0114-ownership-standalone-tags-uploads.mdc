@@ -1,0 +1,81 @@
+# T0114 — Ownership — standalone, tags, uploads
+
+**Task:** T0114 (id `126`) — Ownership — standalone, tags, uploads  
+**Parent:** T0110 — Per-user record ownership (`pending`)  
+**Grandparent:** T0095 — Implement Multi-User  
+**State:** implemented on `T0114-ownership-standalone-tags-uploads`, awaiting QA / finish-up  
+**Priority:** high  
+**Depends on:** T0112 ✅ complete (T0113 ✅ also complete; parallel path)  
+**Unblocks:** T0115 (with T0113)
+
+## Interview (confirmed)
+
+| # | Topic | Decision |
+|---|-------|----------|
+| 1 | Dual-scope unsorted | Non-admin: `(projectId IS NULL AND ownerId = actor) OR project owned by actor`. Get/mutate: if `projectId` set → project owner; if null → row `ownerId`. Admin bypass. |
+| 2 | Inbox / Unsorted list | **Per-user inbox:** `ensureInboxList` find/create `kind=inbox` for **actor** `ownerId`. `hydrateUnsortedItems` only actor’s null-project todos/tasks (admin: all). |
+| 3 | Ideas | Same as projects: list `ownerScope`; get/patch/delete/convert `assertCanAccessOwned`. |
+| 4 | Tags / taggings | List/mutate own tags only (admin: all). Attach-by-`tagId`: tag must be actor’s (or admin). Taggings on entities: assert entity access. |
+| 5 | Uploads GET | **Strict stamp+scope:** `GET /files/:storedName` → load upload row → `assertCanAccessOwned` (admin bypass). No new list/delete routes. |
+| 6 | Templates | Visibility = **owner + admin**. `listApplicableTemplates` filters by actor unless admin. Create with `projectId` → `assertCanAccessProject`. Mutate stays admin routes. |
+| 7 | SPA / transfer | No ownership UI; admin transfer stays **T0115**. No schema migration. |
+
+## Goal
+
+Non-admins see/mutate only their standalone ideas, unsorted dual-scope rows, tags, uploads, and (creator-owned) templates. Administrators retain full access. Project-tree behavior from T0113 unchanged.
+
+## Scope
+
+### Helpers (`src/services/ownership.ts`)
+
+1. **Update `dualScopeListFilter`** — require `ownerId = actor` on the null-`projectId` branch (pass owner column).
+2. **Add `assertCanAccessDualScoped(db, actor, { projectId, ownerId })`** — project path → `assertCanAccessProject`; unsorted → `assertCanAccessOwned`.
+3. Optionally tighten `assertCanAccessViaProject` call sites on dual-scope rows to the new dual assert (keep via-project for pure nested resources).
+
+### Enforce on
+
+| Area | Notes |
+|------|-------|
+| Ideas | `ideas.ts` — list/get/patch/delete/convert |
+| Dual-scope | `todos.ts`, `standaloneTasks.ts`, `todoLists.ts`, `imageBoards.ts`; activity/deps on unsorted tasks |
+| Inbox | `todoLists.ts` / `todoLists` service — per-user ensure + scoped hydrate |
+| Tags | `tags.ts` — list/get/patch/delete/merge with `ownerScope` / assert |
+| Taggings | `taggings.ts` — entity access + tag ownership on attach |
+| Uploads | `uploads.ts` — GET file by storedName → ownership assert |
+| Templates | `taskDescriptionTemplates` service + route — list filter; create project assert |
+
+### Tests
+
+- Non-owner 403 / filtered list for ideas, unsorted todo/task/list/image board, tags, upload GET, templates
+- Owner + admin OK
+- Dual-scope: project branch still uses project owner; unsorted uses row owner
+- Inbox hydrate does not leak other users’ unsorted items
+
+### Docs
+
+- Update `SECURITY.md` residual (T0114 done; T0115 remains)
+- Brief note if ownership helper docs mention unsorted residual
+
+## Out of scope
+
+- Schema / backfill (T0112)
+- Project-tree (T0113 done)
+- Search, assistant, import/export, admin ownership transfer (T0115)
+- Sharing / team ownership
+- New upload list/delete API
+- SPA ownership chrome
+
+## Branch
+
+- `T0114-ownership-standalone-tags-uploads` (after plan approval)
+
+## Version
+
+No new migration → **PATCH** bump on finish-up.
+
+## Done when
+
+- Non-admin cannot list/get/mutate another user’s ideas, unsorted dual-scope rows, tags, uploads, or templates
+- Admin still full access
+- Per-user inbox hydrate scoped
+- Tests + QA checklist; finish-up only on request

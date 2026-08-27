@@ -6,12 +6,19 @@ import { getCurrentUserId } from "./users.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
-/** Ensures a global Unsorted list exists (project_id null, kind inbox). */
+/** Ensures the actor's Unsorted list exists (project_id null, kind inbox, per-user). */
 export async function ensureInboxList(db: Db): Promise<number> {
+  const ownerId = await getCurrentUserId(db);
   const existing = await db
     .select({ id: schema.todoLists.id, title: schema.todoLists.title })
     .from(schema.todoLists)
-    .where(and(isNull(schema.todoLists.projectId), eq(schema.todoLists.kind, "inbox")))
+    .where(
+      and(
+        isNull(schema.todoLists.projectId),
+        eq(schema.todoLists.kind, "inbox"),
+        eq(schema.todoLists.ownerId, ownerId),
+      ),
+    )
     .limit(1);
   if (existing[0]) {
     if (existing[0].title === "Inbox") {
@@ -24,7 +31,6 @@ export async function ensureInboxList(db: Db): Promise<number> {
   }
 
   const number = await allocateTodoListNumber(db);
-  const ownerId = await getCurrentUserId(db);
   const [row] = await db
     .insert(schema.todoLists)
     .values({

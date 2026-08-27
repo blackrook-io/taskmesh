@@ -10,6 +10,12 @@ import {
   entityExists,
   isTaggableEntityType,
 } from "../../services/entities.js";
+import {
+  assertCanAccessOwned,
+  assertCanAccessTaggableEntity,
+  ownerScope,
+} from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { applyTaskGroupAutoTagsForTask } from "../../services/taskGroupAutoTag.js";
 import { getCurrentUserId } from "../../services/users.js";
 
@@ -43,9 +49,19 @@ taggingsRouter.get("/", async (req, res) => {
       return;
     }
 
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+
+    if (entityId != null) {
+      await assertCanAccessTaggableEntity(db, actorId, entityType, entityId);
+    }
+
     const filters = [eq(schema.taggings.entityType, entityType)];
     if (entityId != null) {
       filters.push(eq(schema.taggings.entityId, entityId));
+    } else {
+      const tagScope = ownerScope(schema.tags.ownerId, actorId, isAdmin);
+      if (tagScope) filters.push(tagScope);
     }
 
     const rows = await db
@@ -81,11 +97,13 @@ taggingsRouter.post("/", async (req, res) => {
       return;
     }
 
+    const actorId = await getCurrentUserId(db);
     const exists = await entityExists(db, parsed.entityType, parsed.entityId);
     if (!exists) {
       sendError(res, 404, "not_found", "Entity not found");
       return;
     }
+    await assertCanAccessTaggableEntity(db, actorId, parsed.entityType, parsed.entityId);
 
     let tag: typeof schema.tags.$inferSelect | undefined;
 
@@ -98,10 +116,11 @@ taggingsRouter.post("/", async (req, res) => {
         sendError(res, 404, "not_found", "Tag not found");
         return;
       }
+      await assertCanAccessOwned(db, actorId, found.ownerId);
       tag = found;
     } else {
       const name = parsed.name!.trim();
-      const ownerId = await getCurrentUserId(db);
+      const ownerId = actorId;
       const [existing] = await db
         .select()
         .from(schema.tags)
@@ -163,6 +182,19 @@ taggingsRouter.delete("/", async (req, res) => {
         entityId: z.number().int().positive(),
       })
       .parse(req.body);
+
+    if (!isTaggableEntityType(body.entityType)) {
+      sendError(
+        res,
+        400,
+        "validation_error",
+        `Entity type ${body.entityType} does not support tags yet`,
+      );
+      return;
+    }
+
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessTaggableEntity(db, actorId, body.entityType, body.entityId);
 
     const deleted = await db
       .delete(schema.taggings)

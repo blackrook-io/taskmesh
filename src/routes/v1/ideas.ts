@@ -7,7 +7,12 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateIdeaNumber, allocateProjectNumber } from "../../services/entityNumbers.js";
+import {
+  assertCanAccessOwned,
+  ownerScope,
+} from "../../services/ownership.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const ideaBody = z.object({
@@ -26,7 +31,14 @@ export const ideasRouter = Router();
 
 ideasRouter.get("/", async (_req, res) => {
   try {
-    const rows = await db.select().from(schema.ideas).orderBy(desc(schema.ideas.updatedAt));
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = ownerScope(schema.ideas.ownerId, actorId, isAdmin);
+    const rows = await db
+      .select()
+      .from(schema.ideas)
+      .where(scope)
+      .orderBy(desc(schema.ideas.updatedAt));
     res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
@@ -60,11 +72,13 @@ ideasRouter.post("/", async (req, res) => {
 ideasRouter.get("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
+    const actorId = await getCurrentUserId(db);
     const [row] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, id));
     if (!row) {
       sendError(res, 404, "not_found", "Idea not found");
       return;
     }
+    await assertCanAccessOwned(db, actorId, row.ownerId);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -79,11 +93,13 @@ ideasRouter.patch("/:id", async (req, res) => {
       sendError(res, 400, "empty_patch", "Provide title and/or body");
       return;
     }
+    const actorId = await getCurrentUserId(db);
     const [existing] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, id));
     if (!existing) {
       sendError(res, 404, "not_found", "Idea not found");
       return;
     }
+    await assertCanAccessOwned(db, actorId, existing.ownerId);
     const [row] = await db
       .update(schema.ideas)
       .set({
@@ -102,11 +118,14 @@ ideasRouter.patch("/:id", async (req, res) => {
 ideasRouter.delete("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    const deleted = await db.delete(schema.ideas).where(eq(schema.ideas.id, id)).returning({ id: schema.ideas.id });
-    if (deleted.length === 0) {
+    const actorId = await getCurrentUserId(db);
+    const [existing] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, id));
+    if (!existing) {
       sendError(res, 404, "not_found", "Idea not found");
       return;
     }
+    await assertCanAccessOwned(db, actorId, existing.ownerId);
+    await db.delete(schema.ideas).where(eq(schema.ideas.id, id));
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);
@@ -116,15 +135,16 @@ ideasRouter.delete("/:id", async (req, res) => {
 ideasRouter.post("/:id/convert-to-project", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
+    const actorId = await getCurrentUserId(db);
     const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, id));
     if (!idea) {
       sendError(res, 404, "not_found", "Idea not found");
       return;
     }
+    await assertCanAccessOwned(db, actorId, idea.ownerId);
 
     const number = await allocateProjectNumber(db);
     const sortOrder = await nextProjectSortOrder(db);
-    const ownerId = await getCurrentUserId(db);
     const [project] = await db
       .insert(schema.projects)
       .values({
@@ -134,7 +154,7 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
         status: "idea",
         sourceIdeaId: idea.id,
         sortOrder,
-        ownerId,
+        ownerId: actorId,
       })
       .returning();
 

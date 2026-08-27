@@ -1,4 +1,4 @@
-import { eq, inArray, isNull, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import * as schema from "../db/schema.js";
@@ -88,7 +88,7 @@ export async function assertCanAccessProject(
 
 /**
  * When `projectId` is set, assert project-tree access.
- * When null/undefined, no-op (unsorted / standalone → T0114).
+ * When null/undefined, no-op (caller must use assertCanAccessDualScoped for unsorted rows).
  */
 export async function assertCanAccessViaProject(
   db: Db,
@@ -100,13 +100,94 @@ export async function assertCanAccessViaProject(
 }
 
 /**
+ * Dual-scope get/mutate: project-backed → project owner; unsorted → row owner.
+ * Admins pass via assertCanAccessOwned / assertCanAccessProject.
+ */
+export async function assertCanAccessDualScoped(
+  db: Db,
+  actorUserId: number,
+  row: { projectId: number | null; ownerId: number },
+): Promise<void> {
+  if (row.projectId != null) {
+    await assertCanAccessProject(db, actorUserId, row.projectId);
+    return;
+  }
+  await assertCanAccessOwned(db, actorUserId, row.ownerId);
+}
+
+/**
+ * Assert the actor may access a taggable entity (idea / project / task / todo / document).
+ * Missing entity → 404; non-owner non-admin → 403.
+ */
+export async function assertCanAccessTaggableEntity(
+  db: Db,
+  actorUserId: number,
+  entityType: "idea" | "project" | "task" | "todo" | "document",
+  entityId: number,
+): Promise<void> {
+  switch (entityType) {
+    case "idea": {
+      const [row] = await db
+        .select({ ownerId: schema.ideas.ownerId })
+        .from(schema.ideas)
+        .where(eq(schema.ideas.id, entityId));
+      if (!row) throw new NotFoundError("Entity not found");
+      await assertCanAccessOwned(db, actorUserId, row.ownerId);
+      return;
+    }
+    case "project": {
+      await assertCanAccessProject(db, actorUserId, entityId);
+      return;
+    }
+    case "task": {
+      const [row] = await db
+        .select({
+          projectId: schema.tasks.projectId,
+          ownerId: schema.tasks.ownerId,
+        })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, entityId));
+      if (!row) throw new NotFoundError("Entity not found");
+      await assertCanAccessDualScoped(db, actorUserId, row);
+      return;
+    }
+    case "todo": {
+      const [row] = await db
+        .select({
+          projectId: schema.todos.projectId,
+          ownerId: schema.todos.ownerId,
+        })
+        .from(schema.todos)
+        .where(eq(schema.todos.id, entityId));
+      if (!row) throw new NotFoundError("Entity not found");
+      await assertCanAccessDualScoped(db, actorUserId, row);
+      return;
+    }
+    case "document": {
+      const [row] = await db
+        .select({ projectId: schema.projectDocuments.projectId })
+        .from(schema.projectDocuments)
+        .where(eq(schema.projectDocuments.id, entityId));
+      if (!row) throw new NotFoundError("Entity not found");
+      await assertCanAccessProject(db, actorUserId, row.projectId);
+      return;
+    }
+    default: {
+      const _exhaustive: never = entityType;
+      throw new NotFoundError(`Unsupported entity type: ${_exhaustive}`);
+    }
+  }
+}
+
+/**
  * Dual-scope list filter (tasks, todos, lists, image boards):
  * - Admins: no filter
- * - Others: `project_id IS NULL` (unsorted residual until T0114) OR project owned by actor
+ * - Others: (`project_id IS NULL` AND `owner_id = actor`) OR project owned by actor
  */
 export function dualScopeListFilter(
   db: Db,
   projectIdColumn: AnyPgColumn,
+  ownerIdColumn: AnyPgColumn,
   actorUserId: number,
   isAdministrator: boolean,
 ): SQL | undefined {
@@ -115,5 +196,8 @@ export function dualScopeListFilter(
     .select({ id: schema.projects.id })
     .from(schema.projects)
     .where(eq(schema.projects.ownerId, actorUserId));
-  return or(isNull(projectIdColumn), inArray(projectIdColumn, ownedProjectIds));
+  return or(
+    and(isNull(projectIdColumn), eq(ownerIdColumn, actorUserId)),
+    inArray(projectIdColumn, ownedProjectIds),
+  );
 }

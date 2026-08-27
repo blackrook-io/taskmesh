@@ -9,9 +9,10 @@ import { jsonDocumentSchema } from "../../lib/jsonDocument.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateImageBoardNumber } from "../../services/entityNumbers.js";
 import {
+  assertCanAccessDualScoped,
   assertCanAccessProject,
-  assertCanAccessViaProject,
   dualScopeListFilter,
+  ownerScope,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -52,6 +53,7 @@ export const imageBoardsRouter = Router();
 const summarySelect = {
   id: schema.imageBoards.id,
   projectId: schema.imageBoards.projectId,
+  ownerId: schema.imageBoards.ownerId,
   title: schema.imageBoards.title,
   sortOrder: schema.imageBoards.sortOrder,
   createdAt: schema.imageBoards.createdAt,
@@ -94,8 +96,16 @@ imageBoardsRouter.get("/", async (req, res) => {
       filters.push(eq(schema.imageBoards.projectId, q.projectId));
     } else if (q.standalone) {
       filters.push(isNull(schema.imageBoards.projectId));
+      const os = ownerScope(schema.imageBoards.ownerId, actorId, isAdmin);
+      if (os) filters.push(os);
     } else {
-      const scope = dualScopeListFilter(db, schema.imageBoards.projectId, actorId, isAdmin);
+      const scope = dualScopeListFilter(
+        db,
+        schema.imageBoards.projectId,
+        schema.imageBoards.ownerId,
+        actorId,
+        isAdmin,
+      );
       if (scope) filters.push(scope);
     }
 
@@ -154,7 +164,13 @@ imageBoardsRouter.patch("/reorder", async (req, res) => {
     const { orderedIds } = reorderBody.parse(req.body);
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    const scope = dualScopeListFilter(db, schema.imageBoards.projectId, actorId, isAdmin);
+    const scope = dualScopeListFilter(
+      db,
+      schema.imageBoards.projectId,
+      schema.imageBoards.ownerId,
+      actorId,
+      isAdmin,
+    );
     const existing = await db
       .select({ id: schema.imageBoards.id })
       .from(schema.imageBoards)
@@ -205,7 +221,7 @@ imageBoardsRouter.get("/:imageBoardId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, row.projectId);
+    await assertCanAccessDualScoped(db, actorId, row);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -221,7 +237,7 @@ imageBoardsRouter.patch("/:imageBoardId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, existing.projectId);
+    await assertCanAccessDualScoped(db, actorId, existing);
     const parsed = patchBody.parse(req.body);
     if (
       parsed.title === undefined &&
@@ -274,7 +290,7 @@ imageBoardsRouter.delete("/:imageBoardId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, existing.projectId);
+    await assertCanAccessDualScoped(db, actorId, existing);
     await db.delete(schema.imageBoards).where(eq(schema.imageBoards.id, id));
     res.status(204).send();
   } catch (err) {

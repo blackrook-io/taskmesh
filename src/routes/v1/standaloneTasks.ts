@@ -27,9 +27,10 @@ import {
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
 import {
+  assertCanAccessDualScoped,
   assertCanAccessProject,
-  assertCanAccessViaProject,
   dualScopeListFilter,
+  ownerScope,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import {
@@ -99,11 +100,19 @@ standaloneTasksRouter.get("/", async (req, res) => {
     const filters = [];
     if (parsed.projectId === "null") {
       filters.push(isNull(schema.tasks.projectId));
+      const os = ownerScope(schema.tasks.ownerId, actorId, isAdmin);
+      if (os) filters.push(os);
     } else if (typeof parsed.projectId === "number") {
       await assertCanAccessProject(db, actorId, parsed.projectId);
       filters.push(eq(schema.tasks.projectId, parsed.projectId));
     } else {
-      const scope = dualScopeListFilter(db, schema.tasks.projectId, actorId, isAdmin);
+      const scope = dualScopeListFilter(
+        db,
+        schema.tasks.projectId,
+        schema.tasks.ownerId,
+        actorId,
+        isAdmin,
+      );
       if (scope) filters.push(scope);
     }
     if (parsed.state) {
@@ -135,7 +144,7 @@ standaloneTasksRouter.get("/:taskId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, row.projectId);
+    await assertCanAccessDualScoped(db, actorId, row);
     res.json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
@@ -207,7 +216,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       );
       return;
     }
-    await assertCanAccessViaProject(db, actorId, existing.projectId);
+    await assertCanAccessDualScoped(db, actorId, existing);
 
     if (
       !hasDefinedKeys(parsed, [
@@ -335,7 +344,7 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, existing.projectId);
+    await assertCanAccessDualScoped(db, actorId, existing);
     const deleteGate = await rejectDeleteIfBlocked(taskId);
     if (deleteGate.blocked) {
       sendError(res, 400, "dependency_required_by", deleteGate.message);

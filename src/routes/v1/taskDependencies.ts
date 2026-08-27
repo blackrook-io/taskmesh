@@ -15,7 +15,7 @@ import {
   removeDependency,
   searchTasksForDependency,
 } from "../../services/taskDependencies.js";
-import { assertCanAccessViaProject } from "../../services/ownership.js";
+import { assertCanAccessDualScoped } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -49,7 +49,11 @@ taskDependenciesRouter.get("/:taskId/dependencies", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
     const [task] = await db
-      .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
+      .select({
+        id: schema.tasks.id,
+        projectId: schema.tasks.projectId,
+        ownerId: schema.tasks.ownerId,
+      })
       .from(schema.tasks)
       .where(eq(schema.tasks.id, taskId));
     if (!task) {
@@ -57,7 +61,7 @@ taskDependenciesRouter.get("/:taskId/dependencies", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, task.projectId);
+    await assertCanAccessDualScoped(db, actorId, task);
     const dependsOn = await listDependsOn(db, taskId);
     const requiredBy = await listRequiredBy(db, taskId);
     res.json({ data: { dependsOn, requiredBy } });
@@ -71,7 +75,11 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
     const taskId = idParam.parse(req.params.taskId);
     const parsed = addBody.parse(req.body);
     const [task] = await db
-      .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
+      .select({
+        id: schema.tasks.id,
+        projectId: schema.tasks.projectId,
+        ownerId: schema.tasks.ownerId,
+      })
       .from(schema.tasks)
       .where(eq(schema.tasks.id, taskId));
     if (!task) {
@@ -79,7 +87,11 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
       return;
     }
     const [dependsOnTask] = await db
-      .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
+      .select({
+        id: schema.tasks.id,
+        projectId: schema.tasks.projectId,
+        ownerId: schema.tasks.ownerId,
+      })
       .from(schema.tasks)
       .where(eq(schema.tasks.id, parsed.dependsOnTaskId));
     if (!dependsOnTask) {
@@ -87,8 +99,8 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, task.projectId);
-    await assertCanAccessViaProject(db, actorId, dependsOnTask.projectId);
+    await assertCanAccessDualScoped(db, actorId, task);
+    await assertCanAccessDualScoped(db, actorId, dependsOnTask);
     const result = await addDependency(db, taskId, parsed.dependsOnTaskId, {
       actorId,
       source: activitySourceFromRequest(req),
@@ -111,7 +123,11 @@ taskDependenciesRouter.delete(
       const taskId = idParam.parse(req.params.taskId);
       const dependsOnTaskId = idParam.parse(req.params.dependsOnTaskId);
       const [task] = await db
-        .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
+        .select({
+          id: schema.tasks.id,
+          projectId: schema.tasks.projectId,
+          ownerId: schema.tasks.ownerId,
+        })
         .from(schema.tasks)
         .where(eq(schema.tasks.id, taskId));
       if (!task) {
@@ -119,7 +135,7 @@ taskDependenciesRouter.delete(
         return;
       }
       const actorId = await getCurrentUserId(db);
-      await assertCanAccessViaProject(db, actorId, task.projectId);
+      await assertCanAccessDualScoped(db, actorId, task);
       const result = await removeDependency(db, taskId, dependsOnTaskId, {
         actorId,
         source: activitySourceFromRequest(req),

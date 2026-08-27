@@ -15,9 +15,11 @@ import {
 } from "../../lib/taskFields.js";
 import { allocateTodoNumber } from "../../services/entityNumbers.js";
 import {
+  assertCanAccessDualScoped,
+  assertCanAccessOwned,
   assertCanAccessProject,
-  assertCanAccessViaProject,
   dualScopeListFilter,
+  ownerScope,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
@@ -88,11 +90,19 @@ todosRouter.get("/", async (req, res) => {
     const filters = [];
     if (parsed.projectId === "null") {
       filters.push(isNull(schema.todos.projectId));
+      const os = ownerScope(schema.todos.ownerId, actorId, isAdmin);
+      if (os) filters.push(os);
     } else if (typeof parsed.projectId === "number") {
       await assertCanAccessProject(db, actorId, parsed.projectId);
       filters.push(eq(schema.todos.projectId, parsed.projectId));
     } else {
-      const scope = dualScopeListFilter(db, schema.todos.projectId, actorId, isAdmin);
+      const scope = dualScopeListFilter(
+        db,
+        schema.todos.projectId,
+        schema.todos.ownerId,
+        actorId,
+        isAdmin,
+      );
       if (scope) filters.push(scope);
     }
     if (parsed.state) {
@@ -124,13 +134,14 @@ todosRouter.post("/", async (req, res) => {
     }
     if (parsed.sourceIdeaId != null) {
       const [idea] = await db
-        .select({ id: schema.ideas.id })
+        .select({ id: schema.ideas.id, ownerId: schema.ideas.ownerId })
         .from(schema.ideas)
         .where(eq(schema.ideas.id, parsed.sourceIdeaId));
       if (!idea) {
         sendError(res, 404, "not_found", "Idea not found");
         return;
       }
+      await assertCanAccessOwned(db, actorId, idea.ownerId);
     }
     const number = await allocateTodoNumber(db);
     const [row] = await db
@@ -171,7 +182,7 @@ todosRouter.get("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, row.projectId);
+    await assertCanAccessDualScoped(db, actorId, row);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -207,7 +218,7 @@ todosRouter.patch("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, existing.projectId);
+    await assertCanAccessDualScoped(db, actorId, existing);
     if (parsed.projectId !== undefined && parsed.projectId != null) {
       await assertCanAccessProject(db, actorId, parsed.projectId);
     }
@@ -248,7 +259,7 @@ todosRouter.delete("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, existing.projectId);
+    await assertCanAccessDualScoped(db, actorId, existing);
     const [row] = await db
       .update(schema.todos)
       .set({
@@ -280,6 +291,7 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
+    await assertCanAccessOwned(db, actorId, idea.ownerId);
     if (body.projectId != null) {
       await assertCanAccessProject(db, actorId, body.projectId);
     }
@@ -330,7 +342,7 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessViaProject(db, actorId, todo.projectId);
+    await assertCanAccessDualScoped(db, actorId, todo);
     const projectId =
       parsed.projectId !== undefined ? parsed.projectId : todo.projectId;
     if (projectId != null) {

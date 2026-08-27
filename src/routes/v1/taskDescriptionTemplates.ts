@@ -7,6 +7,7 @@ import {
   createTemplate,
   listApplicableTemplates,
 } from "../../services/taskDescriptionTemplates.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 export const taskDescriptionTemplatesRouter = Router();
 
@@ -35,7 +36,7 @@ function parseProjectIdQuery(raw: unknown): number | null | undefined {
   return undefined;
 }
 
-/** List templates applicable to a task's project (Global ∪ project match). */
+/** List templates applicable to a task's project (Global ∪ project match; owner-scoped). */
 taskDescriptionTemplatesRouter.get("/", async (req, res) => {
   try {
     const projectId = parseProjectIdQuery(req.query.projectId);
@@ -43,7 +44,8 @@ taskDescriptionTemplatesRouter.get("/", async (req, res) => {
       sendError(res, 400, "validation_error", "Invalid projectId");
       return;
     }
-    const data = await listApplicableTemplates(db, projectId ?? null);
+    const actorId = await getCurrentUserId(db);
+    const data = await listApplicableTemplates(db, projectId ?? null, actorId);
     res.json({ data });
   } catch (err) {
     handleRouteError(res, err);

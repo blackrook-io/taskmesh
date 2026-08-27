@@ -67,11 +67,20 @@ describe("dualScopeListFilter", () => {
   } as never;
 
   it("returns undefined for administrators", () => {
-    assert.equal(dualScopeListFilter(fakeDb, todos.projectId, 3, true), undefined);
+    assert.equal(
+      dualScopeListFilter(fakeDb, todos.projectId, todos.ownerId, 3, true),
+      undefined,
+    );
   });
 
-  it("returns a filter for non-administrators", () => {
-    const clause = dualScopeListFilter(fakeDb, todos.projectId, 3, false);
+  it("returns a filter for non-administrators (unsorted owned OR owned projects)", () => {
+    const clause = dualScopeListFilter(
+      fakeDb,
+      todos.projectId,
+      todos.ownerId,
+      3,
+      false,
+    );
     assert.ok(clause);
   });
 });

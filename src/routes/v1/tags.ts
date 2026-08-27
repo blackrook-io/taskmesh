@@ -6,6 +6,11 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { ilikeEscaped } from "../../lib/ilike.js";
+import {
+  assertCanAccessOwned,
+  ownerScope,
+} from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -60,12 +65,17 @@ tagsRouter.get("/", async (req, res) => {
       return;
     }
 
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = ownerScope(schema.tags.ownerId, actorId, isAdmin);
+
     if (qRaw.length >= 3) {
+      const nameFilter = ilikeEscaped(schema.tags.name, qRaw);
       const rows = await db
         .select(tagSelect)
         .from(schema.tags)
         .leftJoin(schema.taggings, eq(schema.taggings.tagId, schema.tags.id))
-        .where(ilikeEscaped(schema.tags.name, qRaw))
+        .where(scope ? and(scope, nameFilter) : nameFilter)
         .groupBy(schema.tags.id)
         .orderBy(asc(schema.tags.name))
         .limit(25);
@@ -77,6 +87,7 @@ tagsRouter.get("/", async (req, res) => {
       .select(tagSelect)
       .from(schema.tags)
       .leftJoin(schema.taggings, eq(schema.taggings.tagId, schema.tags.id))
+      .where(scope)
       .groupBy(schema.tags.id)
       .orderBy(asc(schema.tags.name));
     res.json({ data: rows });
@@ -124,19 +135,23 @@ tagsRouter.post("/merge", async (req, res) => {
       return;
     }
 
-    const merged = await db.transaction(async (tx) => {
-      const [source] = await tx
-        .select()
-        .from(schema.tags)
-        .where(eq(schema.tags.id, parsed.sourceTagId));
-      const [target] = await tx
-        .select()
-        .from(schema.tags)
-        .where(eq(schema.tags.id, parsed.targetTagId));
-      if (!source || !target) {
-        return null;
-      }
+    const actorId = await getCurrentUserId(db);
+    const [source] = await db
+      .select()
+      .from(schema.tags)
+      .where(eq(schema.tags.id, parsed.sourceTagId));
+    const [target] = await db
+      .select()
+      .from(schema.tags)
+      .where(eq(schema.tags.id, parsed.targetTagId));
+    if (!source || !target) {
+      sendError(res, 404, "not_found", "Source or target tag not found");
+      return;
+    }
+    await assertCanAccessOwned(db, actorId, source.ownerId);
+    await assertCanAccessOwned(db, actorId, target.ownerId);
 
+    const merged = await db.transaction(async (tx) => {
       const sourceTaggings = await tx
         .select()
         .from(schema.taggings)
@@ -167,11 +182,6 @@ tagsRouter.post("/merge", async (req, res) => {
       return parsed.targetTagId;
     });
 
-    if (merged == null) {
-      sendError(res, 404, "not_found", "Source or target tag not found");
-      return;
-    }
-
     const row = await loadTagWithUsage(merged);
     if (!row) {
       sendError(res, 404, "not_found", "Target tag not found after merge");
@@ -186,11 +196,14 @@ tagsRouter.post("/merge", async (req, res) => {
 tagsRouter.get("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    const row = await loadTagWithUsage(id);
-    if (!row) {
+    const actorId = await getCurrentUserId(db);
+    const [existing] = await db.select().from(schema.tags).where(eq(schema.tags.id, id));
+    if (!existing) {
       sendError(res, 404, "not_found", "Tag not found");
       return;
     }
+    await assertCanAccessOwned(db, actorId, existing.ownerId);
+    const row = await loadTagWithUsage(id);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -205,11 +218,13 @@ tagsRouter.patch("/:id", async (req, res) => {
       sendError(res, 400, "validation_error", "No fields to update");
       return;
     }
+    const actorId = await getCurrentUserId(db);
     const [existing] = await db.select().from(schema.tags).where(eq(schema.tags.id, id));
     if (!existing) {
       sendError(res, 404, "not_found", "Tag not found");
       return;
     }
+    await assertCanAccessOwned(db, actorId, existing.ownerId);
     if (parsed.name !== undefined && parsed.name !== existing.name) {
       const [dup] = await db
         .select()
@@ -242,14 +257,14 @@ tagsRouter.patch("/:id", async (req, res) => {
 tagsRouter.delete("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    const deleted = await db
-      .delete(schema.tags)
-      .where(eq(schema.tags.id, id))
-      .returning({ id: schema.tags.id });
-    if (deleted.length === 0) {
+    const actorId = await getCurrentUserId(db);
+    const [existing] = await db.select().from(schema.tags).where(eq(schema.tags.id, id));
+    if (!existing) {
       sendError(res, 404, "not_found", "Tag not found");
       return;
     }
+    await assertCanAccessOwned(db, actorId, existing.ownerId);
+    await db.delete(schema.tags).where(eq(schema.tags.id, id));
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);

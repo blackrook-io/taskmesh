@@ -26,6 +26,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | 2026-08-27 | T0108 | Roles + Administration gating; last-admin guards; API-key admin logging | `requireAdministrator` on admin + backups; `admin_key` only for Administrator owners |
 | 2026-08-27 | T0112 | `ownerId` columns + backfill U0001; ownership helpers; create stamps | Schema/helpers only; list/get enforcement → T0113–T0115 |
 | 2026-08-27 | T0113 | Project-tree list/get/mutate via `projects.ownerId`; nested inherit; dual-scope project branch | Standalone/unsorted/tags/uploads → T0114; search/import/transfer → T0115 |
+| 2026-08-27 | T0114 | Standalone ideas, unsorted dual-scope (`ownerId`), per-user tags, upload GET scope, creator-owned templates | Search/assistant/import/transfer → T0115 |
 
 ## Surfaces
 
@@ -71,11 +72,11 @@ Run after adding a route or query:
 |------|--------|
 | **T0086** | Automated security tests in CI (`npm audit`, SAST) |
 | **T0112** | Ownership schema + helpers (`ownerId`, backfill) — complete |
-| **T0113** | Project-tree list/get/mutate ownership enforcement — in progress |
-| **T0114** | Standalone entities, per-user tags, uploads, creator-owned templates |
+| **T0113** | Project-tree list/get/mutate ownership enforcement — complete |
+| **T0114** | Standalone entities, per-user tags, uploads, creator-owned templates — complete |
 | **T0115** | Search / assistant / import-export scoping + admin ownership transfer |
 
-**T0110** is the parent epic for T0112–T0115. Project-tree surfaces are scoped to `projects.ownerId` (admins bypass). Unsorted/standalone rows, tags, uploads, templates, search, assistant, and import/export remain residual until T0114–T0115.
+**T0110** is the parent epic for T0112–T0115. Project-tree and standalone/unsorted/tags/uploads/templates are scoped to owners (admins bypass). Search, assistant, and import/export remain residual until T0115.
 
 ## Secrets and host hardening (T0087)
 
