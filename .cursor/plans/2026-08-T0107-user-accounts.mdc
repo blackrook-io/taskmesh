@@ -1,0 +1,85 @@
+# T0107 — User accounts: create, delete, lock/unlock
+
+**Task:** T0107 (id `119`) — User accounts — create, delete, lock/unlock  
+**Parent:** T0095 — Implement Multi-User  
+**State:** implemented on `T0107-user-accounts`, awaiting QA / finish-up  
+**Priority:** urgent · Project: TaskMesh (4)
+
+## Context
+
+First slice of multi-user. Administration → Users already lists the sole seed user (**U0001**), reset password, and deactivate/reactivate. `users.locked_at` exists but nothing sets it except reactivate (clears it). There is no create, no delete, and no lock/unlock action.
+
+Sibling non-goals: login/sessions (T0096), API route protection (T0084), roles (T0108), password history (T0109), per-user ownership (T0110).
+
+## Size / split
+
+One cohesive admin CRUD session. Schema already has `email`, `password_hash`, `locked_at`, `deactivated_at`, and `allocateUserNumber()`. No split.
+
+Depends-on: none. Required-by: T0096, T0108, T0109.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Create fields:** display name, **required** email, **required** initial password (existing `validatePassword` rules). No avatar, no role (T0108).
+2. **Delete is hard delete**, with confirm. Guards:
+   - last remaining user row (including deactivated) → 409
+   - current user (`getCurrentUser()`) → 409 (works today as U0001; still correct once auth exists)
+   - Postgres **RESTRICT** FKs (tasks/todos/templates authored by that user) → 409, tell admin to **deactivate** instead. No reassignment (T0110).
+3. **Lock / Unlock** only set/clear `locked_at`. Do **not** revoke API keys (that stays deactivate). Unlock also resets `failed_login_count` to 0. Hide lock/unlock when the user is deactivated.
+4. **Reactivate** keeps today’s behavior (clears `deactivated_at`, `locked_at`, `failed_login_count`).
+5. **Login rejection** of locked/deactivated is **not implemented here**. Add a small shared helper (`userCanAuthenticate`) that T0096 / T0084 will call later.
+6. **No migration.** Reuse existing columns. Finish-up is PATCH +1.
+
+## Goal
+
+Admins can create a second user (email + password, next `U####`), lock/unlock them, and delete them when safe. Locked vs deactivated are both visible in the Users table.
+
+## Scope
+
+### API (`/api/v1/admin/users`)
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| `POST` | `/` | Create: `{ displayName, email, password }`. Allocate next `number`. Hash password. Unique email → 409 `email_taken`. Never return hash. |
+| `DELETE` | `/:id` | Hard delete after guards above. API keys cascade. Confirm is UI-only. |
+| `POST` | `/:id/lock` | Set `lockedAt = now` if not deactivated. |
+| `POST` | `/:id/unlock` | Clear `lockedAt`, reset `failedLoginCount`. |
+
+Keep existing list / reset-password / deactivate / reactivate.
+
+### UI (`AdminUsersPanel`)
+
+- **Create user** form (display name, email, password + confirm) using existing password/email client validators and reset-password card styling.
+- Per-row **Lock** / **Unlock** (non-deactivated only).
+- Per-row **Delete** with `window.confirm` (same pattern as deactivate). Disable or hide when last remaining / current user; still enforce on server.
+- Status column already prefers Deactivated over Locked over Active — keep that.
+
+### Shared helper
+
+`userCanAuthenticate(user)` → false when `deactivatedAt` or `lockedAt` is set. Export from server lib for later auth tasks. Optional unit test.
+
+### Docs
+
+Light touch on `docs/database/platform.md` if create/lock/delete semantics need a sentence. No schema change → no `docs:sync-schema` unless we edit `/docs`.
+
+### Tests
+
+Service tests for create (next `U####`, password hashed), lock/unlock, delete guards (last user, self, unique email).
+
+## Out of scope
+
+Login UI, sessions, route protection, roles, password history, record ownership, changing deactivate/API-key behavior, email verification.
+
+## Implementation order
+
+1. Service: create / lock / unlock / delete + helper  
+2. Admin routes + Zod  
+3. Users panel UI  
+4. Tests  
+5. Docs sentence if needed  
+
+## Done when
+
+- Admin can create a second user with email + password (next `U####`).
+- Lock/unlock and deactivate remain distinct; both statuses show in the table.
+- Delete works for a unused extra user; blocked for last user, self, and users with RESTRICT authorship.
+- QA checklist delivered; finish-up only on request.

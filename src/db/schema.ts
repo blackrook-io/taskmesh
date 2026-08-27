@@ -113,7 +113,7 @@ export const users = pgTable("users", {
   deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
   /** Failed login attempts; written when auth exists. */
   failedLoginCount: integer("failed_login_count").notNull().default(0),
-  /** Set when login-failure threshold is hit (future auth). */
+  /** Set when login-failure threshold is hit, or when an admin locks the account. */
   lockedAt: timestamp("locked_at", { withTimezone: true }),
   /** Last UI auth/access — written when auth exists. */
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),

@@ -9,6 +9,7 @@ import {
 } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import { plainTitle } from "../../lib/markdownFields.js";
 import {
   createAdminApiKey,
   expireApiKey,
@@ -18,10 +19,14 @@ import {
   unsuspendApiKey,
 } from "../../services/adminApiKeys.js";
 import {
+  createAdminUser,
   deactivateUser,
+  deleteAdminUser,
   listAdminUsers,
+  lockUser,
   reactivateUser,
   resetUserPassword,
+  unlockUser,
 } from "../../services/adminUsers.js";
 import {
   getApiUsageSummary,
@@ -71,6 +76,70 @@ adminRouter.get("/users", async (_req, res) => {
   try {
     res.json({ data: await listAdminUsers(db) });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const createUserBody = z
+  .object({
+    displayName: plainTitle(200),
+    email: z.string().trim().email().max(320),
+    password: z.string().min(1).max(200),
+  })
+  .strict();
+
+adminRouter.post("/users", async (req, res) => {
+  try {
+    const parsed = createUserBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const data = await createAdminUser(db, parsed);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `User created: ${data.referenceId} (${data.email})`;
+    res.status(201).json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/users/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const actor = await getCurrentUser(db);
+    await deleteAdminUser(db, id, actor.id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `User deleted: id ${id}`;
+    res.status(204).send();
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.post("/users/:id/lock", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const actor = await getCurrentUser(db);
+    const data = await lockUser(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `User locked: ${data.referenceId}`;
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.post("/users/:id/unlock", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const actor = await getCurrentUser(db);
+    const data = await unlockUser(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `User unlocked: ${data.referenceId}`;
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
     handleRouteError(res, err);
   }
 });
