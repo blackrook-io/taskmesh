@@ -14,6 +14,12 @@ import {
   taskStateSchema,
 } from "../../lib/taskFields.js";
 import { allocateTodoNumber } from "../../services/entityNumbers.js";
+import {
+  assertCanAccessProject,
+  assertCanAccessViaProject,
+  dualScopeListFilter,
+} from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { copyTaggings } from "../../services/copyTaggings.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -77,11 +83,17 @@ todosRouter.get("/", async (req, res) => {
       state: req.query.state as string | undefined,
       includeDeleted: req.query.includeDeleted as string | undefined,
     });
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
     const filters = [];
     if (parsed.projectId === "null") {
       filters.push(isNull(schema.todos.projectId));
     } else if (typeof parsed.projectId === "number") {
+      await assertCanAccessProject(db, actorId, parsed.projectId);
       filters.push(eq(schema.todos.projectId, parsed.projectId));
+    } else {
+      const scope = dualScopeListFilter(db, schema.todos.projectId, actorId, isAdmin);
+      if (scope) filters.push(scope);
     }
     if (parsed.state) {
       filters.push(eq(schema.todos.state, parsed.state));
@@ -106,15 +118,9 @@ todosRouter.get("/", async (req, res) => {
 todosRouter.post("/", async (req, res) => {
   try {
     const parsed = createBody.parse(req.body);
+    const actorId = await getCurrentUserId(db);
     if (parsed.projectId != null) {
-      const [proj] = await db
-        .select({ id: schema.projects.id })
-        .from(schema.projects)
-        .where(eq(schema.projects.id, parsed.projectId));
-      if (!proj) {
-        sendError(res, 404, "not_found", "Project not found");
-        return;
-      }
+      await assertCanAccessProject(db, actorId, parsed.projectId);
     }
     if (parsed.sourceIdeaId != null) {
       const [idea] = await db
@@ -127,7 +133,6 @@ todosRouter.post("/", async (req, res) => {
       }
     }
     const number = await allocateTodoNumber(db);
-    const actorId = await getCurrentUserId(db);
     const [row] = await db
       .insert(schema.todos)
       .values({
@@ -165,6 +170,8 @@ todosRouter.get("/:id", async (req, res) => {
       sendError(res, 404, "not_found", "ToDo not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, row.projectId);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -199,17 +206,11 @@ todosRouter.patch("/:id", async (req, res) => {
       sendError(res, 400, "todo_deleted", "Cannot update a deleted ToDo");
       return;
     }
-    if (parsed.projectId !== undefined && parsed.projectId != null) {
-      const [proj] = await db
-        .select({ id: schema.projects.id })
-        .from(schema.projects)
-        .where(eq(schema.projects.id, parsed.projectId));
-      if (!proj) {
-        sendError(res, 404, "not_found", "Project not found");
-        return;
-      }
-    }
     const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, existing.projectId);
+    if (parsed.projectId !== undefined && parsed.projectId != null) {
+      await assertCanAccessProject(db, actorId, parsed.projectId);
+    }
     const [row] = await db
       .update(schema.todos)
       .set({
@@ -247,6 +248,7 @@ todosRouter.delete("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, existing.projectId);
     const [row] = await db
       .update(schema.todos)
       .set({
@@ -277,18 +279,11 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
       sendError(res, 404, "not_found", "Idea not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
     if (body.projectId != null) {
-      const [proj] = await db
-        .select({ id: schema.projects.id })
-        .from(schema.projects)
-        .where(eq(schema.projects.id, body.projectId));
-      if (!proj) {
-        sendError(res, 404, "not_found", "Project not found");
-        return;
-      }
+      await assertCanAccessProject(db, actorId, body.projectId);
     }
     const number = await allocateTodoNumber(db);
-    const actorId = await getCurrentUserId(db);
     const [todo] = await db
       .insert(schema.todos)
       .values({
@@ -334,20 +329,14 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
       sendError(res, 400, "todo_deleted", "Cannot convert a deleted ToDo");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, todo.projectId);
     const projectId =
       parsed.projectId !== undefined ? parsed.projectId : todo.projectId;
     if (projectId != null) {
-      const [proj] = await db
-        .select({ id: schema.projects.id })
-        .from(schema.projects)
-        .where(eq(schema.projects.id, projectId));
-      if (!proj) {
-        sendError(res, 404, "not_found", "Project not found");
-        return;
-      }
+      await assertCanAccessProject(db, actorId, projectId);
     }
     const number = await allocateTaskNumber(db);
-    const actorId = await getCurrentUserId(db);
     let description = todo.description ?? "";
     if (todo.actionBy) {
       const note = `Action by: ${todo.actionBy.toISOString()}`;

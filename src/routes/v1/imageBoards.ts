@@ -1,4 +1,4 @@
-import { asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -8,6 +8,12 @@ import { optionalPlainTitle } from "../../lib/markdownFields.js";
 import { jsonDocumentSchema } from "../../lib/jsonDocument.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateImageBoardNumber } from "../../services/entityNumbers.js";
+import {
+  assertCanAccessProject,
+  assertCanAccessViaProject,
+  dualScopeListFilter,
+} from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const emptyDocument = {
@@ -53,11 +59,6 @@ const summarySelect = {
   projectName: schema.projects.name,
 };
 
-async function requireProject(projectId: number) {
-  const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
-  return proj ?? null;
-}
-
 async function requireBoard(id: number) {
   const [row] = await db.select().from(schema.imageBoards).where(eq(schema.imageBoards.id, id));
   return row ?? null;
@@ -84,23 +85,25 @@ imageBoardsRouter.get("/", async (req, res) => {
       sendError(res, 400, "invalid_query", "Use projectId or standalone, not both");
       return;
     }
-    if (q.projectId != null && !(await requireProject(q.projectId))) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
-    }
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
 
-    const where =
-      q.projectId != null
-        ? eq(schema.imageBoards.projectId, q.projectId)
-        : q.standalone
-          ? isNull(schema.imageBoards.projectId)
-          : undefined;
+    const filters = [];
+    if (q.projectId != null) {
+      await assertCanAccessProject(db, actorId, q.projectId);
+      filters.push(eq(schema.imageBoards.projectId, q.projectId));
+    } else if (q.standalone) {
+      filters.push(isNull(schema.imageBoards.projectId));
+    } else {
+      const scope = dualScopeListFilter(db, schema.imageBoards.projectId, actorId, isAdmin);
+      if (scope) filters.push(scope);
+    }
 
     const rows = await db
       .select(summarySelect)
       .from(schema.imageBoards)
       .leftJoin(schema.projects, eq(schema.imageBoards.projectId, schema.projects.id))
-      .where(where)
+      .where(filters.length ? and(...filters) : undefined)
       .orderBy(asc(schema.imageBoards.sortOrder), asc(schema.imageBoards.id));
 
     res.json({ data: rows });
@@ -113,13 +116,13 @@ imageBoardsRouter.post("/", async (req, res) => {
   try {
     const parsed = createBody.parse(req.body);
     const projectId = parsed.projectId === undefined ? null : parsed.projectId;
-    if (projectId != null && !(await requireProject(projectId))) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
+    const actorId = await getCurrentUserId(db);
+    if (projectId != null) {
+      await assertCanAccessProject(db, actorId, projectId);
     }
     const sortOrder = await nextSortOrder(projectId);
     const number = await allocateImageBoardNumber(db);
-    const ownerId = await getCurrentUserId(db);
+    const ownerId = actorId;
     const [row] = await db
       .insert(schema.imageBoards)
       .values({
@@ -149,10 +152,23 @@ imageBoardsRouter.post("/", async (req, res) => {
 imageBoardsRouter.patch("/reorder", async (req, res) => {
   try {
     const { orderedIds } = reorderBody.parse(req.body);
-    const existing = await db.select({ id: schema.imageBoards.id }).from(schema.imageBoards);
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = dualScopeListFilter(db, schema.imageBoards.projectId, actorId, isAdmin);
+    const existing = await db
+      .select({ id: schema.imageBoards.id })
+      .from(schema.imageBoards)
+      .where(scope);
     const allowed = new Set(existing.map((r) => r.id));
     if (orderedIds.length !== allowed.size || orderedIds.some((id) => !allowed.has(id))) {
-      sendError(res, 400, "invalid_reorder", "orderedIds must list every image board exactly once");
+      sendError(
+        res,
+        400,
+        "invalid_reorder",
+        isAdmin
+          ? "orderedIds must list every image board exactly once"
+          : "orderedIds must list every image board you can access exactly once",
+      );
       return;
     }
     for (let i = 0; i < orderedIds.length; i++) {
@@ -166,13 +182,13 @@ imageBoardsRouter.patch("/reorder", async (req, res) => {
       .select(summarySelect)
       .from(schema.imageBoards)
       .leftJoin(schema.projects, eq(schema.imageBoards.projectId, schema.projects.id))
+      .where(scope)
       .orderBy(asc(schema.imageBoards.sortOrder), asc(schema.imageBoards.id));
     res.json({ data: rows });
   } catch (err) {
     handleRouteError(res, err);
   }
 });
-
 imageBoardsRouter.get("/:imageBoardId", async (req, res) => {
   try {
     const id = parseRouteId(req, "imageBoardId");
@@ -188,6 +204,8 @@ imageBoardsRouter.get("/:imageBoardId", async (req, res) => {
       sendError(res, 404, "not_found", "Image board not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, row.projectId);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -202,6 +220,8 @@ imageBoardsRouter.patch("/:imageBoardId", async (req, res) => {
       sendError(res, 404, "not_found", "Image board not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, existing.projectId);
     const parsed = patchBody.parse(req.body);
     if (
       parsed.title === undefined &&
@@ -212,9 +232,8 @@ imageBoardsRouter.patch("/:imageBoardId", async (req, res) => {
       sendError(res, 400, "empty_patch", "Provide title, document, sortOrder, and/or projectId");
       return;
     }
-    if (parsed.projectId != null && !(await requireProject(parsed.projectId))) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
+    if (parsed.projectId != null) {
+      await assertCanAccessProject(db, actorId, parsed.projectId);
     }
 
     const [row] = await db
@@ -254,6 +273,8 @@ imageBoardsRouter.delete("/:imageBoardId", async (req, res) => {
       sendError(res, 404, "not_found", "Image board not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, existing.projectId);
     await db.delete(schema.imageBoards).where(eq(schema.imageBoards.id, id));
     res.status(204).send();
   } catch (err) {

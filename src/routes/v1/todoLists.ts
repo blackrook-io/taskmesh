@@ -7,6 +7,12 @@ import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateTodoListNumber, allocateTodoNumber } from "../../services/entityNumbers.js";
+import {
+  assertCanAccessProject,
+  assertCanAccessViaProject,
+  dualScopeListFilter,
+} from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -206,6 +212,8 @@ async function hydrateItems(listId: number) {
 todoListsRouter.get("/", async (req, res) => {
   try {
     await ensureInboxList(db);
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
     const projectIdRaw = req.query.projectId;
     let rows;
     if (projectIdRaw === "null" || projectIdRaw === "") {
@@ -216,13 +224,19 @@ todoListsRouter.get("/", async (req, res) => {
         .orderBy(asc(schema.todoLists.id));
     } else if (projectIdRaw != null) {
       const projectId = idParam.parse(projectIdRaw);
+      await assertCanAccessProject(db, actorId, projectId);
       rows = await db
         .select()
         .from(schema.todoLists)
         .where(eq(schema.todoLists.projectId, projectId))
         .orderBy(asc(schema.todoLists.id));
     } else {
-      rows = await db.select().from(schema.todoLists).orderBy(asc(schema.todoLists.id));
+      const scope = dualScopeListFilter(db, schema.todoLists.projectId, actorId, isAdmin);
+      rows = await db
+        .select()
+        .from(schema.todoLists)
+        .where(scope)
+        .orderBy(asc(schema.todoLists.id));
     }
     res.json({ data: rows });
   } catch (err) {
@@ -233,18 +247,11 @@ todoListsRouter.get("/", async (req, res) => {
 todoListsRouter.post("/", async (req, res) => {
   try {
     const parsed = listBody.parse(req.body);
+    const ownerId = await getCurrentUserId(db);
     if (parsed.projectId != null) {
-      const [proj] = await db
-        .select()
-        .from(schema.projects)
-        .where(eq(schema.projects.id, parsed.projectId));
-      if (!proj) {
-        sendError(res, 404, "not_found", "Project not found");
-        return;
-      }
+      await assertCanAccessProject(db, ownerId, parsed.projectId);
     }
     const number = await allocateTodoListNumber(db);
-    const ownerId = await getCurrentUserId(db);
     const [row] = await db
       .insert(schema.todoLists)
       .values({
@@ -273,6 +280,8 @@ todoListsRouter.get("/:id", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     const items = await hydrateItems(id);
     res.json({ data: { ...list, items } });
   } catch (err) {
@@ -293,6 +302,8 @@ todoListsRouter.patch("/:id", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     if (list.kind === "inbox" && parsed.title !== undefined && parsed.title !== list.title) {
       // allow rename of inbox
     }
@@ -318,6 +329,8 @@ todoListsRouter.delete("/:id", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     if (list.kind === "inbox") {
       sendError(res, 400, "protected_list", "Cannot delete the Unsorted list");
       return;
@@ -332,10 +345,13 @@ todoListsRouter.delete("/:id", async (req, res) => {
 todoListsRouter.get("/:id/items", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    if (!(await loadList(id))) {
+    const list = await loadList(id);
+    if (!list) {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     res.json({ data: await hydrateItems(id) });
   } catch (err) {
     handleRouteError(res, err);
@@ -350,6 +366,8 @@ todoListsRouter.post("/:id/items", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     if (list.kind === "inbox") {
       sendError(
         res,
@@ -418,6 +436,8 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     const parsed = createItemBody.parse(req.body);
     const title = parsed.title.trim();
     let entityType = parsed.entityType;
@@ -426,14 +446,9 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
     if (entityType === "todo") {
       const projectId = parsed.projectId ?? list.projectId ?? null;
       if (projectId != null) {
-        const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
-        if (!proj) {
-          sendError(res, 404, "not_found", "Project not found");
-          return;
-        }
+        await assertCanAccessProject(db, actorId, projectId);
       }
       const number = await allocateTodoNumber(db);
-      const actorId = await getCurrentUserId(db);
       const [todo] = await db
         .insert(schema.todos)
         .values({
@@ -455,14 +470,9 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
       const projectId = parsed.projectId ?? list.projectId ?? null;
       let phaseId: number | null = null;
       if (projectId != null) {
-        const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
-        if (!proj) {
-          sendError(res, 404, "not_found", "Project not found");
-          return;
-        }
+        await assertCanAccessProject(db, actorId, projectId);
       }
       const number = await allocateTaskNumber(db);
-      const actorId = await getCurrentUserId(db);
       const [task] = await db
         .insert(schema.tasks)
         .values({
@@ -526,6 +536,8 @@ todoListsRouter.patch("/:id/items/reorder", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     if (list.kind === "inbox") {
       sendError(res, 400, "virtual_list", "Unsorted order is not persisted");
       return;
@@ -569,6 +581,13 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
       sendError(res, 400, "empty_patch", "Provide checked and/or sortOrder");
       return;
     }
+    const list = await loadList(listId);
+    if (!list) {
+      sendError(res, 404, "not_found", "List not found");
+      return;
+    }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     const [existing] = await db
       .select()
       .from(schema.todoListItems)
@@ -597,6 +616,13 @@ todoListsRouter.delete("/:id/items/:itemId", async (req, res) => {
   try {
     const listId = idParam.parse(req.params.id);
     const itemId = idParam.parse(req.params.itemId);
+    const list = await loadList(listId);
+    if (!list) {
+      sendError(res, 404, "not_found", "List not found");
+      return;
+    }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     const deleted = await db
       .delete(schema.todoListItems)
       .where(
@@ -627,6 +653,8 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     const [item] = await db
       .select()
       .from(schema.todoListItems)
@@ -639,17 +667,9 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       sendError(res, 400, "invalid_item", "Only idea or ToDo items can convert to tasks");
       return;
     }
-    const [proj] = await db
-      .select()
-      .from(schema.projects)
-      .where(eq(schema.projects.id, parsed.projectId));
-    if (!proj) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
-    }
+    await assertCanAccessProject(db, actorId, parsed.projectId);
 
     const number = await allocateTaskNumber(db);
-    const actorId = await getCurrentUserId(db);
     let title: string;
     let description: string | null = null;
     let priority = "none";
@@ -742,6 +762,8 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
       sendError(res, 404, "not_found", "List not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, list.projectId);
     const [item] = await db
       .select()
       .from(schema.todoListItems)
@@ -762,17 +784,9 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
     const projectId =
       parsed.projectId !== undefined ? parsed.projectId : list.projectId;
     if (projectId != null) {
-      const [proj] = await db
-        .select()
-        .from(schema.projects)
-        .where(eq(schema.projects.id, projectId));
-      if (!proj) {
-        sendError(res, 404, "not_found", "Project not found");
-        return;
-      }
+      await assertCanAccessProject(db, actorId, projectId);
     }
     const number = await allocateTodoNumber(db);
-    const actorId = await getCurrentUserId(db);
     const [todo] = await db
       .insert(schema.todos)
       .values({

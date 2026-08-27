@@ -15,6 +15,7 @@ import {
   removeDependency,
   searchTasksForDependency,
 } from "../../services/taskDependencies.js";
+import { assertCanAccessViaProject } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -48,13 +49,15 @@ taskDependenciesRouter.get("/:taskId/dependencies", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
     const [task] = await db
-      .select({ id: schema.tasks.id })
+      .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
       .from(schema.tasks)
       .where(eq(schema.tasks.id, taskId));
     if (!task) {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, task.projectId);
     const dependsOn = await listDependsOn(db, taskId);
     const requiredBy = await listRequiredBy(db, taskId);
     res.json({ data: { dependsOn, requiredBy } });
@@ -67,7 +70,25 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
     const parsed = addBody.parse(req.body);
+    const [task] = await db
+      .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.id, taskId));
+    if (!task) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    const [dependsOnTask] = await db
+      .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.id, parsed.dependsOnTaskId));
+    if (!dependsOnTask) {
+      sendError(res, 404, "not_found", "Dependency task not found");
+      return;
+    }
     const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, task.projectId);
+    await assertCanAccessViaProject(db, actorId, dependsOnTask.projectId);
     const result = await addDependency(db, taskId, parsed.dependsOnTaskId, {
       actorId,
       source: activitySourceFromRequest(req),
@@ -89,7 +110,16 @@ taskDependenciesRouter.delete(
     try {
       const taskId = idParam.parse(req.params.taskId);
       const dependsOnTaskId = idParam.parse(req.params.dependsOnTaskId);
+      const [task] = await db
+        .select({ id: schema.tasks.id, projectId: schema.tasks.projectId })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, taskId));
+      if (!task) {
+        sendError(res, 404, "not_found", "Task not found");
+        return;
+      }
       const actorId = await getCurrentUserId(db);
+      await assertCanAccessViaProject(db, actorId, task.projectId);
       const result = await removeDependency(db, taskId, dependsOnTaskId, {
         actorId,
         source: activitySourceFromRequest(req),

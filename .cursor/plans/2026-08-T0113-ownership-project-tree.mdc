@@ -1,0 +1,77 @@
+# T0113 — Ownership — project tree scoping
+
+**Task:** T0113 (id `125`) — Ownership — project tree scoping  
+**Parent:** T0110 — Per-user record ownership (`pending`)  
+**Grandparent:** T0095 — Implement Multi-User  
+**State:** implementing on `T0113-ownership-project-tree`  
+**Priority:** high  
+**Depends on:** T0112 ✅ complete  
+**Unblocks:** T0115 (with T0114)
+
+## Context
+
+T0112 shipped `ownerId` + helpers (`assertCanAccessOwned`, `ownerScope`, `OwnershipAccessError` → 403 `access_denied`). Create paths stamp ownership; **no list/get/mutate enforcement yet**. Nested project tables have **no** `ownerId` — access inherits from `projects.ownerId`.
+
+## Interview (confirmed)
+
+| # | Topic | Decision |
+|---|-------|----------|
+| 1 | Access source of truth | Gate via **`projects.ownerId`**. Nested resources inherit; do **not** re-check child `ownerId` when `projectId` is set. |
+| 2 | Dual-scope entities (`tasks`, `todos`, `todo_lists`, `image_boards`) | **`projectId != null` → project owner (this Task).** `projectId == null` → leave to **T0114**. |
+| 3 | Cross-tenant denial | **403** `access_denied` (existing helper), including nested routes after project resolve fails ownership. Keep **404** only when the project/resource truly does not exist. |
+| 4 | Project list / reorder | Non-admins: list and reorder **only their** projects (`ownerScope`). Admins: all. |
+| 5 | Activity / dependencies | Resolve task → if `projectId` set, assert project access; unsorted → T0114 (no change this Task beyond project-backed paths). |
+| 6 | Transfer / UI | No SPA ownership UI. Admin transfer stays **T0115**. No schema migration. |
+
+## Goal
+
+Non-admins list/get/mutate only projects they own (and all nested content under those projects). Administrators retain full visibility and mutate. Authorship columns unchanged.
+
+## Scope
+
+### Shared helper
+
+Add something like `assertCanAccessProject(db, actorUserId, projectId)` (load project → `assertCanAccessOwned` on `ownerId`; missing project → 404). Reuse from nested `requireProject` paths and flat dual-scope routes when `projectId` is set.
+
+### Enforce on
+
+| Area | Routes / notes |
+|------|----------------|
+| Projects hub | `projects.ts` — list `ownerScope`; get/patch/delete/reorder; nested mounts |
+| Nested under `/:projectId` | `tasks`, `documents`, `boards` (+ columns/lanes/cards), `wiki`, `canvases`, `phases`, `groups`, `modules` |
+| Dual-scope (project branch only) | `todos`, `todoLists`, `imageBoards`, `standaloneTasks` when `projectId` set or entity has `projectId` |
+| Task activity / deps | Project-backed tasks only |
+
+### Tests
+
+- Unit/integration: non-owner 403 on foreign project get/list/mutate; owner OK; admin OK
+- Nested resource under foreign project → 403
+- Dual-scope: project-scoped denied; unsorted path untouched (still open until T0114)
+
+### Docs
+
+- Short note in `SECURITY.md` / ownership docs: project-tree enforcement live; standalone residual → T0114/T0115
+- No schema docs churn unless helper APIs are documented somewhere already
+
+## Out of scope
+
+- Schema / backfill (T0112 done)
+- Standalone ideas, tags, uploads, template **API** enforcement (T0114)
+- Unsorted (`projectId` null) tasks/todos/lists/image boards (T0114)
+- Search, assistant, import/export, admin ownership transfer (T0115)
+- Sharing / team ownership
+
+## Branch
+
+- `T0113-ownership-project-tree` (after plan approval)
+
+## Version
+
+No new migration → **PATCH** bump on finish-up.
+
+## Done when
+
+- Non-admin cannot see or mutate another user’s projects or nested project content
+- Admin still sees/mutates all
+- Dual-scope unsorted paths unchanged (T0114)
+- Tests + QA checklist; finish-up only on request

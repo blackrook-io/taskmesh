@@ -27,6 +27,12 @@ import {
   wouldCreateParentCycle,
 } from "../../services/tasks.js";
 import {
+  assertCanAccessProject,
+  assertCanAccessViaProject,
+  dualScopeListFilter,
+} from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
+import {
   afterTaskHierarchyChange,
   resolvePersistedState,
 } from "../../services/taskPending.js";
@@ -88,11 +94,17 @@ standaloneTasksRouter.get("/", async (req, res) => {
       state: req.query.state as string | undefined,
       includeDeleted: req.query.includeDeleted as string | undefined,
     });
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
     const filters = [];
     if (parsed.projectId === "null") {
       filters.push(isNull(schema.tasks.projectId));
     } else if (typeof parsed.projectId === "number") {
+      await assertCanAccessProject(db, actorId, parsed.projectId);
       filters.push(eq(schema.tasks.projectId, parsed.projectId));
+    } else {
+      const scope = dualScopeListFilter(db, schema.tasks.projectId, actorId, isAdmin);
+      if (scope) filters.push(scope);
     }
     if (parsed.state) {
       filters.push(eq(schema.tasks.state, parsed.state));
@@ -122,6 +134,8 @@ standaloneTasksRouter.get("/:taskId", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, row.projectId);
     res.json({ data: await attachTaskActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
@@ -193,6 +207,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       );
       return;
     }
+    await assertCanAccessViaProject(db, actorId, existing.projectId);
 
     if (
       !hasDefinedKeys(parsed, [
@@ -220,14 +235,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       if (parsed.projectId === null) {
         nextPhaseId = null;
       } else {
-        const [proj] = await db
-          .select()
-          .from(schema.projects)
-          .where(eq(schema.projects.id, parsed.projectId));
-        if (!proj) {
-          sendError(res, 400, "invalid_project", "Project not found");
-          return;
-        }
+        await assertCanAccessProject(db, actorId, parsed.projectId);
         // Project Phases are project-scoped; drop unless the client set a new phase.
         if (parsed.phaseId === undefined) {
           nextPhaseId = null;
@@ -326,6 +334,8 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
       sendError(res, 400, "already_deleted", "Task is already deleted");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, existing.projectId);
     const deleteGate = await rejectDeleteIfBlocked(taskId);
     if (deleteGate.blocked) {
       sendError(res, 400, "dependency_required_by", deleteGate.message);
@@ -336,7 +346,6 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
       sendError(res, 400, "has_children", childGate.message);
       return;
     }
-    const actorId = await getCurrentUserId(db);
     const [row] = await db
       .update(schema.tasks)
       .set({

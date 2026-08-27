@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
@@ -7,8 +7,13 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
+import {
+  assertCanAccessProject,
+  ownerScope,
+} from "../../services/ownership.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { documentsRouter } from "./documents.js";
@@ -44,9 +49,13 @@ export const projectsRouter = Router();
 
 projectsRouter.get("/", async (_req, res) => {
   try {
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
     const rows = await db
       .select()
       .from(schema.projects)
+      .where(scope)
       .orderBy(asc(schema.projects.sortOrder), asc(schema.projects.id));
     res.json({ data: rows });
   } catch (err) {
@@ -85,13 +94,26 @@ projectsRouter.post("/", async (req, res) => {
 projectsRouter.patch("/reorder", async (req, res) => {
   try {
     const { orderedProjectIds } = reorderBody.parse(req.body);
-    const existing = await db.select({ id: schema.projects.id }).from(schema.projects);
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
+    const existing = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(scope);
     const allowed = new Set(existing.map((r) => r.id));
     if (
       orderedProjectIds.length !== allowed.size ||
       orderedProjectIds.some((id) => !allowed.has(id))
     ) {
-      sendError(res, 400, "invalid_reorder", "orderedProjectIds must list every project exactly once");
+      sendError(
+        res,
+        400,
+        "invalid_reorder",
+        isAdmin
+          ? "orderedProjectIds must list every project exactly once"
+          : "orderedProjectIds must list every project you own exactly once",
+      );
       return;
     }
     for (let i = 0; i < orderedProjectIds.length; i++) {
@@ -104,6 +126,7 @@ projectsRouter.patch("/reorder", async (req, res) => {
     const rows = await db
       .select()
       .from(schema.projects)
+      .where(scope)
       .orderBy(asc(schema.projects.sortOrder), asc(schema.projects.id));
     res.json({ data: rows });
   } catch (err) {
@@ -114,11 +137,8 @@ projectsRouter.patch("/reorder", async (req, res) => {
 projectsRouter.get("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    const [row] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
-    if (!row) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
-    }
+    const actorId = await getCurrentUserId(db);
+    const row = await assertCanAccessProject(db, actorId, id);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -133,11 +153,8 @@ projectsRouter.patch("/:id", async (req, res) => {
       sendError(res, 400, "empty_patch", "Provide name, description, and/or status");
       return;
     }
-    const [existing] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
-    if (!existing) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
-    }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
     const [row] = await db
       .update(schema.projects)
       .set({
@@ -157,6 +174,8 @@ projectsRouter.patch("/:id", async (req, res) => {
 projectsRouter.delete("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
     const deleted = await db
       .delete(schema.projects)
       .where(eq(schema.projects.id, id))
@@ -174,11 +193,8 @@ projectsRouter.delete("/:id", async (req, res) => {
 projectsRouter.get("/:id/groups", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
-    if (!proj) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
-    }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
     const rows = await db
       .select()
       .from(schema.taskGroups)
@@ -193,11 +209,8 @@ projectsRouter.get("/:id/groups", async (req, res) => {
 projectsRouter.get("/:id/phases", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
-    if (!proj) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
-    }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
     const rows = await db
       .select()
       .from(schema.projectPhases)
@@ -209,11 +222,26 @@ projectsRouter.get("/:id/phases", async (req, res) => {
   }
 });
 
-projectsRouter.use("/:projectId/groups", groupsRouter);
-projectsRouter.use("/:projectId/phases", phasesRouter);
-projectsRouter.use("/:projectId/tasks", tasksRouter);
-projectsRouter.use("/:projectId/documents", documentsRouter);
-projectsRouter.use("/:projectId/modules", modulesRouter);
-projectsRouter.use("/:projectId/boards", boardsRouter);
-projectsRouter.use("/:projectId/wiki", wikiRouter);
-projectsRouter.use("/:projectId/canvases", canvasesRouter);
+async function ensureNestedProjectAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const projectId = idParam.parse(req.params.projectId);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, projectId);
+    next();
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+}
+
+projectsRouter.use("/:projectId/groups", ensureNestedProjectAccess, groupsRouter);
+projectsRouter.use("/:projectId/phases", ensureNestedProjectAccess, phasesRouter);
+projectsRouter.use("/:projectId/tasks", ensureNestedProjectAccess, tasksRouter);
+projectsRouter.use("/:projectId/documents", ensureNestedProjectAccess, documentsRouter);
+projectsRouter.use("/:projectId/modules", ensureNestedProjectAccess, modulesRouter);
+projectsRouter.use("/:projectId/boards", ensureNestedProjectAccess, boardsRouter);
+projectsRouter.use("/:projectId/wiki", ensureNestedProjectAccess, wikiRouter);
+projectsRouter.use("/:projectId/canvases", ensureNestedProjectAccess, canvasesRouter);

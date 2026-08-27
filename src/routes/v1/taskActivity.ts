@@ -8,6 +8,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import { dueDateSchema } from "../../lib/taskFields.js";
 import { recordTaskChanges, type TaskLike } from "../../services/tasks.js";
+import { assertCanAccessViaProject } from "../../services/ownership.js";
 import { getCurrentUserId, loadUserMap } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -54,6 +55,8 @@ taskActivityRouter.get("/:taskId/activity", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, task.projectId);
     const rows = await db
       .select()
       .from(schema.taskActivity)
@@ -78,6 +81,8 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, task.projectId);
     const before: TaskLike = {
       title: parsed.before.title,
       description: parsed.before.description,
@@ -100,7 +105,6 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       parentId: task.parentId,
       projectId: task.projectId,
     };
-    const actorId = await getCurrentUserId(db);
     const row = await recordTaskChanges(db, taskId, before, after, {
       actorId,
       source: activitySourceFromRequest(req),
@@ -119,13 +123,14 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
 taskActivityRouter.post("/:taskId/activity", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
-    const parsed = commentBody.parse(req.body);
     const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
     if (!task) {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
     const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, task.projectId);
+    const parsed = commentBody.parse(req.body);
     const [row] = await db
       .insert(schema.taskActivity)
       .values({
@@ -151,6 +156,13 @@ taskActivityRouter.patch("/:taskId/activity/:entryId", async (req, res) => {
   try {
     const taskId = idParam.parse(req.params.taskId);
     const entryId = idParam.parse(req.params.entryId);
+    const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
+    if (!task) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessViaProject(db, actorId, task.projectId);
     const parsed = commentBody.parse(req.body);
     const [existing] = await db
       .select()

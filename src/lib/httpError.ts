@@ -2,6 +2,7 @@ import type { Response } from "express";
 import { ZodError } from "zod";
 import { AuthenticationError } from "./authErrors.js";
 import { ImmutableFieldError } from "./immutableFields.js";
+import { NotFoundError } from "./notFound.js";
 import { OwnershipAccessError } from "../services/ownership.js";
 
 export function sendError(
@@ -22,6 +23,10 @@ export function handleRouteError(res: Response, err: unknown): void {
     return;
   }
   if (err instanceof OwnershipAccessError) {
+    sendError(res, err.status, err.code, err.message);
+    return;
+  }
+  if (err instanceof NotFoundError) {
     sendError(res, err.status, err.code, err.message);
     return;
   }
