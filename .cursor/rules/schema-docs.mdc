@@ -32,7 +32,7 @@ In the **same change set** as any of the following, update the matching Markdown
 ## What to update in `/docs`
 
 - **Main domain tables** — full physical column tables, constraints, and logical Mermaid ERDs on the domain pages (`projects-and-ideas.md`, `tasks.md`, `content-and-modules.md`) plus the conceptual diagram in `overview.md` when relationships change.
-- **Non-main tables** (`users`, `api_keys`, `system_properties`, `api_request_logs`) — keep the inventory in `platform.md` accurate; show them only minimally on diagrams.
+- **Non-main tables** (`users`, `sessions`, `roles`, `user_roles`, `api_keys`, `system_properties`, `api_request_logs`) — keep the inventory in `platform.md` accurate; show them only minimally on diagrams.
 - **Glossary** — display-number prefixes, entity types, enum-like text values, and polymorphic join conventions when those change.
 - Reclassify a table (main ↔ non-main) only when product intent clearly shifts; note the change in the PR/commit.
 - If you add/remove/rename a synced page, update `SCHEMA_DOC_SYNC_MAP` in the sync script in the same change.

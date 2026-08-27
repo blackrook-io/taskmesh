@@ -12,7 +12,7 @@ Authoritative Drizzle definitions live in [`src/db/schema.ts`](../src/db/schema.
 | [Projects and ideas](database/projects-and-ideas.md) | `ideas`, `projects`, `task_groups`, `project_phases` |
 | [Tasks](database/tasks.md) | `tasks`, activity, dependencies, description templates |
 | [Content and modules](database/content-and-modules.md) | Documents, uploads, tags, todos, boards, wiki, canvases, image boards |
-| [Platform tables](database/platform.md) | Non-main inventory: users, API keys, system properties, request logs |
+| [Platform tables](database/platform.md) | Non-main inventory: users, sessions, roles, API keys, system properties, request logs |
 | [Glossary](database/glossary.md) | Display numbers, entity types, states, polymorphic joins |
 
 ### Keeping schema docs current
@@ -23,4 +23,4 @@ Whenever development changes the database (new tables/columns, constraint or rel
 npm run docs:sync-schema
 ```
 
-`/docs` is authoritative. The script upserts PROD Documents by stable titles (see `src/scripts/syncSchemaDocsToProject.ts`). Agents must follow [`.cursor/rules/schema-docs.mdc`](../.cursor/rules/schema-docs.mdc).
+Authenticated PROD (`TASKMESH_COOKIE` session cookie or id) is required after login/session binding. `/docs` is authoritative. The script upserts PROD Documents by stable titles (see `src/scripts/syncSchemaDocsToProject.ts`). Agents must follow [`.cursor/rules/schema-docs.mdc`](../.cursor/rules/schema-docs.mdc).

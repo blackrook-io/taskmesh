@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { adminSectionFromPath, dispatchOpenAdmin } from "../lib/administration";
+import { useAuth } from "../lib/auth";
+import { userIsAdministrator } from "../lib/roles";
 import { dispatchOpenSettings } from "../lib/settings";
 
 /**
@@ -8,15 +10,18 @@ import { dispatchOpenSettings } from "../lib/settings";
  */
 export function AdminHubPage() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
+  const allowed = userIsAdministrator(user);
 
   useEffect(() => {
+    if (!allowed) return;
     if (pathname === "/settings/backups") {
       dispatchOpenAdmin("backups");
       return;
     }
     const section = adminSectionFromPath(pathname) ?? "users";
     dispatchOpenAdmin(section);
-  }, [pathname]);
+  }, [pathname, allowed]);
 
   return <Navigate to="/" replace />;
 }

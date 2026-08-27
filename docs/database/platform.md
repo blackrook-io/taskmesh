@@ -8,8 +8,10 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 
 | Table | Purpose | Notable relationships |
 |-------|---------|------------------------|
-| `users` | App users. Display → **U####**. Email + scrypt password hash for login; avatar upload; lockout / last-login fields. Admins create users (next `U####`, required email + password), **lock** / **unlock** (`locked_at`, distinct from deactivate), and **hard-delete** when the user is not last remaining, not the signed-in user, and has no RESTRICT authorship (tasks/ToDos). Deactivate remains the path for users who have authored records. Failed sign-in increments `failed_login_count`; at `login_failure_threshold` the account is locked. | Avatar → `uploads` (`ON DELETE SET NULL`). Referenced by `sessions`, tasks (`created_by` / `updated_by`, **RESTRICT**), activity, templates, API keys, request logs. |
+| `users` | App users. Display → **U####**. Email + scrypt password hash for login; avatar upload; lockout / last-login fields. Admins create users (next `U####`, required email + password), **lock** / **unlock** (`locked_at`, distinct from deactivate), and **hard-delete** when the user is not last remaining, not the signed-in user, not the last **Administrator**, and has no RESTRICT authorship (tasks/ToDos). Deactivate remains the path for users who have authored records. Failed sign-in increments `failed_login_count`; at `login_failure_threshold` the account is locked. | Avatar → `uploads` (`ON DELETE SET NULL`). Referenced by `sessions`, `user_roles`, tasks (`created_by` / `updated_by`, **RESTRICT**), activity, templates, API keys, request logs. |
 | `sessions` | Browser login sessions: opaque `id` (httpOnly cookie), `user_id`, `expires_at` (enforced at request time; idle timeout from `session_timeout_minutes`), `created_at`. | FK `user_id` → `users` · **CASCADE**. |
+| `roles` | Named roles. Unique `name` and `slug`. System role **Administrator** (`slug: administrator`, `is_system`) is seeded and cannot be renamed or deleted. Custom roles are labels only (T0108); they do not grant Administration. | Referenced by `user_roles`. |
+| `user_roles` | User ↔ role membership (composite PK). U0001 is seeded as Administrator. Removing the last Administrator assignment is blocked, as are lock / deactivate / delete of the last Administrator. | FKs `user_id` → `users` · **CASCADE**; `role_id` → `roles` · **CASCADE**. |
 | `api_keys` | Programmatic API keys (`taskmesh_{ro\|rw}_…`). Prefix for display; **SHA-256** of full secret in `key_hash`. Access `readonly` \| `readwrite`; status `active` \| `suspended` \| `expired` \| `revoked`. Max **3 active** per user; default/max expiry **60 days**. Request auth via Bearer / X-API-Key (T0063). | FK `user_id` → `users` · **CASCADE**. Referenced by `api_request_logs`. |
 | `system_properties` | System-wide key/value settings (`key` text PK, `value` jsonb). Known keys include `api_rate_limit_per_minute`, `login_failure_threshold` (default **3**), `session_timeout_minutes` (default **60**, stored for cookie lifetime and future enforcement), and `default_theme` (accent theme id string, seeded `green`). | Standalone; no FKs. |
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag, request/response byte counts). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
@@ -21,12 +23,22 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 erDiagram
   users ||--o{ api_keys : owns
   users ||--o{ sessions : "login"
+  users ||--o{ user_roles : has
+  roles ||--o{ user_roles : granted
   users ||--o{ api_request_logs : "optional"
   api_keys ||--o{ api_request_logs : "optional"
   users }o--o| uploads : avatar
   users {
     int id PK
     int number UK
+  }
+  roles {
+    int id PK
+    text slug UK
+  }
+  user_roles {
+    int user_id PK
+    int role_id PK
   }
   api_keys {
     int id PK

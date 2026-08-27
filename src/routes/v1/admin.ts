@@ -9,6 +9,7 @@ import {
 } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import { requireAdministrator } from "../../middleware/requireAdministrator.js";
 import { plainTitle } from "../../lib/markdownFields.js";
 import {
   createAdminApiKey,
@@ -31,6 +32,14 @@ import {
   resetUserPassword,
   unlockUser,
 } from "../../services/adminUsers.js";
+import {
+  assignRole,
+  createRole,
+  deleteRole,
+  listRoles,
+  removeRole,
+  renameRole,
+} from "../../services/roles.js";
 import {
   getApiUsageSummary,
   listApiRequestLogs,
@@ -57,6 +66,8 @@ import {
 } from "../../services/users.js";
 
 export const adminRouter = Router();
+
+adminRouter.use(requireAdministrator);
 
 function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boolean {
   if (
@@ -181,6 +192,107 @@ adminRouter.post("/users/:id/reactivate", async (req, res) => {
     const id = parseRouteId(req, "id");
     const data = await reactivateUser(db, id);
     res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+// ── Roles ──────────────────────────────────────────────────────────────────
+
+adminRouter.get("/roles", async (_req, res) => {
+  try {
+    res.json({ data: await listRoles(db) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const createRoleBody = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+  })
+  .strict();
+
+adminRouter.post("/roles", async (req, res) => {
+  try {
+    const parsed = createRoleBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const data = await createRole(db, parsed.name);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Role created: ${data.name} (${data.slug})`;
+    res.status(201).json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const patchRoleBody = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+  })
+  .strict();
+
+adminRouter.patch("/roles/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = patchRoleBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const data = await renameRole(db, id, parsed.name);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Role renamed: ${data.name} (${data.slug})`;
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/roles/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const actor = await getCurrentUser(db);
+    await deleteRole(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Role deleted: id ${id}`;
+    res.status(204).send();
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const assignRoleBody = z
+  .object({
+    roleId: z.number().int().positive(),
+  })
+  .strict();
+
+adminRouter.post("/users/:id/roles", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = assignRoleBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const roles = await assignRole(db, id, parsed.roleId);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Role assigned: user ${id} role ${parsed.roleId}`;
+    res.json({ data: roles });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/users/:id/roles/:roleId", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const roleId = parseRouteId(req, "roleId");
+    const actor = await getCurrentUser(db);
+    const roles = await removeRole(db, id, roleId);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Role removed: user ${id} role ${roleId}`;
+    res.json({ data: roles });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);

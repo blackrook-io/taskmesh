@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { heavyWriteRateLimit } from "../../middleware/rateLimits.js";
+import { requireAdministrator } from "../../middleware/requireAdministrator.js";
 import {
   deleteBackup,
   listBackups,
@@ -13,6 +14,8 @@ import {
 } from "../../services/backups.js";
 
 export const backupsRouter = Router();
+
+backupsRouter.use(requireAdministrator);
 
 backupsRouter.get("/", (_req, res) => {
   try {

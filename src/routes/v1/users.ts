@@ -15,6 +15,7 @@ import {
   revokeApiKey,
   updateApiKeyExpiry,
 } from "../../services/apiKeys.js";
+import { attachRolesToProfile } from "../../services/roles.js";
 import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
 
 /** Required valid email when provided — null/empty not allowed (T0062). */
@@ -63,7 +64,7 @@ async function resolveAvatarStoredName(
 
 async function profilePayload(user: typeof schema.users.$inferSelect) {
   const storedName = await resolveAvatarStoredName(user.avatarUploadId);
-  return toUserProfile(user, storedName);
+  return attachRolesToProfile(db, toUserProfile(user, storedName), user.id);
 }
 
 export const usersRouter = Router();

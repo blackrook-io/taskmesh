@@ -1,3 +1,5 @@
+import type { RoleRef } from "./roles.js";
+
 /** Display form: U + zero-padded number (at least 4 digits). */
 export function formatUserNumber(n: number): string {
   return `U${String(n).padStart(4, "0")}`;
@@ -17,6 +19,8 @@ export type UserProfile = UserRef & {
   lastApiAt: string | null;
   /** True when a password hash is stored; never exposes the secret. */
   hasPassword: boolean;
+  roles: RoleRef[];
+  isAdministrator: boolean;
 };
 
 export function toUserRef(user: {
@@ -57,5 +61,7 @@ export function toUserProfile(
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     lastApiAt: user.lastApiAt?.toISOString() ?? null,
     hasPassword: Boolean(user.passwordHash),
+    roles: [],
+    isAdministrator: false,
   };
 }

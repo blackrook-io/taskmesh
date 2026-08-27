@@ -17,6 +17,8 @@ import {
   type AdminSection,
   useAdministration,
 } from "../../lib/administration";
+import { useAuth } from "../../lib/auth";
+import { userIsAdministrator } from "../../lib/roles";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 
 const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
@@ -33,11 +35,17 @@ const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
 
 export function AdministrationModal() {
   const { open, section, setSection, closeAdmin } = useAdministration();
+  const { user } = useAuth();
+  const allowed = userIsAdministrator(user);
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
-  useModalScrollbarGutter(contentRef, { enabled: open });
+  useModalScrollbarGutter(contentRef, { enabled: open && allowed });
+
+  useEffect(() => {
+    if (open && !allowed) closeAdmin();
+  }, [open, allowed, closeAdmin]);
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +69,7 @@ export function AdministrationModal() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, closeAdmin]);
 
-  if (!open) return null;
+  if (!open || !allowed) return null;
 
   return (
     <div

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { useAuth } from "../lib/auth";
+import { userIsAdministrator } from "../lib/roles";
 import { loadRecentNav, pushRecentNav } from "../lib/recentNav";
 import type { SearchResults } from "../types";
 
@@ -250,6 +252,8 @@ function flattenSearch(data: SearchResults): PaletteItem[] {
 
 export function CommandPalette({ open, onClose }: Props) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const showAdmin = userIsAdministrator(user);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -260,27 +264,37 @@ export function CommandPalette({ open, onClose }: Props) {
   const [searching, setSearching] = useState(false);
   const [recentTick, setRecentTick] = useState(0);
 
+  const staticCommands = useMemo(
+    () =>
+      showAdmin
+        ? STATIC_COMMANDS
+        : STATIC_COMMANDS.filter((c) => c.action !== "open-admin"),
+    [showAdmin],
+  );
+
   const recentItems = useMemo((): PaletteItem[] => {
     void recentTick;
-    return loadRecentNav().map((r, i) => ({
-      id: `recent-${i}-${r.path}`,
-      group: "Recent",
-      label: r.label,
-      hint: r.path,
-      path: r.path,
-    }));
-  }, [recentTick]);
+    return loadRecentNav()
+      .filter((r) => showAdmin || !r.path.startsWith("/admin"))
+      .map((r, i) => ({
+        id: `recent-${i}-${r.path}`,
+        group: "Recent",
+        label: r.label,
+        hint: r.path,
+        path: r.path,
+      }));
+  }, [recentTick, showAdmin]);
 
   const items = useMemo(() => {
     const q = query.trim();
     if (q.length >= 1) {
-      const filteredStatic = STATIC_COMMANDS.filter((c) =>
+      const filteredStatic = staticCommands.filter((c) =>
         c.label.toLowerCase().includes(q.toLowerCase()),
       );
       return [...searchHits, ...filteredStatic];
     }
-    return [...recentItems, ...STATIC_COMMANDS];
-  }, [query, searchHits, recentItems]);
+    return [...recentItems, ...staticCommands];
+  }, [query, searchHits, recentItems, staticCommands]);
 
   useEffect(() => {
     setActiveIndex(0);

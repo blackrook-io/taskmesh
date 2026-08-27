@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { db } from "../db/client.js";
 import { sendError } from "../lib/httpError.js";
 import { resolveApiKeyForAuth, touchApiKeyUsage } from "../services/apiKeys.js";
+import { userHasAdministrator } from "../services/roles.js";
 
 const QUERY_KEY_PARAMS = ["api_key", "apiKey", "apikey", "access_token"] as const;
 
@@ -88,12 +89,14 @@ export async function apiKeyAuth(
     }
 
     const resolved = await resolveApiKeyForAuth(db, rawKey);
+    const ownerIsAdmin = await userHasAdministrator(db, resolved.userId);
+    const adminTag = ownerIsAdmin ? " [ADMIN KEY]" : "";
 
     if (resolved.access === "readonly" && !SAFE_METHODS.has(req.method.toUpperCase())) {
       res.locals.logUserId = resolved.userId;
       res.locals.logApiKeyId = resolved.keyId;
-      res.locals.logAdminKey = true;
-      res.locals.logMessage = `Read-only API key denied write [ADMIN KEY]`;
+      res.locals.logAdminKey = ownerIsAdmin;
+      res.locals.logMessage = `Read-only API key denied write${adminTag}`;
       sendError(
         res,
         403,
@@ -107,7 +110,7 @@ export async function apiKeyAuth(
     req.apiKeyUserId = resolved.userId;
     res.locals.logUserId = resolved.userId;
     res.locals.logApiKeyId = resolved.keyId;
-    res.locals.logAdminKey = true;
+    res.locals.logAdminKey = ownerIsAdmin;
 
     void touchApiKeyUsage(db, resolved.keyId, resolved.userId).catch((err) => {
       console.error("api key last_used update failed", err);
@@ -119,8 +122,8 @@ export async function apiKeyAuth(
       const e = err as { code?: string; message?: string };
       res.locals.logMessage =
         e.code === "key_suspended"
-          ? "Suspended API key rejected [ADMIN KEY]"
-          : `API key auth failed [ADMIN KEY]`;
+          ? "Suspended API key rejected"
+          : `API key auth failed`;
       return;
     }
     next(err);

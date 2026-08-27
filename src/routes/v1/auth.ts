@@ -6,6 +6,7 @@ import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { clearSessionCookie, readSessionCookie, setSessionCookie } from "../../lib/sessionCookie.js";
 import { toUserProfile } from "../../lib/userFields.js";
+import { attachRolesToProfile } from "../../services/roles.js";
 import { userCanAuthenticate } from "../../lib/userAuth.js";
 import { loginRateLimit } from "../../middleware/rateLimits.js";
 import {
@@ -33,7 +34,7 @@ async function profileForUser(user: typeof schema.users.$inferSelect) {
       .limit(1);
     avatarStoredName = upload?.storedName ?? null;
   }
-  return toUserProfile(user, avatarStoredName);
+  return attachRolesToProfile(db, toUserProfile(user, avatarStoredName), user.id);
 }
 
 function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boolean {

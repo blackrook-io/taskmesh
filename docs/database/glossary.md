@@ -87,6 +87,10 @@ Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the 
 
 Do not conflate the two.
 
+## Roles
+
+`roles.slug` is unique. Seeded system role: **`administrator`** (name Administrator, `is_system`). Custom role slugs are derived from the name. Administration access is granted only by the administrator role (T0108). Membership is `user_roles`.
+
 ## Foreign-key delete behaviors (summary)
 
 | Pattern | Typical meaning |

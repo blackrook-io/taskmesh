@@ -49,6 +49,13 @@ export type UserRef = {
   displayName: string;
 };
 
+export type RoleRef = {
+  id: number;
+  name: string;
+  slug: string;
+  isSystem: boolean;
+};
+
 /** Full profile from GET/PATCH /users/me (extends actor embed shape). */
 export type UserProfile = UserRef & {
   email: string | null;
@@ -58,6 +65,8 @@ export type UserProfile = UserRef & {
   lastApiAt: string | null;
   /** True when a password hash is stored; never exposes the secret. */
   hasPassword: boolean;
+  roles: RoleRef[];
+  isAdministrator: boolean;
 };
 
 export type Task = {

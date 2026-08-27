@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -94,7 +95,7 @@ export const projectPhases = pgTable("project_phases", {
     .defaultNow(),
 });
 
-/** App users (single-user now; auth later). Display → U####. */
+/** App users. Display → U####. */
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   /** App-wide unique display number → U####. */
@@ -142,6 +143,34 @@ export const sessions = pgTable(
       .defaultNow(),
   },
   (t) => [index("sessions_user_id_idx").on(t.userId)],
+);
+
+/** Named roles. System `administrator` is seeded and protected (T0108). */
+export const roles = pgTable("roles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** User ↔ role membership. */
+export const userRoles = pgTable(
+  "user_roles",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roleId: integer("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.roleId] }),
+    index("user_roles_role_id_idx").on(t.roleId),
+  ],
 );
 
 /** API keys (admin bridge; Profile CRUD + enforcement in T0063). */
@@ -790,6 +819,22 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     relationName: "task_description_templates_updated_by",
   }),
   apiKeys: many(apiKeys),
+  userRoles: many(userRoles),
+}));
+
+export const rolesRelations = relations(roles, ({ many }) => ({
+  userRoles: many(userRoles),
+}));
+
+export const userRolesRelations = relations(userRoles, ({ one }) => ({
+  user: one(users, {
+    fields: [userRoles.userId],
+    references: [users.id],
+  }),
+  role: one(roles, {
+    fields: [userRoles.roleId],
+    references: [roles.id],
+  }),
 }));
 
 export const apiKeysRelations = relations(apiKeys, ({ one }) => ({

@@ -24,6 +24,8 @@ import {
 } from "../../lib/appVersion";
 import { lastProjectPath, type AppNavMode } from "../../lib/appNavMode";
 import { useAdministration } from "../../lib/administration";
+import { useAuth } from "../../lib/auth";
+import { userIsAdministrator } from "../../lib/roles";
 import { useSettings } from "../../lib/settings";
 import { useActiveProjectId, useShellSection } from "../../lib/useShellNav";
 import type { Project } from "../../types";
@@ -90,6 +92,8 @@ export function AppNav({
   const activeProjectId = useActiveProjectId();
   const { open: settingsOpen, openSettings } = useSettings();
   const { open: adminOpen, openAdmin } = useAdministration();
+  const { user } = useAuth();
+  const showAdmin = userIsAdministrator(user);
   const [projectsOpen, setProjectsOpen] = useState(section === "projects");
   const qc = useQueryClient();
 
@@ -323,18 +327,20 @@ export function AppNav({
             >
               <NavIcon icon={shellIcons.search} />
             </button>
-            <button
-              type="button"
-              className={`app-nav__icon-btn${adminOpen ? " is-active" : ""}`}
-              onClick={() => {
-                openAdmin("users");
-                onNavigate?.();
-              }}
-              title="Administration"
-              aria-label="Administration"
-            >
-              <NavIcon icon={shellIcons.admin} />
-            </button>
+            {showAdmin ? (
+              <button
+                type="button"
+                className={`app-nav__icon-btn${adminOpen ? " is-active" : ""}`}
+                onClick={() => {
+                  openAdmin("users");
+                  onNavigate?.();
+                }}
+                title="Administration"
+                aria-label="Administration"
+              >
+                <NavIcon icon={shellIcons.admin} />
+              </button>
+            ) : null}
             <button
               type="button"
               className={`app-nav__icon-btn${settingsOpen ? " is-active" : ""}`}
@@ -375,19 +381,21 @@ export function AppNav({
                 ⌘K
               </button>
             </div>
-            <button
-              type="button"
-              className={`app-nav__item${adminOpen ? " is-active" : ""}`}
-              onClick={() => {
-                openAdmin("users");
-                onNavigate?.();
-              }}
-            >
-              <span className="app-nav__glyph" aria-hidden>
-                <NavIcon icon={shellIcons.admin} />
-              </span>
-              <span className="app-nav__label">Administration</span>
-            </button>
+            {showAdmin ? (
+              <button
+                type="button"
+                className={`app-nav__item${adminOpen ? " is-active" : ""}`}
+                onClick={() => {
+                  openAdmin("users");
+                  onNavigate?.();
+                }}
+              >
+                <span className="app-nav__glyph" aria-hidden>
+                  <NavIcon icon={shellIcons.admin} />
+                </span>
+                <span className="app-nav__label">Administration</span>
+              </button>
+            ) : null}
             <div className="app-nav__footer-sep" aria-hidden />
             <button
               type="button"

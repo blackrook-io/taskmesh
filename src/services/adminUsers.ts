@@ -1,10 +1,12 @@
 import { asc, count, eq, inArray, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import type { RoleRef } from "../lib/roles.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
 import { deleteUserDeniedReason } from "../lib/userAuth.js";
 import { allocateUserNumber } from "./users.js";
+import { guardLastAdministrator, listRolesByUserIds } from "./roles.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -16,9 +18,13 @@ export type AdminUserRow = UserRef & {
   lastApiAt: string | null;
   hasPassword: boolean;
   failedLoginCount: number;
+  roles: RoleRef[];
 };
 
-function toAdminUser(row: typeof schema.users.$inferSelect): AdminUserRow {
+function toAdminUser(
+  row: typeof schema.users.$inferSelect,
+  roles: RoleRef[] = [],
+): AdminUserRow {
   return {
     ...toUserRef(row),
     email: row.email,
@@ -28,6 +34,7 @@ function toAdminUser(row: typeof schema.users.$inferSelect): AdminUserRow {
     lastApiAt: row.lastApiAt?.toISOString() ?? null,
     hasPassword: Boolean(row.passwordHash),
     failedLoginCount: row.failedLoginCount,
+    roles,
   };
 }
 
@@ -36,7 +43,11 @@ export async function listAdminUsers(db: Db): Promise<AdminUserRow[]> {
     .select()
     .from(schema.users)
     .orderBy(asc(schema.users.number));
-  return rows.map(toAdminUser);
+  const rolesByUser = await listRolesByUserIds(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((row) => toAdminUser(row, rolesByUser.get(row.id) ?? []));
 }
 
 function serviceErr(message: string, status: number, code: string): Error {
@@ -110,6 +121,7 @@ export async function lockUser(db: Db, userId: number): Promise<AdminUserRow> {
   if (existing.deactivatedAt) {
     throw serviceErr("Cannot lock a deactivated user", 409, "user_deactivated");
   }
+  await guardLastAdministrator(db, userId, "lock");
   const now = new Date();
   const [row] = await db
     .update(schema.users)
@@ -142,6 +154,7 @@ export async function deleteAdminUser(
   currentUserId: number,
 ): Promise<void> {
   await requireUser(db, userId);
+  await guardLastAdministrator(db, userId, "delete");
   const [countRow] = await db.select({ value: count() }).from(schema.users);
   const denied = deleteUserDeniedReason({
     userCount: countRow?.value ?? 0,
@@ -207,6 +220,7 @@ export async function deactivateUser(db: Db, userId: number): Promise<AdminUserR
   if (!existing) {
     throw Object.assign(new Error("User not found"), { status: 404, code: "not_found" });
   }
+  await guardLastAdministrator(db, userId, "deactivate");
   const [row] = await db
     .update(schema.users)
     .set({ deactivatedAt: now, updatedAt: now })

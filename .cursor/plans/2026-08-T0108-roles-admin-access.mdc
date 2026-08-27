@@ -1,0 +1,98 @@
+# T0108 — Roles and Administration access control
+
+**Task:** T0108 (id `120`) — Roles and Administration access control  
+**Parent:** T0095 — Implement Multi-User (`ready`)  
+**State:** ready for finish-up on `T0108-roles-admin-access` (shipped as `0.31.0`)  
+**Priority:** urgent · Project: TaskMesh (4)  
+**Depends on:** T0107 ✅ complete  
+**Required by:** T0110 (Per-user record ownership)
+
+## Context
+
+Multi-user auth path is largely shipped (accounts, login, session binding, CSRF, API keys). Administration UI and `/api/v1/admin/*` remain **open to any authenticated user**. SECURITY.md still treats all API-key traffic as `[ADMIN KEY]` until roles land.
+
+This Task introduces a **Roles** framework (seed **Administrator**), gates Administration (nav / modal / `/admin/*` / admin APIs) to Administrators, and lets admins manage role membership and custom roles.
+
+## Size / split
+
+One cohesive schema + middleware + Admin UI session. No split recommended.
+
+## Interview (approved)
+
+1. **Schema:** `roles` + `user_roles` (M:N). Seed system `Administrator` (`slug: administrator`, `isSystem: true`). Assign U0001 on migrate. Custom roles are name/slug labels only.
+2. **Admin gate:** only the system `administrator` role grants Administration.
+3. **Last-admin guard:** 409 on removing Administrator from the last admin; also block delete / deactivate / lock of the last Administrator.
+4. **Custom roles:** create + delete (and rename name only) for non-system roles. Cannot delete or rename `Administrator`.
+5. **SPA:** `roles` + `isAdministrator` on session, login, and `/users/me`. Hide nav, palette, `/admin/*`. Server 403s.
+6. **API keys:** `admin_key` / `[ADMIN KEY]` only when the key owner is an Administrator.
+7. **UI:** extend **Users** panel (role chips + Manage roles card). No dedicated Roles section.
+8. **Non-goals:** OIDC, ownership, password history, permission bits.
+
+## Goal
+
+Only Administrators can open Administration or call admin APIs. U0001 starts as Administrator. Admins assign/remove roles (with last-admin protection) and create/delete custom roles.
+
+## Scope
+
+### Schema (new migration → finish-up **MINOR** bump)
+
+| Table | Columns (sketch) |
+|-------|------------------|
+| `roles` | `id`, `name`, `slug` (unique), `is_system` (bool), `created_at` |
+| `user_roles` | `user_id` FK CASCADE, `role_id` FK CASCADE, PK `(user_id, role_id)` |
+
+Seed: insert Administrator; insert `user_roles` for user `number = 1` (U0001).
+
+### API
+
+| Area | Behavior |
+|------|----------|
+| `requireAdministrator` middleware | On `adminRouter` (and any admin-only backups routes if separate). 403 `forbidden` / `not_administrator` when caller lacks Administrator role. Session + API-key users both checked via owner user id. |
+| `GET/POST/PATCH?/DELETE /api/v1/admin/roles` | List; create custom; delete non-system. |
+| `PUT/POST/DELETE …/admin/users/:id/roles` | Assign / remove role by id or slug. Last-Administrator removal → 409. |
+| List users | Include `roles: [{id,name,slug,isSystem}]` on each user. |
+| `GET /users/me` + session | Include `roles` and/or `isAdministrator` for SPA gating. |
+| Logging | `admin_key` true only if key owner is Administrator. |
+
+### UI
+
+- Gate AppNav Administration control, Command Palette admin actions, `AdministrationModal`, `AdminHubPage` (`/admin/*` → home or 403-ish message).
+- Users panel: show roles; assign/remove Administrator + custom; create/delete custom roles (confirm on delete).
+- Settings → Profile unchanged for self-service (non-admins keep Profile only).
+
+### Docs / security
+
+- `docs/database/platform.md` — `roles`, `user_roles`; then `npm run docs:sync-schema`.
+- `SECURITY.md` — roles gate Administration; fix API-key admin logging note.
+
+### Tests
+
+- Seed U0001 is admin; non-admin → 403 on admin route.
+- Cannot remove/delete last Administrator.
+- Cannot delete system Administrator role.
+- Custom role create/delete.
+- `admin_key` flag reflects owner admin status.
+
+## Out of scope
+
+OIDC, per-user ownership, password history, permission bits on custom roles, changing Profile self-service.
+
+## Implementation order
+
+1. Schema + migration + seed  
+2. Role services + `requireAdministrator` + wire admin router  
+3. Role CRUD + user↔role routes; enrich `/me` + session + list users  
+4. Fix `admin_key` logging  
+5. SPA gating + Admin Users / roles UI  
+6. Docs + SECURITY + tests  
+
+## Done when
+
+- Non-admin authenticated user cannot see or call Administration.
+- U0001 is Administrator; last-admin protected.
+- Custom roles creatable/deletable; Administrator system-protected.
+- Docs synced; tests green.
+
+## Version (finish-up)
+
+New Drizzle migration → **MINOR** +1, PATCH `0` (from `0.30.4` → `0.31.0`).

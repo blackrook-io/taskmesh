@@ -4,6 +4,7 @@
  *
  * Usage:
  *   npm run docs:sync-schema
+ *   TASKMESH_COOKIE='<session id or Cookie header>' npm run docs:sync-schema
  *   TASKMESH_API_BASE=http://127.0.0.1:3000 TASKMESH_PROJECT_ID=4 npm run docs:sync-schema
  */
 import { readFile } from "node:fs/promises";
@@ -18,6 +19,13 @@ const API_BASE = (process.env.TASKMESH_API_BASE ?? "http://127.0.0.1:3000").repl
   "",
 );
 const PROJECT_ID = Number(process.env.TASKMESH_PROJECT_ID ?? "4");
+
+const rawCookie = process.env.TASKMESH_COOKIE?.trim();
+const cookieHeader = rawCookie
+  ? rawCookie.toLowerCase().startsWith("taskmesh_session=")
+    ? rawCookie
+    : `taskmesh_session=${rawCookie}`
+  : undefined;
 
 /** Stable Document titles used for upsert (match exactly on sync). */
 export const SCHEMA_DOC_SYNC_MAP: ReadonlyArray<{
@@ -70,7 +78,13 @@ type ProjectDocument = {
 async function api<T>(method: string, urlPath: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${urlPath}`, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      ...(cookieHeader && method !== "GET"
+        ? { "X-TaskMesh-Client": "ui", Origin: API_BASE }
+        : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();

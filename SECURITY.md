@@ -6,7 +6,9 @@ Living record of input-path audits and hardening. Update this file when routes, 
 
 **CSRF (T0087):** mutating `/api/v1/*` requests that carry a session cookie must include `X-TaskMesh-Client: ui` (SPA) and pass same-origin `Origin`/`Referer` checks when those headers are sent. `POST /auth/login` is exempt. **API key** requests bypass the CSRF header gate.
 
-**API keys (T0063):** `Authorization: Bearer` or `X-API-Key` (never query string). Secrets are hashed at rest (`taskmesh_{ro|rw}_…`); max 3 active keys per user; default/max expiry 60 days. Read-only keys may only GET/HEAD/OPTIONS. Suspended keys → 403 `key_suspended`. Until roles (T0108), key-auth traffic is logged with `[ADMIN KEY]` / `admin_key`. Per-key rate limit uses Admin `api_rate_limit_per_minute`.
+**API keys (T0063):** `Authorization: Bearer` or `X-API-Key` (never query string). Secrets are hashed at rest (`taskmesh_{ro|rw}_…`); max 3 active keys per user; default/max expiry 60 days. Read-only keys may only GET/HEAD/OPTIONS. Suspended keys → 403 `key_suspended`. Key-auth traffic is logged with `[ADMIN KEY]` / `admin_key` **only when the key’s owner holds the Administrator role** (T0108). Per-key rate limit uses Admin `api_rate_limit_per_minute`.
+
+**Roles (T0108):** Administration UI, `/api/v1/admin/*`, and `/api/v1/backups` require the system **Administrator** role. Other authenticated users keep Settings → Profile (and the rest of the app). Custom roles are labels only. The last Administrator cannot be removed, locked, deactivated, or deleted.
 
 **Rate limits (T0085):** in-process `express-rate-limit` budgets keyed by session user (or API key id when present), else client IP. Tight caps on login, backup run/restore, import, uploads, assistant chat, and search; loose global ceiling on `/api/v1/*`; additional per-key ceiling from system properties. Exceeded requests return **429** `rate_limited` with `Retry-After`. Store is memory-only (single Node process); multi-instance would need a shared store later.
 
@@ -21,7 +23,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | 2026-08-20 | T0073 | All `/api/v1` input paths, Drizzle `sql` / `ILIKE`, uploads, backup `execFile`, assistant URL fetch, Markdown editor links, HTTP headers | Hardening below; residuals → follow-up Tasks |
 | 2026-08-27 | T0087 | CSRF for cookie sessions, CSP second pass, nginx/TLS template sync, secrets/host checklist | CSRF middleware + SPA header; prod CSP `https:` images + wasm; deploy/ssl docs |
 | 2026-08-27 | T0085 | Rate limits on login + expensive routes; global API ceiling | `express-rate-limit` in-memory; 429 `rate_limited` |
-| 2026-08-27 | T0063 | API key request auth, Profile CRUD, RO/RW, per-key rate limit | Bearer/X-API-Key; query ban; CSRF bypass; `[ADMIN KEY]` logs |
+| 2026-08-27 | T0108 | Roles + Administration gating; last-admin guards; API-key admin logging | `requireAdministrator` on admin + backups; `admin_key` only for Administrator owners |
 
 ## Surfaces
 
