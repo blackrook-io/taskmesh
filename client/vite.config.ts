@@ -30,6 +30,11 @@ export default defineConfig(({ mode }) => {
       host: true, // 0.0.0.0 — LAN hosts can reach :5173
       port: 5173,
       strictPort: true,
+      // Same-origin `/api` proxy — do not inject CORS. Vite's default allows
+      // localhost/127.0.0.1 with ACAO but without Allow-Credentials, which can
+      // prevent the browser from storing the session cookie after login while
+      // LAN hosts (no ACAO) keep working.
+      cors: false,
       // Agent/editor writes sometimes skip inotify; polling keeps HMR honest.
       watch: { usePolling: true, interval: 400 },
       proxy: {

@@ -44,7 +44,7 @@ describe("csrfProtection", () => {
         if (name === "host") return "127.0.0.1";
         return undefined;
       },
-      headers: { cookie: "taskmesh_session=abc123" },
+      headers: { cookie: "taskmesh_session_dev=abc123" },
     } as import("express").Request;
     assert.equal(readSessionCookie(req), "abc123");
     const res = {

@@ -23,6 +23,7 @@ import {
   faTableCells,
   faTags,
   faUser,
+  faWrench,
 } from "@fortawesome/free-solid-svg-icons";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 
@@ -35,6 +36,7 @@ export const shellIcons = {
   lists: faListUl,
   calendar: faCalendarDays,
   settings: faGear,
+  projectSettings: faWrench,
   tasks: faClipboardList,
   kanban: faColumns,
   canvas: faDrawPolygon,

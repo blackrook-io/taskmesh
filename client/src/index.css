@@ -664,22 +664,36 @@ a.app-nav__item.active {
 .app-nav__footer {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-1);
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
 }
 
+.app-nav__footer > .app-nav__item {
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+}
+
+.app-nav__footer > .app-nav__item .app-nav__label {
+  flex: none;
+}
+
 .app-nav__footer-sep {
   height: 1px;
-  margin: 0.35rem 0.55rem;
+  width: 100%;
+  margin: 0.35rem 0;
   background: var(--border);
   opacity: 0.9;
 }
 
 .app-nav__tools {
   display: flex;
+  justify-content: center;
   gap: 0.25rem;
   padding: 0 0.2rem;
+  width: 100%;
 }
 
 .app-nav__tools .btn {
@@ -810,9 +824,11 @@ a.app-nav__item.active {
 .app-nav__brand-foot {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   padding: 0.25rem 0.4rem;
   color: var(--text-muted);
+  width: 100%;
 }
 
 .app-nav__version {
@@ -864,6 +880,16 @@ a.app-nav__item.active {
   overflow: visible;
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
+}
+
+.context-nav__list--bottom > li {
+  width: 100%;
+}
+
+.context-nav__list--bottom .context-nav__item {
+  justify-content: center;
+  text-align: center;
+  width: 100%;
 }
 
 .context-nav__item {

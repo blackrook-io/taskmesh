@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+/** Short weekday labels (3–4 letters) for the narrow app-nav footer. */
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tues", "Weds", "Thur", "Fri", "Sat"] as const;
+
 function formatClock(now: Date): { primary: string; tooltip: string } {
   const localTime = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
@@ -13,11 +16,11 @@ function formatClock(now: Date): { primary: string; tooltip: string } {
     timeZone: "UTC",
   }).format(now);
 
-  const datePart = new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
+  const monthDay = new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
   }).format(now);
+  const datePart = `${WEEKDAY_SHORT[now.getDay()]} ${monthDay}`;
 
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
   const offsetMin = -now.getTimezoneOffset();

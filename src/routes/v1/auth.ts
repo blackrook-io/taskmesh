@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { AUTH_REQUIRED_MESSAGE } from "../../lib/authErrors.js";
 import { clearSessionCookie, readSessionCookie, setSessionCookie } from "../../lib/sessionCookie.js";
 import { toUserProfile } from "../../lib/userFields.js";
 import { attachRolesToProfile } from "../../services/roles.js";
@@ -86,7 +87,7 @@ authRouter.get("/session", async (req, res) => {
   try {
     const userId = req.sessionUserId;
     if (userId == null) {
-      sendError(res, 401, "not_authenticated", LOGIN_ERROR_MESSAGE);
+      sendError(res, 401, "not_authenticated", AUTH_REQUIRED_MESSAGE);
       return;
     }
     const user = await getUserById(db, userId);
@@ -95,7 +96,7 @@ authRouter.get("/session", async (req, res) => {
         await destroySession(db, req.sessionId);
       }
       clearSessionCookie(res);
-      sendError(res, 401, "not_authenticated", LOGIN_ERROR_MESSAGE);
+      sendError(res, 401, "not_authenticated", AUTH_REQUIRED_MESSAGE);
       return;
     }
     res.json({ data: await profileForUser(user) });

@@ -79,7 +79,13 @@ const PROJECT_MIDDLE: {
     moduleKey: "wiki",
     icon: shellIcons.documents,
   },
-  { id: "settings", label: "Settings", tab: "settings", icon: shellIcons.settings, pin: "bottom" },
+  {
+    id: "settings",
+    label: "Settings",
+    tab: "settings",
+    icon: shellIcons.projectSettings,
+    pin: "bottom",
+  },
 ];
 
 export function useShellSection(): ShellSection {

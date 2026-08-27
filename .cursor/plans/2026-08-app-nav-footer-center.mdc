@@ -1,0 +1,19 @@
+# App nav footer centering
+
+## Goal
+In the left-most app nav (full-width mode), center the footer controls within the panel:
+
+1. AI + ⌘K / Ctrl+K tool buttons
+2. Administration and Settings items
+3. Mesh mark + version number
+
+## Approach
+CSS-only in `client/src/index.css` targeting `.app-nav__tools`, footer `.app-nav__item`s, and `.app-nav__brand-foot`. Collapsed (“less”) mode already centers; leave unless something regresses.
+
+## Out of scope
+Main section links (Projects, Ideas, etc.), brand wordmark at top.
+
+## QA follow-ups
+- Shorten SystemClock weekday in the app-nav footer to 3–4 letters (e.g. Wednesday → Weds, Thursday → Thur) via a fixed English abbrev table in `SystemClock.tsx`.
+- Middle (context) nav: Project Settings uses a wrench icon (`shellIcons.projectSettings`) instead of the gear used by app Settings; bottom Settings row is centered.
+- **Auth (DEV):** Login on localhost/127.0.0.1 failed to persist the session because a Secure PROD `taskmesh_session` cookie on the same host blocked HTTP DEV from overwriting it (LAN sometimes worked). Fix: DEV cookie name `taskmesh_session_dev` vs PROD `taskmesh_session`; Vite `server.cors: false`; login verifies `/auth/session` before navigate; session 401 uses `Authentication required.`

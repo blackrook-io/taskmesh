@@ -1,6 +1,13 @@
 import type { Request, Response } from "express";
 
-export const SESSION_COOKIE_NAME = "taskmesh_session";
+/**
+ * PROD uses `taskmesh_session` (Secure). DEV uses a distinct name so a Secure
+ * PROD cookie on the same host (127.0.0.1 / localhost / LAN IP) cannot block
+ * the non-Secure DEV Set-Cookie — browsers refuse to overwrite Secure cookies
+ * from an HTTP origin.
+ */
+export const SESSION_COOKIE_NAME =
+  process.env.NODE_ENV === "production" ? "taskmesh_session" : "taskmesh_session_dev";
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === "production";

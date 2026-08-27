@@ -58,6 +58,17 @@ export function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      // Confirm the session cookie stuck (Secure PROD cookie on the same host used
+      // to block DEV's non-Secure Set-Cookie when both shared `taskmesh_session`).
+      const sessionRes = await fetch("/api/v1/auth/session", {
+        credentials: "include",
+        headers: { "X-TaskMesh-Client": "ui" },
+      });
+      if (!sessionRes.ok) {
+        throw new Error(
+          "Signed in, but the session cookie was not stored. Clear site cookies for this host (including https://127.0.0.1 / https://localhost), or open DEV via http://<lan-ip>:5173.",
+        );
+      }
       return res.data;
     },
     onSuccess: (profile) => {
