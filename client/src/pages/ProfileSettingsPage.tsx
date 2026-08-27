@@ -9,6 +9,7 @@ import {
   validatePasswordClient,
 } from "../lib/password";
 import type { UserProfile } from "../types";
+import { ProfileApiKeysSection } from "../components/ProfileApiKeysSection";
 
 type Props = {
   embedded?: boolean;
@@ -246,6 +247,8 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
               </div>
             ) : null}
           </div>
+
+          <ProfileApiKeysSection />
 
           {savedFlash ? <p className="muted">{savedFlash}</p> : null}
 

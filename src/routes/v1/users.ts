@@ -5,7 +5,16 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalPlainTitle } from "../../lib/markdownFields.js";
+import { parseRouteId } from "../../lib/routeParams.js";
 import { toUserProfile } from "../../lib/userFields.js";
+import {
+  createApiKeyForUser,
+  deleteApiKeyRecord,
+  listApiKeysForUser,
+  parseApiKeyExpiresAt,
+  revokeApiKey,
+  updateApiKeyExpiry,
+} from "../../services/apiKeys.js";
 import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
 
 /** Required valid email when provided — null/empty not allowed (T0062). */
@@ -131,6 +140,96 @@ usersRouter.post("/me/password", async (req, res) => {
     const { password } = passwordBody.parse(req.body);
     const row = await setCurrentUserPassword(db, password);
     res.json({ data: await profilePayload(row) });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+// ── Own API keys (T0063) ───────────────────────────────────────────────────
+
+usersRouter.get("/me/api-keys", async (_req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    res.json({ data: await listApiKeysForUser(db, user.id) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const createOwnKeyBody = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    access: z.enum(["readonly", "readwrite"]).default("readwrite"),
+    expiresAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+usersRouter.post("/me/api-keys", async (req, res) => {
+  try {
+    const parsed = createOwnKeyBody.parse(req.body);
+    const user = await getCurrentUser(db);
+    const { key, rawKey } = await createApiKeyForUser(db, {
+      userId: user.id,
+      name: parsed.name,
+      access: parsed.access,
+      expiresAt: parsed.expiresAt ? parseApiKeyExpiresAt(parsed.expiresAt) : undefined,
+    });
+    res.locals.logUserId = user.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key created: ${key.name} (${key.prefix}, ${key.access})`;
+    res.status(201).json({ data: { ...key, rawKey } });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const patchOwnKeyBody = z
+  .object({
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
+
+usersRouter.patch("/me/api-keys/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = patchOwnKeyBody.parse(req.body);
+    const user = await getCurrentUser(db);
+    const key = await updateApiKeyExpiry(db, id, parseApiKeyExpiresAt(parsed.expiresAt), {
+      ownerUserId: user.id,
+    });
+    res.locals.logUserId = user.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key expiry updated: ${key.name} (${key.prefix})`;
+    res.json({ data: key });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.delete("/me/api-keys/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const user = await getCurrentUser(db);
+    const purge =
+      req.query.purge === "1" ||
+      req.query.purge === "true" ||
+      req.query.delete === "1" ||
+      req.query.delete === "true";
+    if (purge) {
+      const key = await deleteApiKeyRecord(db, id, { ownerUserId: user.id });
+      res.locals.logUserId = user.id;
+      res.locals.logMessage = `API key deleted: ${key.name} (${key.prefix})`;
+      res.json({ data: key });
+      return;
+    }
+    const key = await revokeApiKey(db, id, { ownerUserId: user.id });
+    res.locals.logUserId = user.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key revoked: ${key.name} (${key.prefix})`;
+    res.json({ data: key });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);

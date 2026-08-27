@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { db } from "../db/client.js";
 import { sendError } from "../lib/httpError.js";
+import { getSystemProperties } from "../services/systemProperties.js";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -88,4 +90,25 @@ export const assistantChatRateLimit = createRateLimiter({
 export const searchRateLimit = createRateLimiter({
   windowMs: MINUTE,
   limit: 60,
+});
+
+/**
+ * Per-API-key budget from Admin `api_rate_limit_per_minute` (default 60).
+ * Skips when the request is not authenticated via an API key.
+ */
+export const apiKeyRateLimit = rateLimit({
+  windowMs: MINUTE,
+  limit: async () => {
+    const props = await getSystemProperties(db);
+    return Math.max(1, props.apiRateLimitPerMinute);
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `apikey:${req.apiKeyId ?? "none"}`,
+  handler: (req, res) => {
+    sendRateLimited(req, res);
+  },
+  skip: (req) =>
+    req.apiKeyId == null || process.env.RATE_LIMIT_DISABLE === "1",
+  validate: { keyGeneratorIpFallback: false },
 });

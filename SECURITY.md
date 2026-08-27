@@ -2,11 +2,13 @@
 
 Living record of input-path audits and hardening. Update this file when routes, query construction, uploads, or outbound fetch change.
 
-**Threat model (current):** multi-user app with **email/password login** and **httpOnly session cookies** (T0096/T0084). The HTTP API requires a valid session or, when implemented, an **API key** (T0063) on `/api/v1/*`. Public exceptions: health check, login/logout/session bootstrap, and public theme config.
+**Threat model (current):** multi-user app with **email/password login** and **httpOnly session cookies** (T0096/T0084), plus **API keys** (T0063) as a second auth path on `/api/v1/*`. Public exceptions: health check, login/logout/session bootstrap, and public theme config.
 
-**CSRF (T0087):** mutating `/api/v1/*` requests that carry a session cookie must include `X-TaskMesh-Client: ui` (SPA) and pass same-origin `Origin`/`Referer` checks when those headers are sent. `POST /auth/login` is exempt. API keys bypass CSRF when T0063 ships.
+**CSRF (T0087):** mutating `/api/v1/*` requests that carry a session cookie must include `X-TaskMesh-Client: ui` (SPA) and pass same-origin `Origin`/`Referer` checks when those headers are sent. `POST /auth/login` is exempt. **API key** requests bypass the CSRF header gate.
 
-**Rate limits (T0085):** in-process `express-rate-limit` budgets keyed by session user (or API key id when present), else client IP. Tight caps on login, backup run/restore, import, uploads, assistant chat, and search; loose global ceiling on `/api/v1/*`. Exceeded requests return **429** `rate_limited` with `Retry-After`. Store is memory-only (single Node process); multi-instance would need a shared store later.
+**API keys (T0063):** `Authorization: Bearer` or `X-API-Key` (never query string). Secrets are hashed at rest (`taskmesh_{ro|rw}_…`); max 3 active keys per user; default/max expiry 60 days. Read-only keys may only GET/HEAD/OPTIONS. Suspended keys → 403 `key_suspended`. Until roles (T0108), key-auth traffic is logged with `[ADMIN KEY]` / `admin_key`. Per-key rate limit uses Admin `api_rate_limit_per_minute`.
+
+**Rate limits (T0085):** in-process `express-rate-limit` budgets keyed by session user (or API key id when present), else client IP. Tight caps on login, backup run/restore, import, uploads, assistant chat, and search; loose global ceiling on `/api/v1/*`; additional per-key ceiling from system properties. Exceeded requests return **429** `rate_limited` with `Retry-After`. Store is memory-only (single Node process); multi-instance would need a shared store later.
 
 Anyone who can reach the process without authenticating cannot read or mutate application data, but **TLS/nginx exposure** still matters — see [host hardening](#secrets-and-host-hardening-t0087).
 
@@ -19,6 +21,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | 2026-08-20 | T0073 | All `/api/v1` input paths, Drizzle `sql` / `ILIKE`, uploads, backup `execFile`, assistant URL fetch, Markdown editor links, HTTP headers | Hardening below; residuals → follow-up Tasks |
 | 2026-08-27 | T0087 | CSRF for cookie sessions, CSP second pass, nginx/TLS template sync, secrets/host checklist | CSRF middleware + SPA header; prod CSP `https:` images + wasm; deploy/ssl docs |
 | 2026-08-27 | T0085 | Rate limits on login + expensive routes; global API ceiling | `express-rate-limit` in-memory; 429 `rate_limited` |
+| 2026-08-27 | T0063 | API key request auth, Profile CRUD, RO/RW, per-key rate limit | Bearer/X-API-Key; query ban; CSRF bypass; `[ADMIN KEY]` logs |
 
 ## Surfaces
 
@@ -36,7 +39,8 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production | CSRF: SPA client header + Origin/Referer on mutating routes (T0087) |
 | TLS | nginx terminates HTTPS :443; Express on loopback only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); certbot path for public hosts |
 | Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | Import rate-limited (T0085) |
-| Rate limits | Per-route + global `express-rate-limit` (memory store) | Login IP; user/key for authenticated; see threat model |
+| Rate limits | Per-route + global + per-API-key `express-rate-limit` (memory store) | Login IP; user/key for authenticated; Admin `api_rate_limit_per_minute` |
+| API keys | Hashed secrets; Bearer / X-API-Key; RO/RW method gate | Profile + Admin lifecycle; query-string keys rejected |
 | Client text inputs | Capture-phase sanitizer on every `<input>` / `<textarea>` | Skips password/file/number/date/color and TipTap `contenteditable` |
 
 ## HTTP headers
@@ -62,8 +66,7 @@ Run after adding a route or query:
 | Task | Topic |
 |------|--------|
 | **T0086** | Automated security tests in CI (`npm audit`, SAST) |
-| **T0063** | API key auth (second auth path; bypasses CSRF header gate) |
-| **T0108** | Role-based Administration 403 |
+| **T0108** | Role-based Administration 403 (narrow `[ADMIN KEY]` logging) |
 | **T0110** | Per-user record ownership / data scoping |
 
 ## Secrets and host hardening (T0087)

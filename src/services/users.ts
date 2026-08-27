@@ -4,6 +4,7 @@ import * as schema from "../db/schema.js";
 import { AuthenticationError } from "../lib/authErrors.js";
 import { getRequestApiKeyUserId, getRequestSessionUserId } from "../lib/requestAuthContext.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
+import { userCanAuthenticate } from "../lib/userAuth.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -31,7 +32,7 @@ export async function getAuthenticatedUser(
     .from(schema.users)
     .where(eq(schema.users.id, actorUserId))
     .limit(1);
-  if (!user) {
+  if (!user || !userCanAuthenticate(user)) {
     throw new AuthenticationError();
   }
   return user;

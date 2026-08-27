@@ -35,7 +35,8 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": {
           target: `http://127.0.0.1:${apiPort}`,
-          changeOrigin: true,
+          // Keep browser Host (e.g. :5173) so CSRF same-origin checks match Origin/Referer.
+          changeOrigin: false,
         },
       },
     },

@@ -78,11 +78,16 @@ export function apiRequestLogger(req: Request, res: Response, next: NextFunction
     const status = res.statusCode;
     const outcome = outcomeFromStatus(status);
     const custom = res.locals.logMessage?.trim();
-    const message = custom
-      ? custom.slice(0, 500)
+    let message = custom
+      ? custom
       : status >= 400
         ? `HTTP ${status}`
         : `${method} ${startedPath} OK`;
+    const adminKey = res.locals.logAdminKey ?? false;
+    if (adminKey && !message.includes("[ADMIN KEY]")) {
+      message = `${message} [ADMIN KEY]`;
+    }
+    message = message.slice(0, 500);
 
     void insertApiRequestLog(db, {
       outcome,
@@ -93,7 +98,7 @@ export function apiRequestLogger(req: Request, res: Response, next: NextFunction
       userId: res.locals.logUserId ?? null,
       apiKeyId: res.locals.logApiKeyId ?? null,
       message,
-      adminKey: res.locals.logAdminKey ?? false,
+      adminKey,
       requestBytes,
       responseBytes: responseBytesOf(),
     }).catch((err) => {

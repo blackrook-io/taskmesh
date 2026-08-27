@@ -15,6 +15,17 @@ type AdminApiKey = {
   rawKey?: string;
 };
 
+function toDatetimeLocalValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(local: string): string {
+  return new Date(local).toISOString();
+}
+
 export function AdminKeysPanel() {
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -22,6 +33,8 @@ export function AdminKeysPanel() {
   const [access, setAccess] = useState<"readonly" | "readwrite">("readwrite");
   const [rawOnce, setRawOnce] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editExpiry, setEditExpiry] = useState("");
 
   const keysQuery = useQuery({
     queryKey: ["admin", "api-keys"],
@@ -51,14 +64,33 @@ export function AdminKeysPanel() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const expiryMutation = useMutation({
+    mutationFn: async ({ id, expiresAt }: { id: number; expiresAt: string }) => {
+      await apiJson(`/api/v1/admin/api-keys/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ expiresAt }),
+      });
+    },
+    onSuccess: async () => {
+      setEditingId(null);
+      setError(null);
+      await qc.invalidateQueries({ queryKey: ["admin", "api-keys"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const actionMutation = useMutation({
     mutationFn: async ({
       id,
       action,
     }: {
       id: number;
-      action: "suspend" | "unsuspend" | "expire" | "revoke";
+      action: "suspend" | "unsuspend" | "expire" | "revoke" | "delete";
     }) => {
+      if (action === "delete") {
+        await apiJson(`/api/v1/admin/api-keys/${id}`, { method: "DELETE" });
+        return;
+      }
       await apiJson(`/api/v1/admin/api-keys/${id}/${action}`, { method: "POST" });
     },
     onSuccess: async () => {
@@ -72,8 +104,8 @@ export function AdminKeysPanel() {
   return (
     <div className="settings-panel admin-panel">
       <p className="muted" style={{ marginTop: 0 }}>
-        All API keys in the system. Full request enforcement lands with T0063; this panel
-        manages key records and states.
+        All API keys in the system. Keys authenticate via Bearer / X-API-Key (max 3 active per
+        user). Suspended keys return 403; read-only keys cannot mutate.
       </p>
 
       <div className="admin-toolbar">
@@ -180,9 +212,53 @@ export function AdminKeysPanel() {
                     <span className={`admin-badge admin-badge--${k.status}`}>{k.status}</span>
                   </td>
                   <td className="muted small">
-                    {new Date(k.expiresAt).toLocaleString()}
+                    {editingId === k.id ? (
+                      <span className="admin-table__actions">
+                        <input
+                          type="datetime-local"
+                          value={editExpiry}
+                          onChange={(e) => setEditExpiry(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn primary small"
+                          disabled={expiryMutation.isPending || !editExpiry}
+                          onClick={() =>
+                            expiryMutation.mutate({
+                              id: k.id,
+                              expiresAt: fromDatetimeLocalValue(editExpiry),
+                            })
+                          }
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="btn ghost small"
+                          onClick={() => setEditingId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
+                      new Date(k.expiresAt).toLocaleString()
+                    )}
                   </td>
                   <td className="admin-table__actions">
+                    {(k.status === "active" || k.status === "suspended") &&
+                    editingId !== k.id ? (
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        onClick={() => {
+                          setEditingId(k.id);
+                          setEditExpiry(toDatetimeLocalValue(k.expiresAt));
+                          setError(null);
+                        }}
+                      >
+                        Expiry
+                      </button>
+                    ) : null}
                     {k.status === "active" ? (
                       <button
                         type="button"
@@ -220,7 +296,7 @@ export function AdminKeysPanel() {
                         Expire
                       </button>
                     ) : null}
-                    {k.status !== "revoked" ? (
+                    {k.status !== "revoked" && k.status !== "expired" ? (
                       <button
                         type="button"
                         className="btn ghost small"
@@ -231,6 +307,23 @@ export function AdminKeysPanel() {
                         }}
                       >
                         Revoke
+                      </button>
+                    ) : null}
+                    {k.status === "revoked" || k.status === "expired" ? (
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Delete this ${k.status} API key record permanently? This cannot be undone.`,
+                            )
+                          ) {
+                            actionMutation.mutate({ id: k.id, action: "delete" });
+                          }
+                        }}
+                      >
+                        Delete
                       </button>
                     ) : null}
                   </td>

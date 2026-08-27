@@ -12,11 +12,14 @@ import { parseRouteId } from "../../lib/routeParams.js";
 import { plainTitle } from "../../lib/markdownFields.js";
 import {
   createAdminApiKey,
+  deleteApiKeyRecord,
   expireApiKey,
   listAdminApiKeys,
+  parseApiKeyExpiresAt,
   revokeApiKey,
   suspendApiKey,
   unsuspendApiKey,
+  updateApiKeyExpiry,
 } from "../../services/adminApiKeys.js";
 import {
   createAdminUser,
@@ -212,13 +215,35 @@ adminRouter.post("/api-keys", async (req, res) => {
       userId: ownerId,
       name: parsed.name,
       access: parsed.access,
-      expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : undefined,
+      expiresAt: parsed.expiresAt ? parseApiKeyExpiresAt(parsed.expiresAt) : undefined,
     });
     res.locals.logUserId = actor.id;
     res.locals.logApiKeyId = key.id;
     res.locals.logMessage =
       `API key created: ${key.name} (${key.prefix}, ${key.access}) for ${key.owner.referenceId}`;
     res.status(201).json({ data: { ...key, rawKey } });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const patchKeyBody = z
+  .object({
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
+
+adminRouter.patch("/api-keys/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = patchKeyBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const key = await updateApiKeyExpiry(db, id, parseApiKeyExpiresAt(parsed.expiresAt));
+    res.locals.logUserId = actor.id;
+    res.locals.logApiKeyId = key.id;
+    res.locals.logMessage = `API key expiry updated: ${key.name} (${key.prefix})`;
+    res.json({ data: key });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
@@ -278,6 +303,20 @@ adminRouter.post("/api-keys/:id/revoke", async (req, res) => {
     res.locals.logUserId = actor.id;
     res.locals.logApiKeyId = key.id;
     res.locals.logMessage = `API key revoked: ${key.name} (${key.prefix})`;
+    res.json({ data: key });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/api-keys/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const actor = await getCurrentUser(db);
+    const key = await deleteApiKeyRecord(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `API key deleted: ${key.name} (${key.prefix})`;
     res.json({ data: key });
   } catch (err) {
     if (serviceError(res, err)) return;

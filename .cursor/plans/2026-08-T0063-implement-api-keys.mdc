@@ -1,0 +1,104 @@
+# T0063 — Implement API Keys
+
+**Task:** T0063 (id `70`) — Implement API Keys  
+**Parent:** T0084 — Authentication and session binding (`pending`)  
+**Grandparent:** T0095 — Implement Multi-User  
+**State:** implemented on `T0063-implement-api-keys`, awaiting QA / finish-up  
+**Depends on:** T0062 ✅ · T0084 ✅ `pending` · T0085 ✅ · T0087 ✅  
+**Required by:** T0016 / T0017 / T0018 (task APIs)
+
+## Context
+
+Admin key CRUD (T0064 bridge), crypto (`taskmesh_{ro|rw}_{64hex}`), schema, CSRF/rate-limit/`requireAuth` hooks, and ALS for `apiKeyUserId` already exist. **`apiKeyAuth` is a no-op** — keys cannot authenticate requests. Profile has no key UI. `api_rate_limit_per_minute` is Admin-editable but unused. Roles (T0108) are not shipped; any authenticated user can use Administration today.
+
+## Size / split
+
+Large but one cohesive auth path (middleware + Profile + RO/RW + logging + per-key rate limit). **No split recommended.** Schema already sufficient → likely **PATCH** unless we add columns/properties.
+
+## Interview (confirmed)
+
+1. **Profile + Admin:** Keep Admin Keys panel; add Profile self-service (create / update expiry / revoke, max **3 active**, one-time raw secret).
+2. **Headers:** `Authorization: Bearer` and `X-API-Key`; ban query-string keys.
+3. **RO/RW:** readonly = GET/HEAD/OPTIONS; writes → 403 `access_violation`.
+4. **Reject:** inactive owner, bad/suspended/expired/revoked; suspended → 403 `key_suspended`.
+5. **Per-key rate limit:** wire `api_rate_limit_per_minute` for key-auth; keep T0085 caps.
+6. **Auto-suspend:** deferred; Admin manual only.
+7. **`[ADMIN KEY]`:** flag all key-auth until T0108.
+8. **TLS:** no loopback HTTP reject; nginx TLS docs suffice.
+9. **Update expiry:** PATCH; new expiry > now and ≤ now+60d.
+10. **Delete:** Profile delete = revoke + confirm.
+
+## Proposed approach
+
+### 1. Request auth — `apiKeyAuth`
+
+- Parse Bearer / `X-API-Key` (trim); if both present and differ → 401.
+- If query contains `api_key` / `apiKey` / `access_token` style params → **400** explaining keys must not be in the URL.
+- Hash secret → lookup by `key_hash`; validate status + expiry + owner `userCanAuthenticate`.
+- Set `req.apiKeyId`, `req.apiKeyUserId`; touch `last_used_at` / `users.last_api_at` (throttled OK, e.g. every request or ≥1 min).
+- RO/RW method gate after identity resolved (or thin follow-on middleware).
+- No key header → `next()` (session path).
+
+### 2. Logging
+
+- On key-auth success: `res.locals.logUserId`, `logApiKeyId`, `logAdminKey` (per interview #7); prepend/append `[ADMIN KEY]` in `logMessage` when set.
+- Auth failures: existing `auth_failure` / distinct codes for suspended.
+
+### 3. Profile API + UI
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| GET | `/api/v1/users/me/api-keys` | List own keys (no hash/raw) |
+| POST | `/api/v1/users/me/api-keys` | Create; enforce ≤3 **active**; return one-time `rawKey` |
+| PATCH | `/api/v1/users/me/api-keys/:id` | Update `expiresAt` (and maybe `name`?) |
+| DELETE | `/api/v1/users/me/api-keys/:id` | Revoke |
+
+- ProfileSettings: API Keys section — list prefix/access/status/expiry/last used; Create modal (name, RO/RW, optional expiry); one-time copy + warning; Update expiry; Revoke with confirm.
+- Reuse crypto + shared service helpers with admin (DRY: extract `createApiKeyForUser` with active-count check).
+
+### 4. Admin polish
+
+- Enforce 3-active limit on Admin create too.
+- Add update-expiry if not present.
+- Keep suspend / unsuspend / expire / revoke.
+
+### 5. Rate limits
+
+- New limiter (or factory) keyed by `apikey:{id}` using `api_rate_limit_per_minute` from system properties (read cached/per-request).
+- Apply when `req.apiKeyId` set (after auth), without removing T0085 route/global limits.
+
+### 6. Docs / tests
+
+- `SECURITY.md`: move T0063 from residual → shipped threat model.
+- `docs/database/platform.md` touch if behavior notes change (no schema → optional).
+- Unit tests: header parse, reject query key, RO write → 403, suspended, deactivated owner, 3-active cap, rate-limit keying.
+
+### 7. Version
+
+No new migration expected → **PATCH** (`0.30.3` → `0.30.4`) on finish-up. If we add a system property for failure threshold (interview #6 no), still PATCH unless new SQL file.
+
+## Out of scope
+
+- T0108 role gating of Administration
+- Redis / distributed rate store
+- Per-project / per-table keys
+- OIDC (T0111)
+- Auto-suspend from failure counters (unless interview overrides)
+
+## Branch
+
+- `T0063-implement-api-keys`
+
+## Done when
+
+- API keys authenticate `/api/v1/*` (CSRF bypass works)
+- Profile + Admin key lifecycle per decisions above
+- RO/RW + reject rules enforced
+- Per-key rate limit uses Admin setting
+- Tests + SECURITY.md updated
+- QA checklist passed; finish-up only on user request
+
+## QA follow-ups
+
+- **CSRF on DEV create key:** Vite proxy used `changeOrigin: true`, rewriting `Host` to `:3001` while browser `Origin` stayed `:5173`, so session mutations returned 403 `csrf_rejected` (“Request rejected.”). Fixed with `changeOrigin: false` so Host matches the SPA origin.
+- **Delete revoked/expired keys:** Profile + Admin show **Delete** with confirm for `revoked` / `expired` rows; hard-deletes the DB record (`DELETE …?purge=1` for Profile, `DELETE /admin/api-keys/:id` for Admin). Active/suspended still use Revoke only.
