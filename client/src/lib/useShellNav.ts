@@ -8,7 +8,7 @@ import {
   isProjectModuleKey,
   type ProjectModuleKey,
 } from "./projectModules";
-import type { ProjectModule, TaskGroup } from "../types";
+import type { ProjectModule, TaskGroup, Project } from "../types";
 import { shellIcons } from "../components/shell/shellIcons";
 import { isFilterActive, parseTaskListFilterValue } from "./taskListFilter";
 
@@ -109,7 +109,11 @@ export function useActiveProjectId(): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
-export function useContextNavItems(): { title: string; items: ContextNavItem[] } {
+export function useContextNavItems(): {
+  title: string;
+  titleTooltip?: string;
+  items: ContextNavItem[];
+} {
   const section = useShellSection();
   const projectId = useActiveProjectId();
   const [searchParams] = useSearchParams();
@@ -133,6 +137,15 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
       const res = await apiJson<{ data: TaskGroup[] }>(
         `/api/v1/projects/${projectId}/groups`,
       );
+      return res.data;
+    },
+  });
+
+  const projectQuery = useQuery({
+    queryKey: ["project", projectId],
+    enabled: section === "projects" && projectId != null,
+    queryFn: async () => {
+      const res = await apiJson<{ data: Project }>(`/api/v1/projects/${projectId}`);
       return res.data;
     },
   });
@@ -206,7 +219,13 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
         return [parent, ...children];
       });
 
-      return { title: "Project Menu", items };
+      return {
+        title: projectQuery.data?.name ?? "…",
+        titleTooltip: projectQuery.data
+          ? formatEntityRef("project", projectQuery.data.number)
+          : undefined,
+        items,
+      };
     }
 
     if (section === "projects") {
@@ -367,6 +386,7 @@ export function useContextNavItems(): { title: string; items: ContextNavItem[] }
   }, [
     section,
     projectId,
+    projectQuery.data,
     modulesQuery.data,
     groupsQuery.data,
     listsQuery.data,

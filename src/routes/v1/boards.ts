@@ -96,6 +96,7 @@ boardsRouter.get("/", async (req, res) => {
     const rows = await db
       .select({
         id: schema.boards.id,
+        number: schema.boards.number,
         projectId: schema.boards.projectId,
         name: schema.boards.name,
         sortOrder: schema.boards.sortOrder,

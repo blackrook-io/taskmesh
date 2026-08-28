@@ -14,6 +14,7 @@ import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
 import { CanvasesPanel } from "../components/CanvasesPanel";
+import { DocumentsToc } from "../components/DocumentsToc";
 import { ImageBoardList } from "../components/imageBoard/ImageBoardList";
 import {
   isProjectModuleKey,
@@ -521,15 +522,6 @@ export function ProjectDetailPage() {
 
   return (
     <div>
-      {tab !== "overview" ? (
-        <div className="page-head">
-          <h1>
-            <span className="muted">{formatEntityRef("project", project.number)} </span>
-            {project.name}
-          </h1>
-        </div>
-      ) : null}
-
       {tab === "images" ? (
         <ImageBoardList projectId={project.id} heading="Images" />
       ) : null}
@@ -537,11 +529,7 @@ export function ProjectDetailPage() {
       {tab === "overview" ? (
         <div className="grid" style={{ gap: "1rem" }}>
           <div className="card">
-            <div className="wiki-panel__main-head">
-              <h1 className="wiki-page-title" style={{ margin: 0, minWidth: 0, flex: 1 }}>
-                <span className="muted">{formatEntityRef("project", project.number)} </span>
-                {project.name}
-              </h1>
+            <div className="wiki-panel__main-head wiki-panel__main-head--actions-only">
               <div className="wiki-panel__main-actions">
                 {overviewEdit ? (
                   <>
@@ -815,36 +803,38 @@ export function ProjectDetailPage() {
 
       {tab === "documents" ? (
         <div className="split-panel">
-          <div className="card">
-            <h3>Documents</h3>
-            <div className="field">
-              <label>New document title</label>
-              <input type="text" value={newDocTitle} onChange={(e) => setNewDocTitle(e.target.value)} />
+          <div className="documents-panel__sidebar">
+            <h3 className="documents-panel__heading">Documents</h3>
+            <div className="card documents-panel__create">
+              <div className="documents-panel__create-form">
+                <input
+                  type="text"
+                  value={newDocTitle}
+                  placeholder="Title"
+                  aria-label="Document title"
+                  onChange={(e) => setNewDocTitle(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn primary small"
+                  disabled={!newDocTitle.trim() || createDocument.isPending}
+                  onClick={() => createDocument.mutate()}
+                >
+                  Create
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              className="btn primary"
-              style={{ width: "100%", marginBottom: "0.75rem" }}
-              disabled={!newDocTitle.trim() || createDocument.isPending}
-              onClick={() => createDocument.mutate()}
-            >
-              Create
-            </button>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {documents.map((d) => (
-                <li key={d.id} style={{ marginBottom: "0.35rem" }}>
-                  <button
-                    type="button"
-                    className={`btn small${selectedDocId === d.id ? " primary" : " ghost"}`}
-                    style={{ width: "100%", justifyContent: "flex-start" }}
-                    onClick={() => setSelectedDocId(d.id)}
-                  >
-                    <span className="muted">{formatEntityRef("document", d.number)} </span>
-                    {d.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="card documents-panel__toc">
+              {documentsQuery.isLoading ? (
+                <p className="muted">Loading…</p>
+              ) : (
+                <DocumentsToc
+                  documents={documents}
+                  selectedId={selectedDocId}
+                  onSelect={setSelectedDocId}
+                />
+              )}
+            </div>
           </div>
           <div className="card">
             {selectedDoc ? (

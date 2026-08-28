@@ -19,6 +19,7 @@ import {
   nextWikiSort,
   wouldCreateCycle,
 } from "../../services/wiki.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const entityType = z.enum(["document", "canvas"]);
 
@@ -99,6 +100,7 @@ wikiRouter.post("/pages", async (req, res) => {
       .from(schema.projectDocuments)
       .where(eq(schema.projectDocuments.projectId, projectId));
     const nextPos = docs.length ? Math.max(...docs.map((d) => d.m)) + 1 : 0;
+    const actorId = await getCurrentUserId(db);
     const docNumber = await allocateDocumentNumber(db);
     const [doc] = await db
       .insert(schema.projectDocuments)
@@ -108,6 +110,7 @@ wikiRouter.post("/pages", async (req, res) => {
         title: parsed.title,
         body: parsed.body ?? "",
         position: nextPos,
+        updatedById: actorId,
       })
       .returning();
     if (!doc) {
@@ -325,9 +328,10 @@ wikiRouter.patch("/nodes/:nodeId", async (req, res) => {
       .returning();
 
     if (parsed.title !== undefined && node.entityType === "document") {
+      const actorId = await getCurrentUserId(db);
       await db
         .update(schema.projectDocuments)
-        .set({ title: parsed.title, updatedAt: new Date() })
+        .set({ title: parsed.title, updatedAt: new Date(), updatedById: actorId })
         .where(eq(schema.projectDocuments.id, node.entityId));
     }
     if (parsed.title !== undefined && node.entityType === "canvas") {

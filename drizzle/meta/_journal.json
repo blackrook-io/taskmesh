@@ -232,6 +232,13 @@
       "when": 1787827584673,
       "tag": "0032_medical_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787935172499,
+      "tag": "0033_first_marvel_zombies",
+      "breakpoints": true
     }
   ]
 }

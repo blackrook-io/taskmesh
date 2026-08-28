@@ -8,6 +8,8 @@ import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateDocumentNumber } from "../../services/entityNumbers.js";
+import { attachDocumentActor, attachDocumentActors } from "../../services/documents.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const docBody = z.object({
   title: plainTitle(500),
@@ -36,7 +38,7 @@ documentsRouter.get("/", async (req, res) => {
       .from(schema.projectDocuments)
       .where(eq(schema.projectDocuments.projectId, projectId))
       .orderBy(asc(schema.projectDocuments.position), asc(schema.projectDocuments.id));
-    res.json({ data: rows });
+    res.json({ data: await attachDocumentActors(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -58,6 +60,7 @@ documentsRouter.post("/", async (req, res) => {
     const nextPos =
       parsed.position ?? (maxPos.length ? Math.max(...maxPos.map((r) => r.p)) + 1 : 0);
 
+    const actorId = await getCurrentUserId(db);
     const number = await allocateDocumentNumber(db);
     const [row] = await db
       .insert(schema.projectDocuments)
@@ -67,13 +70,14 @@ documentsRouter.post("/", async (req, res) => {
         title: parsed.title,
         body: parsed.body ?? null,
         position: nextPos,
+        updatedById: actorId,
       })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create document");
       return;
     }
-    res.status(201).json({ data: row });
+    res.status(201).json({ data: await attachDocumentActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -88,7 +92,7 @@ documentsRouter.get("/:docId", async (req, res) => {
       sendError(res, 404, "not_found", "Document not found");
       return;
     }
-    res.json({ data: row });
+    res.json({ data: await attachDocumentActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -111,6 +115,7 @@ documentsRouter.patch("/:docId", async (req, res) => {
       sendError(res, 404, "not_found", "Document not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
     const [row] = await db
       .update(schema.projectDocuments)
       .set({
@@ -118,10 +123,11 @@ documentsRouter.patch("/:docId", async (req, res) => {
         ...(parsed.body !== undefined ? { body: parsed.body } : {}),
         ...(parsed.position !== undefined ? { position: parsed.position } : {}),
         updatedAt: new Date(),
+        updatedById: actorId,
       })
       .where(eq(schema.projectDocuments.id, docId))
       .returning();
-    res.json({ data: row });
+    res.json({ data: await attachDocumentActor(db, row!) });
   } catch (err) {
     handleRouteError(res, err);
   }

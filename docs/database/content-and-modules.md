@@ -109,6 +109,7 @@ Standalone Markdown documents owned by a project. Display number → **N####** (
 | `title` | text | no | — | |
 | `body` | text | yes | — | Markdown |
 | `position` | integer | no | `0` | Ordering within the project |
+| `updated_by_id` | integer | yes | — | FK → `users.id` — last editor |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -117,6 +118,7 @@ Standalone Markdown documents owned by a project. Display number → **N####** (
 - **PK:** `id`
 - **UNIQUE:** `number`
 - **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
+- **FK:** `updated_by_id` → `users.id` · **ON DELETE SET NULL**
 
 ---
 

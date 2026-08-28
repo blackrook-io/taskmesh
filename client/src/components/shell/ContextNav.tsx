@@ -45,13 +45,18 @@ function NavItem({ item }: { item: ContextNavItem }) {
 }
 
 export function ContextNav() {
-  const { title, items } = useContextNavItems();
+  const { title, titleTooltip, items } = useContextNavItems();
   const mainItems = items.filter((item) => item.pin !== "bottom");
   const bottomItems = items.filter((item) => item.pin === "bottom");
 
   return (
-    <nav className="context-nav" aria-label={title}>
-      <h2 className="context-nav__title">{title}</h2>
+    <nav
+      className="context-nav"
+      aria-label={titleTooltip ? `${title}, ${titleTooltip}` : title}
+    >
+      <h2 className="context-nav__title" title={titleTooltip}>
+        {title}
+      </h2>
       <ul className="context-nav__list">
         {mainItems.map((item) => (
           <li key={item.id}>

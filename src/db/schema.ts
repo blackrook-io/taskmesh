@@ -442,6 +442,9 @@ export const projectDocuments = pgTable("project_documents", {
   title: text("title").notNull(),
   body: text("body"),
   position: integer("position").notNull().default(0),
+  updatedById: integer("updated_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1040,6 +1043,10 @@ export const projectDocumentsRelations = relations(projectDocuments, ({ one }) =
   project: one(projects, {
     fields: [projectDocuments.projectId],
     references: [projects.id],
+  }),
+  updatedBy: one(users, {
+    fields: [projectDocuments.updatedById],
+    references: [users.id],
   }),
 }));
 

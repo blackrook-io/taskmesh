@@ -861,6 +861,9 @@ a.app-nav__item.active {
   padding: 0 var(--space-2);
   font-size: 0.95rem;
   flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .context-nav__list {
@@ -5087,6 +5090,10 @@ a:focus-visible {
   margin-bottom: 0.7rem;
 }
 
+.wiki-panel__main-head--actions-only {
+  justify-content: flex-end;
+}
+
 .wiki-panel__main-head .wiki-breadcrumb {
   margin-bottom: 0;
   min-width: 0;
@@ -5211,6 +5218,120 @@ a:focus-visible {
 
 .wiki-panel__toc-child-actions .btn {
   flex: 1;
+}
+
+.documents-panel__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.documents-panel__heading {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.documents-panel__create {
+  padding: 0.55rem 0.65rem;
+}
+
+.documents-panel__create-form {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.documents-panel__create-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.documents-panel__toc {
+  padding: 0.65rem 0.55rem;
+}
+
+.documents-toc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.documents-toc__empty {
+  margin: 0;
+}
+
+.documents-toc__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.documents-toc__row {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-bottom: 0.05rem;
+  padding: 0.15rem 0.2rem;
+  border-radius: 4px;
+}
+
+.documents-toc__row.is-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.documents-toc__row--folder {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.88rem;
+  letter-spacing: 0.01em;
+}
+
+.documents-toc__twist {
+  width: 1.1rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font: inherit;
+  line-height: 1;
+}
+
+.documents-toc__twist--leaf {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.documents-toc__folder-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.documents-toc__title {
+  flex: 1;
+  min-width: 0;
+  padding: 0.1rem 0.15rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.documents-toc__title:hover {
+  color: var(--accent);
+}
+
+.documents-toc__row.is-selected .documents-toc__title {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .canvases-panel {

@@ -52,6 +52,7 @@ export const imageBoardsRouter = Router();
 
 const summarySelect = {
   id: schema.imageBoards.id,
+  number: schema.imageBoards.number,
   projectId: schema.imageBoards.projectId,
   ownerId: schema.imageBoards.ownerId,
   title: schema.imageBoards.title,

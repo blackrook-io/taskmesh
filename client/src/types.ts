@@ -116,6 +116,8 @@ export type ProjectDocument = {
   title: string;
   body: string | null;
   position: number;
+  updatedById?: number | null;
+  updatedBy?: UserRef | null;
   createdAt: string;
   updatedAt: string;
 };
