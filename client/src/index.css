@@ -1803,6 +1803,36 @@ textarea.raw-md {
   overflow-x: auto;
 }
 
+.md-prose .md-mermaid-wrap {
+  margin: 0.75rem 0;
+}
+
+.md-prose .md-mermaid {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.md-prose .md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.md-prose .md-mermaid--error {
+  display: block;
+  color: var(--danger);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.md-prose pre.md-mermaid-source {
+  margin: 0.75rem 0;
+}
+
 .md-field .w-md-editor {
   box-shadow: none;
 }

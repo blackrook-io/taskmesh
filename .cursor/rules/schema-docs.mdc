@@ -42,4 +42,4 @@ In the **same change set** as any of the following, update the matching Markdown
 - Wiki-suitable Markdown; Mermaid for ERDs; physical detail as Markdown tables.
 - No SQL DDL dumps — explain in human-readable language.
 - Prefer linking to `schema.ts` / this docs tree over inventing a second source of truth.
-- In-app mirrors may show Mermaid as fenced code until the Markdown editor supports Mermaid preview.
+- In-app Markdown preview renders ` ```mermaid ` fences (including `erDiagram`) via Mermaid in `MarkdownEditor`.

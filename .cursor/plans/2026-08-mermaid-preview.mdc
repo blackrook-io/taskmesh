@@ -1,0 +1,16 @@
+# Mermaid preview in MarkdownEditor
+
+## Problem
+Schema docs and other Markdown use ` ```mermaid ` fences with `erDiagram` (and other diagram types). TipTap renders these as plain code blocks — no Mermaid integration exists in the client.
+
+## Approach
+1. Add `mermaid`, `@tiptap/extension-code-block-lowlight`, `lowlight`, `prosemirror-mermaid`.
+2. Replace StarterKit `codeBlock` with extended `CodeBlockLowlight` + `mermaidPlugin` (stable `id` per block).
+3. Initialize Mermaid once with dark theme aligned to app chrome.
+4. Style `.mermaid` containers in `index.css`.
+5. Remove outdated “may render as code fences” banner text from schema sync script.
+
+## QA follow-up
+- First pass used `prosemirror-mermaid` widget decorations alongside `CodeBlockLowlight`; decorations did not surface reliably in the TipTap view.
+- Replaced with a React `NodeView` that calls `mermaid.render()` when the editor is in preview/read-only (default for Documents).
+- `crypto.randomUUID` unavailable on HTTP LAN dev hosts — added `randomShortId()` fallback for Mermaid block ids.

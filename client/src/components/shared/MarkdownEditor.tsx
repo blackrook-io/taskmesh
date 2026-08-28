@@ -34,6 +34,7 @@ import { uploadFile } from "../../api/client";
 import { NavIcon } from "../shell/NavIcon";
 import { MarkdownReferenceSuggest } from "./MarkdownReferenceSuggest";
 import { ResizableMarkdownImage } from "./ResizableMarkdownImage";
+import { MermaidCodeBlock } from "./mermaidCodeBlock";
 import { isAllowedHref } from "../../lib/safeHref";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown";
 
@@ -210,7 +211,9 @@ export function MarkdownEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        codeBlock: false,
       }),
+      MermaidCodeBlock,
       Underline,
       Link.configure({
         openOnClick: false,

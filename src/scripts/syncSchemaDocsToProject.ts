@@ -62,7 +62,7 @@ export const SCHEMA_DOC_SYNC_MAP: ReadonlyArray<{
   },
 ];
 
-const BANNER = `> **Authoritative copy:** git-tracked [\`docs/\`](https://github.com/blackrook-io/taskmesh/tree/main/docs) in the repo. This Document is a synced mirror for in-app reading. Mermaid diagrams may render as code fences until the editor supports Mermaid preview. Re-sync with \`npm run docs:sync-schema\`.
+const BANNER = `> **Authoritative copy:** git-tracked [\`docs/\`](https://github.com/blackrook-io/taskmesh/tree/main/docs) in the repo. This Document is a synced mirror for in-app reading. Re-sync with \`npm run docs:sync-schema\`.
 >
 > Source file: \`{{REPO_PATH}}\`
 
