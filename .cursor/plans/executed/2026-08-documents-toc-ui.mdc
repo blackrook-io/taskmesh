@@ -1,0 +1,17 @@
+# Documents TOC panel UI refactor
+
+## Goal
+Refactor the Documents sidebar from pill buttons to a table-of-contents tree:
+- Group `DB Schema — …` documents under a collapsible **DB Schema** folder; show child titles without the prefix.
+- Move entity ref (N####) into a hover tooltip with last-edited date and editor name (multiline).
+- Track `updated_by_id` on documents so “by whom” is available going forward.
+
+## Scope
+- `DocumentsToc` component + CSS (wiki-toc-style rows)
+- `project_documents.updated_by_id` migration + API enrichment
+- Wire into `ProjectDetailPage` documents tab
+
+## QA follow-ups
+- Removed visible “New document title” label; input + Create moved into a separate card above the TOC card (placeholder + aria-label for accessibility).
+- Input placeholder shortened to “Title”.
+- Fixed Kanban/image board list APIs omitting `number` (Bundefined/Mundefined); columns exist in DB since migration 0019.
