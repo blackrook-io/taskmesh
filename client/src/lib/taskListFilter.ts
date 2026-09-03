@@ -150,11 +150,13 @@ function foldCase(s: string): string {
   return s.toLocaleLowerCase();
 }
 
-function matchText(
-  haystack: string,
-  needle: string,
-  operator: Exclude<FilterOperator, "before" | "after">,
-): boolean {
+type TextOperator = Exclude<FilterOperator, "before" | "after">;
+
+function isTextOperator(op: FilterOperator): op is TextOperator {
+  return op !== "before" && op !== "after";
+}
+
+function matchText(haystack: string, needle: string, operator: TextOperator): boolean {
   const h = foldCase(haystack);
   const n = foldCase(needle);
   switch (operator) {
@@ -259,7 +261,9 @@ function matchPhase(task: Task, clause: FilterClause, ctx?: FilterMatchContext):
     return !haystacks.some((h) => matchText(h, value, "contains"));
   }
   if (!value) return false;
-  return haystacks.some((h) => matchText(h, value, clause.operator));
+  const op = clause.operator;
+  if (!isTextOperator(op)) return false;
+  return haystacks.some((h) => matchText(h, value, op));
 }
 
 function noneValue(value: string): boolean {
@@ -280,7 +284,9 @@ function matchTags(task: Task, clause: FilterClause, ctx?: FilterMatchContext): 
     noneValue(value) ? tags.length === 0 : tags.some((t) => String(t.id) === value);
   if (op === "contains" || op === "is") return has;
   if (op === "does_not_contain" || op === "is_not") return !has;
-  return tags.some((t) => matchText(t.name, value, op));
+  const textOp = op;
+  if (!isTextOperator(textOp)) return false;
+  return tags.some((t) => matchText(t.name, value, textOp));
 }
 
 function matchProject(task: Task, clause: FilterClause, ctx?: FilterMatchContext): boolean {
@@ -297,7 +303,9 @@ function matchProject(task: Task, clause: FilterClause, ctx?: FilterMatchContext
     return !haystacks.some((h) => matchText(h, value, "contains"));
   }
   if (!value) return false;
-  return haystacks.some((h) => matchText(h, value, clause.operator));
+  const projOp = clause.operator;
+  if (!isTextOperator(projOp)) return false;
+  return haystacks.some((h) => matchText(h, value, projOp));
 }
 
 export function clauseMatchesTask(
@@ -350,7 +358,9 @@ export function clauseMatchesTask(
   if (clause.operator === "does_not_contain") {
     return !haystacks.some((h) => matchText(h, value, "contains"));
   }
-  return haystacks.some((h) => matchText(h, value, clause.operator));
+  const fallbackOp = clause.operator;
+  if (!isTextOperator(fallbackOp)) return false;
+  return haystacks.some((h) => matchText(h, value, fallbackOp));
 }
 
 /** Left-to-right: ((c0 ⊕ c1) ⊕ c2) … */
