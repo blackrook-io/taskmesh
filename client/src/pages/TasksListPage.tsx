@@ -4,6 +4,14 @@ import { useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CHILD_TITLE_INDENT_PX, StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
+import {
+  TaskListContextMenu,
+  ctxFieldFromEventTarget,
+  type TaskListContextMenuItem,
+  type TaskListContextMenuState,
+} from "../components/TaskListContextMenu";
+import { MoveTaskToProjectModal } from "../components/MoveTaskToProjectModal";
+import { SetTaskParentModal } from "../components/SetTaskParentModal";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
 import { RowTagChips } from "../components/shared/RowTagChips";
@@ -125,6 +133,9 @@ export function TasksListPage() {
     DEFAULT_GLOBAL_TASK_LIST_SORT,
   );
   const [creating, setCreating] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
+  const [moveTaskId, setMoveTaskId] = useState<number | null>(null);
+  const [parentTaskId, setParentTaskId] = useState<number | null>(null);
 
   useEffect(() => {
     if (openParam && Number.isFinite(Number(openParam))) {
@@ -418,6 +429,15 @@ export function TasksListPage() {
               key={task.id}
               className={`task-list-row${depth > 0 ? " task-list-row--child" : ""}`}
               onDoubleClick={() => openModal(task.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setCtxMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  taskId: task.id,
+                  field: ctxFieldFromEventTarget(e.target),
+                });
+              }}
             >
               <span
                 className="task-list-row__stripe"
@@ -484,12 +504,16 @@ export function TasksListPage() {
                 <span className="task-list-row__title-text">{task.title}</span>
                 <RowTagChips entityType="task" entityId={task.id} />
               </span>
-              <span className={taskStateClass("task-list-row__state", task.state)}>
+              <span
+                className={taskStateClass("task-list-row__state", task.state)}
+                data-ctx-field="state"
+              >
                 {TASK_STATE_LABELS[task.state]}
               </span>
               <select
                 className={taskPriorityClass("task-list-row__priority", task.priority)}
                 value={task.priority}
+                data-ctx-field="priority"
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) =>
                   void patchTask.mutateAsync({
@@ -509,6 +533,7 @@ export function TasksListPage() {
                 type="date"
                 className="task-list-row__date"
                 value={taskDue(task) ?? ""}
+                data-ctx-field="dueDate"
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) =>
                   void patchTask.mutateAsync({
@@ -579,6 +604,64 @@ export function TasksListPage() {
         onCancel={() => setCompleteBlockMsg(null)}
         onConfirm={() => setCompleteBlockMsg(null)}
       />
+
+      <TaskListContextMenu
+        menu={ctxMenu}
+        onClose={() => setCtxMenu(null)}
+        items={(() => {
+          const all = tasksQuery.data ?? [];
+          const ctxTask = ctxMenu ? (all.find((t) => t.id === ctxMenu.taskId) ?? null) : null;
+          if (!ctxMenu || !ctxTask) return [] as TaskListContextMenuItem[];
+          return [
+            {
+              type: "action" as const,
+              label: "Move to…",
+              onSelect: () => setMoveTaskId(ctxTask.id),
+            },
+            {
+              type: "action" as const,
+              label: "Set Parent…",
+              onSelect: () => setParentTaskId(ctxTask.id),
+            },
+          ];
+        })()}
+      />
+
+      {(() => {
+        const all = tasksQuery.data ?? [];
+        const moveTask = moveTaskId != null ? (all.find((t) => t.id === moveTaskId) ?? null) : null;
+        const parentTask =
+          parentTaskId != null ? (all.find((t) => t.id === parentTaskId) ?? null) : null;
+        return (
+          <>
+            <MoveTaskToProjectModal
+              open={moveTask != null}
+              currentProjectId={moveTask?.projectId ?? null}
+              onClose={() => setMoveTaskId(null)}
+              onSave={async (nextProjectId) => {
+                if (!moveTask) return;
+                await patchTask.mutateAsync({
+                  id: moveTask.id,
+                  patch: { projectId: nextProjectId, phaseId: null },
+                });
+              }}
+            />
+            <SetTaskParentModal
+              open={parentTask != null}
+              taskId={parentTask?.id ?? 0}
+              currentParentId={parentTask?.parentId ?? null}
+              onClose={() => setParentTaskId(null)}
+              onSave={async (nextParentId) => {
+                if (!parentTask) return;
+                await patchTask.mutateAsync({
+                  id: parentTask.id,
+                  patch: { parentId: nextParentId },
+                });
+              }}
+            />
+          </>
+        );
+      })()}
     </div>
   );
 }

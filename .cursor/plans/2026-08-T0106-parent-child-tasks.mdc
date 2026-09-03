@@ -1,0 +1,86 @@
+# T0106 — How to Parent-Child Tasks?
+
+**Task:** T0106 (id `118`) — How to Parent-Child Tasks?  
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)  
+**Branch (after approval):** `T0106-parent-child-tasks`
+
+## Context
+
+`tasks.parent_id` already exists. The API accepts `parentId` on create/PATCH (same-project, no cycles, children inherit parent phase). T0103 shipped list-view hierarchy (indent, tint, twistie). **The SPA never sets `parentId`** — there is no parent picker, no “Add child”, and list DnD is sibling reorder only.
+
+Users can see trees they cannot build in-product. Delete copy already says “Reparent or delete children first” with no reparent UI.
+
+`TaskEditorFields` is the shared Edit Task modal (project list, global Tasks, Kanban, To Do list). Closest UX to copy: `TaskDependencyLists` search-to-add; Wiki “create under parent”.
+
+## Size / split
+
+One cohesive UX session (no schema). Suitable as a single worktask. No split.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Primary authoring surface:** Edit Task modal **and** a list-row **Add child** control on project TaskBoard + global Tasks list (where the tree is already visible).  
+2. **Two directions:** (a) set/clear **Parent** on the current task; (b) **Add child** = create a new task under this one; also **attach an existing** same-project task as a child.  
+3. **Unlink:** Clear parent from the child; unlink from the parent’s children list (sets that child’s `parentId` to null).  
+4. **List DnD reparent:** **Out of scope** (T0094 kept sibling-only; groups make nest-by-drag a separate task).  
+5. **Open related tasks:** Children and parent rows **double-click** to open in-place in the same modal (match Depends on).  
+6. **List “New task”** at the bottom stays a **root**. Child creation is explicit (modal or row Add child).  
+7. **Kanban / command palette / overview:** no extra hierarchy chrome this task — they inherit the modal controls via `TaskEditorFields`.
+
+## Goal
+
+Make parent/child **authorable** in the UI using existing `parentId` APIs — obvious from the task modal and from the list tree.
+
+## Scope
+
+**In scope**
+
+1. **Parent field** on `TaskEditorFields` (always visible)
+   - Search combobox (title OR number, same project including both-unassigned)
+   - Show current parent (number + title); Clear unlinks
+   - Exclude self and descendants (cycle)
+   - Changing parent PATCHes `parentId`; phase inherit stays as today
+   - Changing **project** already clears parent in API when incompatible — keep that; refresh the picker
+
+2. **Children section** on the same modal (always visible, not only when children exist)
+   - Mini list: number, title, state (match deps density)
+   - Double-click → `onOpenTask` in-place
+   - **Add child** → title prompt (same as global New task) → `POST` with `parentId` = current task → invalidate lists; optionally open the new child
+   - **Attach existing** → same search as Parent, but PATCHes the *candidate’s* `parentId` to this task
+   - Unlink control on each child row
+
+3. **List Add child** (project `TaskBoard` + `TasksListPage`)
+   - Small control on the row (near twistie / title) that creates a child under that task without opening the modal first
+   - After create, lists refresh so the new row nests under the parent (T0103 display)
+
+4. **History** — existing `parentId` change logging should fire from PATCH; no new activity kinds
+
+**Out of scope**
+
+- Schema / new tables
+- Drag-to-nest / DnD reparent
+- Command palette “new child of…”
+- Kanban / overview / wiki-style indent display
+- Persisting list collapse
+- Changing delete-with-children policy (still block until unlinked/deleted)
+
+## Implementation outline
+
+1. **Shared picker** — extract or mirror `TaskDependencyLists` combobox for a single parent / attach-child search. Filter candidates client-side from loaded project/global tasks when `allTasks` is present; otherwise `GET /api/v1/tasks` and filter (same `projectId`, not self, not in descendant set). Surface API 400s (cycle / project mismatch) as inline errors.
+2. **Create child** — project: `POST /api/v1/projects/:id/tasks` with `parentId`; standalone: `POST /api/v1/tasks` with `parentId` + same `projectId` as parent. Invalidate `["tasks"]` (and children query keys).
+3. **Unlink** — `PATCH` `{ parentId: null }` on the child.
+4. **List row control** — stop click from opening the task modal; create + invalidate.
+5. **Child list** — load children whenever the editor is open (not only when delete dialog is open).
+
+No Drizzle migration.
+
+## Acceptance
+
+- From a task modal, user can set parent, clear parent, add a new child, attach an existing task as child, and unlink a child.
+- From project and global task lists, user can Add child on a row and see it nested (T0103 indent/twistie).
+- Invalid parents (other project, cycle, self) fail with a clear error; existing data unchanged.
+- Phase still inherits from parent; delete still blocked while children remain.
+- QA checklist at end of implement pass.
+
+## Versioning note
+
+No DB migration → **PATCH** bump on finish-up.

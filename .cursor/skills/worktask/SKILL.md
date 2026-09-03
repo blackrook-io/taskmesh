@@ -29,6 +29,7 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 6. **Never** update git config (`user.name` / `user.email`). If commit fails for missing identity, set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for that command only (see [reference.md](reference.md)).
 7. **App version** — on finish-up, bump SemVer per [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) in the merge commit (MINOR if this Task added a Drizzle migration, otherwise PATCH). Mention the new version in the completion comment. Do not skip the bump.
 8. **Child Task → Parent** — if the Agent needs more context or information on a Child Task, it should refer to the Parent. Load the Parent from PROD (`parentId` → `GET /api/v1/tasks/{parentId}` plus description/comments as needed). Do not invent missing background.
+9. **Deferred scope → new Task** — if interview/sizing defers work out of the current Task, create a PROD Task with full context and relate it via dependencies to the working Task (see §4 and [reference.md](reference.md)). Never leave deferrals only in the plan.
 
 ## Workflow checklist
 
@@ -94,8 +95,14 @@ Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still bein
 ### 4. Interview + plan
 
 1. Interview for clarifications (even if the description looks complete).
-2. Write plan: `.cursor/plans/<YYYY-MM>-T####-<slug>.mdc`.
-3. Present plan; **wait for approval to implement**.
+2. **Deferral → new Task (required):** Whenever interview answers (or sizing) **defer** scope out of the current worktask — a feature slice, field, modal, schema piece, or follow-up — **always** create a **new PROD Task** before treating the deferral as settled:
+   - Copy **all related information and context** into the new Task (title, description with acceptance notes, why it was deferred from `T####`, relevant parent/sibling context, API/UI gaps already known).
+   - Prefer the same `projectId` (and `parentId` only when it is truly a child of the same epic; otherwise leave standalone).
+   - Default state `new` (Draft) unless the user asks for Ready.
+   - **Relate** it to the working Task via dependencies: set the new Task’s `dependsOn` → working Task when the follow-up should wait on this work; or the reverse only when the working Task is blocked on the new one. Use `POST /api/v1/tasks/{id}/dependencies` (see [reference.md](reference.md)). Do not leave orphan deferred notes only in the plan.
+   - Mention the new Task number(s) in the plan and in any later start/completion comments.
+3. Write plan: `.cursor/plans/<YYYY-MM>-T####-<slug>.mdc`.
+4. Present plan; **wait for approval to implement**.
 
 ### 5. On implement approval
 

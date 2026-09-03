@@ -1,0 +1,72 @@
+# T0045 — Context menu in List View
+
+**Task:** T0045 (id `45`) — Context menu in List View  
+**State:** Ready → In Progress on implement approval  
+**Priority:** low · **Project:** TaskMesh (id 4)  
+**Depends on:** none  
+**Required by:** T0031 — Right-click Task Group and show in Kanban Board  
+**Deferred follow-up:** [T0117](http://127.0.0.1:3000) — List context menu: Assign to… (assignee) — Draft; **Depends on** T0045
+
+## Interview (confirmed)
+
+1. **Assign to…** — Defer → **T0117** (assignee schema + API + menu entry). Not in this Task.
+2. **Create Group → Date** — Add `dueDate` list/group filter (`before` / `after`) in this Task so the Date submenu works.
+3. **Surfaces** — Project Tasks list (`TaskBoard`) and global `/tasks` (`TasksListPage`). Hide **Create Task Group…** on global `/tasks` (groups are project-scoped).
+4. **Menu chrome** — Positioned right-click context menu; **modals** only for Move to… and Set Parent….
+5. **Create Group flow** — Create group with preset filter, then open `GroupEditModal` for name/tweaks.
+6. **Set Parent** — Enforce same-project + no-cycle API rules; **Clear parent** available inside the Set Parent modal.
+
+## Scope
+
+### In scope
+
+1. **Row context menu** on `SortableTaskRow` (`TaskBoard`) and global list rows (`TasksListPage`):
+   - **Move to…** → modal: search/select Project → `PATCH` `{ projectId, phaseId: null }` via `patchTaskRecord` / standalone route.
+   - **Set Parent…** → modal: task search (reuse dependency-search UX pattern) → `PATCH` `{ parentId }` or clear → `parentId: null`.
+   - **Create Task Group ▸** (project lists only), field-aware submenu:
+     - **State** cell/context → IS / IS NOT (value = row’s state).
+     - **Priority** → IS / IS NOT (value = row’s priority).
+     - **Date** (due) → Before / After (value = row’s due date; omit or disable if due date empty).
+   - Suppress browser default menu; avoid fighting double-click-to-edit.
+
+2. **Due date filter field** for list + group filters:
+   - Add `dueDate` to shared filter field/operator model (client `taskListFilter.ts`, server `taskGroupFilter.ts` if groups evaluate server-side).
+   - Operators: `before`, `after` (and wire `FilterClauseValueInput` / labels).
+   - Expose in `TaskListFilterBar` + group edit filter UI.
+
+3. **Create Group from context** — `POST /api/v1/projects/:id/groups` with name stub + one-clause `filter`, then open existing `GroupEditModal`.
+
+### Out of scope
+
+- **Assign to…** → T0117  
+- Kanban / To Do list context menus (T0031 and other surfaces stay separate)  
+- Changing DnD / double-click edit behavior beyond `preventDefault` on contextmenu  
+- Schema migration for assignee (T0117)
+
+## Approach
+
+| Area | Plan |
+|------|------|
+| Menu UI | Shared `TaskListContextMenu` (portal/fixed position near pointer); entries driven by surface + which column/field was targeted when useful for Create Group |
+| Move modal | Project list from `GET /api/v1/projects` + typeahead/filter; Save/Cancel |
+| Parent modal | `GET /api/v1/tasks/dependency-search` (or project task list) + Clear parent; Save/Cancel |
+| Filters | Extend `FILTER_FIELDS` / operators; keep group filter JSON compatible |
+| Version | No new Drizzle migration → **PATCH** bump on finish-up |
+
+## QA follow-ups
+
+- **Modal input theming:** Global form control styles now include `search` / `email` / `password` / `url` / `tel`, plus an explicit `.modal` / `.settings-modal` rule so Move to…, Set Parent…, Group edit, and other modal fields always use `--bg` / `--text` / `--border` (browser-default white search boxes were unthemed).
+- **Set Parent pick:** Choosing a result now fills the search input with `T#### Title`, shows a Selected line, and enables Save for that parent (previously only highlighted the list row).
+
+## QA checklist
+
+- [ ] Right-click row on project Tasks list → menu; left-click elsewhere / Esc dismisses
+- [ ] Move to… changes project; Cancel leaves task unchanged
+- [ ] Set Parent… sets parent (same project); Clear parent works; invalid/cycle rejected gracefully
+- [ ] Create Group ▸ State/Priority IS/IS NOT creates group and opens Group edit with preset filter
+- [ ] Create Group ▸ Date Before/After works when due date set; sensible when missing
+- [ ] Due date appears in list filter bar and Group edit filter UI
+- [ ] Global `/tasks`: Move + Set Parent present; Create Task Group hidden
+- [ ] Assign to… **not** shown (T0117)
+- [ ] Double-click / inline edits still work; no browser native menu on rows
+- [ ] Move to… / Set Parent… / Group edit search & text inputs match app theme (not browser-white)

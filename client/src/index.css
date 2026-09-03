@@ -1283,12 +1283,23 @@ a.app-nav__item.active {
 }
 
 input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[type="tel"],
 input[type="number"],
 input[type="date"],
 input[type="time"],
 input[type="datetime-local"],
 select,
-textarea {
+textarea,
+.modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]),
+.modal select,
+.modal textarea,
+.settings-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]),
+.settings-modal select,
+.settings-modal textarea {
   width: 100%;
   padding: 0.4rem 0.55rem;
   border-radius: 8px;
@@ -1296,6 +1307,13 @@ textarea {
   background: var(--bg);
   color: var(--text);
   color-scheme: dark;
+}
+
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button {
+  filter: invert(1);
+  opacity: 0.75;
+  cursor: pointer;
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator,
@@ -6285,4 +6303,132 @@ a:focus-visible {
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--border);
+}
+
+/* T0045 — list row context menu + pickers */
+.task-list-ctx-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 11.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 0.25rem 0;
+}
+
+.task-list-ctx-menu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-list-ctx-menu__list--nested {
+  min-width: 10.5rem;
+}
+
+.task-list-ctx-menu__sep {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: var(--border);
+}
+
+.task-list-ctx-menu__item {
+  position: relative;
+}
+
+.task-list-ctx-menu__item.is-disabled .task-list-ctx-menu__btn {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.task-list-ctx-menu__btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.task-list-ctx-menu__btn:hover:not(:disabled),
+.task-list-ctx-menu__item--submenu:hover > .task-list-ctx-menu__btn {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.task-list-ctx-menu__chevron {
+  opacity: 0.7;
+  font-size: 0.75rem;
+}
+
+.task-list-ctx-menu__flyout {
+  position: absolute;
+  left: 100%;
+  top: -0.25rem;
+  margin-left: 0.15rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 0.25rem 0;
+  z-index: 1;
+}
+
+.task-picker-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.task-picker-list__hint {
+  padding: 0.6rem 0.75rem;
+}
+
+.task-picker-list__btn {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.45rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.task-picker-list__btn:hover,
+.task-picker-list__btn.is-selected {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.task-picker-list__state {
+  margin-left: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.task-picker-selected {
+  margin: 0.45rem 0 0;
+  font-size: 0.9rem;
+}
+
+.task-picker-selected strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stack-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
 }

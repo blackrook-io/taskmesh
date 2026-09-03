@@ -41,6 +41,25 @@ curl -fsS "http://127.0.0.1:3000/api/v1/tasks/dependency-search?q=T0042&excludeT
 
 **Worktask Depends-on gate:** if any `dependsOn[].state` is not `complete`, `canceled`, or `pending`, alert and stop before planning/branch/In Progress. `pending` means the dependency’s own work is done (waiting on *its* children) and does not block.
 
+### Add a dependency (relate tasks)
+
+```bash
+# New follow-up Task depends on the working Task (typical deferral link)
+curl -fsS -X POST "http://127.0.0.1:3000/api/v1/tasks/${NEW_TASK_ID}/dependencies" \
+  -H 'Content-Type: application/json' \
+  -H 'X-TaskMesh-Client: ui' \
+  -H 'Origin: http://127.0.0.1:3000' \
+  -d "{\"dependsOnTaskId\": ${WORKING_TASK_ID}}"
+```
+
+### Deferred scope → new Task (interview / sizing)
+
+When `/worktask` defers scope out of the current Task:
+
+1. Prefer `POST /api/v1/projects/{projectId}/tasks` (same project as the working Task) with a full description (context, acceptance, why deferred from `T####`). Use `state: "new"` unless the user wants Ready. Auth: session cookie + `X-TaskMesh-Client: ui` + `Origin` on mutating calls.
+2. Relate: usually new Task **Depends on** the working Task (`POST …/dependencies` as above).
+3. Record the new `T####` in the plan and comments — do not leave deferrals only as plan bullets.
+
 ## Update state
 
 ```bash

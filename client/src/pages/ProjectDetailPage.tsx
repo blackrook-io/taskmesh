@@ -752,12 +752,16 @@ export function ProjectDetailPage() {
                 });
                 await qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
               }}
-              onCreateGroup={async (name) => {
-                await apiJson(`/api/v1/projects/${projectId}/groups`, {
-                  method: "POST",
-                  body: JSON.stringify({ name }),
-                });
-                void qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
+              onCreateGroup={async (name, filter) => {
+                const res = await apiJson<{ data: TaskGroup }>(
+                  `/api/v1/projects/${projectId}/groups`,
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ name, filter: filter ?? null }),
+                  },
+                );
+                await qc.invalidateQueries({ queryKey: ["task-groups", projectId] });
+                return res.data;
               }}
               onDeleteGroup={async (groupId) => {
                 await apiJson(`/api/v1/projects/${projectId}/groups/${groupId}`, {

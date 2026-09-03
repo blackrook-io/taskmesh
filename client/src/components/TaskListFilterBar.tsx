@@ -160,6 +160,16 @@ export function FilterClauseValueInput({
       </select>
     );
   }
+  if (clause.field === "dueDate") {
+    return (
+      <input
+        type="date"
+        aria-label="Filter value"
+        value={clause.value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
   return (
     <input
       type="text"

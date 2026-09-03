@@ -41,6 +41,15 @@ import type { Project, ProjectPhase, Task, TaskGroup } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ColorPopover } from "./shared/ColorPopover";
 import { GroupEditModal } from "./GroupEditModal";
+import {
+  TaskListContextMenu,
+  buildCreateGroupMenuItems,
+  ctxFieldFromEventTarget,
+  type TaskListContextMenuItem,
+  type TaskListContextMenuState,
+} from "./TaskListContextMenu";
+import { MoveTaskToProjectModal } from "./MoveTaskToProjectModal";
+import { SetTaskParentModal } from "./SetTaskParentModal";
 import { FilterIcon } from "./TaskListFilterBar";
 import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
@@ -82,11 +91,14 @@ import {
   emptyTaskListFilter,
   evaluateMergedListAndGroupFilter,
   evaluateTaskListFilter,
+  FILTER_FIELD_LABELS,
+  FILTER_OPERATOR_LABELS,
   formatFilterBreadcrumb,
   isFilterActive,
   parseTaskListFilterValue,
   taskMatchesFilter,
   type FilterMatchContext,
+  type FilterOperator,
   type TaskListFilter,
 } from "../lib/taskListFilter";
 
@@ -917,6 +929,7 @@ function SortableTaskRow({
   onOpen,
   onCycleState,
   onPatch,
+  onContextMenu,
 }: {
   task: Task;
   depth: number;
@@ -928,6 +941,7 @@ function SortableTaskRow({
   onOpen: () => void;
   onCycleState: () => void;
   onPatch: (patch: TaskPatch) => void;
+  onContextMenu: (e: React.MouseEvent, task: Task) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `task-${groupKey}-${task.id}`,
@@ -944,6 +958,7 @@ function SortableTaskRow({
       style={style}
       className={`task-list-row${isDragging ? " dragging" : ""}${depth > 0 ? " task-list-row--child" : ""}`}
       onDoubleClick={onOpen}
+      onContextMenu={(e) => onContextMenu(e, task)}
       {...attributes}
       {...listeners}
     >
@@ -992,12 +1007,16 @@ function SortableTaskRow({
         ) : null}
         <RowTagChips entityType="task" entityId={task.id} />
       </span>
-      <span className={taskStateClass("task-list-row__state", task.state)}>
+      <span
+        className={taskStateClass("task-list-row__state", task.state)}
+        data-ctx-field="state"
+      >
         {TASK_STATE_LABELS[task.state]}
       </span>
       <select
         className={taskPriorityClass("task-list-row__priority", task.priority)}
         value={task.priority}
+        data-ctx-field="priority"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => onPatch({ priority: e.target.value as TaskPriority })}
@@ -1013,6 +1032,7 @@ function SortableTaskRow({
         type="date"
         className="task-list-row__date"
         value={taskDue(task) ?? ""}
+        data-ctx-field="dueDate"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => onPatch({ dueDate: e.target.value || null })}
@@ -1199,7 +1219,10 @@ type Props = {
       autoTagId?: number | null;
     },
   ) => Promise<void>;
-  onCreateGroup: (name: string) => Promise<void>;
+  onCreateGroup: (
+    name: string,
+    filter?: TaskListFilter | null,
+  ) => Promise<TaskGroup | void>;
   onDeleteGroup: (groupId: number) => Promise<void>;
   onAttachTaskTag: (taskId: number, tagId: number) => Promise<void>;
   onAddGroupMember: (groupId: number, taskId: number) => Promise<void>;
@@ -1248,6 +1271,9 @@ export function TaskBoard({
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
   const [pendingAutoTagDrop, setPendingAutoTagDrop] = useState<PendingAutoTagDrop | null>(null);
   const [dndInfo, setDndInfo] = useState<{ title: string; message: string } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
+  const [moveTaskId, setMoveTaskId] = useState<number | null>(null);
+  const [parentTaskId, setParentTaskId] = useState<number | null>(null);
 
   const toggleParentCollapse = (taskId: number) => {
     setCollapsedParents((prev) => {
@@ -1580,8 +1606,76 @@ export function TaskBoard({
       onOpen={() => setModalTaskId(row.task.id)}
       onCycleState={() => cycleTaskState(row.task)}
       onPatch={(patch) => void onPatchTask(row.task.id, patch)}
+      onContextMenu={(e, task) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setCtxMenu({
+          x: e.clientX,
+          y: e.clientY,
+          taskId: task.id,
+          field: ctxFieldFromEventTarget(e.target),
+        });
+      }}
     />
   );
+
+  const ctxTask = ctxMenu ? (tasks.find((t) => t.id === ctxMenu.taskId) ?? null) : null;
+  const moveTask = moveTaskId != null ? (tasks.find((t) => t.id === moveTaskId) ?? null) : null;
+  const parentTask =
+    parentTaskId != null ? (tasks.find((t) => t.id === parentTaskId) ?? null) : null;
+
+  const ctxMenuItems: TaskListContextMenuItem[] = (() => {
+    if (!ctxMenu || !ctxTask) return [];
+    const due = taskDue(ctxTask);
+    const items: TaskListContextMenuItem[] = [
+      {
+        type: "action",
+        label: "Move to…",
+        onSelect: () => setMoveTaskId(ctxTask.id),
+      },
+      {
+        type: "action",
+        label: "Set Parent…",
+        onSelect: () => setParentTaskId(ctxTask.id),
+      },
+    ];
+    items.push({ type: "separator" });
+    items.push({
+      type: "submenu",
+      label: "Create Task Group",
+      children: buildCreateGroupMenuItems({
+        field: ctxMenu.field,
+        stateLabel: TASK_STATE_LABELS[ctxTask.state],
+        priorityLabel: TASK_PRIORITY_LABELS[ctxTask.priority],
+        dueLabel: due,
+        onCreate: (field, operator) => {
+          void (async () => {
+            const value =
+              field === "state"
+                ? ctxTask.state
+                : field === "priority"
+                  ? ctxTask.priority
+                  : (due ?? "");
+            if (field === "dueDate" && !value) return;
+            const filter: TaskListFilter = {
+              clauses: [{ field, operator: operator as FilterOperator, value }],
+              joins: [],
+            };
+            const name = `${FILTER_FIELD_LABELS[field]} ${FILTER_OPERATOR_LABELS[operator]} ${
+              field === "state"
+                ? TASK_STATE_LABELS[ctxTask.state]
+                : field === "priority"
+                  ? TASK_PRIORITY_LABELS[ctxTask.priority]
+                  : value
+            }`;
+            const created = await onCreateGroup(name.slice(0, 200), filter);
+            if (created) setEditGroup(created);
+          })();
+        },
+      }),
+    });
+    return items;
+  })();
 
   return (
     <>
@@ -1792,6 +1886,33 @@ export function TaskBoard({
           const id = pendingGroupDelete.id;
           setPendingGroupDelete(null);
           void onDeleteGroup(id);
+        }}
+      />
+
+      <TaskListContextMenu
+        menu={ctxMenu}
+        onClose={() => setCtxMenu(null)}
+        items={ctxMenuItems}
+      />
+
+      <MoveTaskToProjectModal
+        open={moveTask != null}
+        currentProjectId={moveTask?.projectId ?? projectId}
+        onClose={() => setMoveTaskId(null)}
+        onSave={async (nextProjectId) => {
+          if (!moveTask) return;
+          await onPatchTask(moveTask.id, { projectId: nextProjectId, phaseId: null });
+        }}
+      />
+
+      <SetTaskParentModal
+        open={parentTask != null}
+        taskId={parentTask?.id ?? 0}
+        currentParentId={parentTask?.parentId ?? null}
+        onClose={() => setParentTaskId(null)}
+        onSave={async (nextParentId) => {
+          if (!parentTask) return;
+          await onPatchTask(parentTask.id, { parentId: nextParentId });
         }}
       />
     </>

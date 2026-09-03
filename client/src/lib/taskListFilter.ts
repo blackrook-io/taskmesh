@@ -11,10 +11,27 @@ import {
 } from "./taskFields";
 import type { Task } from "../types";
 
-export const FILTER_FIELDS = ["state", "priority", "title", "number", "phase", "tags", "project"] as const;
+export const FILTER_FIELDS = [
+  "state",
+  "priority",
+  "title",
+  "number",
+  "phase",
+  "tags",
+  "project",
+  "dueDate",
+] as const;
 export type FilterField = (typeof FILTER_FIELDS)[number];
 
-export const FILTER_OPERATORS = ["is", "is_not", "contains", "does_not_contain", "starts_with"] as const;
+export const FILTER_OPERATORS = [
+  "is",
+  "is_not",
+  "contains",
+  "does_not_contain",
+  "starts_with",
+  "before",
+  "after",
+] as const;
 export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 
 export const FILTER_JOINS = ["and", "or"] as const;
@@ -40,6 +57,7 @@ export const FILTER_FIELD_LABELS: Record<FilterField, string> = {
   phase: "Phase",
   tags: "Tags",
   project: "Project",
+  dueDate: "Due date",
 };
 
 export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
@@ -48,6 +66,8 @@ export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
   contains: "contains",
   does_not_contain: "does not contain",
   starts_with: "starts with",
+  before: "before",
+  after: "after",
 };
 
 export const FILTER_JOIN_LABELS: Record<FilterJoin, string> = {
@@ -58,18 +78,21 @@ export const FILTER_JOIN_LABELS: Record<FilterJoin, string> = {
 export function defaultValueForField(field: FilterField): string {
   if (field === "state") return "new";
   if (field === "priority") return "none";
+  if (field === "dueDate") return new Date().toISOString().slice(0, 10);
   return "";
 }
 
 export function defaultOperatorForField(field: FilterField): FilterOperator {
   if (field === "tags") return "contains";
+  if (field === "dueDate") return "before";
   return "is";
 }
 
-/** Tags use membership language; other fields keep the full operator set. */
+/** Tags use membership language; due date uses before/after; others keep text operators. */
 export function operatorsForField(field: FilterField): readonly FilterOperator[] {
   if (field === "tags") return ["contains", "does_not_contain", "starts_with"];
-  return FILTER_OPERATORS;
+  if (field === "dueDate") return ["before", "after"];
+  return ["is", "is_not", "contains", "does_not_contain", "starts_with"];
 }
 
 export function filterFieldsForScope(includeProject: boolean): readonly FilterField[] {
@@ -127,7 +150,11 @@ function foldCase(s: string): string {
   return s.toLocaleLowerCase();
 }
 
-function matchText(haystack: string, needle: string, operator: FilterOperator): boolean {
+function matchText(
+  haystack: string,
+  needle: string,
+  operator: Exclude<FilterOperator, "before" | "after">,
+): boolean {
   const h = foldCase(haystack);
   const n = foldCase(needle);
   switch (operator) {
@@ -142,6 +169,21 @@ function matchText(haystack: string, needle: string, operator: FilterOperator): 
     case "starts_with":
       return h.startsWith(n);
   }
+}
+
+function taskDueDateYmd(task: Task): string | null {
+  if (task.dueDate) return task.dueDate.slice(0, 10);
+  if (task.dueAt) return task.dueAt.slice(0, 10);
+  return null;
+}
+
+function matchDueDate(task: Task, clause: FilterClause): boolean {
+  const due = taskDueDateYmd(task);
+  const value = clause.value.trim().slice(0, 10);
+  if (!due || !value) return false;
+  if (clause.operator === "before") return due < value;
+  if (clause.operator === "after") return due > value;
+  return false;
 }
 
 /** Parse `53`, `T53`, `T0053` → integer; otherwise null. */
@@ -194,6 +236,10 @@ function fieldHaystacks(task: Task, field: FilterField, ctx?: FilterMatchContext
       if (task.projectId == null) return ["none", ""];
       const name = ctx?.projectNames?.get(task.projectId) ?? "";
       return [name, String(task.projectId)].filter((s) => s.length > 0);
+    }
+    case "dueDate": {
+      const due = taskDueDateYmd(task);
+      return due ? [due] : [];
     }
   }
 }
@@ -260,6 +306,9 @@ export function clauseMatchesTask(
   ctx?: FilterMatchContext,
 ): boolean {
   const value = clause.value.trim();
+  if (clause.field === "dueDate") {
+    return matchDueDate(task, clause);
+  }
   if (clause.field === "phase") {
     return matchPhase(task, clause, ctx);
   }
