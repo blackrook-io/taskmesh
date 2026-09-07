@@ -8,6 +8,8 @@ import type { Tag } from "../../types";
 
 type TagRow = Tag & { usageCount: number };
 
+const EMPTY_TAGS: TagRow[] = [];
+
 function invalidateTagQueries(qc: ReturnType<typeof useQueryClient>) {
   void qc.invalidateQueries({ queryKey: ["tags"] });
   void qc.invalidateQueries({ queryKey: ["tags-suggest"] });
@@ -36,7 +38,7 @@ export function TagsSettingsPanel() {
     },
   });
 
-  const tags = listQuery.data ?? [];
+  const tags = listQuery.data ?? EMPTY_TAGS;
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return tags;

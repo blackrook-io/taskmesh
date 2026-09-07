@@ -14,7 +14,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { apiJson } from "../../api/client";
 import {
@@ -35,6 +35,8 @@ import { NavIcon } from "./NavIcon";
 import { ProjectSelectModal } from "./ProjectSelectModal";
 import { shellIcons } from "./shellIcons";
 import { SystemClock } from "./SystemClock";
+
+const EMPTY_PROJECTS: Project[] = [];
 
 type Props = {
   mode: AppNavMode;
@@ -96,12 +98,13 @@ export function AppNav({
   const { user } = useAuth();
   const showAdmin = userIsAdministrator(user);
   const [projectsOpen, setProjectsOpen] = useState(section === "projects");
+  const [prevSection, setPrevSection] = useState(section);
+  if (prevSection !== section) {
+    setPrevSection(section);
+    if (section === "projects") setProjectsOpen(true);
+  }
   const [projectSelectOpen, setProjectSelectOpen] = useState(false);
   const qc = useQueryClient();
-
-  useEffect(() => {
-    if (section === "projects") setProjectsOpen(true);
-  }, [section]);
 
   const healthQuery = useQuery({
     queryKey: ["api-health"],
@@ -131,7 +134,7 @@ export function AppNav({
     enabled: projectsOpen && !less,
   });
 
-  const projects = projectsQuery.data ?? [];
+  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
   const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
 
   const reorderProjects = useMutation({

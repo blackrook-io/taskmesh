@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson, uploadFileWithMeta } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EpubReader } from "../components/EpubReader";
@@ -99,16 +99,19 @@ export function ProjectDetailPage() {
   const initialNodeId = parseIdParam(searchParams.get("node"));
   const openTaskId = parseIdParam(searchParams.get("open"));
 
-  const clearSearchParam = (key: string) => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete(key);
-        return next;
-      },
-      { replace: true },
-    );
-  };
+  const clearSearchParam = useCallback(
+    (key: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete(key);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const setTab = (next: Tab) => {
     if (next === "overview") {
@@ -134,22 +137,12 @@ export function ProjectDetailPage() {
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [pendingDocDelete, setPendingDocDelete] = useState<number | null>(null);
   const [overviewEdit, setOverviewEdit] = useState(false);
-  const initialDocApplied = useRef(false);
-  const initialOpenTaskApplied = useRef(false);
+  /** One-shot guards so URL-driven open/doc apply once per param value. */
+  const [appliedDocParam, setAppliedDocParam] = useState<number | null>(null);
+  const [appliedOpenParam, setAppliedOpenParam] = useState<number | null>(null);
+  const [boundProjectId, setBoundProjectId] = useState(projectId);
 
   const invalidId = Number.isNaN(projectId);
-
-  useRegisterAssistantAttach(
-    useMemo(() => {
-      if (invalidId || tab !== "overview") return null;
-      return {
-        key: `project-${projectId}-overview`,
-        label: name.trim() || `Project #${projectId}`,
-        getContext: () =>
-          `Project #${projectId}\nName: ${name}\nStatus: ${status}\n\n${description}`,
-      };
-    }, [invalidId, tab, projectId, name, status, description]),
-  );
 
   const projectQuery = useQuery({
     queryKey: ["project", projectId],
@@ -159,6 +152,24 @@ export function ProjectDetailPage() {
       return res.data;
     },
   });
+
+  const overviewName = overviewEdit ? name : (projectQuery.data?.name ?? "");
+  const overviewStatus = overviewEdit ? status : (projectQuery.data?.status ?? "idea");
+  const overviewDescription = overviewEdit
+    ? description
+    : (projectQuery.data?.description ?? "");
+
+  useRegisterAssistantAttach(
+    useMemo(() => {
+      if (invalidId || tab !== "overview") return null;
+      return {
+        key: `project-${projectId}-overview`,
+        label: overviewName.trim() || `Project #${projectId}`,
+        getContext: () =>
+          `Project #${projectId}\nName: ${overviewName}\nStatus: ${overviewStatus}\n\n${overviewDescription}`,
+      };
+    }, [invalidId, tab, projectId, overviewName, overviewStatus, overviewDescription]),
+  );
 
   const modulesQuery = useQuery({
     queryKey: ["project-modules", projectId],
@@ -218,7 +229,10 @@ export function ProjectDetailPage() {
     },
   });
 
-  const projectTodoLists = todoListsQuery.data ?? [];
+  const projectTodoLists = useMemo(
+    () => todoListsQuery.data ?? [],
+    [todoListsQuery.data],
+  );
 
   const todoListItemCountQueries = useQueries({
     queries: projectTodoLists.map((l) => ({
@@ -301,10 +315,10 @@ export function ProjectDetailPage() {
   });
 
   const project = projectQuery.data;
-  const modules = modulesQuery.data ?? [];
-  const groups = groupsQuery.data ?? [];
+  const modules = useMemo(() => modulesQuery.data ?? [], [modulesQuery.data]);
+  const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
   const tasks = tasksQuery.data ?? [];
-  const documents = documentsQuery.data ?? [];
+  const documents = useMemo(() => documentsQuery.data ?? [], [documentsQuery.data]);
 
   const taskListFilterKey = storageKeyForProjectTasks(projectId);
   const {
@@ -362,37 +376,67 @@ export function ProjectDetailPage() {
     [documents, selectedDocId],
   );
 
+  // Disabled-module tab → overview (router sync only).
   useEffect(() => {
+    if (!modulesQuery.isSuccess) return;
+    if (tab === "overview" || tab === "images" || tab === "settings") return;
+    const mod = modules.find((m) => m.moduleKey === tab);
+    if (mod?.enabled) return;
+    setSearchParams({}, { replace: true });
+  }, [modules, modulesQuery.isSuccess, tab, setSearchParams]);
+
+  // Adopt ?doc= once the document list includes it.
+  if (initialDocId == null) {
+    if (appliedDocParam != null) setAppliedDocParam(null);
+  } else if (
+    tab === "documents" &&
+    appliedDocParam !== initialDocId &&
+    documents.some((d) => d.id === initialDocId)
+  ) {
+    setAppliedDocParam(initialDocId);
+    setSelectedDocId(initialDocId);
+  }
+
+  useEffect(() => {
+    if (initialDocId == null || appliedDocParam !== initialDocId) return;
+    if (!searchParams.has("doc")) return;
+    clearSearchParam("doc");
+  }, [initialDocId, appliedDocParam, searchParams, clearSearchParam]);
+
+  // Adopt ?open= once the task list includes it.
+  if (openTaskId == null) {
+    if (appliedOpenParam != null) setAppliedOpenParam(null);
+  } else if (tab === "tasks" && appliedOpenParam !== openTaskId) {
+    const task = tasks.find((t) => t.id === openTaskId);
+    if (task) {
+      setAppliedOpenParam(openTaskId);
+      setRequestOpenTask(task);
+    }
+  }
+
+  useEffect(() => {
+    if (openTaskId == null || appliedOpenParam !== openTaskId) return;
+    if (!searchParams.has("open")) return;
+    clearSearchParam("open");
+  }, [openTaskId, appliedOpenParam, searchParams, clearSearchParam]);
+
+  if (boundProjectId !== projectId) {
+    setBoundProjectId(projectId);
+    setAppliedDocParam(null);
+    setAppliedOpenParam(null);
+    setSelectedDocId(null);
+    setRequestOpenTask(null);
+    setOverviewEdit(false);
+  }
+
+  const beginOverviewEdit = () => {
     if (project) {
       setName(project.name);
       setStatus(project.status);
       setDescription(project.description ?? "");
     }
-  }, [project, overviewEdit]);
-
-  useEffect(() => {
-    if (!modulesQuery.isSuccess) return;
-    if (tab === "overview" || tab === "images" || tab === "settings") return;
-    const mod = modules.find((m) => m.moduleKey === tab);
-    if (!mod?.enabled) setTab("overview");
-  }, [modules, modulesQuery.isSuccess, tab]);
-
-  useEffect(() => {
-    if (initialDocApplied.current || tab !== "documents" || initialDocId == null) return;
-    if (!documents.some((d) => d.id === initialDocId)) return;
-    initialDocApplied.current = true;
-    setSelectedDocId(initialDocId);
-    clearSearchParam("doc");
-  }, [tab, initialDocId, documents]);
-
-  useEffect(() => {
-    if (initialOpenTaskApplied.current || tab !== "tasks" || openTaskId == null) return;
-    const task = tasks.find((t) => t.id === openTaskId);
-    if (!task) return;
-    initialOpenTaskApplied.current = true;
-    setRequestOpenTask(task);
-    clearSearchParam("open");
-  }, [tab, openTaskId, tasks]);
+    setOverviewEdit(true);
+  };
 
   const cancelOverviewEdit = () => {
     if (project) {
@@ -618,7 +662,7 @@ export function ProjectDetailPage() {
                     className="btn small btn-icon"
                     aria-label="Edit overview"
                     title="Edit"
-                    onClick={() => setOverviewEdit(true)}
+                    onClick={beginOverviewEdit}
                   >
                     <PencilIcon />
                   </button>
@@ -658,7 +702,12 @@ export function ProjectDetailPage() {
                 <div className="field field--tags-below">
                   <TagInput entityType="project" entityId={projectId} readOnly />
                 </div>
-                <MarkdownEditor value={description} onChange={() => undefined} autoHeight readOnly />
+                <MarkdownEditor
+                  value={project.description ?? ""}
+                  onChange={() => undefined}
+                  autoHeight
+                  readOnly
+                />
               </>
             )}
             {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
@@ -1077,20 +1126,23 @@ function DocumentEditor({
   busy: boolean;
 }) {
   const kind = doc.kind ?? "markdown";
-  const [title, setTitle] = useState(() => sanitizePlainText(doc.title));
+  const sanitizedTitle = sanitizePlainText(doc.title);
+  const [title, setTitle] = useState(sanitizedTitle);
   const [body, setBody] = useState(doc.body ?? "");
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(() => sanitizePlainText(doc.title));
+  const [titleDraft, setTitleDraft] = useState(sanitizedTitle);
+  const [prevDocTitle, setPrevDocTitle] = useState(doc.title);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const skipTitleCommitRef = useRef(false);
 
-  useEffect(() => {
-    setTitle(sanitizePlainText(doc.title));
-    if (!editingTitle) setTitleDraft(sanitizePlainText(doc.title));
-  }, [doc.title, editingTitle]);
+  if (doc.title !== prevDocTitle) {
+    setPrevDocTitle(doc.title);
+    setTitle(sanitizedTitle);
+    if (!editingTitle) setTitleDraft(sanitizedTitle);
+  }
 
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();

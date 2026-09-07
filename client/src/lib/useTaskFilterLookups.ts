@@ -8,6 +8,9 @@ export type FilterTagOption = Pick<Tag, "id" | "name">;
 
 type TaggingRow = Tag & { entityId: number };
 
+const EMPTY_TAGS: Tag[] = [];
+const EMPTY_PROJECTS: Project[] = [];
+
 export function useTaskFilterLookups(opts: { includeProjects: boolean }): {
   tags: FilterTagOption[];
   projects: Project[];
@@ -38,8 +41,8 @@ export function useTaskFilterLookups(opts: { includeProjects: boolean }): {
     },
   });
 
-  const tags = tagsQuery.data ?? [];
-  const projects = projectsQuery.data ?? [];
+  const tags = tagsQuery.data ?? EMPTY_TAGS;
+  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
 
   const tagNames = useMemo(
     () => new Map(tags.map((t) => [t.id, t.name])),

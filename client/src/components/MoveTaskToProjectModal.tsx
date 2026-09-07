@@ -16,6 +16,17 @@ export function MoveTaskToProjectModal({ open, currentProjectId, onClose, onSave
   const [selectedId, setSelectedId] = useState<number | null>(currentProjectId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const initKey = open ? `open:${currentProjectId}` : "closed";
+  const [prevInitKey, setPrevInitKey] = useState(initKey);
+  if (prevInitKey !== initKey) {
+    setPrevInitKey(initKey);
+    if (open) {
+      setQuery("");
+      setSelectedId(currentProjectId);
+      setError(null);
+      setBusy(false);
+    }
+  }
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -25,14 +36,6 @@ export function MoveTaskToProjectModal({ open, currentProjectId, onClose, onSave
       return res.data;
     },
   });
-
-  useEffect(() => {
-    if (!open) return;
-    setQuery("");
-    setSelectedId(currentProjectId);
-    setError(null);
-    setBusy(false);
-  }, [open, currentProjectId]);
 
   useEffect(() => {
     if (!open) return;

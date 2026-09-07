@@ -76,13 +76,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setSticky = useCallback((next: StickyProjectTheme | null) => {
-    persistStickyProjectTheme(next);
     setStickyState(next);
   }, []);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    persistStickyProjectTheme(sticky);
+  }, [sticky]);
 
   useEffect(() => {
     if (isViteDevInstance()) applyInstanceFavicon("dev");
@@ -117,27 +120,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [setApplied]);
 
-  // Sticky apply when entering a project that has an explicit override.
-  useEffect(() => {
-    if (!separateProjectThemes || routeProjectId == null) return;
+  // Sticky apply when entering a project that has an explicit override (setState only;
+  // theme DOM + sticky persist run in effects above).
+  if (separateProjectThemes && routeProjectId != null) {
     const override = getProjectThemeFromMap(projectThemes, routeProjectId);
-    if (override == null) return;
-    if (sticky?.projectId === routeProjectId && sticky.theme === override) {
-      if (theme !== override) setApplied(override);
-      return;
+    if (override != null) {
+      if (sticky?.projectId !== routeProjectId || sticky.theme !== override) {
+        setStickyState({ projectId: routeProjectId, theme: override });
+      }
+      if (theme !== override) {
+        setThemeState(override);
+      }
     }
-    setSticky({ projectId: routeProjectId, theme: override });
-    setApplied(override);
-  }, [
-    separateProjectThemes,
-    routeProjectId,
-    projectThemes,
-    sticky?.projectId,
-    sticky?.theme,
-    theme,
-    setApplied,
-    setSticky,
-  ]);
+  }
 
   const setPlatformTheme = useCallback(
     (next: ThemeId) => {

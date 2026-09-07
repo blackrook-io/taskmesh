@@ -115,10 +115,6 @@ function SortableBoardTab({
   const [draft, setDraft] = useState(board.name);
   const empty = (board.cardCount ?? 0) === 0;
 
-  useEffect(() => {
-    if (!editing) setDraft(board.name);
-  }, [board.name, editing]);
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -166,6 +162,7 @@ function SortableBoardTab({
           onDoubleClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            setDraft(board.name);
             setEditing(true);
           }}
         >
@@ -415,10 +412,6 @@ function LaneHead({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(lane?.name ?? "Unassigned");
 
-  useEffect(() => {
-    if (!editing) setDraft(lane?.name ?? "Unassigned");
-  }, [lane?.name, editing]);
-
   if (lane == null) {
     return (
       <div className="kanban-lane__head">
@@ -449,7 +442,14 @@ function LaneHead({
           }}
         />
       ) : (
-        <button type="button" className="kanban-lane__title" onClick={() => setEditing(true)}>
+        <button
+          type="button"
+          className="kanban-lane__title"
+          onClick={() => {
+            setDraft(lane.name);
+            setEditing(true);
+          }}
+        >
           {lane.name}
         </button>
       )}
@@ -498,8 +498,10 @@ export function KanbanBoardsPanel({
   const [boardOrder, setBoardOrder] = useState<number[]>([]);
   const [cellsState, setCellsState] = useState<Record<string, number[]>>({});
   const cellsRef = useRef(cellsState);
+  // eslint-disable-next-line react-hooks/refs -- latest callback ref
   cellsRef.current = cellsState;
-  const initialBoardApplied = useRef(false);
+  const [initialBoardApplied, setInitialBoardApplied] = useState(false);
+  const initialBoardNotifiedRef = useRef(false);
 
   const boardsQuery = useQuery({
     queryKey: ["boards", projectId],
@@ -509,7 +511,13 @@ export function KanbanBoardsPanel({
     },
   });
 
-  const boards = boardsQuery.data ?? [];
+  const boards = useMemo(() => boardsQuery.data ?? [], [boardsQuery.data]);
+  const [boardsData, setBoardsData] = useState(boardsQuery.data);
+  if (boardsQuery.data !== boardsData) {
+    setBoardsData(boardsQuery.data);
+    setBoardOrder((boardsQuery.data ?? []).map((b) => b.id));
+  }
+
   const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
   const orderedBoards = useMemo(
     () =>
@@ -520,17 +528,20 @@ export function KanbanBoardsPanel({
   );
   const activeBoardId = selectedId ?? orderedBoards[0]?.id ?? null;
 
-  useEffect(() => {
-    setBoardOrder(boards.map((b) => b.id));
-  }, [boards]);
+  if (
+    !initialBoardApplied &&
+    initialBoardId != null &&
+    boards.some((b) => b.id === initialBoardId)
+  ) {
+    setInitialBoardApplied(true);
+    setSelectedId(initialBoardId);
+  }
 
   useEffect(() => {
-    if (initialBoardApplied.current || initialBoardId == null) return;
-    if (!boards.some((b) => b.id === initialBoardId)) return;
-    initialBoardApplied.current = true;
-    setSelectedId(initialBoardId);
+    if (!initialBoardApplied || initialBoardNotifiedRef.current) return;
+    initialBoardNotifiedRef.current = true;
     onInitialBoardConsumed?.();
-  }, [initialBoardId, boards, onInitialBoardConsumed]);
+  }, [initialBoardApplied, onInitialBoardConsumed]);
 
   const detailQuery = useQuery({
     queryKey: ["board", projectId, activeBoardId],
@@ -544,16 +555,19 @@ export function KanbanBoardsPanel({
   });
 
   const detail = detailQuery.data;
+  const [cellsDetail, setCellsDetail] = useState(detail);
+  if (detail !== cellsDetail) {
+    setCellsDetail(detail);
+    if (detail) {
+      setCellsState(cardIdsByCell(detail.columns, detail.lanes, detail.cards));
+    }
+  }
+
   const cardsById = useMemo(() => {
     const m = new Map<number, BoardCard>();
     for (const c of detail?.cards ?? []) m.set(c.id, c);
     return m;
   }, [detail?.cards]);
-
-  useEffect(() => {
-    if (!detail) return;
-    setCellsState(cardIdsByCell(detail.columns, detail.lanes, detail.cards));
-  }, [detail]);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["boards", projectId] });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   emptyTodoListFilter,
   isTodoFilterActive,
@@ -9,10 +9,11 @@ import {
 
 export function usePersistedTodoListFilter(storageKey: string) {
   const [filter, setFilter] = useState<TodoListFilter>(() => loadTodoListFilter(storageKey));
-
-  useEffect(() => {
+  const [prevKey, setPrevKey] = useState(storageKey);
+  if (prevKey !== storageKey) {
+    setPrevKey(storageKey);
     setFilter(loadTodoListFilter(storageKey));
-  }, [storageKey]);
+  }
 
   const applyFilter = useCallback(
     (next: TodoListFilter) => {

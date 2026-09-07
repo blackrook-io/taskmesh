@@ -1,6 +1,5 @@
 import {
   Children,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -52,9 +51,16 @@ export function KanbanBoardCarousel({
   const [colWidth, setColWidth] = useState(FALLBACK_COL);
   const [gap, setGap] = useState(FALLBACK_GAP);
   const [page, setPage] = useState(0);
+  const [pageBasis, setPageBasis] = useState(`${boardKey}:${columnCount}`);
 
   const showGhost = ghostInsertAt != null && ghost != null;
   const visualCount = columnCount + (showGhost ? 1 : 0);
+
+  const nextPageBasis = `${boardKey}:${columnCount}`;
+  if (nextPageBasis !== pageBasis) {
+    setPageBasis(nextPageBasis);
+    setPage(0);
+  }
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -79,10 +85,6 @@ export function KanbanBoardCarousel({
     return () => ro.disconnect();
   }, [visualCount, boardKey]);
 
-  useEffect(() => {
-    setPage(0);
-  }, [boardKey, columnCount]);
-
   const step = colWidth + gap;
   const colsPerPage = useMemo(() => {
     if (viewportWidth <= 0 || step <= 0) return 1;
@@ -92,10 +94,10 @@ export function KanbanBoardCarousel({
 
   const pageCount = Math.max(1, Math.ceil(visualCount / colsPerPage));
   const overflows = visualCount > colsPerPage;
-
-  useEffect(() => {
-    setPage((p) => Math.min(p, pageCount - 1));
-  }, [pageCount]);
+  const clampedPage = Math.min(page, pageCount - 1);
+  if (clampedPage !== page) {
+    setPage(clampedPage);
+  }
 
   const maxOffset = Math.max(0, visualCount * step - gap - viewportWidth);
   const idealOffset = page * colsPerPage * step;

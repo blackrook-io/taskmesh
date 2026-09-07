@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
@@ -30,12 +30,14 @@ export function IdeaEditPage() {
     },
   });
 
-  useEffect(() => {
+  const [prevIdea, setPrevIdea] = useState(idea);
+  if (idea !== prevIdea) {
+    setPrevIdea(idea);
     if (idea) {
       setTitle(sanitizePlainText(idea.title));
       setBody(idea.body ?? "");
     }
-  }, [idea]);
+  }
 
   useRegisterAssistantAttach(
     useMemo(

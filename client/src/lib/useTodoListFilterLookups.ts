@@ -11,6 +11,8 @@ export type FilterTagOption = Pick<Tag, "id" | "name">;
 
 type TaggingRow = Tag & { entityId: number };
 
+const EMPTY_TAGS: Tag[] = [];
+
 export function useTodoListFilterLookups(): {
   tags: FilterTagOption[];
   filterCtx: TodoFilterMatchContext;
@@ -47,7 +49,7 @@ export function useTodoListFilterLookups(): {
     },
   });
 
-  const tags = tagsQuery.data ?? [];
+  const tags = tagsQuery.data ?? EMPTY_TAGS;
 
   const tagNames = useMemo(() => new Map(tags.map((t) => [t.id, t.name])), [tags]);
 

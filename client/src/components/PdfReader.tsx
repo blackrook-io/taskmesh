@@ -62,6 +62,10 @@ async function fetchPdfBytes(url: string): Promise<Uint8Array> {
 }
 
 export function PdfReader({ fileUrl, title }: Props) {
+  return <PdfReaderInner key={fileUrl} fileUrl={fileUrl} title={title} />;
+}
+
+function PdfReaderInner({ fileUrl, title }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
@@ -110,14 +114,6 @@ export function PdfReader({ fileUrl, title }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setPage(1);
-    setPageCount(0);
-    setPasswordReason(null);
-    setPasswordDraft("");
-    setPasswordBusy(false);
-    passwordUpdateRef.current = null;
 
     void (async () => {
       try {

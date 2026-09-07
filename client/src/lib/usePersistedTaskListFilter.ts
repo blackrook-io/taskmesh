@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   emptyTaskListFilter,
   isFilterActive,
@@ -9,10 +9,11 @@ import {
 
 export function usePersistedTaskListFilter(storageKey: string) {
   const [filter, setFilter] = useState<TaskListFilter>(() => loadTaskListFilter(storageKey));
-
-  useEffect(() => {
+  const [prevKey, setPrevKey] = useState(storageKey);
+  if (prevKey !== storageKey) {
+    setPrevKey(storageKey);
     setFilter(loadTaskListFilter(storageKey));
-  }, [storageKey]);
+  }
 
   const applyFilter = useCallback(
     (next: TaskListFilter) => {

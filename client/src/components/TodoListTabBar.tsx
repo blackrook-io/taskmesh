@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { formatEntityRef } from "../lib/entityRef";
 import type { TodoList } from "../types";
 
@@ -19,10 +19,6 @@ function TodoListTab({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(list.title);
-
-  useEffect(() => {
-    if (!editing) setDraft(list.title);
-  }, [list.title, editing]);
 
   const commitRename = () => {
     setEditing(false);
@@ -64,6 +60,7 @@ function TodoListTab({
           onClick={onSelect}
           onDoubleClick={(e) => {
             e.preventDefault();
+            setDraft(list.title);
             setEditing(true);
           }}
         >
@@ -111,13 +108,15 @@ export function TodoListTabBar({
 }: Props) {
   const [creatingNew, setCreatingNew] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [wasCreating, setWasCreating] = useState(creating);
 
-  useEffect(() => {
+  if (creating !== wasCreating) {
+    setWasCreating(creating);
     if (!creating) {
       setCreatingNew(false);
       setNewTitle("");
     }
-  }, [creating]);
+  }
 
   const commitCreate = () => {
     const title = newTitle.trim();

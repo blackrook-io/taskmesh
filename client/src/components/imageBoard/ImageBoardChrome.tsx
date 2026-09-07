@@ -8,10 +8,11 @@ type Props = {
 
 export function TextToolbar({ text, onChange }: Props) {
   const [color, setColor] = useState(text.color);
-
-  useEffect(() => {
+  const [prevColor, setPrevColor] = useState(text.color);
+  if (prevColor !== text.color) {
+    setPrevColor(text.color);
     setColor(text.color);
-  }, [text.color]);
+  }
 
   return (
     <div className="ib-text-toolbar" role="toolbar" aria-label="Text formatting">

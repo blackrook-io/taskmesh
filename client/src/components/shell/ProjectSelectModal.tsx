@@ -18,6 +18,11 @@ export function ProjectSelectModal({ open, activeProjectId, onClose, onNavigate 
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [query, setQuery] = useState("");
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (open) setQuery("");
+  }
   const onAllProjects = pathname === "/projects";
 
   const projectsQuery = useQuery({
@@ -28,11 +33,6 @@ export function ProjectSelectModal({ open, activeProjectId, onClose, onNavigate 
       return res.data;
     },
   });
-
-  useEffect(() => {
-    if (!open) return;
-    setQuery("");
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;

@@ -251,6 +251,11 @@ function flattenSearch(data: SearchResults): PaletteItem[] {
 }
 
 export function CommandPalette({ open, onClose }: Props) {
+  if (!open) return null;
+  return <CommandPaletteDialog onClose={onClose} />;
+}
+
+function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const showAdmin = userIsAdministrator(user);
@@ -260,9 +265,9 @@ export function CommandPalette({ open, onClose }: Props) {
   const titleId = useId();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [searchHits, setSearchHits] = useState<PaletteItem[]>([]);
+  const [fetchedHits, setFetchedHits] = useState<PaletteItem[]>([]);
   const [searching, setSearching] = useState(false);
-  const [recentTick, setRecentTick] = useState(0);
+  const [indexResetKey, setIndexResetKey] = useState({ query: "", len: 0 });
 
   const staticCommands = useMemo(
     () =>
@@ -273,7 +278,6 @@ export function CommandPalette({ open, onClose }: Props) {
   );
 
   const recentItems = useMemo((): PaletteItem[] => {
-    void recentTick;
     return loadRecentNav()
       .filter((r) => showAdmin || !r.path.startsWith("/admin"))
       .map((r, i) => ({
@@ -283,10 +287,12 @@ export function CommandPalette({ open, onClose }: Props) {
         hint: r.path,
         path: r.path,
       }));
-  }, [recentTick, showAdmin]);
+  }, [showAdmin]);
+
+  const q = query.trim();
 
   const items = useMemo(() => {
-    const q = query.trim();
+    const searchHits = q.length < 1 ? [] : fetchedHits;
     if (q.length >= 1) {
       const filteredStatic = staticCommands.filter((c) =>
         c.label.toLowerCase().includes(q.toLowerCase()),
@@ -294,44 +300,35 @@ export function CommandPalette({ open, onClose }: Props) {
       return [...searchHits, ...filteredStatic];
     }
     return [...recentItems, ...staticCommands];
-  }, [query, searchHits, recentItems, staticCommands]);
+  }, [q, fetchedHits, recentItems, staticCommands]);
 
-  useEffect(() => {
+  if (query !== indexResetKey.query || items.length !== indexResetKey.len) {
+    setIndexResetKey({ query, len: items.length });
     setActiveIndex(0);
-  }, [items.length, query]);
+  }
 
   useEffect(() => {
-    if (!open) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
-    setQuery("");
-    setSearchHits([]);
-    setRecentTick((n) => n + 1);
     const t = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => {
       window.clearTimeout(t);
       previouslyFocused.current?.focus?.();
     };
-  }, [open]);
+  }, []);
 
   useEffect(() => {
-    if (!open) return;
-    const q = query.trim();
-    if (q.length < 1) {
-      setSearchHits([]);
-      setSearching(false);
-      return;
-    }
+    if (q.length < 1) return;
     let cancelled = false;
-    setSearching(true);
     const timer = window.setTimeout(() => {
+      setSearching(true);
       void apiJson<{ data: SearchResults }>(
         `/api/v1/search?q=${encodeURIComponent(q)}`,
       )
         .then((res) => {
-          if (!cancelled) setSearchHits(flattenSearch(res.data));
+          if (!cancelled) setFetchedHits(flattenSearch(res.data));
         })
         .catch(() => {
-          if (!cancelled) setSearchHits([]);
+          if (!cancelled) setFetchedHits([]);
         })
         .finally(() => {
           if (!cancelled) setSearching(false);
@@ -341,7 +338,7 @@ export function CommandPalette({ open, onClose }: Props) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, open]);
+  }, [q]);
 
   const go = useCallback(
     (item: PaletteItem) => {
@@ -376,7 +373,6 @@ export function CommandPalette({ open, onClose }: Props) {
   );
 
   useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -421,18 +417,15 @@ export function CommandPalette({ open, onClose }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, items, activeIndex, go]);
+  }, [onClose, items, activeIndex, go]);
 
   // Keep active row visible
   useEffect(() => {
-    if (!open) return;
     const el = listRef.current?.querySelector<HTMLElement>(
       `[data-palette-index="${activeIndex}"]`,
     );
     el?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, open]);
-
-  if (!open) return null;
+  }, [activeIndex]);
 
   let lastGroup = "";
 
@@ -471,8 +464,10 @@ export function CommandPalette({ open, onClose }: Props) {
           role="listbox"
           ref={listRef}
         >
-          {searching ? <p className="muted command-palette__status">Searching…</p> : null}
-          {!searching && items.length === 0 ? (
+          {searching && q.length >= 1 ? (
+            <p className="muted command-palette__status">Searching…</p>
+          ) : null}
+          {!(searching && q.length >= 1) && items.length === 0 ? (
             <p className="muted command-palette__status">No matches</p>
           ) : null}
           {items.map((item, index) => {

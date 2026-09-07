@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { apiJson } from "../../api/client";
 import { ThemeSwitcher } from "../shell/ThemeSwitcher";
 import { isThemeId, type ThemeId } from "../../lib/theme";
@@ -37,17 +37,20 @@ export function AdminSystemPropertiesPanel() {
     },
   });
 
-  useEffect(() => {
-    if (!propsQuery.data) return;
-    setRate(String(propsQuery.data.apiRateLimitPerMinute));
-    setThreshold(String(propsQuery.data.loginFailureThreshold));
-    if (hasSessionTimeoutMinutes(propsQuery.data)) {
-      setSessionTimeout(String(propsQuery.data.sessionTimeoutMinutes));
+  const [prevData, setPrevData] = useState(propsQuery.data);
+  if (propsQuery.data !== prevData) {
+    setPrevData(propsQuery.data);
+    if (propsQuery.data) {
+      setRate(String(propsQuery.data.apiRateLimitPerMinute));
+      setThreshold(String(propsQuery.data.loginFailureThreshold));
+      if (hasSessionTimeoutMinutes(propsQuery.data)) {
+        setSessionTimeout(String(propsQuery.data.sessionTimeoutMinutes));
+      }
+      if (isThemeId(propsQuery.data.defaultTheme)) {
+        setDefaultTheme(propsQuery.data.defaultTheme);
+      }
     }
-    if (isThemeId(propsQuery.data.defaultTheme)) {
-      setDefaultTheme(propsQuery.data.defaultTheme);
-    }
-  }, [propsQuery.data]);
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {

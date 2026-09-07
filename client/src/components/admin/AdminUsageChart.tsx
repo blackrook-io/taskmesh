@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- intentional co-exports (helpers/hooks with components) */
 import { useMemo } from "react";
 
 export type UsageRange = "1h" | "1d" | "1w" | "1m";

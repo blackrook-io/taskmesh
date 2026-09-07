@@ -78,7 +78,7 @@ GitHub Actions [`.github/workflows/security-ci.yml`](.github/workflows/security-
 | `npm test` (includes `secureInputs` / SSRF / magic-byte tests; CI sets dummy `DATABASE_URL` for middleware imports) | **hard** |
 | `npm run build` (API `tsc`) | **hard** |
 | `npm run build --prefix client` | **hard** |
-| `npm run lint --prefix client` | **hard** (errors fail; intentional warnings OK — see T0126 for `set-state-in-effect` cleanup) |
+| `npm run lint --prefix client` | **hard** (`eslint . --max-warnings 0`; T0126 cleared warn backlog / re-raised Compiler rules) |
 | `npm run security:scan -- --modules repo_static --fail-on-findings` | **hard** |
 | `npm run security:scan -- --modules repo_npm_audit --fail-on-findings` | **hard** (T0124) |
 
@@ -102,14 +102,14 @@ Run after adding a route or query:
 |------|--------|
 | **T0086** | Automated security tests in CI (workflow on `main`) — complete |
 | **T0124** | Production `npm audit` high/critical remediated; `repo_npm_audit` hard-gated in CI — complete |
-| **T0125** | Clean client ESLint baseline + hard-gate lint in CI — complete with this work |
-| **T0126** | Incremental `set-state-in-effect` refactors; optionally re-raise rule to error |
+| **T0125** | Clean client ESLint baseline + hard-gate lint in CI — complete |
+| **T0126** | Zero client ESLint warnings; `set-state-in-effect` / refs / refresh at error; `--max-warnings 0` — complete with this work |
 | **T0112** | Ownership schema + helpers (`ownerId`, backfill) — complete |
 | **T0113** | Project-tree list/get/mutate ownership enforcement — complete |
 | **T0114** | Standalone entities, per-user tags, uploads, creator-owned templates — complete |
 | **T0115** | Search / assistant / import-export scoping + admin ownership transfer — complete |
 
-**T0110** is the parent epic for T0112–T0115. Ownership enforcement (project tree, standalone, search, assistant, import/export) and admin transfer are complete. Remaining multi-user residuals are outside this epic (sharing/teams). Security CI lint residual warn cleanup: **T0126**.
+**T0110** is the parent epic for T0112–T0115. Ownership enforcement (project tree, standalone, search, assistant, import/export) and admin transfer are complete. Remaining multi-user residuals are outside this epic (sharing/teams).
 
 ## Secrets and host hardening (T0087)
 

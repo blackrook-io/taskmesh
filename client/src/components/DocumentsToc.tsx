@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+/* eslint-disable react-refresh/only-export-components -- intentional co-exports (helpers/hooks with components) */
+import { useMemo, useState } from "react";
 import { formatEntityRef } from "../lib/entityRef";
 import { formatTimelineWhen } from "../lib/taskTimeline";
 import type { ProjectDocument } from "../types";
@@ -53,18 +54,19 @@ type Props = {
 export function DocumentsToc({ documents, selectedId, onSelect }: Props) {
   const entries = useMemo(() => buildDocumentsTocEntries(documents), [documents]);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
+  const [autoExpandForId, setAutoExpandForId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (selectedId == null) return;
-    const doc = documents.find((d) => d.id === selectedId);
-    if (!doc || getDbSchemaChildTitle(doc.title) == null) return;
-    setCollapsedFolders((prev) => {
-      if (!prev.has("DB Schema")) return prev;
-      const next = new Set(prev);
-      next.delete("DB Schema");
-      return next;
-    });
-  }, [selectedId, documents]);
+  if (selectedId !== autoExpandForId) {
+    setAutoExpandForId(selectedId);
+    if (selectedId != null) {
+      const doc = documents.find((d) => d.id === selectedId);
+      if (doc && getDbSchemaChildTitle(doc.title) != null && collapsedFolders.has("DB Schema")) {
+        const next = new Set(collapsedFolders);
+        next.delete("DB Schema");
+        setCollapsedFolders(next);
+      }
+    }
+  }
 
   const toggleFolder = (label: string) => {
     setCollapsedFolders((prev) => {

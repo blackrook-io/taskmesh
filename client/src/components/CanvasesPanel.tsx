@@ -47,14 +47,15 @@ function SortableCanvasTab({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(canvas.title);
 
-  useEffect(() => {
-    if (!editing) setDraft(canvas.title);
-  }, [canvas.title, editing]);
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.55 : 1,
+  };
+
+  const beginRename = () => {
+    setDraft(canvas.title);
+    setEditing(true);
   };
 
   const commitRename = () => {
@@ -98,7 +99,7 @@ function SortableCanvasTab({
           onDoubleClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setEditing(true);
+            beginRename();
           }}
         >
           <span className="muted">{formatEntityRef("canvas", canvas.number)} </span>
@@ -133,7 +134,12 @@ export function CanvasesPanel({
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [tabOrder, setTabOrder] = useState<number[]>([]);
-  const initialCanvasApplied = useRef(false);
+  const [tabOrderData, setTabOrderData] = useState<CanvasSummary[] | undefined>(undefined);
+  const [appliedInitialId, setAppliedInitialId] = useState<number | null>(null);
+  const onInitialCanvasConsumedRef = useRef(onInitialCanvasConsumed);
+  // latest callback ref
+  // eslint-disable-next-line react-hooks/refs -- keep consume callback fresh without re-running effect
+  onInitialCanvasConsumedRef.current = onInitialCanvasConsumed;
 
   const listQuery = useQuery({
     queryKey: ["canvases", projectId],
@@ -143,20 +149,26 @@ export function CanvasesPanel({
     },
   });
 
-  const canvases = listQuery.data ?? [];
+  const canvases = useMemo(() => listQuery.data ?? [], [listQuery.data]);
 
-  useEffect(() => {
-    if (!listQuery.data) return;
+  if (listQuery.data && listQuery.data !== tabOrderData) {
+    setTabOrderData(listQuery.data);
     setTabOrder(listQuery.data.map((c) => c.id));
-  }, [listQuery.data]);
+  }
+
+  if (
+    initialCanvasId != null &&
+    appliedInitialId !== initialCanvasId &&
+    canvases.some((c) => c.id === initialCanvasId)
+  ) {
+    setAppliedInitialId(initialCanvasId);
+    setSelectedId(initialCanvasId);
+  }
 
   useEffect(() => {
-    if (initialCanvasApplied.current || initialCanvasId == null) return;
-    if (!canvases.some((c) => c.id === initialCanvasId)) return;
-    initialCanvasApplied.current = true;
-    setSelectedId(initialCanvasId);
-    onInitialCanvasConsumed?.();
-  }, [initialCanvasId, canvases, onInitialCanvasConsumed]);
+    if (appliedInitialId == null) return;
+    onInitialCanvasConsumedRef.current?.();
+  }, [appliedInitialId]);
 
   const orderedCanvases = useMemo(() => {
     const byId = new Map(canvases.map((c) => [c.id, c]));

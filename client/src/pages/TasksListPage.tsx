@@ -119,10 +119,10 @@ export function TasksListPage() {
   const filter = searchParams.get("filter") === "unassigned" ? "unassigned" : "all";
   const openParam = searchParams.get("open");
   const wantNew = searchParams.get("new") === "1";
+  const parsedOpenId =
+    openParam != null && Number.isFinite(Number(openParam)) ? Number(openParam) : null;
 
-  const [modalTaskId, setModalTaskId] = useState<number | null>(
-    openParam && Number.isFinite(Number(openParam)) ? Number(openParam) : null,
-  );
+  const [modalTaskId, setModalTaskId] = useState<number | null>(parsedOpenId);
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
@@ -132,16 +132,21 @@ export function TasksListPage() {
     sortStorageKey,
     DEFAULT_GLOBAL_TASK_LIST_SORT,
   );
-  const [creating, setCreating] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
   const [moveTaskId, setMoveTaskId] = useState<number | null>(null);
   const [parentTaskId, setParentTaskId] = useState<number | null>(null);
+  const [prevWantNew, setPrevWantNew] = useState(wantNew);
+  const [urlCreateNonce, setUrlCreateNonce] = useState(() => (wantNew ? 1 : 0));
 
-  useEffect(() => {
-    if (openParam && Number.isFinite(Number(openParam))) {
-      setModalTaskId(Number(openParam));
-    }
-  }, [openParam]);
+  // Adopt ?open= during render (do not clear modal when the param is stripped).
+  if (parsedOpenId != null && parsedOpenId !== modalTaskId) {
+    setModalTaskId(parsedOpenId);
+  }
+
+  if (wantNew !== prevWantNew) {
+    setPrevWantNew(wantNew);
+    if (wantNew) setUrlCreateNonce((n) => n + 1);
+  }
 
   const tasksQuery = useQuery({
     queryKey: ["tasks", "all", filter],
@@ -189,7 +194,13 @@ export function TasksListPage() {
 
   const displayRows = useMemo(
     () =>
-      buildGlobalDisplayRows(filteredTasks, collapsedParents, sortCol, sortDir, projectLabel),
+      buildGlobalDisplayRows(
+        filteredTasks,
+        collapsedParents,
+        sortCol,
+        sortDir,
+        (id) => (id == null ? "—" : (projectNameById.get(id) ?? `Project #${id}`)),
+      ),
     [filteredTasks, collapsedParents, sortCol, sortDir, projectNameById],
   );
 
@@ -207,9 +218,9 @@ export function TasksListPage() {
 
   const modalTaskFromList =
     modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
-  useEffect(() => {
-    if (modalTaskFromList) setModalTaskHeld(modalTaskFromList);
-  }, [modalTaskFromList]);
+  if (modalTaskFromList != null && modalTaskFromList !== modalTaskHeld) {
+    setModalTaskHeld(modalTaskFromList);
+  }
 
   useEffect(() => {
     if (!openParam || !modalTaskFromList) return;
@@ -290,12 +301,13 @@ export function TasksListPage() {
     },
   });
 
+  // URL ?new=1 → prompt + create. Nonce is bumped during render when wantNew turns true;
+  // this effect only talks to window / router / mutation (no sync useState).
+  const createTaskMutate = createTask.mutate;
   useEffect(() => {
-    if (!wantNew || creating || createTask.isPending) return;
-    setCreating(true);
+    if (urlCreateNonce === 0) return;
     const title = window.prompt("New task title", "Untitled task");
     if (title == null || !title.trim()) {
-      setCreating(false);
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.delete("new");
@@ -303,10 +315,8 @@ export function TasksListPage() {
       });
       return;
     }
-    createTask.mutate(title.trim(), {
-      onSettled: () => setCreating(false),
-    });
-  }, [wantNew, creating, createTask, setSearchParams]);
+    createTaskMutate(title.trim());
+  }, [urlCreateNonce, setSearchParams, createTaskMutate]);
 
   const headerSort = (col: SortCol) => {
     setSort((prev) =>

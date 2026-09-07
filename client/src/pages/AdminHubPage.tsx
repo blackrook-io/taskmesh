@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- intentional co-exports (helpers/hooks with components) */
 import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { adminSectionFromPath, dispatchOpenAdmin } from "../lib/administration";

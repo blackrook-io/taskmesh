@@ -26,6 +26,8 @@ type Current = {
   sampledAt: string | null;
 };
 
+const EMPTY_SERIES: SeriesPoint[] = [];
+
 const CHARTS: {
   key: keyof Omit<SeriesPoint, "t">;
   label: string;
@@ -84,7 +86,7 @@ export function AdminDatabasePanel() {
     refetchInterval: 30_000,
   });
 
-  const series = statsQuery.data?.series ?? [];
+  const series = statsQuery.data?.series ?? EMPTY_SERIES;
   const current = statsQuery.data?.current;
 
   const totals = useMemo(() => {

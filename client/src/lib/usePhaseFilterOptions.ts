@@ -48,9 +48,12 @@ export function usePhaseFilterOptions(projectId?: number): {
     },
   });
 
-  const phases: PhaseFilterOption[] = scoped
-    ? (oneQuery.data ?? []).map((p) => ({ ...p, label: p.name }))
-    : (allQuery.data ?? []);
+  const phases = useMemo((): PhaseFilterOption[] => {
+    if (scoped) {
+      return (oneQuery.data ?? []).map((p) => ({ ...p, label: p.name }));
+    }
+    return allQuery.data ?? [];
+  }, [scoped, oneQuery.data, allQuery.data]);
 
   const phaseNames = useMemo(
     () => new Map(phases.map((p) => [p.id, p.label])),

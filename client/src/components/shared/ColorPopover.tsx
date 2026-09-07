@@ -36,13 +36,14 @@ export function ColorPopover({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(color ?? "");
+  const [prevColor, setPrevColor] = useState(color);
+  if (prevColor !== color) {
+    setPrevColor(color);
+    setCustom(color ?? "");
+  }
   const rootRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const hasChildren = children != null;
-
-  useEffect(() => {
-    setCustom(color ?? "");
-  }, [color]);
 
   useEffect(() => {
     if (!open) return;
