@@ -1179,6 +1179,21 @@ a.app-nav__item.active {
   color: var(--danger);
 }
 
+.backup-status-ok {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+.backup-status-fail {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.backup-row-actions {
+  flex-wrap: nowrap;
+}
+
 .backup-schedule-form {
   display: grid;
   gap: 0.55rem;

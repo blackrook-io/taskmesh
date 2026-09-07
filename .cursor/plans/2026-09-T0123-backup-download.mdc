@@ -1,0 +1,60 @@
+# T0123 — Backups should be downloadable
+
+**Task:** T0123 (id 136) — Backups should be downloadable  
+**Branch (pending approval):** `T0123-backup-download`  
+**State at plan:** `ready`
+
+## Goal
+
+Administrators can download a **complete** backup from the Backups list (DB dump + on-disk upload files used by Documents and other media), without SSH/filesystem access.
+
+## Current state (findings)
+
+- `runBackup()` already writes per-backup:
+  - `taskmesh-<id>.sql` (pg_dump)
+  - `uploads-<id>.tar.gz` (full `UPLOAD_DIR` tree)
+  - `manifest.json`
+- Document EPUB/PDF binaries are stored via `uploads` + files under `UPLOAD_DIR`; markdown Document bodies live in Postgres. Restoring DB + uploads already reconstitutes Documents.
+- Backups UI has Restore / Delete per row; **no Download** action or download API yet.
+
+## Decisions (interview)
+
+1. **Download format:** One archive of the **entire** backup folder (SQL + uploads tar + manifest) — “everything.”
+2. **Uploads completeness:** Already done via `UPLOAD_DIR` tar; verify only, no extra paths.
+3. **UI affordances:**
+   - Download: icon-only
+   - Restore → up-arrow icon
+   - Delete → red trashcan icon
+   - DB / Uploads “OK” cells → green checkmarks (failures stay clearly non-OK)
+
+## Scope
+
+1. **API** — Admin-only `GET /api/v1/backups/:id/download` that streams a single archive of that backup directory (SQL + uploads tar + manifest). Reject missing/invalid ids; reuse existing admin gate + sensible rate limits for large responses.
+2. **UI** — Icon-only Download / Restore / Delete on each row; green checkmarks for OK DB/Uploads columns; triggers authenticated download of the complete archive. Disabled when the backup folder is unusable (e.g. missing files).
+3. **Backup completeness** — Verify only (uploads already included). No schema migration.
+4. **Docs touch** — Brief note in INSTALL.md Backups section that Admins can download complete archives from the UI.
+
+## Out of scope (unless deferred to new Tasks)
+
+- Off-site / S3 export, email delivery, or scheduled push of archives
+- Client-side zip of only SQL without uploads
+- Changing restore semantics
+- Non-admin download access
+- Extra data paths beyond `UPLOAD_DIR`
+
+## Implementation outline
+
+| Area | Change |
+|------|--------|
+| `src/services/backups.ts` | Resolve/validate backup dir; stream or build download tar of folder contents |
+| `src/routes/v1/backups.ts` | `GET /:id/download` — `Content-Disposition` attachment, stream file, admin + rate limit |
+| `client/.../BackupsPage.tsx` | Icon actions (download / restore↑ / delete trash); green checks for OK |
+| INSTALL.md | One-line mention of Download |
+
+## Acceptance
+
+- [ ] Each backup row has icon-only Download, Restore (up arrow), Delete (red trash)
+- [ ] DB/Uploads OK shown as green checkmarks
+- [ ] Downloaded archive contains SQL dump + uploads archive (+ manifest)
+- [ ] Non-admins cannot download
+- [ ] Delete confirmation / restore flows unchanged

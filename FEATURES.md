@@ -95,7 +95,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 ## Backup & data
 
-- Scheduled and on-demand backups of PostgreSQL plus uploaded files, with restore and safety dumps
+- Scheduled and on-demand backups of PostgreSQL plus uploaded files, with admin download of complete archives, restore, and safety dumps
 - CSV export and insert-only CSV/XLSX import for projects and tasks
 - Confirm before destructive deletes so accidents stay rare
 

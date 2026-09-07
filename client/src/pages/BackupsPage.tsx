@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { faArrowUp, faCheck, faDownload, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { useState } from "react";
-import { apiJson } from "../api/client";
+import { apiJson, applySpaClientHeaders } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { NavIcon } from "../components/shell/NavIcon";
 
 type BackupItem = {
   id: string;
@@ -49,11 +51,56 @@ function healthLabel(h: string): string {
   return "No backup";
 }
 
+function StatusOk({ ok }: { ok: boolean }) {
+  if (ok) {
+    return (
+      <span className="backup-status-ok" title="OK">
+        <NavIcon icon={faCheck} size={14} />
+        <span className="sr-only">OK</span>
+      </span>
+    );
+  }
+  return <span className="backup-status-fail">Fail</span>;
+}
+
+async function downloadBackupArchive(id: string): Promise<void> {
+  const headers = new Headers();
+  applySpaClientHeaders(headers);
+  const res = await fetch(`/api/v1/backups/${encodeURIComponent(id)}/download`, {
+    method: "GET",
+    headers,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    let message = res.statusText || "Download failed";
+    try {
+      const json = (await res.json()) as { error?: { message?: string } };
+      if (json.error?.message) message = json.error.message;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `taskmesh-backup-${id}.tar.gz`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export function BackupsPage({ embedded = false }: { embedded?: boolean }) {
   const qc = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<BackupItem | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BackupItem | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const listQuery = useQuery({
     queryKey: ["backups"],
@@ -149,7 +196,10 @@ export function BackupsPage({ embedded = false }: { embedded?: boolean }) {
   });
 
   const busy =
-    runMutation.isPending || restoreMutation.isPending || deleteMutation.isPending;
+    runMutation.isPending ||
+    restoreMutation.isPending ||
+    deleteMutation.isPending ||
+    downloadingId != null;
 
   return (
     <div className={embedded ? "settings-panel" : undefined}>
@@ -161,9 +211,10 @@ export function BackupsPage({ embedded = false }: { embedded?: boolean }) {
       <p className="muted" style={embedded ? { marginTop: 0 } : undefined}>
         Database dumps and upload archives under the configured backup directory. A backup is{" "}
         <strong>healthy</strong> when the latest successful dump is less than{" "}
-        {listQuery.data?.freshHours ?? 36} hours old. Restore replaces the current database (and
-        uploads when present) after confirmation; a safety backup is taken first. Delete removes a
-        backup folder from disk (useful for discarding unwanted safety snapshots).
+        {listQuery.data?.freshHours ?? 36} hours old. Download pulls the full backup folder (SQL +
+        uploads + manifest). Restore replaces the current database (and uploads when present) after
+        confirmation; a safety backup is taken first. Delete removes a backup folder from disk
+        (useful for discarding unwanted safety snapshots).
       </p>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
@@ -293,35 +344,62 @@ export function BackupsPage({ embedded = false }: { embedded?: boolean }) {
                       {healthLabel(b.health)}
                     </span>
                   </td>
-                  <td>{b.pgDumpOk ? "OK" : "Fail"}</td>
-                  <td>{b.uploadsOk ? "OK" : "Fail"}</td>
+                  <td>
+                    <StatusOk ok={b.pgDumpOk} />
+                  </td>
+                  <td>
+                    <StatusOk ok={b.uploadsOk} />
+                  </td>
                   <td>{formatBytes(b.bytes)}</td>
                   <td className="muted">{b.error ?? "—"}</td>
                   <td>
-                    <div className="btn-row" style={{ gap: "0.35rem" }}>
+                    <div className="btn-row backup-row-actions" style={{ gap: "0.35rem" }}>
                       <button
                         type="button"
-                        className="btn small danger"
+                        className="btn small btn-icon ghost"
+                        disabled={busy}
+                        title={
+                          downloadingId === b.id
+                            ? "Downloading…"
+                            : "Download complete backup archive"
+                        }
+                        aria-label={`Download backup ${b.id}`}
+                        onClick={() => {
+                          setMessage(null);
+                          setDownloadingId(b.id);
+                          void downloadBackupArchive(b.id)
+                            .then(() => setMessage(`Download started for backup ${b.id}.`))
+                            .catch((e: Error) => setMessage(e.message))
+                            .finally(() => setDownloadingId(null));
+                        }}
+                      >
+                        <NavIcon icon={faDownload} size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn small btn-icon ghost"
                         disabled={busy || !b.pgDumpOk}
                         title={b.pgDumpOk ? "Restore this backup" : "No database dump to restore"}
+                        aria-label={`Restore backup ${b.id}`}
                         onClick={() => {
                           setMessage(null);
                           setPendingRestore(b);
                         }}
                       >
-                        Restore
+                        <NavIcon icon={faArrowUp} size={14} />
                       </button>
                       <button
                         type="button"
-                        className="btn small ghost"
+                        className="btn small btn-icon danger"
                         disabled={busy}
                         title="Delete this backup from disk"
+                        aria-label={`Delete backup ${b.id}`}
                         onClick={() => {
                           setMessage(null);
                           setPendingDelete(b);
                         }}
                       >
-                        Delete
+                        <NavIcon icon={faTrash} size={14} />
                       </button>
                     </div>
                   </td>
