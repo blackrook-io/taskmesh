@@ -365,7 +365,7 @@ export function TaskEditorFields({
   const qc = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
   const initial = snapshotFromTask(task);
-  const { push, undo, reset, canUndo, revision } = useUndoStack(initial);
+  const { push, undo, canUndo, revision } = useUndoStack(initial);
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [dueLocal, setDueLocal] = useState(initial.dueDate ?? "");
@@ -403,6 +403,7 @@ export function TaskEditorFields({
     }
   };
   const flushSessionHistoryRef = useRef(flushSessionHistory);
+  // eslint-disable-next-line react-hooks/refs -- latest callback ref
   flushSessionHistoryRef.current = flushSessionHistory;
 
   const projectsQuery = useQuery({
@@ -433,24 +434,15 @@ export function TaskEditorFields({
   });
   const children = allTasks !== undefined ? knownChildren : (childrenQuery.data ?? knownChildren);
 
-  useEffect(() => {
-    const snap = snapshotFromTask(task);
-    reset(snap);
-    setTitle(sanitizePlainText(snap.title));
-    setDescription(snap.description);
-    setDueLocal(snap.dueDate ?? "");
-    setColor(snap.color);
-    setPhaseId(snap.phaseId);
-    setProjectId(snap.projectId);
-    setState(snap.state);
-    setPriority(snap.priority);
-    setSaveError(null);
-  }, [task.id, reset]);
-
-  useEffect(() => {
+  // Call sites key TaskEditorFields by task.id; sync project/phase if props change in place.
+  const [syncedProjectId, setSyncedProjectId] = useState(task.projectId);
+  const [syncedPhaseId, setSyncedPhaseId] = useState(task.phaseId);
+  if (task.projectId !== syncedProjectId || task.phaseId !== syncedPhaseId) {
+    setSyncedProjectId(task.projectId);
+    setSyncedPhaseId(task.phaseId);
     setProjectId(task.projectId);
     setPhaseId(task.phaseId);
-  }, [task.projectId, task.phaseId]);
+  }
 
   const currentSnap = (): TaskSnapshot => ({
     title,
@@ -529,6 +521,7 @@ export function TaskEditorFields({
   };
 
   const handleUndoRef = useRef(handleUndo);
+  // eslint-disable-next-line react-hooks/refs -- latest callback ref
   handleUndoRef.current = handleUndo;
 
   useEffect(() => {
@@ -605,7 +598,7 @@ export function TaskEditorFields({
         type="button"
         className="btn small ghost"
         disabled={!canUndo}
-        onClick={() => void handleUndo()}
+        onClick={() => void handleUndoRef.current()}
         title="Revert last saved change (Ctrl+Z)"
       >
         Undo
@@ -1314,19 +1307,27 @@ export function TaskBoard({
   }, [navListView, rows, listFilter, filterCtx]);
 
   const onRequestOpenTaskConsumedRef = useRef(onRequestOpenTaskConsumed);
+  // eslint-disable-next-line react-hooks/refs -- latest callback ref
   onRequestOpenTaskConsumedRef.current = onRequestOpenTaskConsumed;
+
+  const [prevRequestOpenTask, setPrevRequestOpenTask] = useState(requestOpenTask);
+  if (requestOpenTask !== prevRequestOpenTask) {
+    setPrevRequestOpenTask(requestOpenTask);
+    if (requestOpenTask != null) {
+      setModalTaskId(requestOpenTask.id);
+      setModalTaskHeld(requestOpenTask);
+    }
+  }
 
   useEffect(() => {
     if (requestOpenTask == null) return;
-    setModalTaskId(requestOpenTask.id);
-    setModalTaskHeld(requestOpenTask);
     onRequestOpenTaskConsumedRef.current?.();
   }, [requestOpenTask]);
 
   const fromList = modalTaskId != null ? (tasks.find((t) => t.id === modalTaskId) ?? null) : null;
-  useEffect(() => {
-    if (fromList) setModalTaskHeld(fromList);
-  }, [fromList]);
+  if (fromList != null && fromList !== modalTaskHeld) {
+    setModalTaskHeld(fromList);
+  }
   const modalTask = fromList ?? (modalTaskId != null ? modalTaskHeld : null);
 
   const sortableIds = useMemo(() => displayRows.map((r) => r.key), [displayRows]);

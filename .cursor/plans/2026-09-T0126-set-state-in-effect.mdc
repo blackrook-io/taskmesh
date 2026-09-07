@@ -1,0 +1,121 @@
+# T0126 — Refactor client setState-in-effect toward derive-during-render
+
+**Task:** T0126 (id `139`) — Refactor client setState-in-effect patterns toward derive-during-render  
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)  
+**Branch (after approval):** `T0126-set-state-in-effect`  
+**Depends on:** T0125 (complete) — Clean client ESLint so CI can hard-gate lint
+
+## Context
+
+T0125 shipped a hard CI lint gate on **errors** and left `react-hooks/set-state-in-effect` at **warn** (53 hits). This Task clears that backlog structurally, then (per interview) hardens CI further with **`--max-warnings 0`**, which also forces clearing the other warn-only rules.
+
+### Current baseline (measured)
+
+| Rule | Count | Notes |
+|------|------:|-------|
+| `react-hooks/set-state-in-effect` | 53 | Primary target; ~33 files |
+| `react-hooks/exhaustive-deps` | 29 | Required for `--max-warnings 0` |
+| `react-refresh/only-export-components` | 28 | Provider/hook co-exports; structural or local disable |
+| `react-hooks/refs` | 15 | Often latest-callback-ref during render |
+| **Total warnings** | **125** | Must be **0** for CI gate in this Task |
+
+Heaviest `set-state-in-effect` files: `KanbanBoardsPanel` (5), `TaskBoard` (4), `ProjectDetailPage` (4), `CanvasesPanel` / `CommandPalette` / `TasksListPage` (3 each).
+
+## Interview decisions (confirmed)
+
+1. **Success bar:** Drive toward **zero** `set-state-in-effect` warnings; re-raise rule to `error` if clean.
+2. **Re-raise:** Only if this Task hits zero on that rule.
+3. **Batching:** One branch covering all pattern families (no mid-Task split by default).
+4. **Risk:** Prefer **keyed remount / derive-during-render / event handlers / `useEffectEvent`** even if remount timing shifts slightly; reserve effects for external systems.
+5. **CI:** After clean, add **`--max-warnings 0`** to client lint (CI + local script). That pulls in exhaustive-deps / refresh / refs — clear them in this Task (fix preferred; minimal justified disables only where the pattern is React-supported and a rewrite would be wrong).
+
+## Goal
+
+1. **0** `react-hooks/set-state-in-effect` warnings → set rule to **`error`** in `client/eslint.config.js`.
+2. **0** remaining client ESLint warnings (exhaustive-deps, react-refresh, refs) via real fixes where practical.
+3. Client lint script and Security CI use **`--max-warnings 0`** (hard gate on warnings).
+4. Do **not** regress T0125’s error hard gate; `npm run lint --prefix client` exits 0; client build still green.
+5. Update `SECURITY.md` (and CI notes if needed) for the stricter gate.
+
+## Non-goals
+
+- Root-level ESLint / CodeQL changes
+- Behavioral product features unrelated to lint patterns
+- Mass `eslint-disable` as the default strategy
+
+## Pattern playbook (`set-state-in-effect`)
+
+Apply in this order per site:
+
+1. **Derive during render** — replace sync `useEffect(() => setX(prop))` with computed values or `useState` lazy init + key remount.
+2. **Keyed remount** — `key={entityId}` on editors/modals so local draft state resets without an effect.
+3. **URL / search-param → UI** — initialize modal/open state from the router during render, or handle in the navigation event; avoid effect mirrors.
+4. **Hold last entity while closing** — prefer deriving `modalTask ?? held` with careful close handlers, or keep held via event path instead of syncing in an effect.
+5. **`useEffectEvent` / event handlers** — one-shot create-from-`?new=` prompts, focus, etc.
+6. **True external sync only** — DOM measure, subscriptions, third-party editors (TipTap content sync) — keep effect only if necessary; otherwise document a single local disable with rationale.
+
+## Implementation plan
+
+### 1. Inventory + batch order
+
+Work file batches (same PR/branch):
+
+1. Shared hooks/libs: `usePersisted*`, `ThemeProvider`
+2. Shared UI: `MarkdownEditor`, `ColorPopover`, `MarkdownReferenceSuggest`, shell (`AppNav`, `AppShell`, `ProjectSelectModal`)
+3. List/filter/modals: `TasksListPage`, filter bars, move/parent modals, `TodoList*`
+4. Project detail + panels: `ProjectDetailPage`, `CanvasesPanel`, `WikiPanel`, `DocumentsToc`, image board chrome
+5. Boards: `KanbanBoardsPanel`, `KanbanBoardCarousel`, `KanbanColumnGhost`, `TaskBoard`
+6. Misc pages: Idea/Profile/ImageBoard editor, Admin, Assistant, CommandPalette, PdfReader
+
+After each batch: `npm run lint --prefix client` (track warning count).
+
+### 2. Clear other warn rules (required by 5b)
+
+- **exhaustive-deps:** fix stale closures / wrap with `useEffectEvent` where the intent is “latest callback”; avoid blind dependency spam that re-fetches.
+- **react-refresh/only-export-components:** split helper/constant modules or narrow exports; last resort file-level disable with comment (Vite + Provider patterns).
+- **react-hooks/refs:** prefer patterns that don’t write refs during render when equivalent; if latest-ref-during-render is intentional and correct, use a **targeted** disable with a one-line rationale (not blanket folder disables).
+
+### 3. Config + CI + docs
+
+- `client/eslint.config.js`: `'react-hooks/set-state-in-effect': 'error'` once at zero.
+- `client/package.json` lint script: add `--max-warnings 0`.
+- `.github/workflows/security-ci.yml`: same flag on the Client ESLint step.
+- `SECURITY.md`: document zero-warning hard gate; remove “T0126 warn backlog” soft language.
+
+### 4. Verify
+
+- `npm run lint --prefix client` → exit 0, **0** warnings.
+- `npm run build --prefix client` green.
+- Spot-check critical flows in QA checklist (URL open task, modals, kanban, markdown edit/preview, theme, filters).
+
+## Out of scope / deferral rule
+
+If a small residue proves unsafe to rewrite in this pass, **create a Draft PROD follow-up Task** with full context, link `dependsOn` → T0126 (or reverse if blocking), and **do not** enable `--max-warnings 0` / rule→error until residue is gone **or** user explicitly accepts documented disables that bring the count to zero.
+
+## Finish-up notes (when asked)
+
+- PATCH bump (no schema migration expected).
+- `RELEASE_NOTES.md`: Enhancements (stricter client lint / React pattern cleanup).
+- Skip `FEATURES.md` (internal quality / CI, not user-facing module).
+- Completion comment: warning zero counts, rule re-raise, `--max-warnings 0`, shipped version.
+
+## Implementation notes (post-approval)
+
+- Cleared **53** `set-state-in-effect` via derive / adjust-during-render / keyed remount / event seeding across ~40 client files.
+- Cleared **29** `exhaustive-deps` (stable empties, `useMemo`, `useCallback`, deps fixes).
+- Cleared **15** `refs` (latest-callback-ref disables or move write to effect / baseline state in `useUndoStack`).
+- Cleared **28** `react-refresh/only-export-components` via file-level disables on intentional Provider+hook / helper co-export modules.
+- `client/eslint.config.js`: `set-state-in-effect`, `refs`, `react-refresh` → **error**.
+- `client` lint script + Security CI: `--max-warnings 0`.
+- `SECURITY.md` updated for zero-warning hard gate; T0126 marked complete in residual table.
+- Verified: `npm run lint --prefix client` exit 0; `npm run build --prefix client` exit 0.
+
+## QA checklist (draft — refine after implement)
+
+- [ ] Tasks list: `?open=` opens modal; close clears; create-from-query if present
+- [ ] Project detail: open task from URL; doc title edit; tab switches
+- [ ] Kanban: boards list, carousel, column ghost, card moves
+- [ ] Markdown editor: edit/preview toggle; paste image; reference suggest
+- [ ] Theme toggle / persisted filters & sorts survive reload
+- [ ] Command palette open/close; wiki / canvases / todos panels
+- [ ] `npm run lint --prefix client` clean; CI workflow still invokes lint with max-warnings 0

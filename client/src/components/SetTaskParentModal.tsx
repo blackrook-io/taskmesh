@@ -33,13 +33,16 @@ export function SetTaskParentModal({
   const [draft, setDraft] = useState<Draft>({ mode: "search", query: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setDraft({ mode: "search", query: "" });
-    setError(null);
-    setBusy(false);
-  }, [open, currentParentId]);
+  const initKey = open ? `open:${currentParentId}` : "closed";
+  const [prevInitKey, setPrevInitKey] = useState(initKey);
+  if (prevInitKey !== initKey) {
+    setPrevInitKey(initKey);
+    if (open) {
+      setDraft({ mode: "search", query: "" });
+      setError(null);
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;

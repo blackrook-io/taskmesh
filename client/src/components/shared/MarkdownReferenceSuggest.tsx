@@ -41,10 +41,7 @@ export function MarkdownReferenceSuggest({ editor, enabled }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!editor || !enabled) {
-      setTrigger(null);
-      return;
-    }
+    if (!editor || !enabled) return;
 
     const refresh = () => {
       const { from } = editor.state.selection;
@@ -60,8 +57,9 @@ export function MarkdownReferenceSuggest({ editor, enabled }: Props) {
 
     editor.on("selectionUpdate", refresh);
     editor.on("update", refresh);
-    refresh();
+    const frame = requestAnimationFrame(refresh);
     return () => {
+      cancelAnimationFrame(frame);
       editor.off("selectionUpdate", refresh);
       editor.off("update", refresh);
     };

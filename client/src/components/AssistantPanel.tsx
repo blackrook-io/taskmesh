@@ -58,6 +58,11 @@ export function AssistantPanel({ open, onClose }: Props) {
   const qc = useQueryClient();
   const attachTarget = useAssistantAttachTarget();
   const [attachEnabled, setAttachEnabled] = useState(true);
+  const [seenAttachKey, setSeenAttachKey] = useState(attachTarget?.key);
+  if (attachTarget?.key !== seenAttachKey) {
+    setSeenAttachKey(attachTarget?.key);
+    if (attachTarget) setAttachEnabled(true);
+  }
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>(() => loadTranscript());
   const [streaming, setStreaming] = useState("");
@@ -68,10 +73,6 @@ export function AssistantPanel({ open, onClose }: Props) {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (attachTarget) setAttachEnabled(true);
-  }, [attachTarget?.key]);
 
   const statusQuery = useQuery({
     queryKey: ["assistant-status"],

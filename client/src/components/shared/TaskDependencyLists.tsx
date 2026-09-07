@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- intentional co-exports (helpers/hooks with components) */
 import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "../../api/client";

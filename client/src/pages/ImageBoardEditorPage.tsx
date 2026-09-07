@@ -41,11 +41,14 @@ export function ImageBoardEditorPage() {
     },
   });
 
-  useEffect(() => {
-    if (!data) return;
-    setDoc(normalizeDocument(data.document));
-    setTitle(sanitizePlainText(data.title));
-  }, [data]);
+  const [prevData, setPrevData] = useState(data);
+  if (data !== prevData) {
+    setPrevData(data);
+    if (data) {
+      setDoc(normalizeDocument(data.document));
+      setTitle(sanitizePlainText(data.title));
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -73,7 +76,9 @@ export function ImageBoardEditorPage() {
   });
 
   const patchMutRef = useRef(patchMut.mutate);
-  patchMutRef.current = patchMut.mutate;
+  useEffect(() => {
+    patchMutRef.current = patchMut.mutate;
+  }, [patchMut.mutate]);
 
   const deleteMut = useMutation({
     mutationFn: async () => {

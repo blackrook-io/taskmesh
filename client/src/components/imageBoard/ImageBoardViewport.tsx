@@ -74,6 +74,7 @@ export function ImageBoardViewport({ document: doc, onChange, readOnly = false }
   const [renameDraft, setRenameDraft] = useState("");
   const lastPointerWorld = useRef({ x: 0, y: 0 });
   const docRef = useRef(doc);
+  // eslint-disable-next-line react-hooks/refs -- latest document snapshot for sync updateDoc
   docRef.current = doc;
 
   const selected = doc.items.find((i) => i.id === selectedId) ?? null;

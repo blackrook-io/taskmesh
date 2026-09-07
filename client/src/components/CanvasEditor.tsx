@@ -32,6 +32,8 @@ export function CanvasEditor({
 }: Props) {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const saveRef = useRef(onSaveDocument);
+  // latest callback ref
+  // eslint-disable-next-line react-hooks/refs -- keep save callback fresh for debounced writes
   saveRef.current = onSaveDocument;
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [selectionTick, setSelectionTick] = useState(0);

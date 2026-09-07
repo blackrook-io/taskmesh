@@ -39,9 +39,13 @@ export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
     setContextOpen(false);
   };
 
-  useEffect(() => {
-    closeDrawers();
-  }, [location.pathname, location.search]);
+  const locationKey = `${location.pathname}${location.search}`;
+  const [prevLocationKey, setPrevLocationKey] = useState(locationKey);
+  if (prevLocationKey !== locationKey) {
+    setPrevLocationKey(locationKey);
+    setNavOpen(false);
+    setContextOpen(false);
+  }
 
   const shellClass = [
     "app-shell",

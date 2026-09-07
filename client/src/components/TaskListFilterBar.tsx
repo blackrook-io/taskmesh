@@ -225,11 +225,6 @@ export function TaskListFilterBar({
 
   useEffect(() => {
     if (!open) return;
-    setDraft(draftFromFilter(filter));
-  }, [open, filter]);
-
-  useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
@@ -292,7 +287,10 @@ export function TaskListFilterBar({
           aria-label={active ? "Edit list filter" : "Filter list"}
           aria-haspopup="dialog"
           aria-expanded={open}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setDraft(draftFromFilter(filter));
+            setOpen(true);
+          }}
         >
           <FilterIcon />
           <span>Filter</span>

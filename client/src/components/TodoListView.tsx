@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { formatEntityRef } from "../lib/entityRef";
@@ -188,8 +188,10 @@ function TodoEditorFields({
   const [actionByLocal, setActionByLocal] = useState(datetimeLocalValue(todo.actionBy));
   const [color, setColor] = useState(todo.color);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [syncedTodo, setSyncedTodo] = useState(todo);
 
-  useEffect(() => {
+  if (todo !== syncedTodo) {
+    setSyncedTodo(todo);
     setTitle(todo.title);
     setDescription(todo.description ?? "");
     setState(todo.state);
@@ -197,7 +199,7 @@ function TodoEditorFields({
     setDueLocal(todo.dueDate ?? "");
     setActionByLocal(datetimeLocalValue(todo.actionBy));
     setColor(todo.color);
-  }, [todo]);
+  }
 
   const patch = async (body: Record<string, unknown>) => {
     try {
@@ -560,7 +562,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   });
 
   const list = detailQuery.data;
-  const items = list?.items ?? [];
+  const items = useMemo(() => list?.items ?? [], [list?.items]);
   const visibleItems = useMemo(
     () => evaluateTodoListFilter(items, listFilter, filterCtx),
     [items, listFilter, filterCtx],

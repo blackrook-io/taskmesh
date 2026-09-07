@@ -152,7 +152,12 @@ export function WikiPanel({
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const initialNodeApplied = useRef(false);
+  const [appliedInitialId, setAppliedInitialId] = useState<number | null>(null);
+  const [draftKey, setDraftKey] = useState<string | null>(null);
+  const onInitialNodeConsumedRef = useRef(onInitialNodeConsumed);
+  // latest callback ref
+  // eslint-disable-next-line react-hooks/refs -- keep consume callback fresh without re-running effect
+  onInitialNodeConsumedRef.current = onInitialNodeConsumed;
 
   const treeQuery = useQuery({
     queryKey: ["wiki", projectId],
@@ -162,7 +167,7 @@ export function WikiPanel({
     },
   });
 
-  const tree = treeQuery.data?.tree ?? [];
+  const tree = useMemo(() => treeQuery.data?.tree ?? [], [treeQuery.data?.tree]);
   const nodes = treeQuery.data?.nodes ?? [];
   const flat = useMemo(() => flattenTree(tree, collapsed), [tree, collapsed]);
   const byId = useMemo(() => {
@@ -179,13 +184,19 @@ export function WikiPanel({
 
   const activeId = selectedId ?? flat[0]?.node.id ?? null;
 
-  useEffect(() => {
-    if (initialNodeApplied.current || initialNodeId == null) return;
-    if (!byId.has(initialNodeId)) return;
-    initialNodeApplied.current = true;
+  if (
+    initialNodeId != null &&
+    appliedInitialId !== initialNodeId &&
+    byId.has(initialNodeId)
+  ) {
+    setAppliedInitialId(initialNodeId);
     setSelectedId(initialNodeId);
-    onInitialNodeConsumed?.();
-  }, [initialNodeId, byId, onInitialNodeConsumed]);
+  }
+
+  useEffect(() => {
+    if (appliedInitialId == null) return;
+    onInitialNodeConsumedRef.current?.();
+  }, [appliedInitialId]);
 
   const detailQuery = useQuery({
     queryKey: ["wiki-node", projectId, activeId],
@@ -203,13 +214,16 @@ export function WikiPanel({
     },
   });
 
-  useEffect(() => {
-    const doc = detailQuery.data?.document;
-    const node = detailQuery.data?.node;
-    if (node) setTitleDraft(sanitizePlainText(node.title));
-    if (doc) setBodyDraft(doc.body ?? "");
-    else if (node) setBodyDraft("");
-  }, [detailQuery.data?.node?.id, detailQuery.data?.document?.id, pageEdit]);
+  const detailNode = detailQuery.data?.node;
+  const detailDoc = detailQuery.data?.document;
+  const draftSyncKey = detailNode
+    ? `${detailNode.id}:${detailDoc?.id ?? "none"}:${pageEdit ? "edit" : "view"}`
+    : null;
+  if (detailNode && draftSyncKey !== draftKey) {
+    setDraftKey(draftSyncKey);
+    setTitleDraft(sanitizePlainText(detailNode.title));
+    setBodyDraft(detailDoc?.body ?? "");
+  }
 
   const selectPage = (id: number) => {
     setSelectedId(id);

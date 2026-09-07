@@ -9,11 +9,13 @@ const MAX_STEPS = 10;
 export function useUndoStack<T>(initial: T, maxSteps = MAX_STEPS) {
   const baselineRef = useRef(initial);
   const stackRef = useRef<T[]>([]);
+  const [baseline, setBaseline] = useState(initial);
   const [depth, setDepth] = useState(0);
   const [revision, setRevision] = useState(0);
 
   const reset = useCallback((value: T) => {
     baselineRef.current = value;
+    setBaseline(value);
     stackRef.current = [];
     setDepth(0);
     setRevision((r) => r + 1);
@@ -47,6 +49,6 @@ export function useUndoStack<T>(initial: T, maxSteps = MAX_STEPS) {
     reset,
     canUndo: depth > 0,
     revision,
-    baseline: baselineRef.current,
+    baseline,
   };
 }

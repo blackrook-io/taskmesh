@@ -157,11 +157,11 @@ export function MarkdownEditor({
   const [mode, setMode] = useState<Mode>("preview");
   const [focusMode, setFocusMode] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [surfaceHeight, setSurfaceHeight] = useState(() =>
-    clampEditorHeight(preferredHeight, minHeight, maxHeight),
+  const [dragHeight, setDragHeight] = useState<number | null>(() =>
+    initialLockedHeight != null
+      ? clampEditorHeight(initialLockedHeight, Math.min(minHeightProp ?? DEFAULT_MIN_HEIGHT, preferredHeight), Math.max(maxHeightProp, preferredHeight))
+      : null,
   );
-  /** After the user drags, prefer explicit height over flex `fill`. */
-  const [heightLocked, setHeightLocked] = useState(() => initialLockedHeight != null);
   const [dragging, setDragging] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -172,20 +172,23 @@ export function MarkdownEditor({
   const onBlurRef = useRef(onBlur);
   const onHeightChangeRef = useRef(onHeightChange);
   const navigateRef = useRef(navigate);
-  const liveHeightRef = useRef(surfaceHeight);
-  modeRef.current = mode;
+  const liveHeightRef = useRef(dragHeight ?? clampEditorHeight(preferredHeight, minHeight, maxHeight));
+  // latest callback refs
+  /* eslint-disable react-hooks/refs -- latest callback / mode refs for TipTap handlers */
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
   onHeightChangeRef.current = onHeightChange;
   navigateRef.current = navigate;
+  /* eslint-enable react-hooks/refs */
 
-  useEffect(() => {
-    if (autoHeight || heightLocked) return;
-    setSurfaceHeight(clampEditorHeight(height, minHeight, maxHeight));
-  }, [autoHeight, height, heightLocked, maxHeight, minHeight]);
-
-  const useFixedHeight = !autoHeight && !focusMode && (!fill || heightLocked);
-  const canResize = !autoHeight && !focusMode;
+  const heightLocked = dragHeight != null;
+  const surfaceHeight = dragHeight ?? clampEditorHeight(height, minHeight, maxHeight);
+  const effectiveMode: Mode = readOnly ? "preview" : mode;
+  const effectiveFocusMode = readOnly ? false : focusMode;
+  const useFixedHeight = !autoHeight && !effectiveFocusMode && (!fill || heightLocked);
+  const canResize = !autoHeight && !effectiveFocusMode;
+  // eslint-disable-next-line react-hooks/refs -- latest mode for TipTap paste handler
+  modeRef.current = effectiveMode;
 
   const activateEdit = () => {
     if (readOnly) return;
@@ -198,13 +201,6 @@ export function MarkdownEditor({
       });
     }
   };
-
-  useEffect(() => {
-    if (readOnly) {
-      setMode("preview");
-      setFocusMode(false);
-    }
-  }, [readOnly]);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -236,7 +232,7 @@ export function MarkdownEditor({
     ],
     content: sanitizeMarkdown(value || ""),
     contentType: "markdown",
-    editable: !readOnly && mode === "edit",
+    editable: !readOnly && effectiveMode === "edit",
     editorProps: {
       attributes: {
         class: "md-prose",
@@ -321,12 +317,14 @@ export function MarkdownEditor({
     },
   });
 
+  // latest editor instance for imperative handlers
+  // eslint-disable-next-line react-hooks/refs -- TipTap instance mirror for paste/toolbar
   editorRef.current = editor;
 
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!readOnly && mode === "edit");
-  }, [editor, mode, readOnly]);
+    editor.setEditable(!readOnly && effectiveMode === "edit");
+  }, [editor, effectiveMode, readOnly]);
 
   useEffect(() => {
     if (!editor) return;
@@ -385,15 +383,14 @@ export function MarkdownEditor({
     const startY = e.clientY;
     const startHeight = surfaceRef.current?.offsetHeight ?? surfaceHeight;
     liveHeightRef.current = startHeight;
-    setSurfaceHeight(startHeight);
-    setHeightLocked(true);
+    setDragHeight(startHeight);
     setDragging(true);
     handle.setPointerCapture(e.pointerId);
 
     const onMove = (ev: PointerEvent) => {
       const next = clampEditorHeight(startHeight + (ev.clientY - startY), minHeight, maxHeight);
       liveHeightRef.current = next;
-      setSurfaceHeight(next);
+      setDragHeight(next);
     };
     const onUp = (ev: PointerEvent) => {
       handle.releasePointerCapture(ev.pointerId);
@@ -408,21 +405,21 @@ export function MarkdownEditor({
     handle.addEventListener("pointercancel", onUp);
   }
 
-  const disabled = readOnly || !editor || mode !== "edit";
+  const disabled = readOnly || !editor || effectiveMode !== "edit";
 
   return (
     <div
       ref={rootRef}
       className={[
         "md-editor",
-        focusMode ? "md-editor--focus" : null,
+        effectiveFocusMode ? "md-editor--focus" : null,
         readOnly ? "md-editor--readonly" : null,
         autoHeight ? "md-editor--auto-height" : null,
         fill && !heightLocked && !autoHeight ? "md-editor--fill" : null,
         heightLocked && !autoHeight ? "md-editor--height-locked" : null,
         dragging ? "md-editor--resizing" : null,
-        mode === "edit" ? "md-editor--editing" : null,
-        mode === "preview" && !readOnly ? "md-editor--previewing" : null,
+        effectiveMode === "edit" ? "md-editor--editing" : null,
+        effectiveMode === "preview" && !readOnly ? "md-editor--previewing" : null,
         className,
       ]
         .filter(Boolean)
@@ -432,18 +429,18 @@ export function MarkdownEditor({
         ref={surfaceRef}
         className="md-editor__surface"
         style={useFixedHeight ? { height: surfaceHeight } : undefined}
-        tabIndex={readOnly || mode === "edit" ? undefined : 0}
+        tabIndex={readOnly || effectiveMode === "edit" ? undefined : 0}
         onFocus={(e) => {
-          if (readOnly || mode === "edit") return;
+          if (readOnly || effectiveMode === "edit") return;
           if (e.target !== e.currentTarget) return;
           activateEdit();
         }}
         onMouseDown={() => {
-          if (!readOnly && mode !== "edit") activateEdit();
+          if (!readOnly && effectiveMode !== "edit") activateEdit();
         }}
       >
         <EditorContent editor={editor} />
-        <MarkdownReferenceSuggest editor={editor} enabled={!readOnly && mode === "edit"} />
+        <MarkdownReferenceSuggest editor={editor} enabled={!readOnly && effectiveMode === "edit"} />
       </div>
       {canResize ? (
         <div
@@ -462,9 +459,8 @@ export function MarkdownEditor({
             const delta = e.key === "ArrowUp" ? -24 : 24;
             const base = surfaceRef.current?.offsetHeight ?? surfaceHeight;
             const next = clampEditorHeight(base + delta, minHeight, maxHeight);
-            setHeightLocked(true);
             liveHeightRef.current = next;
-            setSurfaceHeight(next);
+            setDragHeight(next);
             onHeightChangeRef.current?.(next);
           }}
         />
@@ -473,9 +469,9 @@ export function MarkdownEditor({
         <div className="md-toolbar" role="toolbar" aria-label="Markdown formatting">
           <div className="md-toolbar__group">
             <IconBtn
-              icon={focusMode ? faCompress : faExpand}
-              title={focusMode ? "Exit focus" : "Focus"}
-              active={focusMode}
+              icon={effectiveFocusMode ? faCompress : faExpand}
+              title={effectiveFocusMode ? "Exit focus" : "Focus"}
+              active={effectiveFocusMode}
               onClick={() => setFocusMode((v) => !v)}
             />
           </div>

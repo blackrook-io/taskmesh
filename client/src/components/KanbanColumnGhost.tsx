@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- intentional co-exports (helpers/hooks with components) */
 import { useEffect, useRef, useState } from "react";
 
 type Phase = "prompt" | "naming";
@@ -89,6 +90,7 @@ export function useColumnGhostHover(opts: {
   const [phase, setPhase] = useState<"hidden" | "prompt" | "naming">("hidden");
   const [name, setName] = useState("");
   const [armedAt, setArmedAt] = useState<number | null>(null);
+  const [suppress, setSuppress] = useState(opts.suppress);
   const timerRef = useRef<number | null>(null);
   const pendingInsert = useRef<number | null>(null);
 
@@ -108,12 +110,23 @@ export function useColumnGhostHover(opts: {
     pendingInsert.current = null;
   };
 
-  useEffect(() => () => clearTimer(), []);
+  if (opts.suppress !== suppress) {
+    setSuppress(opts.suppress);
+    if (opts.suppress && phase !== "naming") {
+      setPhase("hidden");
+      setInsertAt(null);
+      setArmedAt(null);
+      setName("");
+    }
+  }
 
   useEffect(() => {
-    if (opts.suppress && phase !== "naming") reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to suppress
+    if (!opts.suppress) return;
+    clearTimer();
+    pendingInsert.current = null;
   }, [opts.suppress]);
+
+  useEffect(() => () => clearTimer(), []);
 
   const onBlankHover = (nextInsertAt: number | null) => {
     if (opts.suppress || phase === "naming") return;

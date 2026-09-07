@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   loadTaskListSort,
   saveTaskListSort,
@@ -7,10 +7,13 @@ import {
 
 export function usePersistedTaskListSort(storageKey: string, fallback: TaskListSort) {
   const [sort, setSortState] = useState<TaskListSort>(() => loadTaskListSort(storageKey, fallback));
-
-  useEffect(() => {
+  const [prevKey, setPrevKey] = useState(storageKey);
+  const [prevFallback, setPrevFallback] = useState(fallback);
+  if (prevKey !== storageKey || prevFallback !== fallback) {
+    setPrevKey(storageKey);
+    setPrevFallback(fallback);
     setSortState(loadTaskListSort(storageKey, fallback));
-  }, [storageKey, fallback]);
+  }
 
   const setSort = useCallback(
     (next: TaskListSort | ((prev: TaskListSort) => TaskListSort)) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { apiJson } from "../api/client";
@@ -37,12 +37,14 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
     },
   });
 
-  useEffect(() => {
+  const [prevProfile, setPrevProfile] = useState(profileQuery.data);
+  if (profileQuery.data !== prevProfile) {
+    setPrevProfile(profileQuery.data);
     if (profileQuery.data) {
       setDisplayName(profileQuery.data.displayName);
       setEmail(profileQuery.data.email ?? "");
     }
-  }, [profileQuery.data]);
+  }
 
   function flash(message: string) {
     setSavedFlash(message);
