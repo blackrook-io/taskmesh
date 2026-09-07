@@ -8,7 +8,7 @@ This app is not going to suit everyone's needs, nor shall it. I develop it for m
 
 ---
 
-This app is designed as a bare-metal Ubuntu server application (it is not Dockerized). I run this on a small minipc webserver in my home, but it could be also run from a Ubuntu Linux VM. 
+This app can be installed on a **bare-metal Ubuntu** server (systemd + nginx) or via **containers** (Docker Compose: app + PostgreSQL) on Windows, macOS, or Linux desktops. I run the bare-metal path on a small home minipc; Compose is the easier path for trying TaskMesh on a laptop.
 
 **Tech Stack:** Node.js · TypeScript · Express · PostgreSQL · Drizzle ORM · Vite · React  
 
@@ -16,11 +16,21 @@ This app is designed as a bare-metal Ubuntu server application (it is not Docker
 
 ## Install
 
-**Full bare-metal Ubuntu setup** (packages, Postgres, Node.js, clone, env, migrate, systemd, **nginx :80**, backups, troubleshooting):
+Full setup (choose **containers** or **bare-metal Ubuntu**): packages or Docker, Postgres, env, migrate, run, backups, troubleshooting:
 
-→ **[INSTALL.md](INSTALL.md)**
+→ **[INSTALL.md](INSTALL.md)** — start at **Choose your install**
 
-Quick production-style start *after* following that guide:
+**Containers (summary)** after installing [Docker](https://docs.docker.com/get-started/get-docker/) / Compose:
+
+```bash
+git clone https://github.com/blackrook-io/taskmesh.git
+cd taskmesh
+cp .env.docker.example .env.docker   # set POSTGRES_PASSWORD
+docker compose --env-file .env.docker up -d --build
+# UI: http://127.0.0.1:3000/
+```
+
+**Bare-metal production-style start** *after* following the Ubuntu sections in INSTALL.md:
 
 ```bash
 cd /srv/taskmesh
@@ -28,7 +38,8 @@ npm run build:all
 NODE_ENV=production npm start
 ```
 
-**PROD:** Express on `127.0.0.1:3000`; nginx proxies **:80** → that API (LAN: **http://\<server-ip\>/**).  
+**PROD (bare metal):** Express on `127.0.0.1:3000`; nginx proxies **:80** → that API (LAN: **http://\<server-ip\>/**).  
+**Containers:** UI + API on published host port (default **3000**).  
 **DEV:** open only **http://127.0.0.1:5173/** — Vite proxies `/api` to a separate API on **:3001** so PROD can stay up.
 
 ## Development

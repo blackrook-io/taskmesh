@@ -1,0 +1,16 @@
+node_modules
+client/node_modules
+dist
+client/dist
+.git
+.cursor
+data/uploads
+data/backups
+data/backup-schedule.json
+data/prod-release.json
+.env
+.env.docker
+*.log
+.DS_Store
+**/excalidraw-assets
+client/public/excalidraw-assets

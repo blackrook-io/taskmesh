@@ -1,0 +1,52 @@
+# Plan: TaskMesh containerization (install option)
+
+## Goal
+
+Add a **container install path** so a new downloader can choose between bare-metal Ubuntu and containers. Update **INSTALL.md** (and a short README pointer) with OS-specific steps and **links to official sources** for Windows, Linux, and macOS using the most popular container hosts.
+
+## Branch
+
+`phase-12a-container-install` (from updated `main`)
+
+## Findings (decisions)
+
+| Topic | Decision |
+|-------|----------|
+| Topology | **Compose: `app` + `db`** (`postgres:16-alpine`). Build-from-clone; no public registry in v1. |
+| Bind / port | Container `HOST=0.0.0.0` `PORT=3000`; host publish `TASKMESH_PORT` (default 3000). No in-compose nginx — desktop uses published port; bare-metal nginx unchanged. |
+| Volumes | `taskmesh_pg` (Postgres), `taskmesh_data` → `/app/data` (uploads, backups, schedule). |
+| Env | `.env.docker` from `.env.docker.example` (`POSTGRES_PASSWORD` required; URL-safe chars). App gets `DATABASE_URL=…@db:5432/…`. |
+| Migrate | **On start** via `docker/entrypoint.sh` → `node dist/db/migrate.js` (idempotent). |
+| Image | Multi-stage Node 22; runtime slim + `postgresql-client` for UI/CLI `pg_dump`. |
+| Cookies | Compose sets `COOKIE_SECURE=false` so login works over desktop HTTP; bare-metal HTTPS keeps default Secure cookies. |
+| Windows | Recommend Docker Desktop + WSL2. No-WSL: Podman Desktop Hyper-V (still a Linux VM). No Windows containers. |
+| Spike on this host | **Blocked:** Docker daemon socket is `root:docker` and only user `cursor` is in `docker`; agent user `rook` has no access / no passwordless sudo. Artifacts + YAML validated; `tsc` OK. User should run Compose smoke test (QA). |
+
+## Scope
+
+### 1. Investigate runtime and topology — done (see Findings)
+
+### 2. Host tooling matrix — done (INSTALL §A.2)
+
+### 3. Repo artifacts — done
+
+- `Dockerfile`, `compose.yaml`, `docker/entrypoint.sh`, `.dockerignore`, `.env.docker.example`
+- `.env.example` / `.gitignore` notes for `.env.docker`
+- `COOKIE_SECURE` for HTTP Compose installs
+
+### 4. INSTALL.md + README — done
+
+### 5. Out of scope (unchanged)
+
+- PROD `deploy:prod` / systemd on the existing Ubuntu box
+- Publishing images to a registry
+- Windows container images
+- Podman-first rewrite
+
+## Done when
+
+- [x] Topology and env/volume decisions recorded in this plan.
+- [x] Working Dockerfile + Compose in repo for a fresh clone.
+- [x] INSTALL.md offers bare-metal vs container choice; OS steps + official links; Windows no-WSL Hyper-V caveats.
+- [x] README points at the chooser / container install.
+- [x] QA checklist delivered; Compose smoke test deferred (host Docker group access); finish-up requested by user.

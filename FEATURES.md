@@ -1,5 +1,5 @@
 # TaskMesh Features
-A personal knowledge and work hub that unifies projects, ideas, tasks, documents, boards, and diagrams in one place. It is built for desktop and mobile, and is self-hosted on Ubuntu with PostgreSQL — your data stays on your server.
+A personal knowledge and work hub that unifies projects, ideas, tasks, documents, boards, and diagrams in one place. It is built for desktop and mobile, and is self-hosted with PostgreSQL — on bare-metal Ubuntu or Docker Compose (Windows, macOS, Linux) — so your data stays on your machine.
 
 ## Projects
 
@@ -98,4 +98,10 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Scheduled and on-demand backups of PostgreSQL plus uploaded files, with restore and safety dumps
 - CSV export and insert-only CSV/XLSX import for projects and tasks
 - Confirm before destructive deletes so accidents stay rare
+
+
+
+## Install & hosting
+
+- Choose bare-metal Ubuntu (systemd + nginx) or Docker Compose from INSTALL.md, with OS-specific container host steps and official docs links
 

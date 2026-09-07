@@ -1,0 +1,57 @@
+# Compose stack for a self-contained TaskMesh install (app + PostgreSQL).
+# See INSTALL.md → Container install.
+#
+# Quick start (after installing Docker / Compose on your OS):
+#   cp .env.docker.example .env.docker
+#   # edit POSTGRES_PASSWORD (and optional OPENAI_API_KEY)
+#   docker compose --env-file .env.docker up -d --build
+#   curl -sS http://127.0.0.1:${TASKMESH_PORT:-3000}/api/health
+
+name: taskmesh
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taskmesh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}
+      POSTGRES_DB: taskmesh
+    volumes:
+      - taskmesh_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskmesh -d taskmesh"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${TASKMESH_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      DATABASE_URL: postgresql://taskmesh:${POSTGRES_PASSWORD}@db:5432/taskmesh
+      # Desktop Compose is HTTP by default; Secure cookies would not stick in the browser.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      UPLOAD_DIR: /app/data/uploads
+      BACKUP_DIR: /app/data/backups
+      BACKUP_SCHEDULE_PATH: /app/data/backup-schedule.json
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ASSISTANT_DEFAULT_PROVIDER: ${ASSISTANT_DEFAULT_PROVIDER:-openai}
+      ASSISTANT_DEFAULT_MODEL: ${ASSISTANT_DEFAULT_MODEL:-gpt-4.1-mini}
+    volumes:
+      - taskmesh_data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  taskmesh_pg:
+  taskmesh_data:

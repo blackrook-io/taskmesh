@@ -42,7 +42,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | Uploads | UUID filenames; GET uses `path.basename`; **magic-byte** sniff (jpeg/png/gif/webp) | Stored MIME is sniffed, not client-claimed |
 | Assistant `fetchUrl` | http(s) only; DNS resolve; block private IPs; **manual** redirects (max 2) re-checked | No intranet/localhost fetch |
 | Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore/run rate-limited (T0085) |
-| Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production | CSRF: SPA client header + Origin/Referer on mutating routes (T0087) |
+| Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production (override with `COOKIE_SECURE`) | CSRF: SPA client header + Origin/Referer on mutating routes (T0087). Compose desktop sets `COOKIE_SECURE=false` for HTTP. |
 | TLS | nginx terminates HTTPS :443; Express on loopback only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); certbot path for public hosts |
 | Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | Import rate-limited (T0085) |
 | Rate limits | Per-route + global + per-API-key `express-rate-limit` (memory store) | Login IP; user/key for authenticated; Admin `api_rate_limit_per_minute` |

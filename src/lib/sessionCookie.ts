@@ -1,16 +1,22 @@
 import type { Request, Response } from "express";
 
 /**
- * PROD uses `taskmesh_session` (Secure). DEV uses a distinct name so a Secure
- * PROD cookie on the same host (127.0.0.1 / localhost / LAN IP) cannot block
- * the non-Secure DEV Set-Cookie — browsers refuse to overwrite Secure cookies
- * from an HTTP origin.
+ * PROD uses `taskmesh_session` (Secure by default). DEV uses a distinct name so a
+ * Secure PROD cookie on the same host (127.0.0.1 / localhost / LAN IP) cannot
+ * block the non-Secure DEV Set-Cookie — browsers refuse to overwrite Secure
+ * cookies from an HTTP origin.
+ *
+ * Override with `COOKIE_SECURE=true|false` (e.g. Compose desktop HTTP sets false).
  */
 export const SESSION_COOKIE_NAME =
   process.env.NODE_ENV === "production" ? "taskmesh_session" : "taskmesh_session_dev";
 
-function isProduction(): boolean {
-  return process.env.NODE_ENV === "production";
+/** Whether Set-Cookie should include `Secure`. */
+export function useSecureCookies(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.COOKIE_SECURE?.trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "no") return false;
+  if (raw === "1" || raw === "true" || raw === "yes") return true;
+  return env.NODE_ENV === "production";
 }
 
 export function readSessionCookie(req: Request): string | undefined {
@@ -46,7 +52,7 @@ export function setSessionCookie(
   if (maxAgeSeconds > 0) {
     parts.push(`Max-Age=${Math.floor(maxAgeSeconds)}`);
   }
-  if (isProduction()) {
+  if (useSecureCookies()) {
     parts.push("Secure");
   }
   res.append("Set-Cookie", parts.join("; "));
@@ -60,7 +66,7 @@ export function clearSessionCookie(res: Response): void {
     "SameSite=Lax",
     "Max-Age=0",
   ];
-  if (isProduction()) {
+  if (useSecureCookies()) {
     parts.push("Secure");
   }
   res.append("Set-Cookie", parts.join("; "));

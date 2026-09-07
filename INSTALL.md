@@ -1,12 +1,200 @@
-# Install TaskMesh on Ubuntu (bare metal)
+# Install TaskMesh
 
-Start-to-finish guide for installing TaskMesh on a **fresh Ubuntu Linux server** (same host for PostgreSQL, Node.js API, and the React SPA). Validated against Ubuntu **22.04 / 24.04** style `apt` workflows; adjust package names only if your release differs.
-
-TaskMesh is a **single-user, private-network** app: no auth in this build. Prefer binding to localhost and reaching it over **SSH**, or a private LAN firewall — not a public internet exposure without additional hardening.
+Guides for getting TaskMesh running on a private network. Prefer binding to localhost or a LAN firewall — not public internet exposure without additional hardening. (The app uses login/session auth in current builds; treat the host as a trusted private deployment.)
 
 ---
 
-## Table of contents
+## Choose your install
+
+| Path | Best when | Jump to |
+|------|-----------|---------|
+| **Containers** | You want Postgres + the app with one Compose stack on a **Windows**, **macOS**, or **Linux** desktop/server | [A. Container install](#a-container-install) |
+| **Bare-metal Ubuntu** | You want packages, systemd, and nginx on a dedicated Ubuntu host (classic TaskMesh server) | [B. Bare-metal Ubuntu](#b-bare-metal-ubuntu) |
+
+Both paths need disk for the database and `data/uploads/`. Container installs use Docker **Linux** images (Node + PostgreSQL). There is **no** recommended true-native Windows container path for this stack — see [A.2.1](#a21-windows-docker-desktop-recommended).
+
+---
+
+# A. Container install
+
+Self-contained **app + PostgreSQL** via [`compose.yaml`](compose.yaml) and [`Dockerfile`](Dockerfile). The app image runs migrations on start, serves the built SPA, and includes `postgresql-client` for in-app `pg_dump` backups.
+
+## A.1 What you get
+
+| Component | Role |
+|-----------|------|
+| **`db` service** | Official [`postgres:16-alpine`](https://hub.docker.com/_/postgres) image; data in volume `taskmesh_pg` |
+| **`app` service** | Multi-stage Node **22** build of Express API + Vite SPA; data in volume `taskmesh_data` (`uploads`, backups, schedule file) |
+| **Published port** | Host `TASKMESH_PORT` (default **3000**) → container `3000` (`HOST=0.0.0.0`) |
+
+Official Compose reference: [Docker Compose overview](https://docs.docker.com/compose/).
+
+## A.2 Install a container host (by OS)
+
+Pick **one** host stack, install it from the vendor docs, then continue at [A.3](#a3-clone-configure-and-start).
+
+### A.2.1 Windows — Docker Desktop (recommended)
+
+**Recommended** path for Windows. Docker Desktop runs **Linux** containers using a lightweight VM; the default backend is **WSL 2**.
+
+1. Meet Docker’s Windows requirements (virtualization enabled in firmware, supported Windows edition): [Docker Desktop system requirements](https://docs.docker.com/desktop/setup/install/windows-install/#system-requirements).
+2. Install **Docker Desktop for Windows**: [Install Docker Desktop on Windows](https://docs.docker.com/desktop/setup/install/windows-install/).
+3. During/after setup, enable the **WSL 2** backend if prompted. Microsoft WSL install guide: [Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
+4. Confirm Linux containers are active (tray menu should offer “Switch to Windows containers…” — meaning you are already on Linux containers). Microsoft notes: [Linux containers on Windows](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/set-up-linux-containers).
+5. Open **PowerShell** or **Windows Terminal** and verify:
+
+```powershell
+docker version
+docker compose version
+```
+
+### A.2.2 Windows — without WSL (Hyper-V machine)
+
+Linux containers still need a **Linux kernel**. Without WSL you can use a **Hyper-V**-backed machine (still a VM — not native Windows containers).
+
+**Do not** use Windows Server “Windows containers” / process isolation for TaskMesh: this project ships **Linux** images only.
+
+**Option — Podman Desktop + Hyper-V provider**
+
+1. Confirm **Hyper-V** is available (typically Windows Pro/Enterprise) and enabled: [Install Hyper-V on Windows](https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/quick-start/enable-hyper-v).
+2. Install **Podman Desktop**: [Podman Desktop on Windows](https://podman-desktop.io/docs/installation/windows-install).
+3. In setup, select the **Hyper-V** machine provider (not WSL). Podman documents both providers on that page.
+4. Create/start a Podman machine, then prefer Compose-compatible commands (`podman compose` / `docker compose` against the Podman socket — see Podman Desktop docs for the Compose path your build exposes).
+5. Verify:
+
+```powershell
+podman machine list
+podman compose version
+```
+
+If Compose integration differs on your Podman version, run the same service definitions with whatever Compose-compatible CLI Podman Desktop documents for your release.
+
+### A.2.3 macOS — Docker Desktop (recommended)
+
+1. Requirements: [Docker Desktop Mac system requirements](https://docs.docker.com/desktop/setup/install/mac-install/#system-requirements).
+2. Install: [Install Docker Desktop on Mac](https://docs.docker.com/desktop/setup/install/mac-install/) (Apple silicon or Intel build as appropriate).
+3. Verify in Terminal:
+
+```bash
+docker version
+docker compose version
+```
+
+**Optional:** [Podman Desktop on macOS](https://podman-desktop.io/docs/installation/mac-install) also runs Linux containers via a Podman machine. Prefer Docker Desktop unless you already standardize on Podman.
+
+### A.2.4 Linux — Docker Engine + Compose plugin (recommended)
+
+1. Install **Docker Engine** for your distro: [Install Docker Engine](https://docs.docker.com/engine/install/) (pick Ubuntu, Debian, Fedora, etc.).
+2. Install the **Compose plugin**: [Install Docker Compose](https://docs.docker.com/compose/install/) (on Engine installs this is usually `docker compose`, not the legacy `docker-compose` binary).
+3. Allow your user to talk to the daemon (typical): add the user to the `docker` group per Docker’s [Linux post-install](https://docs.docker.com/engine/install/linux-postinstall/), then log out/in.
+4. Verify:
+
+```bash
+docker version
+docker compose version
+```
+
+**Optional:** [Podman](https://podman.io/docs/installation) + Compose-compatible tooling. On Linux, Podman can run rootless containers; ensure your Compose file works with your Podman/Compose versions before relying on it for production.
+
+## A.3 Clone, configure, and start
+
+Commands below use a Unix-style shell. On Windows with Docker Desktop, use **PowerShell** or **WSL**; adjust paths (`\` vs `/`) as needed. Prefer cloning into a path without spaces.
+
+```bash
+git clone https://github.com/blackrook-io/taskmesh.git
+cd taskmesh
+
+cp .env.docker.example .env.docker
+```
+
+Edit `.env.docker`:
+
+- Set **`POSTGRES_PASSWORD`** to a long random secret. Prefer **URL-safe** characters (letters, digits, `-` `_`) so the Compose `DATABASE_URL` does not need encoding.
+- Optionally set **`TASKMESH_PORT`** (default `3000`) if the host port is busy.
+- Leave **`COOKIE_SECURE=false`** for plain HTTP (default). Set `true` only when you terminate TLS in front of the app so browsers accept `Secure` session cookies.
+- Optionally set **`OPENAI_API_KEY`** (and related assistant vars) for the Assistant panel.
+
+Start (build + detach):
+
+```bash
+docker compose --env-file .env.docker up -d --build
+```
+
+First build compiles the API and client inside Docker and may take several minutes. On start, the app container runs Drizzle migrations, then listens on port 3000 inside the network.
+
+Useful commands:
+
+```bash
+docker compose --env-file .env.docker ps
+docker compose --env-file .env.docker logs -f app
+docker compose --env-file .env.docker down          # stop; keep volumes
+docker compose --env-file .env.docker down -v       # stop AND delete DB/uploads volumes (destructive)
+```
+
+## A.4 Verify
+
+```bash
+curl -sS "http://127.0.0.1:${TASKMESH_PORT:-3000}/api/health"
+# expect: {"ok":true,"database":"connected", ...} / HTTP 200
+```
+
+In a browser: `http://127.0.0.1:3000/` (or your `TASKMESH_PORT`). Create a project, paste an image into Markdown, and open a canvas.
+
+From another device on the LAN, use `http://<host-lan-ip>:3000/` and ensure the host firewall allows that TCP port.
+
+## A.5 Data, backups, and updates
+
+**Volumes**
+
+| Volume | Contents |
+|--------|----------|
+| `taskmesh_pg` | PostgreSQL data files |
+| `taskmesh_data` | `/app/data` — uploads, backup archives, `backup-schedule.json` |
+
+**Backups** — With the stack running, use **Settings → Backups** in the UI (same as bare metal). The app image includes `pg_dump`. You can also run a one-shot dump via Compose:
+
+```bash
+docker compose --env-file .env.docker exec -T db \
+  pg_dump -U taskmesh -d taskmesh -F p > "taskmesh-$(date +%F).sql"
+```
+
+**Updates**
+
+```bash
+cd taskmesh
+git pull
+docker compose --env-file .env.docker up -d --build
+```
+
+Migrations run automatically on container start. Review `drizzle/` when upgrading a fork with schema changes.
+
+## A.6 Container troubleshooting
+
+| Symptom | Things to check |
+|---------|-----------------|
+| Cannot log in / session cookie missing | `COOKIE_SECURE` must be `false` on plain HTTP; confirm `.env.docker` and recreate app container |
+| `POSTGRES_PASSWORD` error from Compose | `.env.docker` missing or not passed via `--env-file` |
+| App unhealthy / migrate errors | `docker compose --env-file .env.docker logs app`; wait for `db` healthy; password URL-safety |
+| Port already allocated | Change `TASKMESH_PORT` in `.env.docker` and recreate |
+| Cannot reach from another machine | Firewall; confirm publish mapping in `docker compose ps` |
+| Permission / volume issues on Desktop | Restart Docker Desktop; avoid exotic bind mounts for first install — named volumes are default |
+| Podman Compose quirks | Confirm Compose file version support; try `podman compose` vs Docker CLI against Podman’s socket |
+
+## A.7 Quick checklist (containers)
+
+1. Install Docker Desktop (Windows/macOS) or Docker Engine + Compose (Linux) — links in [A.2](#a2-install-a-container-host-by-os)  
+2. `git clone` → `cp .env.docker.example .env.docker` → set `POSTGRES_PASSWORD`  
+3. `docker compose --env-file .env.docker up -d --build`  
+4. `curl` `/api/health` and open the UI on the published port  
+5. Configure backups in the UI; keep volume backups in your host backup plan  
+
+---
+
+# B. Bare-metal Ubuntu
+
+Start-to-finish guide for installing TaskMesh on a **fresh Ubuntu Linux server** (same host for PostgreSQL, Node.js API, and the React SPA). Validated against Ubuntu **22.04 / 24.04** style `apt` workflows; adjust package names only if your release differs.
+
+## Table of contents (bare metal)
 
 1. [What you will install](#1-what-you-will-install)
 2. [Reference documentation](#2-reference-documentation)
