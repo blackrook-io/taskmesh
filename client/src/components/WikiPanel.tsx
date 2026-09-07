@@ -17,6 +17,7 @@ import type { Canvas, ProjectDocument, WikiNode, WikiTreeNode, WikiTreeResponse 
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CanvasEditor } from "./CanvasEditor";
 import { EpubReader } from "./EpubReader";
+import { PdfReader } from "./PdfReader";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { PencilIcon } from "./shared/PencilIcon";
 import { TagInput } from "./shared/TagInput";
@@ -298,7 +299,7 @@ export function WikiPanel({
       const doc = detailQuery.data?.document;
       if (!doc) throw new Error("No document");
       const payload: Record<string, unknown> = { title: titleDraft.trim() || doc.title };
-      if ((doc.kind ?? "markdown") !== "epub") {
+      if ((doc.kind ?? "markdown") !== "epub" && (doc.kind ?? "markdown") !== "pdf") {
         payload.body = bodyDraft;
       }
       await apiJson(`/api/v1/projects/${projectId}/documents/${doc.id}`, {
@@ -556,11 +557,13 @@ export function WikiPanel({
             </div>
 
             {pageEdit ? (
-              (detailQuery.data.document.kind ?? "markdown") === "epub" ? (
+              (detailQuery.data.document.kind ?? "markdown") === "epub" ||
+              (detailQuery.data.document.kind ?? "markdown") === "pdf" ? (
                 <>
                   <p className="muted">
-                    This wiki entry points at an EPUB document. Use the EPUB viewer; Markdown body editing does
-                    not apply.
+                    This wiki entry points at a{" "}
+                    {(detailQuery.data.document.kind ?? "markdown") === "pdf" ? "PDF" : "EPUB"} document. Use
+                    the viewer; Markdown body editing does not apply.
                   </p>
                   <div className="field">
                     <label htmlFor="wiki-title">Title</label>
@@ -575,13 +578,23 @@ export function WikiPanel({
                     <TagInput entityType="document" entityId={detailQuery.data.document.id} />
                   </div>
                   {detailQuery.data.document.fileUrl ? (
-                    <EpubReader
-                      key={detailQuery.data.document.fileUrl}
-                      fileUrl={detailQuery.data.document.fileUrl}
-                      title={detailQuery.data.document.fileOriginalName ?? undefined}
-                    />
+                    (detailQuery.data.document.kind ?? "markdown") === "pdf" ? (
+                      <PdfReader
+                        key={detailQuery.data.document.fileUrl}
+                        fileUrl={detailQuery.data.document.fileUrl}
+                        title={detailQuery.data.document.fileOriginalName ?? undefined}
+                      />
+                    ) : (
+                      <EpubReader
+                        key={detailQuery.data.document.fileUrl}
+                        fileUrl={detailQuery.data.document.fileUrl}
+                        title={detailQuery.data.document.fileOriginalName ?? undefined}
+                      />
+                    )
                   ) : (
-                    <p className="muted">EPUB file missing.</p>
+                    <p className="muted">
+                      {(detailQuery.data.document.kind ?? "markdown") === "pdf" ? "PDF" : "EPUB"} file missing.
+                    </p>
                   )}
                 </>
               ) : (
@@ -604,7 +617,8 @@ export function WikiPanel({
                   </div>
                 </>
               )
-            ) : (detailQuery.data.document.kind ?? "markdown") === "epub" ? (
+            ) : (detailQuery.data.document.kind ?? "markdown") === "epub" ||
+              (detailQuery.data.document.kind ?? "markdown") === "pdf" ? (
               <>
                 <h1 className="wiki-page-title">
                   {detailQuery.data?.node ? (
@@ -618,13 +632,23 @@ export function WikiPanel({
                   <TagInput entityType="document" entityId={detailQuery.data.document.id} readOnly />
                 </div>
                 {detailQuery.data.document.fileUrl ? (
-                  <EpubReader
-                    key={detailQuery.data.document.fileUrl}
-                    fileUrl={detailQuery.data.document.fileUrl}
-                    title={detailQuery.data.document.fileOriginalName ?? undefined}
-                  />
+                  (detailQuery.data.document.kind ?? "markdown") === "pdf" ? (
+                    <PdfReader
+                      key={detailQuery.data.document.fileUrl}
+                      fileUrl={detailQuery.data.document.fileUrl}
+                      title={detailQuery.data.document.fileOriginalName ?? undefined}
+                    />
+                  ) : (
+                    <EpubReader
+                      key={detailQuery.data.document.fileUrl}
+                      fileUrl={detailQuery.data.document.fileUrl}
+                      title={detailQuery.data.document.fileOriginalName ?? undefined}
+                    />
+                  )
                 ) : (
-                  <p className="muted">EPUB file missing.</p>
+                  <p className="muted">
+                    {(detailQuery.data.document.kind ?? "markdown") === "pdf" ? "PDF" : "EPUB"} file missing.
+                  </p>
                 )}
               </>
             ) : (

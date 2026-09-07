@@ -441,9 +441,9 @@ export const projectDocuments = pgTable("project_documents", {
     .references(() => projects.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   body: text("body"),
-  /** `markdown` (default) or `epub` (binary via uploadId). PDF later. */
+  /** `markdown` (default), `epub`, or `pdf` (binary via uploadId). */
   kind: text("kind").notNull().default("markdown"),
-  /** FK to uploads for binary document kinds (epub). */
+  /** FK to uploads for binary document kinds (epub, pdf). */
   uploadId: integer("upload_id").references((): AnyPgColumn => uploads.id, {
     onDelete: "set null",
   }),

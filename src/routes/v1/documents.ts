@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { EPUB_MIME } from "../../lib/epubMagic.js";
+import { PDF_MIME } from "../../lib/pdfMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
@@ -16,7 +17,16 @@ import {
 } from "../../services/documents.js";
 import { getCurrentUserId } from "../../services/users.js";
 
-const documentKind = z.enum(["markdown", "epub"]);
+const documentKind = z.enum(["markdown", "epub", "pdf"]);
+const BINARY_KINDS = new Set(["epub", "pdf"]);
+
+function binaryMimeForKind(kind: "epub" | "pdf"): string {
+  return kind === "epub" ? EPUB_MIME : PDF_MIME;
+}
+
+function binaryLabel(kind: "epub" | "pdf"): string {
+  return kind === "epub" ? "EPUB" : "PDF";
+}
 
 const docBody = z
   .object({
@@ -28,18 +38,18 @@ const docBody = z
   })
   .superRefine((val, ctx) => {
     const kind = val.kind ?? "markdown";
-    if (kind === "epub") {
+    if (BINARY_KINDS.has(kind)) {
       if (val.uploadId == null) {
         ctx.addIssue({
           code: "custom",
-          message: "EPUB documents require uploadId",
+          message: `${binaryLabel(kind as "epub" | "pdf")} documents require uploadId`,
           path: ["uploadId"],
         });
       }
       if (val.body != null && val.body !== "") {
         ctx.addIssue({
           code: "custom",
-          message: "EPUB documents do not use a Markdown body",
+          message: `${binaryLabel(kind as "epub" | "pdf")} documents do not use a Markdown body`,
           path: ["body"],
         });
       }
@@ -98,11 +108,17 @@ documentsRouter.post("/", async (req, res) => {
       parsed.position ?? (maxPos.length ? Math.max(...maxPos.map((r) => r.p)) + 1 : 0);
 
     let uploadId: number | null = null;
-    if (kind === "epub") {
+    if (kind === "epub" || kind === "pdf") {
       const uid = parsed.uploadId!;
       const [upload] = await db.select().from(schema.uploads).where(eq(schema.uploads.id, uid));
-      if (!upload || upload.mimeType !== EPUB_MIME) {
-        sendError(res, 400, "invalid_upload", "uploadId must reference an EPUB upload");
+      const expectMime = binaryMimeForKind(kind);
+      if (!upload || upload.mimeType !== expectMime) {
+        sendError(
+          res,
+          400,
+          "invalid_upload",
+          `uploadId must reference a ${binaryLabel(kind)} upload`,
+        );
         return;
       }
       uploadId = uid;
@@ -166,8 +182,16 @@ documentsRouter.patch("/:docId", async (req, res) => {
       return;
     }
 
-    if (existing.kind === "epub" && parsed.body !== undefined) {
-      sendError(res, 400, "invalid_patch", "EPUB documents do not use a Markdown body");
+    const binaryKind =
+      existing.kind === "epub" || existing.kind === "pdf" ? existing.kind : null;
+
+    if (binaryKind && parsed.body !== undefined) {
+      sendError(
+        res,
+        400,
+        "invalid_patch",
+        `${binaryLabel(binaryKind)} documents do not use a Markdown body`,
+      );
       return;
     }
     if (existing.kind === "markdown" && parsed.uploadId !== undefined) {
@@ -177,17 +201,27 @@ documentsRouter.patch("/:docId", async (req, res) => {
 
     let nextUploadId = existing.uploadId;
     let oldUploadToDelete: number | null = null;
-    if (existing.kind === "epub" && parsed.uploadId !== undefined) {
+    if (binaryKind && parsed.uploadId !== undefined) {
       if (parsed.uploadId == null) {
-        sendError(res, 400, "invalid_upload", "EPUB documents require an upload");
+        sendError(
+          res,
+          400,
+          "invalid_upload",
+          `${binaryLabel(binaryKind)} documents require an upload`,
+        );
         return;
       }
       const [upload] = await db
         .select()
         .from(schema.uploads)
         .where(eq(schema.uploads.id, parsed.uploadId));
-      if (!upload || upload.mimeType !== EPUB_MIME) {
-        sendError(res, 400, "invalid_upload", "uploadId must reference an EPUB upload");
+      if (!upload || upload.mimeType !== binaryMimeForKind(binaryKind)) {
+        sendError(
+          res,
+          400,
+          "invalid_upload",
+          `uploadId must reference a ${binaryLabel(binaryKind)} upload`,
+        );
         return;
       }
       if (existing.uploadId != null && existing.uploadId !== parsed.uploadId) {
@@ -203,9 +237,7 @@ documentsRouter.patch("/:docId", async (req, res) => {
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.body !== undefined && existing.kind === "markdown" ? { body: parsed.body } : {}),
         ...(parsed.position !== undefined ? { position: parsed.position } : {}),
-        ...(existing.kind === "epub" && parsed.uploadId !== undefined
-          ? { uploadId: nextUploadId }
-          : {}),
+        ...(binaryKind && parsed.uploadId !== undefined ? { uploadId: nextUploadId } : {}),
         updatedAt: new Date(),
         updatedById: actorId,
       })

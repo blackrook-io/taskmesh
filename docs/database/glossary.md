@@ -33,7 +33,7 @@ Internal joins still use surrogate `id` primary keys. Display numbers are for hu
 
 **Note (T0104):** ToDo items use **D####**. Project documents moved from D to **N####**.
 
-**Note (T0091):** `project_documents.kind` is `markdown` (default) or `epub` (binary file via `upload_id` → `uploads` on disk).
+**Note (T0091 / T0119):** `project_documents.kind` is `markdown` (default), `epub`, or `pdf` (binary file via `upload_id` → `uploads` on disk).
 ## Polymorphic entity links
 
 Several tables store **`entity_type`** (text) + **`entity_id`** (integer) instead of a typed foreign key:

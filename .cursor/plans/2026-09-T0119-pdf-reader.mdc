@@ -1,0 +1,96 @@
+# T0119 — Implement PDF document reader
+
+**State:** finished — merged to main as v0.35.4  
+**Branch:** `T0119-pdf-reader`  
+**Parent:** T0091 (pending; own work done)  
+**Depends on:** T0091 — satisfied (`pending`)
+
+## Context
+
+T0091 shipped Document `kind` (`markdown` | `epub`), `uploadId` FK, 100 MB binary uploads on the filesystem, Documents create UX (Markdown / EPUB / disabled PDF icon), and an epub.js reader. PDF was deferred to this Task.
+
+## Decisions (interview)
+
+1. **Library:** Mozilla **pdf.js** via `pdfjs-dist` in `client/` (not `react-pdf` wrapper unless needed for worker ergonomics — prefer direct `pdfjs-dist`).
+2. **Title on upload:** Extract PDF Info/`Title` metadata when present; else filename without `.pdf` (same pattern as EPUB `dc:title`).
+3. **Reading chrome:** Dark / Light page toggle, persisted (mirror EPUB `localStorage` pattern). Dark uses app `--canvas-bg` / `--text` for chrome + page backdrop where pdf.js allows; light keeps a neutral paper surface.
+4. **MVP controls:** Open PDF, prev/next page, zoom in/out. **Out of scope:** annotations, in-PDF text search, thumbnail rail, bookmarks / progress sync.
+5. **Create UX:** Enable the existing PDF kind icon; upload-then-link like EPUB (`accept` PDF MIME / `.pdf`).
+6. **Schema:** No new Drizzle migration — `kind` is already free text + `uploadId` exists. Extend Zod / `DocumentKind` / docs comments to include `pdf`. Finish-up → **PATCH** SemVer bump.
+
+## Outcome
+
+Users can upload a PDF as a Project Document, open it in a pdf.js viewer (page nav, zoom, dark/light), rename via the same N#### + title header pattern as EPUB, and deep-link via `#N####` from Markdown/Wiki.
+
+## Approach
+
+### Uploads API
+
+- Allow `application/pdf` (+ `.pdf` extension); sniff `%PDF` magic.
+- Size limit: same 100 MB binary-doc budget (`UPLOAD_MAX_BYTES_EPUB` or introduce shared `UPLOAD_MAX_BYTES_BINARY` / reuse EPUB env — prefer one binary max used by both epub and pdf).
+- Store as `.pdf` under `UPLOAD_DIR`; backups already tar `UPLOAD_DIR`.
+- Keep image path at 5 MB.
+
+### Documents API
+
+- Extend `DocumentKind` / create schema: `markdown` | `epub` | `pdf`.
+- Create PDF: `{ kind: "pdf", uploadId, title }` — require upload with PDF MIME; reject Markdown `body`.
+- PATCH/delete parity with EPUB (rename title; replace file optional if EPUB already supports it; delete removes linked upload).
+- List/get already expose `kind` + file URL — ensure PDF rows included (no kind filter on references).
+
+### Client
+
+- Enable PDF create button on Documents panel; hidden file input `accept=".pdf,application/pdf"`.
+- Client-side title helper (pdf.js `getMetadata` / Info.Title, filename fallback).
+- New `PdfReader` component: load via same-origin `/api/v1/files/…` (credentials), render page canvas, toolbar (prev/next, zoom, dark/light), reuse EPUB-style header (N#### + inline rename) + tags-below.
+- Wire Project Documents + Wiki document detail: branch `kind === "pdf"` → `PdfReader` (not TipTap).
+- TOC / list icons: show PDF glyph for `kind === "pdf"` (icon already exists).
+- Smoke `#N####` typeahead / navigation for PDF docs.
+
+### Docs
+
+- Update `docs/database/` comments (`kind` includes `pdf`); `npm run docs:sync-schema` on finish-up (or after merge if preferred with deploy).
+
+### Out of scope
+
+- Annotations, text search inside PDF, thumbnails, bookmarks
+- Editing PDF content
+- Full-text index of PDF body for global search (title still searchable)
+
+## Implementation sketch
+
+| Area | Work |
+|------|------|
+| `uploads` route | PDF MIME + magic + 100 MB binary path |
+| `documents` route/service | `pdf` kind create/patch/delete |
+| `client` | `PdfReader` + enable create icon + Wiki/Documents branch |
+| Deps | `pdfjs-dist` in `client/` (+ worker asset packaging for Vite) |
+| Docs | schema comment / content-and-modules mention of `pdf` |
+| Version | PATCH on finish-up (no migration) |
+
+## Risks
+
+- pdf.js worker URL under Vite/prod static paths — copy or `?url` import pattern carefully.
+- Large PDFs on mobile memory — MVP acceptable at 100 MB edge.
+- Auth on file fetch — same cookie/credentials pattern as EPUB reader.
+
+## QA follow-ups
+
+- **PDF upload `unsupported_file_type`:** DEV API (`tsx watch`) had not reloaded `uploads.ts`, so multer still used the pre-PDF allowlist (stack pointed at old `fileFilter` L47). Restarted DEV API; confirmed `%PDF` upload succeeds. Broadened PDF MIME aliases (`application/x-pdf`, `application/acrobat`, octet-stream + `.pdf`). Global multer error handler now returns 400 for `unsupported_file_type` instead of 500 “Unexpected server error”.
+- **Canvas multi-render error overlay:** PdfReader cancelled overlapping `pdfPage.render()` calls (ResizeObserver / Strict Mode / rapid page·zoom). Keep a `RenderTask` ref, `cancel()` on cleanup, ignore `RenderingCancelledException`.
+- **Dark page = white-on-black text, images preserved:** Pixel/`pageColors` remaps produced hollow glyphs or white voids on docs like 455 vAEW Wing Standards. Final approach: CSS `filter: invert(1) hue-rotate(180deg)` on the canvas — solid AA text, paper goes dark, chromatic figures stay roughly natural; toggle is instant (no re-render).
+- **Password-protected PDFs:** `loadingTask.onPassword` prompts inline (need / incorrect). Password stays in memory for the unlock attempt only (not persisted). Cancel destroys the load and shows “Password required…”.
+
+## QA checklist (preview)
+
+- [ ] New Markdown Document unchanged
+- [ ] Upload PDF → Document with N####; opens PdfReader (page nav, zoom, dark/light)
+- [ ] Title from PDF metadata when present; else filename
+- [ ] Inline rename + tags-below match EPUB
+- [ ] Delete PDF Document confirms and removes file
+- [ ] `#N` from Markdown/Wiki finds PDF doc and opens viewer
+- [ ] EPUB path still works; image upload still ≤5 MB
+- [ ] PDF >100 MB rejected
+- [ ] PDF viewer shows clean pages (no canvas multi-render error overlay)
+- [ ] Dark page: solid white text on black (not hollow); color images look natural; Light page restores; toggle is instant
+- [ ] Password PDF: unlock form appears; wrong password re-prompts; correct password opens reader; Cancel shows locked message; password not saved across reload

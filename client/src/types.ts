@@ -109,7 +109,7 @@ export type TaskActivityEntry = {
   createdAt: string;
 };
 
-export type DocumentKind = "markdown" | "epub";
+export type DocumentKind = "markdown" | "epub" | "pdf";
 
 export type ProjectDocument = {
   id: number;

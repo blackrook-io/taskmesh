@@ -5368,7 +5368,8 @@ a:focus-visible {
   flex-shrink: 0;
 }
 
-.document-editor--epub .field--tags-below {
+.document-editor--epub .field--tags-below,
+.document-editor--pdf .field--tags-below {
   margin-top: 0.85rem;
 }
 
@@ -5507,6 +5508,127 @@ a:focus-visible {
 
 .epub-reader--dark .epub-reader__viewport iframe {
   background: var(--canvas-bg, var(--bg)) !important;
+}
+
+.pdf-reader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 28rem;
+}
+
+.pdf-reader__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pdf-reader__toolbar-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.pdf-reader__page {
+  min-width: 3.5rem;
+}
+
+.pdf-reader__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pdf-reader__title {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-reader__viewport-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: min(70vh, 52rem);
+  min-height: 24rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f4f1ea;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.pdf-reader--dark .pdf-reader__viewport-wrap {
+  background: var(--canvas-bg, var(--bg));
+}
+
+.pdf-reader__status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  z-index: 2;
+  padding: 1rem;
+  pointer-events: none;
+  color: #333;
+}
+
+.pdf-reader--dark .pdf-reader__status {
+  color: var(--text-muted, var(--text));
+}
+
+.pdf-reader__canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 18%);
+}
+
+.pdf-reader--dark .pdf-reader__canvas {
+  /* Compositor invert keeps glyph AA solid; hue-rotate roughly restores photo colors. */
+  filter: invert(1) hue-rotate(180deg);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 45%);
+}
+
+.pdf-reader__password {
+  align-self: center;
+  width: min(22rem, 100%);
+  margin: auto;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg, var(--bg));
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  z-index: 2;
+}
+
+.pdf-reader__password-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.pdf-reader__password-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pdf-reader__password input {
+  width: 100%;
+}
+
+.pdf-reader__password-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
 }
 
 .documents-toc {

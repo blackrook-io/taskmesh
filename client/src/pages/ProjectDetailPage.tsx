@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { apiJson, uploadFileWithMeta } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EpubReader } from "../components/EpubReader";
+import { PdfReader } from "../components/PdfReader";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { DocumentKindIcon } from "../components/shared/DocumentKindIcon";
 import { PencilIcon } from "../components/shared/PencilIcon";
@@ -28,6 +29,7 @@ import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
 import { resolveEpubDocumentTitle } from "../lib/epubMeta";
+import { resolvePdfDocumentTitle } from "../lib/pdfMeta";
 import { sanitizePlainText } from "../lib/plainText";
 import { storageKeyForProjectTasks, emptyTaskListFilter, isFilterActive, parseTaskListFilterValue } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
@@ -123,7 +125,9 @@ export function ProjectDetailPage() {
   const [requestOpenTask, setRequestOpenTask] = useState<Task | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [epubUploadError, setEpubUploadError] = useState<string | null>(null);
+  const [pdfUploadError, setPdfUploadError] = useState<string | null>(null);
   const epubFileInputRef = useRef<HTMLInputElement | null>(null);
+  const pdfFileInputRef = useRef<HTMLInputElement | null>(null);
   const [projectListId, setProjectListId] = useState<number | null>(null);
   const [pendingDeleteTodoList, setPendingDeleteTodoList] = useState<TodoList | null>(null);
 
@@ -517,6 +521,28 @@ export function ProjectDetailPage() {
     },
   });
 
+  const createPdfDocument = useMutation({
+    mutationFn: async (file: File) => {
+      const [upload, title] = await Promise.all([
+        uploadFileWithMeta(file),
+        resolvePdfDocumentTitle(file),
+      ]);
+      const res = await apiJson<{ data: ProjectDocument }>(`/api/v1/projects/${projectId}/documents`, {
+        method: "POST",
+        body: JSON.stringify({ title, kind: "pdf", uploadId: upload.id }),
+      });
+      return res.data;
+    },
+    onSuccess: (doc) => {
+      setPdfUploadError(null);
+      setSelectedDocId(doc.id);
+      void qc.invalidateQueries({ queryKey: ["documents", projectId] });
+    },
+    onError: (err) => {
+      setPdfUploadError(err instanceof Error ? err.message : "PDF upload failed");
+    },
+  });
+
   const saveDocument = useMutation({
     mutationFn: async ({
       docId,
@@ -856,7 +882,11 @@ export function ProjectDetailPage() {
                   <button
                     type="button"
                     className="btn small btn-icon documents-panel__create-icon-btn"
-                    disabled={createDocument.isPending || createEpubDocument.isPending}
+                    disabled={
+                      createDocument.isPending ||
+                      createEpubDocument.isPending ||
+                      createPdfDocument.isPending
+                    }
                     aria-label={createDocument.isPending ? "Creating Markdown document" : "New Markdown document"}
                     title="New Markdown"
                     onClick={() => createDocument.mutate()}
@@ -866,7 +896,11 @@ export function ProjectDetailPage() {
                   <button
                     type="button"
                     className="btn small btn-icon documents-panel__create-icon-btn"
-                    disabled={createDocument.isPending || createEpubDocument.isPending}
+                    disabled={
+                      createDocument.isPending ||
+                      createEpubDocument.isPending ||
+                      createPdfDocument.isPending
+                    }
                     aria-label={
                       createEpubDocument.isPending ? "Uploading EPUB" : "Upload EPUB document"
                     }
@@ -881,9 +915,17 @@ export function ProjectDetailPage() {
                   <button
                     type="button"
                     className="btn small btn-icon documents-panel__create-icon-btn"
-                    disabled
-                    aria-label="New PDF document (coming soon)"
-                    title="PDF coming soon"
+                    disabled={
+                      createDocument.isPending ||
+                      createEpubDocument.isPending ||
+                      createPdfDocument.isPending
+                    }
+                    aria-label={createPdfDocument.isPending ? "Uploading PDF" : "Upload PDF document"}
+                    title="Upload PDF"
+                    onClick={() => {
+                      setPdfUploadError(null);
+                      pdfFileInputRef.current?.click();
+                    }}
                   >
                     <DocumentKindIcon kind="pdf" size={16} />
                   </button>
@@ -898,11 +940,27 @@ export function ProjectDetailPage() {
                       if (file) createEpubDocument.mutate(file);
                     }}
                   />
+                  <input
+                    ref={pdfFileInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) createPdfDocument.mutate(file);
+                    }}
+                  />
                 </div>
               </div>
               {epubUploadError ? (
                 <p className="muted small" role="alert" style={{ margin: "0.4rem 0 0" }}>
                   {epubUploadError}
+                </p>
+              ) : null}
+              {pdfUploadError ? (
+                <p className="muted small" role="alert" style={{ margin: "0.4rem 0 0" }}>
+                  {pdfUploadError}
                 </p>
               ) : null}
             </div>
@@ -927,6 +985,9 @@ export function ProjectDetailPage() {
                   saveDocument.mutate({ docId: selectedDoc.id, title, body })
                 }
                 onSaveEpub={(title, uploadId) =>
+                  saveDocument.mutate({ docId: selectedDoc.id, title, uploadId })
+                }
+                onSavePdf={(title, uploadId) =>
                   saveDocument.mutate({ docId: selectedDoc.id, title, uploadId })
                 }
                 onDelete={() => setPendingDocDelete(selectedDoc.id)}
@@ -1004,12 +1065,14 @@ function DocumentEditor({
   doc,
   onSaveMarkdown,
   onSaveEpub,
+  onSavePdf,
   onDelete,
   busy,
 }: {
   doc: ProjectDocument;
   onSaveMarkdown: (title: string, body: string) => void;
   onSaveEpub: (title: string, uploadId?: number) => void;
+  onSavePdf: (title: string, uploadId?: number) => void;
   onDelete: () => void;
   busy: boolean;
 }) {
@@ -1039,15 +1102,21 @@ function DocumentEditor({
         key: `document-${doc.id}`,
         label: title.trim() || `Document #${doc.id}`,
         getContext: () =>
-          kind === "epub"
-            ? `Document #${doc.id} (project #${doc.projectId}, EPUB)\nTitle: ${title}\nFile: ${doc.fileOriginalName ?? doc.fileUrl ?? "(none)"}`
+          kind === "epub" || kind === "pdf"
+            ? `Document #${doc.id} (project #${doc.projectId}, ${kind.toUpperCase()})\nTitle: ${title}\nFile: ${doc.fileOriginalName ?? doc.fileUrl ?? "(none)"}`
             : `Document #${doc.id} (project #${doc.projectId})\nTitle: ${title}\n\n${body}`,
       }),
       [doc.id, doc.projectId, doc.fileOriginalName, doc.fileUrl, title, body, kind],
     ),
   );
 
-  const commitEpubTitle = () => {
+  const onSaveBinary = kind === "pdf" ? onSavePdf : onSaveEpub;
+  const binaryExt = kind === "pdf" ? ".pdf" : ".epub";
+  const binaryLabel = kind === "pdf" ? "PDF" : "EPUB";
+  const binaryAccept =
+    kind === "pdf" ? ".pdf,application/pdf" : ".epub,application/epub+zip";
+
+  const commitBinaryTitle = () => {
     if (skipTitleCommitRef.current) {
       skipTitleCommitRef.current = false;
       return;
@@ -1057,20 +1126,21 @@ function DocumentEditor({
     setEditingTitle(false);
     if (next !== title) {
       setTitle(next);
-      onSaveEpub(next);
+      onSaveBinary(next);
     }
   };
 
-  const cancelEpubTitleEdit = () => {
+  const cancelBinaryTitleEdit = () => {
     skipTitleCommitRef.current = true;
     setTitleDraft(title);
     setEditingTitle(false);
   };
 
-  if (kind === "epub") {
-    const headingTitle = title.replace(/\.epub$/i, "").trim() || title;
+  if (kind === "epub" || kind === "pdf") {
+    const headingTitle =
+      title.replace(new RegExp(`\\${binaryExt}$`, "i"), "").trim() || title;
     return (
-      <div className="document-editor document-editor--epub">
+      <div className={`document-editor document-editor--${kind}`}>
         <div className="page-head document-editor__head">
           {editingTitle ? (
             <input
@@ -1080,14 +1150,14 @@ function DocumentEditor({
               value={titleDraft}
               disabled={busy}
               onChange={(e) => setTitleDraft(sanitizePlainText(e.target.value))}
-              onBlur={() => commitEpubTitle()}
+              onBlur={() => commitBinaryTitle()}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
                   (e.target as HTMLInputElement).blur();
                 } else if (e.key === "Escape") {
                   e.preventDefault();
-                  cancelEpubTitleEdit();
+                  cancelBinaryTitleEdit();
                 }
               }}
             />
@@ -1114,7 +1184,7 @@ function DocumentEditor({
                 replaceInputRef.current?.click();
               }}
             >
-              {replacing ? "Replacing…" : "Replace EPUB"}
+              {replacing ? "Replacing…" : `Replace ${binaryLabel}`}
             </button>
             <button type="button" className="btn danger small" onClick={onDelete}>
               Delete
@@ -1122,7 +1192,7 @@ function DocumentEditor({
             <input
               ref={replaceInputRef}
               type="file"
-              accept=".epub,application/epub+zip"
+              accept={binaryAccept}
               hidden
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -1134,11 +1204,13 @@ function DocumentEditor({
                   try {
                     const [upload, metaTitle] = await Promise.all([
                       uploadFileWithMeta(file),
-                      resolveEpubDocumentTitle(file),
+                      kind === "pdf"
+                        ? resolvePdfDocumentTitle(file)
+                        : resolveEpubDocumentTitle(file),
                     ]);
                     setTitle(metaTitle);
                     setTitleDraft(metaTitle);
-                    onSaveEpub(metaTitle, upload.id);
+                    onSaveBinary(metaTitle, upload.id);
                   } catch (err) {
                     setReplaceError(err instanceof Error ? err.message : "Replace failed");
                   } finally {
@@ -1155,9 +1227,13 @@ function DocumentEditor({
           </p>
         ) : null}
         {doc.fileUrl ? (
-          <EpubReader key={doc.fileUrl} fileUrl={doc.fileUrl} />
+          kind === "pdf" ? (
+            <PdfReader key={doc.fileUrl} fileUrl={doc.fileUrl} />
+          ) : (
+            <EpubReader key={doc.fileUrl} fileUrl={doc.fileUrl} />
+          )
         ) : (
-          <p className="muted">EPUB file missing.</p>
+          <p className="muted">{binaryLabel} file missing.</p>
         )}
         <div className="field field--tags-below">
           <TagInput entityType="document" entityId={doc.id} />

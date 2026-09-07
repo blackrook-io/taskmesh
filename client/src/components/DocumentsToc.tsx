@@ -155,6 +155,8 @@ function DocumentsTocRow({
         {documentDisplayTitle(doc)}
         {(doc.kind ?? "markdown") === "epub" ? (
           <span className="documents-toc__kind">EPUB</span>
+        ) : (doc.kind ?? "markdown") === "pdf" ? (
+          <span className="documents-toc__kind">PDF</span>
         ) : null}
       </button>
     </div>

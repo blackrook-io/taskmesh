@@ -89,6 +89,10 @@ app.use(
         return;
       }
     }
+    if (err instanceof Error && err.message === "unsupported_file_type") {
+      sendError(res, 400, "unsupported_file_type", "Unsupported file type");
+      return;
+    }
     console.error(err);
     const detail = err instanceof Error ? err.message : "Unexpected server error";
     if (!res.locals.logMessage) {

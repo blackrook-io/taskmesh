@@ -9,7 +9,7 @@ import { loadUserMap } from "./users.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
-export type DocumentKind = "markdown" | "epub";
+export type DocumentKind = "markdown" | "epub" | "pdf";
 
 export type ProjectDocumentWithActors = typeof schema.projectDocuments.$inferSelect & {
   updatedBy: UserRef | null;

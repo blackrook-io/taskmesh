@@ -4,6 +4,19 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.4 — 2026-09-07
+
+### New Functionality
+- Projects can upload PDF Documents (up to 100 MB on the filesystem, shared binary limit with EPUB) and open them in an in-app pdf.js reader with page navigation, zoom, and dark/light reading (CSS invert + hue-rotate so type stays solid and color figures stay roughly natural).
+- Password-protected PDFs prompt for unlock in the reader; the password is used only for that open attempt and is not stored.
+
+### Enhancements
+- Document `kind` includes `pdf` alongside `markdown` and `epub`; Documents create enables the PDF kind icon; titles prefer PDF metadata, with inline rename and tags below the reader like EPUB.
+- `#N####` Markdown/Wiki references resolve to PDF Documents the same as other document kinds.
+
+### Fixes
+- Multer `unsupported_file_type` from the upload allowlist returns HTTP 400 instead of a generic 500 “Unexpected server error”.
+
 ## 0.35.3 — 2026-09-07
 
 ### Enhancements

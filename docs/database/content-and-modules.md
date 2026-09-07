@@ -16,7 +16,7 @@ erDiagram
   projects ||--o{ canvases : has
   projects ||--o{ image_boards : "optional"
   users }o--o| uploads : avatar
-  uploads ||--o| project_documents : "epub file"
+  uploads ||--o| project_documents : "binary file"
   tags ||--o{ taggings : has
   todo_lists ||--o{ todo_list_items : has
   boards ||--o{ board_columns : has
@@ -105,7 +105,8 @@ Standalone project documents. Display number → **N####** (documents previously
 Kinds:
 
 - **`markdown`** (default) — TipTap Markdown `body`
-- **`epub`** — binary EPUB on disk via `upload_id` → `uploads` (bytes under `UPLOAD_DIR`; not stored in Postgres). PDF is a follow-up kind.
+- **`epub`** — binary EPUB on disk via `upload_id` → `uploads` (bytes under `UPLOAD_DIR`; not stored in Postgres)
+- **`pdf`** — binary PDF on disk via `upload_id` → `uploads` (same storage pattern as EPUB)
 
 ### Columns
 
@@ -115,8 +116,8 @@ Kinds:
 | `number` | integer | no | — | Display number (N####) |
 | `project_id` | integer | no | — | FK → `projects.id` |
 | `title` | text | no | — | |
-| `body` | text | yes | — | Markdown when `kind=markdown`; null for `epub` |
-| `kind` | text | no | `'markdown'` | `markdown` \| `epub` |
+| `body` | text | yes | — | Markdown when `kind=markdown`; null for `epub` / `pdf` |
+| `kind` | text | no | `'markdown'` | `markdown` \| `epub` \| `pdf` |
 | `upload_id` | integer | yes | — | FK → `uploads.id` for binary kinds |
 | `position` | integer | no | `0` | Ordering within the project |
 | `updated_by_id` | integer | yes | — | FK → `users.id` — last editor |
@@ -137,7 +138,7 @@ Kinds:
 
 Stored image and document files on disk. Metadata only in Postgres; bytes live under `UPLOAD_DIR` (default `data/uploads/`). Included in backup `uploads-*.tar.gz`.
 
-Allowed types: jpeg/png/gif/webp (default max 5 MiB via `UPLOAD_MAX_BYTES`) and EPUB `application/epub+zip` (default max 100 MiB via `UPLOAD_MAX_BYTES_EPUB`).
+Allowed types: jpeg/png/gif/webp (default max 5 MiB via `UPLOAD_MAX_BYTES`) and binary documents EPUB (`application/epub+zip`) / PDF (`application/pdf`) (default max 100 MiB via `UPLOAD_MAX_BYTES_BINARY`, with `UPLOAD_MAX_BYTES_EPUB` as legacy fallback).
 
 ### Columns
 
