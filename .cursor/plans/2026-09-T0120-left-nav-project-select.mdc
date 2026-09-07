@@ -1,0 +1,53 @@
+# T0120 — Left Nav Project Select
+
+**Task:** T0120 (`id` 133) — Left Nav Project Select  
+**State at plan:** `ready` · Priority medium · Project 4 (TaskMesh) · No parent · No dependencies  
+**Branch (on approval):** `T0120-left-nav-project-select`
+
+## Problem
+
+In left-nav **Less** (icon-only) mode, **Projects** is a `NavLink` to `lastProjectPath()` / `/projects`. Switching projects requires expand → pick → collapse. Screenshot in the task description shows the Less-mode Projects glyph + tooltip.
+
+## Goal
+
+When the left nav is collapsed (**Less** mode) and the user clicks **Projects**, open a **small modal** to choose a project and navigate there — without expanding the rail.
+
+## Interview defaults (confirm / adjust)
+
+**Confirmed 2026-09-07:** yes to all.
+
+1. **Trigger:** Only in **Less** mode. Full mode keeps the expandable project list (no modal).
+2. **Navigate on pick:** Clicking a project goes to `/projects/{id}` (overview) and closes the modal; nav stays **Less**.
+3. **Also in modal:** **All projects** → `/projects`, and **New project** → `/projects/new` (mirrors Full-mode list).
+4. **Current project:** Highlight the active project when already on a project route.
+5. **Search:** Include a search field when there are more than a few projects (reuse patterns from `MoveTaskToProjectModal`).
+6. **Out of scope:** Drag-reorder in the modal; changing Full-mode behavior; mobile drawer (already Full).
+
+## Approach
+
+1. Add `ProjectSelectModal` (shell or shared) — lightweight dialog: search + list of projects + All / New links; Esc / backdrop dismiss; Escape focus trap consistent with existing modals.
+2. In `AppNav` Less mode: replace Projects `NavLink` with a **button** that opens the modal (keep glyph, tooltip “Projects”, active styling when `section === "projects"`).
+3. On select: `navigate(...)`, close modal, call `onNavigate` if provided (mobile drawer close path still fine if reused).
+4. Fetch projects when modal opens (`["projects"]` query), same API as Full-mode list.
+5. Light CSS under existing modal / app-nav tokens (dark grey / light green); keep the dialog compact (not a full settings sheet).
+
+## Files likely touched
+
+- `client/src/components/shell/AppNav.tsx` (Less-mode Projects click → modal)
+- New: `client/src/components/shell/ProjectSelectModal.tsx` (or similar)
+- `client/src/index.css` (or shell CSS) — small modal list styles if needed
+
+No API / schema / migration changes. **PATCH version bump** on finish-up.
+
+## Acceptance
+
+- [ ] Less mode: Projects click opens project picker modal (does not expand nav).
+- [ ] Selecting a project navigates to that project; modal closes; nav remains Less.
+- [ ] All projects / New project reachable from the modal.
+- [ ] Full mode unchanged (toggle + drag-reorder list).
+- [ ] Esc / backdrop closes without navigation.
+- [ ] Active project visibly indicated when applicable.
+
+## Out of scope / deferrals
+
+None planned unless interview changes scope.

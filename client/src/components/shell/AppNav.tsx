@@ -22,7 +22,7 @@ import {
   formatVersionTooltip,
   type AppVersionMeta,
 } from "../../lib/appVersion";
-import { lastProjectPath, type AppNavMode } from "../../lib/appNavMode";
+import { type AppNavMode } from "../../lib/appNavMode";
 import { useAdministration } from "../../lib/administration";
 import { useAuth } from "../../lib/auth";
 import { userIsAdministrator } from "../../lib/roles";
@@ -32,6 +32,7 @@ import type { Project } from "../../types";
 import { BrandWordmark } from "./BrandWordmark";
 import { MeshMark } from "./MeshMark";
 import { NavIcon } from "./NavIcon";
+import { ProjectSelectModal } from "./ProjectSelectModal";
 import { shellIcons } from "./shellIcons";
 import { SystemClock } from "./SystemClock";
 
@@ -95,6 +96,7 @@ export function AppNav({
   const { user } = useAuth();
   const showAdmin = userIsAdministrator(user);
   const [projectsOpen, setProjectsOpen] = useState(section === "projects");
+  const [projectSelectOpen, setProjectSelectOpen] = useState(false);
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -164,8 +166,6 @@ export function AppNav({
   const itemClass = ({ isActive }: { isActive: boolean }) =>
     `app-nav__item${isActive ? " is-active" : ""}`;
 
-  const projectsHref = less ? lastProjectPath() : undefined;
-
   return (
     <aside className={`app-nav${less ? " app-nav--less" : ""}`} aria-label="App">
       <div className="app-nav__rail" role="group" aria-label="Navigation width">
@@ -205,19 +205,19 @@ export function AppNav({
 
       <nav className="app-nav__sections">
         {less ? (
-          <NavLink
-            to={projectsHref ?? "/projects"}
-            className={({ isActive }) =>
-              `app-nav__item${isActive || section === "projects" ? " is-active" : ""}`
-            }
+          <button
+            type="button"
+            className={`app-nav__item${section === "projects" ? " is-active" : ""}`}
             title="Projects"
-            onClick={onNavigate}
+            aria-haspopup="dialog"
+            aria-expanded={projectSelectOpen}
+            onClick={() => setProjectSelectOpen(true)}
           >
             <span className="app-nav__glyph" aria-hidden>
               <NavIcon icon={shellIcons.projects} />
             </span>
             <span className="app-nav__label">Projects</span>
-          </NavLink>
+          </button>
         ) : (
           <div className="app-nav__section">
             <button
@@ -420,6 +420,13 @@ export function AppNav({
           </>
         )}
       </div>
+
+      <ProjectSelectModal
+        open={projectSelectOpen}
+        activeProjectId={activeProjectId}
+        onClose={() => setProjectSelectOpen(false)}
+        onNavigate={onNavigate}
+      />
     </aside>
   );
 }

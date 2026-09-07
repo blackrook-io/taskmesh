@@ -3677,6 +3677,20 @@ a:focus-visible {
   margin-top: 0.8rem;
 }
 
+.project-select-modal {
+  max-width: 340px;
+}
+
+.project-select-modal .task-picker-list {
+  max-height: min(40dvh, 16rem);
+}
+
+.project-select-modal .task-picker-list__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .task-list-filter-bar {
   display: flex;
   align-items: center;
