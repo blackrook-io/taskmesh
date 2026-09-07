@@ -1,0 +1,46 @@
+# T0118 — Release Notes in Finish Up skill
+
+**Task:** T0118 (`id` 131) — Release Notes in 'Finish Up' skill  
+**State at plan:** `ready` · Project 4 (TaskMesh) · no parent · no depends-on  
+**Branch (after approval):** `T0118-release-notes-finish-up`
+
+## Goal
+
+Every **finish up** adds a human-readable entry to repo-root `RELEASE_NOTES.md` for the shipped SemVer, summarizing outcome (not the work process). Agents follow this via Cursor rules + `/worktask` skill — no app/UI/API changes.
+
+A future **Build release** (GitHub) skill will consume this file to populate GitHub Release notes. After that publish clears or archives the working notes, finish-up must recreate a blank `RELEASE_NOTES.md` (standard header only) if the file is missing or empty.
+
+## Size / gates
+
+- One docs/rules/skills pass. No schema, no SPA, no split.
+- Depends-on: empty (gate OK). State: `ready` (gate OK).
+
+## Interview answers
+
+1. **Start clean** — no historical backfill. If the file is cleared when publishing a GitHub release, finish-up **recreates** a blank stub (header only) before writing the next version block.
+2. **Newest-first** — yes (newest `##` version block directly under the intro).
+3. **README link** — yes.
+4. **Same commit as SemVer bump** — yes.
+5. **Future consumer:** Build-release GitHub skill will use this file for Release body text (out of scope for T0118; document the contract in the file header + rules).
+
+## Implementation
+
+1. Add `RELEASE_NOTES.md` with purpose blurb, section taxonomy, recreate-if-blank rule, and note that GitHub Build-release will consume it. No version blocks until this Task’s own finish-up.
+2. Update `.cursor/rules/development-rules.mdc` finish-up: after version bump, update `RELEASE_NOTES.md` (recreate stub if missing/empty; prepend newest version; omit empty sections).
+3. Update `.cursor/skills/worktask/SKILL.md` § Finish up + `reference.md` finish template.
+4. Cross-link from `.cursor/rules/versioning.mdc` and `AGENTS.md`.
+5. Link from `README.md`.
+
+## Non-goals
+
+- UI surface for release notes
+- Backfilling prior releases
+- Implementing the Build-release GitHub skill
+- Changing SemVer bump rules themselves
+
+## QA (after implement)
+
+1. Confirm finish-up checklists name `RELEASE_NOTES.md`, recreate-if-blank, and section taxonomy.
+2. Confirm stub file exists at repo root with clear format.
+3. Confirm `/worktask` finish-up lists version bump **and** release-notes update together.
+4. Confirm README links to the file.

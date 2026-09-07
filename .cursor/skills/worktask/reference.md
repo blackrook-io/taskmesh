@@ -120,6 +120,7 @@ Post when implementing new functionality or corrections during QA (not only at C
 - Plan archived: `.cursor/plans/executed/2026-08-T0036-example-slug.mdc`
 - Deployed to PROD (health checks OK)
 - App version: `0.22.1` (example)
+- Release notes: `RELEASE_NOTES.md` updated for `0.22.1`
 
 <summary of what shipped>
 

@@ -92,6 +92,12 @@ Human-readable Postgres schema reference (conceptual / logical Mermaid ERDs, phy
 
 Drizzle source of truth remains [`src/db/schema.ts`](src/db/schema.ts). Keep the docs in sync when the schema changes (see [`.cursor/rules/schema-docs.mdc`](.cursor/rules/schema-docs.mdc)), then mirror into the TaskMesh project Documents with `npm run docs:sync-schema`.
 
+## Release notes
+
+Per-version outcome summaries (updated on every finish-up; consumed later by a GitHub Build-release skill):
+
+→ **[RELEASE_NOTES.md](RELEASE_NOTES.md)**
+
 ## Project layout
 
 ```
@@ -106,6 +112,7 @@ src/
     migrate.ts       # Migration runner
 drizzle/             # Generated SQL migrations + meta
 docs/                # Admin/developer docs (database schema, …)
+RELEASE_NOTES.md     # Per-version finish-up notes (GitHub release source later)
 data/uploads/        # Image uploads (runtime; tracked with .gitkeep)
 INSTALL.md           # Ubuntu bare-metal install guide
 SECURITY.md          # Input-path audit log and re-audit checklist

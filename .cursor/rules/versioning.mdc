@@ -39,8 +39,8 @@ Do **not** set `releasedAt` in git. `deploy/deploy-prod.sh` writes `data/prod-re
 
 ## Workflows and skills
 
-- [development-rules.mdc](development-rules.mdc) finish-up step 1 **must** bump version (or confirm this branch already has the bump).
-- [/worktask](../skills/worktask/SKILL.md) finish-up **must** do the same bump in the merge commit, and mention the new version in the completion comment.
+- [development-rules.mdc](development-rules.mdc) finish-up step 1 **must** bump version (or confirm this branch already has the bump) **and** update [`RELEASE_NOTES.md`](../../RELEASE_NOTES.md) in that same commit (recreate the stub if the file was cleared after a GitHub release publish).
+- [/worktask](../skills/worktask/SKILL.md) finish-up **must** do the same bump + release-notes update in the merge commit, and mention the new version in the completion comment.
 
 ## API / UI
 
