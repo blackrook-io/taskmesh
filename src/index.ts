@@ -39,10 +39,31 @@ app.use("/api", (_req, res) => {
   sendError(res, 404, "not_found", "No such API route");
 });
 
+/** Paths that must never fall back to index.html (missing = real 404). */
+const STATIC_ASSET_EXT = /\.(?:js|mjs|cjs|css|map|json|wasm|woff2?|ttf|otf|eot|png|jpe?g|gif|webp|svg|ico|txt)$/i;
+
+function isStaticAssetPath(pathname: string): boolean {
+  return pathname.startsWith("/assets/") || STATIC_ASSET_EXT.test(pathname);
+}
+
 const clientDist = getClientDistDir();
 if (process.env.NODE_ENV === "production" && fs.existsSync(path.join(clientDist, "index.html"))) {
-  app.use(express.static(clientDist));
-  app.use((req, res, next) => {
+  app.use(
+    express.static(clientDist, {
+      setHeaders(res, filePath) {
+        const base = path.basename(filePath);
+        if (base === "index.html") {
+          res.setHeader("Cache-Control", "no-cache");
+          return;
+        }
+        // Vite hashed filenames under assets/ (and sibling hashed chunks).
+        if (filePath.includes(`${path.sep}assets${path.sep}`) || /-[A-Za-z0-9_-]{6,}\.(?:js|css)$/.test(base)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    }),
+  );
+  app.use((req, res) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
       sendError(res, 404, "not_found", "No such route");
       return;
@@ -51,6 +72,11 @@ if (process.env.NODE_ENV === "production" && fs.existsSync(path.join(clientDist,
       sendError(res, 404, "not_found", "No such API route");
       return;
     }
+    if (isStaticAssetPath(req.path)) {
+      sendError(res, 404, "not_found", "Asset not found");
+      return;
+    }
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.join(clientDist, "index.html"));
   });
 }

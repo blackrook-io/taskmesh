@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.1 — 2026-09-07
+
+### Fixes
+- Mermaid `erDiagram` (and other lazy diagram chunks) no longer break after a PROD redeploy when a stale tab requests an old hashed asset: missing `/assets/*` return 404 instead of `index.html`, so dynamic imports fail cleanly.
+- Markdown Mermaid preview shows a Reload prompt when diagram chunks are out of date, and reliably switches back to SVG after leaving edit mode.
+
+### Enhancements
+- Production SPA serving uses `no-cache` for `index.html` and long immutable cache for hashed `/assets/*` so clients pick up new builds without serving HTML as JavaScript.
+
 ## 0.35.0 — 2026-09-07
 
 ### New Functionality

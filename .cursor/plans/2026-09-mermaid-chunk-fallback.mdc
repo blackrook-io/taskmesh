@@ -1,0 +1,12 @@
+# Fix Mermaid erDiagram chunk load failures
+
+## Problem
+After PROD redeploy, Mermaid lazy-loads `erDiagram-*.js` with a prior build hash. The SPA catch-all returns `index.html` (200 HTML) for missing `/assets/*`, so `import()` fails and the NodeView shows the raw Vite error.
+
+## Approach
+1. Return 404 for missing `/assets/` and other static extensions — never HTML fallback.
+2. `Cache-Control: no-cache` for `index.html`; long immutable cache for hashed `/assets/*`.
+3. Mermaid NodeView: reload-friendly chunk-load error UX; sync `editable` on TipTap `update` as well as `transaction`.
+
+## Out of scope
+- Eager-bundling all Mermaid diagram types.

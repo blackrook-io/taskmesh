@@ -1850,6 +1850,18 @@ textarea.raw-md {
   white-space: pre-wrap;
 }
 
+.md-prose .md-mermaid--reload {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.md-prose .md-mermaid--reload p {
+  margin: 0;
+}
+
 .md-prose pre.md-mermaid-source {
   margin: 0.75rem 0;
 }
