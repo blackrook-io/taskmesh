@@ -36,7 +36,8 @@ to `main`.
 ## After approval
 
 Follow [development-rules.mdc](development-rules.mdc) for the full git and
-"finish up" workflow (commit → merge to `main` ff-only → push → archive the plan
-to `.cursor/plans/executed/` → delete the feature branch → `npm run deploy:prod`,
-plus worktask PROD Task Complete + comment when applicable), and give a QA
-checklist at the end of each implementation pass.
+"finish up" workflow (commit on feature branch → archive plan on that branch →
+push feature branch over SSH → PR + required CI → merge on GitHub → pull `main`
+→ delete feature branch → `npm run deploy:prod`, plus worktask PROD Task
+Complete + comment when applicable). Never push commits directly to `main`.
+Give a QA checklist at the end of each implementation pass.

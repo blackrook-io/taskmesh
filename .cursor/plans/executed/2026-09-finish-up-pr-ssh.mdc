@@ -1,0 +1,26 @@
+# Finish-up: PR-first publish + SSH-only git
+
+**Branch:** `phase-1-finish-up-pr-ssh`  
+**Why:** T0123 finish-up hit (1) blocked direct `main` push (required CI) and (2) skill wording that implied HTTPS-then-SSH fallback.
+
+## Changes
+
+Update finish-up docs so agents:
+
+1. **Never** push `main` directly. Publish via feature-branch PR → wait for required checks → merge on GitHub → pull `main` locally.
+2. **Always** use SSH (`git@github.com:blackrook-io/taskmesh.git`) for pull/push — never try HTTPS first.
+3. Prefer `gh` for PRs; if missing, GitHub API + `~/.config/taskmesh/github.env`.
+4. Archive the plan on the feature branch (in the finish-up commit set) before opening the PR so archive lands with the merge.
+
+## Files
+
+- `.cursor/skills/worktask/SKILL.md` §6 Finish up (+ start pull note)
+- `.cursor/skills/worktask/reference.md` Git ops
+- `.cursor/rules/development-rules.mdc`
+- `.cursor/rules/plan-branch-gate.mdc`
+- `AGENTS.md` Feature git finish-up line
+
+## Out of scope
+
+- App version bump / RELEASE_NOTES (docs-only agent workflow; bump on finish-up if shipping)
+- Installing `gh` on the host
