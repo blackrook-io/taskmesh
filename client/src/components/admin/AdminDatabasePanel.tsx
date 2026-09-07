@@ -98,13 +98,17 @@ export function AdminDatabasePanel() {
   }, [series]);
 
   const chartSeries = useMemo(() => {
-    let requestCount = 0;
-    let responseBytes = 0;
-    return series.map((p) => {
-      requestCount += p.requestCount;
-      responseBytes += p.responseBytes;
-      return { ...p, requestCount, responseBytes };
-    });
+    return series.reduce<
+      Array<(typeof series)[number] & { requestCount: number; responseBytes: number }>
+    >((acc, p) => {
+      const prev = acc[acc.length - 1];
+      acc.push({
+        ...p,
+        requestCount: (prev?.requestCount ?? 0) + p.requestCount,
+        responseBytes: (prev?.responseBytes ?? 0) + p.responseBytes,
+      });
+      return acc;
+    }, []);
   }, [series]);
 
   const valueOf = useCallback(

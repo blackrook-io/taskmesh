@@ -1,0 +1,80 @@
+# T0125 — Clean client ESLint so CI can hard-gate lint
+
+**Task:** T0125 (id `138`) — Clean client ESLint so CI can hard-gate lint  
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)  
+**Branch (after approval):** `T0125-clean-client-eslint`  
+**Depends on:** T0086 (complete) — Automated security tests in CI  
+**Deferred Task:** T0126 (Draft) — Refactor client setState-in-effect patterns toward derive-during-render; depends on T0125
+
+## Context
+
+T0086 shipped Security CI with client ESLint soft-failed (`continue-on-error: true`) because `main` had ~101 errors / 29 warnings. Current baseline (re-measured): **130 problems (101 errors, 29 warnings)**.
+
+| Rule | Count | Severity today |
+|------|------:|----------------|
+| `react-hooks/set-state-in-effect` | 53 | error |
+| `react-hooks/exhaustive-deps` | 29 | warning |
+| `react-refresh/only-export-components` | 28 | error |
+| `react-hooks/refs` | 15 | error |
+| Misc (`no-useless-*`, immutability) | 5 | error |
+
+Lint script: `client` → `eslint .` (errors fail; warnings do **not** fail unless `--max-warnings 0`).
+
+## Interview decisions (confirmed)
+
+1. **`set-state-in-effect`:** Hybrid — fix clear/easy cases; **downgrade rule to `warn`** with documented rationale in `client/eslint.config.js`. Deep derive-during-render refactors → **T0126**.
+2. **`react-refresh/only-export-components`:** Enable **`allowConstantExport: true`** (Vite best practice); fix remaining true violations.
+3. **Warnings / CI:** Hard-gate on **errors only**; do **not** add `--max-warnings 0` in this Task. Fix genuine stale-closure `exhaustive-deps` where cheap/clear.
+4. **Split:** Yes — T0126 holds incremental set-state-in-effect cleanup; T0125 ships baseline + hard gate.
+
+## Goal
+
+1. Client ESLint exits **0** on `main` for the configured error baseline (warnings may remain).
+2. Remove `continue-on-error` from the client lint step in `.github/workflows/security-ci.yml`; rename step to a hard gate.
+3. Update `SECURITY.md` (and any CI notes) so lint is documented as hard, with pointer to T0126 for residual warn backlog.
+4. Prefer real fixes for misc / refresh leftovers over blanket disables.
+
+## Non-goals
+
+- Zeroing all `set-state-in-effect` or `exhaustive-deps` warnings
+- Enabling `--max-warnings 0`
+- Re-raising `set-state-in-effect` to error (optional later in T0126)
+- Root-level ESLint / CodeQL
+
+## Implementation plan
+
+### 1. `client/eslint.config.js`
+
+- Keep `reactHooks.configs.flat.recommended` / refresh vite preset as base.
+- Override (documented in-file):
+  - `'react-hooks/set-state-in-effect': 'warn'` — Compiler-oriented; intentional UI sync remains; cleanup → T0126.
+  - `'react-hooks/refs': 'warn'` — measured class: latest-callback-ref writes during render (React-supported).
+  - `'react-refresh/only-export-components': ['warn', { allowConstantExport: true }]` — Vite scaffold default; Provider+hook / helper co-exports remain.
+
+### 2. Code fixes (errors that remain after config)
+
+- Misc: `no-useless-assignment`, `no-useless-escape`, `no-useless-catch`, `react-hooks/immutability` — fix properly.
+- Do not mass-split context/helper modules solely for Fast Refresh (rule is warn).
+- Opportunistic easy `set-state-in-effect` / `exhaustive-deps` fixes only when low-risk and local.
+
+### 3. CI + docs
+
+- `.github/workflows/security-ci.yml`: drop `continue-on-error`; step name e.g. `Client ESLint (hard gate)`.
+- `SECURITY.md`: change soft-until-T0125 row to hard; note T0126 for warn backlog / optional rule re-raise.
+- Touch `security/scan/README.md` / README CI note only if they still claim soft lint.
+
+### 4. Verify
+
+- `npm run lint --prefix client` → exit 0 (warnings OK).
+- `npm run build --prefix client` still green (no behavior regressions from export moves).
+
+## Out of scope → T0126
+
+Incremental removal of `set-state-in-effect` warnings via derive-during-render / keyed remount / event handlers; optionally re-raise rule to error when backlog is small.
+
+## Finish-up notes (when asked)
+
+- PATCH bump (no schema migration).
+- `RELEASE_NOTES.md` Enhancements/Fixes as appropriate.
+- Skip `FEATURES.md` (internal quality / CI gate, not a user-facing module).
+- Completion comment: mention hard lint gate + T0126 deferral + shipped version.

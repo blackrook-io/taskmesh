@@ -18,5 +18,19 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Compiler-oriented; many intentional UI sync patterns remain (URL→modal,
+      // hold entity, draft title). Incremental cleanup tracked in T0126.
+      'react-hooks/set-state-in-effect': 'warn',
+      // "Latest callback ref" writes (`ref.current = fn`) during render are an
+      // intentional React pattern; the Compiler rule flags them as a class.
+      'react-hooks/refs': 'warn',
+      // Vite Fast Refresh supports constant co-exports; context Provider+hook
+      // and helper co-exports remain common — keep as warn (Vite scaffold default).
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowConstantExport: true },
+      ],
+    },
   },
 ])

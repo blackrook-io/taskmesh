@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.12 — 2026-09-07
+
+### Fixes
+- Cleared client ESLint error baseline (useless assignment/escape/catch and Admin Database cumulative chart reassignment) so `npm run lint --prefix client` exits 0.
+
+### Enhancements
+- Security CI hard-gates client ESLint; `eslint.config.js` documents intentional warns for `set-state-in-effect`, `refs`, and react-refresh (Vite `allowConstantExport`), with deeper hook cleanup deferred to T0126.
+
 ## 0.35.11 — 2026-09-07
 
 ### Fixes

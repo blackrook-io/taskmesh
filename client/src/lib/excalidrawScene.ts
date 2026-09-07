@@ -135,5 +135,5 @@ export function downloadBlob(blob: Blob, filename: string) {
 
 export function safeExportBasename(title: string | undefined): string {
   const raw = (title ?? "canvas").trim() || "canvas";
-  return raw.replace(/[^\w\-]+/g, "_").slice(0, 80);
+  return raw.replace(/[^\w-]+/g, "_").slice(0, 80);
 }

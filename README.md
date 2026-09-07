@@ -117,7 +117,7 @@ npm run security:scan -- --fail-on-findings   # exit 1 if any check FAILs (defau
 
 Color console output (PASS / FAIL / SKIP + Help on findings) and a dated HTML log under `security/scan/logs/` (gitignored). `DATABASE_URL` for DB checks comes from process env, `--env-file`, or repo `.env`.
 
-**CI (T0086 / T0124):** on push/PR to `main`, GitHub Actions runs unit tests, API and client builds, soft client lint (until T0125), and hard `repo_static` + `repo_npm_audit` scans. Details: [`SECURITY.md`](SECURITY.md) and [`security/scan/README.md`](security/scan/README.md).
+**CI (T0086 / T0124 / T0125):** on push/PR to `main`, GitHub Actions runs unit tests, API and client builds, client ESLint (hard on errors), and hard `repo_static` + `repo_npm_audit` scans. Details: [`SECURITY.md`](SECURITY.md) and [`security/scan/README.md`](security/scan/README.md).
 
 ## Configuration
 

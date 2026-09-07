@@ -49,9 +49,7 @@ jobs:
       - name: Client production build (tsc + Vite)
         run: npm run build --prefix client
 
-      # Soft until T0125 cleans the existing ESLint baseline (~100 errors on main).
-      - name: Client ESLint (soft — see T0125)
-        continue-on-error: true
+      - name: Client ESLint (hard gate)
         run: npm run lint --prefix client
 
       - name: Repo static security scan (hard gate)

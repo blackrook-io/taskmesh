@@ -190,12 +190,10 @@ export function formatTimelineWhen(iso: string): string {
 function buildStateLine(task: Task, entries: TaskActivityEntry[]): TimelineLine {
   const transitions = extractTransitions(entries, "state");
 
-  let creationValue: TaskState = "new";
-  if (transitions.length > 0) {
-    creationValue = resolveState(transitions[0]!.from) ?? "new";
-  } else {
-    creationValue = task.state;
-  }
+  const creationValue: TaskState =
+    transitions.length > 0
+      ? (resolveState(transitions[0]!.from) ?? "new")
+      : task.state;
 
   const nodes: TimelineNode[] = [
     {
