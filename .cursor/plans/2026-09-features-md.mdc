@@ -1,0 +1,17 @@
+# Plan: FEATURES.md + finish-up maintenance
+
+## Goal
+Add a repo-root `FEATURES.md` listing major shipped TaskMesh capabilities as website-ready single-line bullets, and require finish-up to keep it current when major features ship.
+
+## Scope
+1. Create `FEATURES.md` (marketing one-liners; exclude Coming Soon placeholders such as Calendar/Filesystem).
+2. Update finish-up in `development-rules.mdc` and `/worktask` skill: when a finished Task adds major user-facing functionality, update `FEATURES.md` in the same SemVer / `RELEASE_NOTES.md` commit.
+3. Point to the file from `AGENTS.md` and `README.md`.
+
+## Out of scope
+- Rewriting `.cursor/plans/feature_list.md` (wishlist).
+- Version bump until user says finish up.
+
+## Done when
+- `FEATURES.md` exists and reflects current shipped surface.
+- Finish-up docs mention `FEATURES.md` alongside release notes.

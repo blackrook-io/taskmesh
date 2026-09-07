@@ -98,6 +98,12 @@ Per-version outcome summaries (updated on every finish-up; consumed later by a G
 
 → **[RELEASE_NOTES.md](RELEASE_NOTES.md)**
 
+## Features
+
+Website-ready single-line list of major shipped capabilities (updated on finish-up when major user-facing features ship):
+
+→ **[FEATURES.md](FEATURES.md)**
+
 ## Project layout
 
 ```
@@ -113,6 +119,7 @@ src/
 drizzle/             # Generated SQL migrations + meta
 docs/                # Admin/developer docs (database schema, …)
 RELEASE_NOTES.md     # Per-version finish-up notes (GitHub release source later)
+FEATURES.md          # Major shipped features (website-ready one-liners)
 data/uploads/        # Image uploads (runtime; tracked with .gitkeep)
 INSTALL.md           # Ubuntu bare-metal install guide
 SECURITY.md          # Input-path audit log and re-audit checklist
