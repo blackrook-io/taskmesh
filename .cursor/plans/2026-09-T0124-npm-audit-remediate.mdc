@@ -1,0 +1,84 @@
+# T0124 — Remediate production npm audit high/critical (CI hard-gate)
+
+**Task:** T0124 (id `137`) — Remediate production npm audit high/critical (CI hard-gate)  
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)  
+**Branch (after approval):** `T0124-npm-audit-remediate`  
+**Depends on:** T0086 (complete) — Automated security tests in CI  
+**Deferred from:** T0086 interview 3A (soft `repo_npm_audit` until remediation)
+
+## Interview decisions (confirmed)
+
+1. **xlsx:** Replace with **ExcelJS**; keep CSV + XLSX import/export API shape (`src/lib/spreadsheet.ts` + import/export routes/UI).
+2. **drizzle-orm:** Upgrade to `^0.45.2` + matching `drizzle-kit`; smoke test/build/migrate; fix breakages.
+3. **Moderates:** Apply safe `npm audit fix` for `body-parser` / `qs` (via express) in this Task.
+4. **Client tree:** Root only — matches current CI / `repo_npm_audit`. Client TipTap moderates out of scope.
+5. **CI hard-gate:** Remove `continue-on-error` on the npm-audit step; keep `repo_static` and audit as separate steps; update SECURITY.md / README / scan README.
+
+## Goal
+
+Clear root production `npm audit --omit=dev` **high/critical** findings (or leave none), then make CI **hard-fail** on `repo_npm_audit` via `--fail-on-findings` (drop soft-fail).
+
+## Non-goals
+
+- Client package audit / TipTap remediations
+- HTTP/DB scan modules in CI
+- Changing branch protection on GitHub
+- Accepting residual risk / advisory allowlists (replaced by remediations)
+
+## Current findings (2026-09-07)
+
+| Severity | Package | Action |
+|----------|---------|--------|
+| high | `drizzle-orm` `<0.45.2` | Bump ≥0.45.2 (+ drizzle-kit) |
+| high | `xlsx` `*` (no fix) | Replace with ExcelJS |
+| moderate | `body-parser` / `qs` | `npm audit fix` where safe |
+
+## Implementation plan
+
+### 1. Replace `xlsx` with ExcelJS
+
+- Add `exceljs`; remove `xlsx`.
+- Rewrite `src/lib/spreadsheet.ts` helpers:
+  - `sheetToObjects` — read buffer (.csv / .xlsx / .xls if ExcelJS supports, else document .xlsx+.csv only)
+  - `objectsToCsv` / `objectsToXlsxBuffer` / `workbookToBuffer`
+- Keep call sites in `src/routes/v1/importExport.ts` stable where possible.
+- Smoke Import/Export mentally against existing API (`format=csv|xlsx`, multipart import).
+- Update any docs that name SheetJS/`xlsx` if present.
+
+### 2. Upgrade drizzle-orm (+ kit)
+
+- Bump `drizzle-orm` to `^0.45.2` and `drizzle-kit` to a compatible release (currently latest kit ~0.31.x).
+- Run `npm test`, `npm run build`, and a dry migrate / generate sanity check if needed.
+- Fix TypeScript or runtime breakages from the 0.38 → 0.45 jump (query API / types only; no intentional schema migration unless required by the upgrade).
+
+### 3. Moderate advisories
+
+- Run `npm audit fix` (no `--force` beyond intentional drizzle bump).
+- Re-run `npm audit --omit=dev`; confirm **no high/critical**.
+
+### 4. Hard-gate CI + docs
+
+- `.github/workflows/security-ci.yml`: remove `continue-on-error: true` and “soft — see T0124” wording from the npm audit step.
+- `SECURITY.md`: mark T0124 done for audit gate; table row → hard.
+- `README.md` / `security/scan/README.md`: note hard `repo_npm_audit` in CI.
+- Optionally refresh `KNOWN_PACKAGE_NOTES` in `repo_npm_audit.py` if drizzle/xlsx notes are obsolete (or leave as historical operator hints — prefer trim/update).
+- Local verify:  
+  `npm run security:scan -- --modules repo_npm_audit --fail-on-findings --no-html` → exit 0.
+
+### 5. Verify
+
+- `npm audit --omit=dev` → no high/critical
+- `npm test` + `npm run build` (+ client build if import/export types untouched — API-only)
+- Scan module hard-gate passes locally
+
+## Out of scope / follow-ups
+
+- **T0125** — client ESLint hard-gate (unchanged)
+- Client TipTap moderate advisories (separate if desired later)
+
+## Finish-up notes (when asked)
+
+- PATCH bump (no new Drizzle SQL migration expected unless upgrade forces one — then MINOR).
+- RELEASE_NOTES: Enhancements / Fixes for audit remediation + hard CI gate.
+- FEATURES.md: skip (security/CI remediation, not a new user-facing module).
+- Completion comment: mention shipped version + remediations (ExcelJS, drizzle 0.45.x, hard audit gate).

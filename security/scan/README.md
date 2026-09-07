@@ -64,18 +64,16 @@ python3 security/scan/run.py --skip-db --skip-repo
 | 1 | Only with `--fail-on-findings`: one or more FAIL checks |
 | 2 | Runner usage / unexpected abort before a complete run |
 
-`npm run security:scan` therefore exits **0** when the suite runs cleanly, even if e.g. `repo_npm_audit` reports high/critical advisories. Review console/HTML for findings. For a CI gate that fails the job on findings: `npm run security:scan -- --fail-on-findings` (T0086).
+`npm run security:scan` therefore exits **0** when the suite runs cleanly, even if e.g. `repo_npm_audit` reports high/critical advisories. Review console/HTML for findings. For a CI gate that fails the job on findings: `npm run security:scan -- --fail-on-findings`.
 
-## CI (T0086)
+## CI (T0086 / T0124)
 
 GitHub Actions [`.github/workflows/security-ci.yml`](../../.github/workflows/security-ci.yml) (push/PR → `main`) invokes this suite for **repo** modules only — no live HTTP/DB in Actions:
 
 ```bash
-# Hard gate (local parity: npm run security:ci)
+# Hard gates
 npm run security:scan -- --modules repo_static --fail-on-findings --no-html
-
-# Soft until T0124 remediates known high advisories
 npm run security:scan -- --modules repo_npm_audit --fail-on-findings --no-html
 ```
 
-The same workflow also hard-gates `npm test`, API `build`, and client `build`, and soft-gates client ESLint until **T0125**. Full HTTP/CSRF/auth modules remain manual against PROD/DEV (optionally with credentials).
+Local static-only parity: `npm run security:ci` (repo_static). The same workflow also hard-gates `npm test`, API `build`, and client `build`, and soft-gates client ESLint until **T0125**. Full HTTP/CSRF/auth modules remain manual against PROD/DEV (optionally with credentials).

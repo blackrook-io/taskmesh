@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.11 — 2026-09-07
+
+### Fixes
+- Cleared root production `npm audit` high/critical findings: upgraded `drizzle-orm` to 0.45.2 (with matching `drizzle-kit`), replaced SheetJS `xlsx` with ExcelJS for CSV/XLSX import-export, and pinned safe transitive `qs` / `uuid` via npm overrides.
+
+### Enhancements
+- Security CI hard-gates `repo_npm_audit` (`--fail-on-findings`); SECURITY.md / README / scan docs mark T0124 complete (client ESLint remains soft until T0125).
+
 ## 0.35.10 — 2026-09-07
 
 ### Fixes
