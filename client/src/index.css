@@ -1979,6 +1979,33 @@ textarea.raw-md {
   );
 }
 
+/* Completed tasks: mute all row text to ~50% grey. */
+.task-list-row--complete,
+.task-list-row--complete .task-list-row__title-text,
+.task-list-row--complete .task-list-row__num,
+.task-list-row--complete .task-list-row__num .muted,
+.task-list-row--complete .task-list-row__twist,
+.task-list-row--complete .task-list-row__child-mark,
+.task-list-row--complete .task-list-row__duplicate,
+.task-list-row--complete .task-list-row__state,
+.task-list-row--complete .task-list-row__state[class*="task-list-row__state--"],
+.task-list-row--complete .task-list-row__priority,
+.task-list-row--complete .task-list-row__priority[class*="task-list-row__priority--"],
+.task-list-row--complete .task-list-row__date,
+.task-list-row--complete .task-list-row__project,
+.task-list-row--complete .row-tag-chips__more {
+  color: #888;
+}
+
+.task-list-row--complete .row-tag-chips {
+  opacity: 0.55;
+}
+
+.task-list-row--complete .task-state-cb--done {
+  color: #888;
+  border-color: #888;
+}
+
 .task-list-row__stripe {
   width: 4px;
   height: 1.4rem;

@@ -1,0 +1,22 @@
+# Complete task row grey-out
+
+**Branch:** `phase-36-complete-task-row-grey`  
+**Date:** 2026-09
+
+## Goal
+
+When a Task’s state is `complete`, grey out the entire list-row text (`#888`) so completed items read as done at a glance.
+
+## Approach
+
+1. Add row modifier `task-list-row--complete` when `task.state === "complete"` on project TaskBoard list rows and global Tasks list rows.
+2. Style the modifier in `index.css` so title, number, state, priority, due date, project label, and related row text use `color: #888` (override per-field state/priority tones). Keep drag handle / checkbox usable.
+3. No schema or API changes.
+
+## Out of scope
+
+Kanban card chrome, Todo items (unless they share `task-list-row`), Edit Task modal body.
+
+## QA follow-ups
+
+- Complete-row State checkbox: override green (`--task-state-done`) to `#888` border + glyph to match muted row text.

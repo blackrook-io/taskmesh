@@ -427,7 +427,7 @@ export function TasksListPage() {
           displayRows.map(({ task, depth, hasChildren }) => (
             <div
               key={task.id}
-              className={`task-list-row${depth > 0 ? " task-list-row--child" : ""}`}
+              className={`task-list-row${depth > 0 ? " task-list-row--child" : ""}${task.state === "complete" ? " task-list-row--complete" : ""}`}
               onDoubleClick={() => openModal(task.id)}
               onContextMenu={(e) => {
                 e.preventDefault();

@@ -956,7 +956,7 @@ function SortableTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`task-list-row${isDragging ? " dragging" : ""}${depth > 0 ? " task-list-row--child" : ""}`}
+      className={`task-list-row${isDragging ? " dragging" : ""}${depth > 0 ? " task-list-row--child" : ""}${task.state === "complete" ? " task-list-row--complete" : ""}`}
       onDoubleClick={onOpen}
       onContextMenu={(e) => onContextMenu(e, task)}
       {...attributes}
