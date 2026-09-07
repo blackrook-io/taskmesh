@@ -1,0 +1,28 @@
+# Worktask PROD login instructions
+
+**State:** finish-up (v0.35.2)  
+**Branch:** `phase-worktask-prod-login`
+
+## Goal
+
+Bake durable Production TaskMesh auth into `/worktask` so agents stop rediscovering login, cookie jars, and CSRF headers every session.
+
+## Scope
+
+1. Hard rule + checklist step `0. Auth` in `SKILL.md`.
+2. Auth section in `reference.md`: credentials file, cookie jar, login/session check, CSRF on mutations, optional API key, DB session mint fallback.
+3. Update all worktask curl examples to include auth.
+4. Helper script `.cursor/skills/worktask/scripts/prod-login.sh` that writes `/tmp/tm-prod-cookies.txt`.
+
+## Non-goals
+
+- App/API/UI changes.
+- Committing passwords or API keys.
+- Changing finish-up / versioning workflow.
+
+## Credentials
+
+- Path: `~/.config/taskmesh/worktask.env` (mode `600`)
+- Vars: `TASKMESH_EMAIL`, `TASKMESH_PASSWORD`; optional `TASKMESH_API_KEY` (Bearer, skips CSRF)
+- If missing: ask user once, write the file; never put secrets in the skill or plan.
+---

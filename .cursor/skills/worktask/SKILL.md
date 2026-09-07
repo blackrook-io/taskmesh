@@ -22,7 +22,8 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 ## Hard rules
 
 1. **PROD only for task I/O** — base URL `http://127.0.0.1:3000` (systemd PROD). Never use DEV `:3001` or Vite `:5173` for task reads/writes.
-2. Prefer the **HTTP API** (see [reference.md](reference.md)). Do not use raw SQL for task updates.
+1b. **Authenticate before task I/O** — PROD `/api/v1/*` requires a session (or API key). Run step **0. Auth** first every `/worktask` session (see [reference.md](reference.md) § Auth). Never invent credentials; never commit secrets; never put passwords in plans or comments.
+2. Prefer the **HTTP API** (see [reference.md](reference.md)). Do not use raw SQL for task updates (auth session mint fallback in reference is the only DB exception).
 3. Do **not** change `dueDate` (including on Complete).
 4. State values: `new` (UI: Draft) | `ready` (UI: Ready) | `in_progress` | `pending` (UI: Pending — own work done, waiting on children) | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`.
 5. Follow repo plan + git + finish-up rules; this skill **adds** task bookkeeping and **replaces** `phase-N-*` branch naming with `T####-*` for this workstream.
@@ -37,6 +38,7 @@ Copy and track:
 
 ```
 Worktask:
+- [ ] 0. Auth (PROD session or API key)
 - [ ] 1. Load PROD task + activity
 - [ ] 2. Scope / size check (split recommendation if needed)
 - [ ] 2b. Depends-on gate (stop if open blockers)
@@ -48,7 +50,21 @@ Worktask:
 - [ ] 7. User “finish up” → version bump + merge/deploy + Complete + finish comment
 ```
 
+### 0. Auth (PROD)
+
+Do this before any `GET`/`PATCH`/`POST` to `/api/v1/tasks` (or other app data).
+
+1. Prefer the helper: `.cursor/skills/worktask/scripts/prod-login.sh` (writes cookie jar `/tmp/tm-prod-cookies.txt`).
+2. Or follow [reference.md](reference.md) § Auth manually:
+   - Credentials from `~/.config/taskmesh/worktask.env` (`TASKMESH_EMAIL` / `TASKMESH_PASSWORD`). If missing, ask the user once and write that file (`chmod 600`). **Never** hardcode or commit secrets.
+   - Optional: `TASKMESH_API_KEY` → use `Authorization: Bearer …` on every call (skips CSRF; no cookie jar).
+   - Session path: login → cookie jar → verify `GET /api/v1/auth/session`; re-login when stale.
+   - Mutating session calls need `X-TaskMesh-Client: ui` + `Origin: http://127.0.0.1:3000`.
+3. If password login fails on this host, use the **session mint fallback** in reference (still not for task row updates).
+
 ### 1. Load context (PROD)
+
+Requires step 0 (authenticated curls).
 
 1. Resolve task by **display number** (filter `GET /api/v1/tasks` where `number` matches).
 2. Fetch activity: `GET /api/v1/tasks/{id}/activity`.
@@ -62,7 +78,7 @@ Worktask:
 5. Note `id`, `state`, `priority`, `projectId`, `parentId`, formatted number `T####`.
 6. If `parentId` is set: fetch the Parent from PROD. If the Child’s title, description, or comments are thin, ambiguous, or incomplete — or you otherwise need more context or information on the Child Task — **refer to the Parent** (title, description, comments, activity). Use that as the missing brief; do not ask the user to restate what the Parent already records.
 
-If not found or PROD unhealthy → stop and report.
+If not found, auth fails, or PROD unhealthy → stop and report.
 
 ### 2. Size / split check
 
