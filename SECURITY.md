@@ -55,6 +55,20 @@ Always: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Fr
 
 **Production only** (`NODE_ENV=production`): Content-Security-Policy with `script-src 'self' 'wasm-unsafe-eval'` (Excalidraw wasm), `style-src 'self' 'unsafe-inline'` (TipTap/Excalidraw), `img-src 'self' data: blob: https:` (external note images), `worker-src 'self' blob:`, `object-src 'none'`, `frame-ancestors 'none'`. DEV omits CSP so Vite HMR works.
 
+## Runnable scan suite (T0121)
+
+Defensive CLI audit (no exploit payloads):
+
+```bash
+npm run security:scan
+# DEV API:
+npm run security:scan -- --base-url http://127.0.0.1:3001
+```
+
+Modules cover HTTP headers/auth/CSRF/API surface, repo static greps + `npm audit --omit=dev`, and optional Postgres role checks when `DATABASE_URL` is available. Color console + dated HTML logs under `security/scan/logs/`. Credentials optional via `~/.config/taskmesh/worktask.env`, `--env-file`, or `--prompt-creds` (auth checks **SKIP** with reason when missing). Full usage: [`security/scan/README.md`](security/scan/README.md).
+
+**CI gating** of this suite (and SAST) remains **T0086**.
+
 ## Re-audit checklist
 
 Run after adding a route or query:
@@ -71,7 +85,7 @@ Run after adding a route or query:
 
 | Task | Topic |
 |------|--------|
-| **T0086** | Automated security tests in CI (`npm audit`, SAST) |
+| **T0086** | Automated security tests in CI (`npm audit`, SAST, and/or `npm run security:scan` from T0121) |
 | **T0112** | Ownership schema + helpers (`ownerId`, backfill) — complete |
 | **T0113** | Project-tree list/get/mutate ownership enforcement — complete |
 | **T0114** | Standalone entities, per-user tags, uploads, creator-owned templates — complete |

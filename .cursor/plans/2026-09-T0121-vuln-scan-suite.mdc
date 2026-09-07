@@ -1,0 +1,135 @@
+# T0121 — Scripted vulnerability scan suite
+
+**Task:** T0121 (id `134`) — Create a scripted, runnable vulnerability scan suite of tests  
+**State at plan:** `ready` · Priority: urgent · Project: TaskMesh (4)  
+**Branch (after approval):** `T0121-vuln-scan-suite`
+
+## Context
+
+TaskMesh has documented hardening in `SECURITY.md` (CSRF, sessions, API keys, rate limits, ownership, headers, upload sniffing, SSRF guards) and unit tests for sanitizers/SSRF helpers, but **no runnable end-to-end security audit CLI**. Residual **T0086** covers CI gating (`npm audit`, SAST, unit security tests); this Task delivers a **manual/defensive scan suite** that T0086 can later invoke or complement.
+
+Threat model: defensive assertions only — verify expected secure behavior. **No exploit payloads, attack PoCs, or offensive tooling.**
+
+## Interview decisions (confirmed)
+
+1. **Target:** default base URL `http://127.0.0.1:3000` (PROD); `--base-url` for DEV (`:3001`) or other hosts. Include **API** checks (`/api/health`, `/api/v1/*`).
+2. **Language:** Python 3 (modular submodules + HTML report).
+3. **Auth:** optional — prompt / CLI flags / env file shaped like worktask (`~/.config/taskmesh/worktask.env` or `--env-file`). Unauthenticated checks always run; auth-gated checks **skip (yellow)** with reason if creds missing/fail.
+4. **Stance:** defensive audit only.
+5. **Layout:** `security/scan/` with CLI entrypoint; HTML logs under `security/scan/logs/` (gitignored).
+6. **DB:** if `DATABASE_URL` available (env file / process env / repo `.env` when safe), run Postgres privilege/role checks; otherwise **skip (yellow)** with reason. All skips: yellow in console **and** noted in HTML log.
+7. **v1 catalog:** approved (HTTP headers/auth/CSRF/public allowlist; repo audit greps + npm audit; optional DB).
+8. **CI:** wire minimal `npm run security:scan`; leave full CI gate to **T0086** with a PROD comment + description note pointing at this suite.
+
+## Goal
+
+Ship a modular, CLI-runnable defensive security scan suite that:
+
+- Hits a configurable app base URL (PROD default) and exercises **API** security expectations
+- Optionally uses worktask-style credentials for authenticated checks
+- When run from repo root, runs codebase static checks
+- When DB URL is available, runs DB privilege sanity checks
+- Prints color-coded console results (pass / fail / skip) with failure explanations
+- Writes a dated HTML log per run
+- Exposes `npm run security:scan` as a thin wrapper
+
+## Non-goals (this Task)
+
+- Offensive exploitation, fuzzing with malicious payloads, or pen-test PoCs
+- Full CI workflow YAML / required GitHub Actions gate (document for **T0086**)
+- Changing app security middleware (scan-only unless a check reveals a clear bug — then fix only if trivial and in-scope, else note in report + follow-up Task)
+- Rate-limit soak that could lock out PROD login (login rate-limit check is **opt-in** / soft-assert)
+
+## Implementation plan
+
+### Layout
+
+```
+security/scan/
+  run.py                 # CLI entry: argparse, orchestration, exit codes
+  lib/
+    report.py            # console colors + HTML log writer
+    http_client.py       # requests session, base URL, auth helpers
+    env_creds.py         # load worktask.env / --env-file / prompt
+  modules/
+    http_headers.py
+    http_auth.py         # unauth 401/403 on protected routes; public allowlist
+    http_csrf.py         # cookie mutate without CSRF headers → reject
+    http_api_surface.py  # health + representative /api/v1 checks
+    repo_static.py       # SECURITY.md re-audit greps, .env not tracked
+    repo_npm_audit.py    # npm audit --omit=dev (or prod)
+    db_postgres.py       # role / privilege checks via DATABASE_URL
+  logs/                  # gitignored; HTML reports
+  README.md              # how to run, exit codes, skip semantics
+```
+
+### CLI
+
+```bash
+# From repo root (default PROD)
+python3 security/scan/run.py
+# or
+npm run security:scan
+
+# DEV API
+npm run security:scan -- --base-url http://127.0.0.1:3001
+
+# Creds
+npm run security:scan -- --env-file ~/.config/taskmesh/worktask.env
+# or interactive prompt when --prompt-creds / missing file for auth modules
+```
+
+- Exit code: `0` all pass (skips OK); `1` any fail; `2` runner error
+- Flags: `--base-url`, `--env-file`, `--prompt-creds`, `--skip-http`, `--skip-repo`, `--skip-db`, `--modules`, `--no-html`
+
+### Module expectations (v1)
+
+| Module | Pass criteria (summary) |
+|--------|-------------------------|
+| HTTP headers | `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`; CSP present when target looks like production |
+| HTTP auth | Protected `/api/v1/*` without session/key → 401; public allowlist (health, login, session bootstrap, public theme) reachable |
+| HTTP CSRF | Session cookie + mutating request **without** `X-TaskMesh-Client` / bad Origin → rejected (when auth available) |
+| HTTP API surface | `/api/health` OK; sample authenticated list endpoints succeed with creds; RO key method gate if key present |
+| Repo static | No committed `.env`; greps for risky patterns from SECURITY.md checklist (report findings; fail on high-confidence hits) |
+| Repo npm audit | `npm audit --omit=dev` — fail on high/critical (configurable); skip if npm unavailable |
+| DB Postgres | Connect via `DATABASE_URL`; app role not superuser; limited to expected DB; skip if no URL / connect fail |
+
+### Reporting
+
+- Console: green PASS / red FAIL (+ explanation) / yellow SKIP (+ reason)
+- HTML: `security/scan/logs/scan-YYYYMMDD-HHMMSS.html` with same rows, summary counts, target URL, modules run
+
+### Repo wiring
+
+- `package.json`: `"security:scan": "python3 security/scan/run.py"`
+- `.gitignore`: `security/scan/logs/`
+- `SECURITY.md`: short “Runnable scan suite” section pointing at `security/scan/` and noting CI residual → T0086
+- `README.md`: one-liner under scripts / security
+- **T0086:** PROD comment (+ light description append) that T0121 shipped CLI/`npm run security:scan`; CI should invoke it (or subset) plus existing unit tests / SAST — do not duplicate the suite inside T0086
+
+### Docs / versioning
+
+- No schema / no Drizzle migration → finish-up **PATCH** bump
+- `RELEASE_NOTES.md` Enhancement bullet; `FEATURES.md` skip (internal tooling, not end-user product feature) unless user prefers a mention under developer/ops
+
+## Acceptance criteria
+
+- [x] `python3 security/scan/run.py` (or `npm run security:scan`) runs against PROD by default with color console + HTML log
+- [x] `--base-url` works for DEV (CSP SKIP on :3001)
+- [x] Auth modules use env file and/or prompt; missing creds → yellow skips with reasons
+- [x] Repo modules run when cwd/repo root detected; DB module skips cleanly without `DATABASE_URL` (connects when `.env` present)
+- [x] Defensive checks only; README documents stance and how to run
+- [x] Minimal npm script wired; T0086 annotated for CI follow-up
+- [x] QA checklist delivered for operator review
+
+## Risks / notes
+
+- Running against live PROD: prefer read-mostly checks; avoid aggressive login flooding
+- CSP assertion may differ between PROD vs DEV (DEV omits CSP) — detect/skip appropriately
+- `npm audit` noise: fail only on high/critical by default — currently reports `drizzle-orm` + `xlsx` (exit 1 until remediated; not in T0121 scope)
+
+## QA follow-ups
+
+- **Help on FAIL/SKIP (2026-09-07):** `CheckResult.help` lines printed under console results and in HTML logs. Modules bundle remediation + doc links (especially `repo_npm_audit` with per-package advisories for drizzle-orm / xlsx and `npm audit` instructions). Also covered headers, auth/CSRF skips, repo_static `rg` skips, DB skips/fails.
+- **Exit codes (2026-09-07):** Default exit **0** when the runner completes (FAIL findings do not fail `npm run security:scan`). Optional `--fail-on-findings` for CI (T0086).
+- **README Security scan section (2026-09-07):** Root `README.md` documents usage commands (`npm run security:scan`, `--base-url`, creds, common flags); details remain in `security/scan/README.md`.

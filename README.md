@@ -75,8 +75,46 @@ npm run dev:web
 | `npm run db:migrate` | Apply `./drizzle` migrations |
 | `npm run db:studio` | Drizzle Studio |
 | `npm run docs:sync-schema` | Copy-replace `docs/` schema Markdown into TaskMesh project Documents (PROD) |
+| `npm run security:scan` | Defensive security scan suite (HTTP / repo / optional DB) — see [`security/scan/README.md`](security/scan/README.md) |
 
 After editing `src/db/schema.ts`: `npm run db:generate`, review `drizzle/`, then `npm run db:migrate`.
+
+## Security scan
+
+Defensive audit CLI (HTTP headers/auth/CSRF/API, repo static checks + `npm audit`, optional Postgres role checks). **No exploit payloads.** Full module list and flags: [`security/scan/README.md`](security/scan/README.md). Threat model / hardening notes: [`SECURITY.md`](SECURITY.md).
+
+From the repo root (default target: PROD `http://127.0.0.1:3000`):
+
+```bash
+npm run security:scan
+# equivalent:
+python3 security/scan/run.py
+```
+
+DEV API:
+
+```bash
+npm run security:scan -- --base-url http://127.0.0.1:3001
+```
+
+Credentials (optional — auth/CSRF checks **SKIP** with a reason if missing):
+
+```bash
+# ~/.config/taskmesh/worktask.env  (TASKMESH_EMAIL / TASKMESH_PASSWORD / optional TASKMESH_API_KEY)
+npm run security:scan -- --env-file ~/.config/taskmesh/worktask.env
+npm run security:scan -- --prompt-creds
+```
+
+Common options:
+
+```bash
+npm run security:scan -- --modules http_headers,http_auth
+npm run security:scan -- --skip-db --skip-repo
+npm run security:scan -- --no-html
+npm run security:scan -- --fail-on-findings   # exit 1 if any check FAILs (default exit 0 when the runner completes)
+```
+
+Color console output (PASS / FAIL / SKIP + Help on findings) and a dated HTML log under `security/scan/logs/` (gitignored). `DATABASE_URL` for DB checks comes from process env, `--env-file`, or repo `.env`.
 
 ## Configuration
 
@@ -134,6 +172,7 @@ FEATURES.md          # Major shipped features (website-ready one-liners)
 data/uploads/        # Image uploads (runtime; tracked with .gitkeep)
 INSTALL.md           # Ubuntu bare-metal install guide
 SECURITY.md          # Input-path audit log and re-audit checklist
+security/scan/       # Defensive security scan CLI (npm run security:scan)
 ```
 
 ## License

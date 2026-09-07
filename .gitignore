@@ -10,3 +10,6 @@ data/backup-schedule.json
 data/prod-release.json
 data/uploads/
 !data/uploads/.gitkeep
+security/scan/logs/*.html
+**/__pycache__/
+*.py[cod]

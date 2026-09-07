@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.8 — 2026-09-07
+
+### New Functionality
+- Defensive security scan suite (`npm run security:scan` / `security/scan/`) asserts HTTP headers, auth gates, CSRF, API surface, repo static greps, production `npm audit`, and optional Postgres role checks, with color console output, Help remediation on FAIL/SKIP, and dated HTML logs.
+
+### Enhancements
+- Root README documents Security scan usage (PROD/DEV targets, credentials, common flags); SECURITY.md points at the suite and notes CI residual T0086. Scan exits 0 when the runner completes (optional `--fail-on-findings` for CI).
+
 ## 0.35.7 — 2026-09-07
 
 ### Enhancements

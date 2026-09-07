@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.35.7",
+  "version": "0.35.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,6 +17,7 @@
     "db:studio": "drizzle-kit studio",
     "backup": "tsx src/scripts/runBackup.ts",
     "docs:sync-schema": "tsx src/scripts/syncSchemaDocsToProject.ts",
+    "security:scan": "python3 security/scan/run.py",
     "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
