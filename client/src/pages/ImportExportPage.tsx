@@ -117,7 +117,7 @@ export function ImportExportPage({ embedded = false }: Props) {
               ref={fileRef}
               className="file-picker__input"
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx"
               aria-labelledby="import-file-label"
               onChange={(e) => {
                 const f = e.target.files?.[0];

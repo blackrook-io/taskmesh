@@ -18,19 +18,19 @@ DOCS = (
     "Safe-ish auto-fix for non-breaking patches: `npm audit fix` (review the diff; re-run tests).",
     "Avoid `npm audit fix --force` unless you intentionally accept breaking upgrades (e.g. drizzle major).",
     "TaskMesh docs: SECURITY.md (threat model / residual T0086 CI) and security/scan/README.md.",
-    "CI follow-up: T0086 should gate on this module; remediating advisories may be a separate Task.",
+    "CI follow-up: hard-gated in GitHub Actions Security CI (`repo_npm_audit` + `--fail-on-findings`).",
 )
 
 # Package-specific operator notes when npm has no easy fix or upgrades are breaking.
 KNOWN_PACKAGE_NOTES: dict[str, tuple[str, ...]] = {
     "drizzle-orm": (
         "drizzle-orm: advisory is typically SQL identifier escaping (GHSA-gpj5-g38j-94v9).",
-        "Upgrade path often requires `npm audit fix --force` → drizzle-orm ≥0.45.x (breaking); plan a migration Task.",
+        "TaskMesh remediates via drizzle-orm ≥0.45.2 (T0124). If this fires again, bump drizzle-orm/drizzle-kit.",
         "Advisory: https://github.com/advisories/GHSA-gpj5-g38j-94v9",
     ),
     "xlsx": (
         "xlsx (SheetJS): high severity (prototype pollution / ReDoS); npm often reports no fix available.",
-        "Options: replace the import/export library, vendor a patched build, or document accepted risk until replaced.",
+        "TaskMesh replaced SheetJS with ExcelJS for import/export (T0124). Reappearance means xlsx was reintroduced.",
         "Advisories: https://github.com/advisories/GHSA-4r6h-8v6p-xvw6 and https://github.com/advisories/GHSA-5pgg-2g8v-p4x9",
     ),
 }

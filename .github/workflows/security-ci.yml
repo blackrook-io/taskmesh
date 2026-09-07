@@ -57,7 +57,5 @@ jobs:
       - name: Repo static security scan (hard gate)
         run: npm run security:scan -- --modules repo_static --fail-on-findings --no-html
 
-      # Soft until T0124 remediates known high advisories (drizzle-orm, xlsx).
-      - name: npm audit via security scan (soft — see T0124)
-        continue-on-error: true
+      - name: npm audit via security scan (hard gate)
         run: npm run security:scan -- --modules repo_npm_audit --fail-on-findings --no-html

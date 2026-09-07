@@ -76,7 +76,7 @@ function discardIfImmutable(raw: Record<string, unknown>, rowNum: number): Disca
   };
 }
 
-function sendDownload(
+async function sendDownload(
   res: import("express").Response,
   format: "csv" | "xlsx",
   basename: string,
@@ -90,7 +90,7 @@ function sendDownload(
     res.send(body);
     return;
   }
-  const buf = objectsToXlsxBuffer(rows, sheetName);
+  const buf = await objectsToXlsxBuffer(rows, sheetName);
   res.setHeader(
     "Content-Type",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -108,7 +108,7 @@ importExportRouter.get("/export/projects", async (req, res) => {
     const rows = scope
       ? await db.select().from(schema.projects).where(scope)
       : await db.select().from(schema.projects);
-    sendDownload(
+    await sendDownload(
       res,
       format,
       "taskmesh-projects",
@@ -160,7 +160,7 @@ importExportRouter.get("/export/tasks", async (req, res) => {
         rows = await db.select().from(schema.tasks);
       }
     }
-    sendDownload(res, format, "taskmesh-tasks", rows.map(taskExportRow), "tasks");
+    await sendDownload(res, format, "taskmesh-tasks", rows.map(taskExportRow), "tasks");
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -204,7 +204,7 @@ importExportRouter.get("/export/bundle", async (req, res) => {
       return;
     }
 
-    const buf = workbookToBuffer([
+    const buf = await workbookToBuffer([
       { name: "projects", rows: projectRows },
       { name: "tasks", rows: taskRows },
     ]);
@@ -615,12 +615,13 @@ importExportRouter.post(
     }
     const name = file.originalname || "upload.xlsx";
     const lower = name.toLowerCase();
-    if (!lower.endsWith(".csv") && !lower.endsWith(".xlsx") && !lower.endsWith(".xls")) {
+    // ExcelJS supports .csv / .xlsx only (legacy BIFF .xls is rejected).
+    if (!lower.endsWith(".csv") && !lower.endsWith(".xlsx")) {
       sendError(res, 400, "unsupported_file_type", "Only .csv or .xlsx allowed");
       return;
     }
 
-    const rows = sheetToObjects(file.buffer, name);
+    const rows = await sheetToObjects(file.buffer, name);
     const result =
       entity === "projects" ? await importProjects(rows) : await importTasks(rows);
 
