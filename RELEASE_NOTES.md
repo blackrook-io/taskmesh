@@ -4,6 +4,19 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.0 — 2026-09-07
+
+### New Functionality
+- Projects can upload EPUB Documents (up to 100 MB on the filesystem) and open them in an in-app epub.js reader with TOC, page turn, font size, and dark/light reading modes.
+- Document records gain `kind` (`markdown` | `epub`) and optional `uploadId`; Markdown Documents behave as before. PDF reader remains deferred (T0119).
+
+### Enhancements
+- Documents create row uses **New:** with Markdown / EPUB / PDF kind icons (PDF disabled until T0119); EPUB titles come from package metadata on upload, with inline rename and tags below the reader.
+- Reader toolbar uses compact icons for Contents, prev/next, and reading mode; dark mode follows app theme colors and stays applied across TOC navigation.
+
+### Fixes
+- Authenticated multipart uploads no longer fail with “Authentication required” after multer (request auth ALS is restored for the upload/import handlers).
+
 ## 0.34.2 — 2026-09-07
 
 ### New Functionality

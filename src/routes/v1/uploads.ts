@@ -6,15 +6,20 @@ import { Router } from "express";
 import multer from "multer";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { EPUB_MIME, sniffEpubZip } from "../../lib/epubMagic.js";
 import { sniffImageMime } from "../../lib/imageMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { getUploadDir } from "../../lib/paths.js";
 import { uploadRateLimit } from "../../middleware/rateLimits.js";
+import { withRestoredRequestAuth } from "../../middleware/restoreRequestAuth.js";
 import { assertCanAccessOwned } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-const MAX_BYTES = Number(process.env.UPLOAD_MAX_BYTES ?? 5 * 1024 * 1024);
+const IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
+const MAX_IMAGE_BYTES = Number(process.env.UPLOAD_MAX_BYTES ?? 5 * 1024 * 1024);
+const MAX_EPUB_BYTES = Number(process.env.UPLOAD_MAX_BYTES_EPUB ?? 100 * 1024 * 1024);
+const MULTER_MAX = Math.max(MAX_IMAGE_BYTES, MAX_EPUB_BYTES);
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -22,16 +27,23 @@ const storage = multer.diskStorage({
   },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const safeExt = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext) ? ext : "";
-    cb(null, `${randomUUID()}${safeExt || ".bin"}`);
+    let safeExt = ".bin";
+    if (IMAGE_EXTS.has(ext)) safeExt = ext === ".jpeg" ? ".jpg" : ext;
+    else if (ext === ".epub" || file.mimetype === EPUB_MIME) safeExt = ".epub";
+    cb(null, `${randomUUID()}${safeExt}`);
   },
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: MAX_BYTES },
+  limits: { fileSize: MULTER_MAX },
   fileFilter: (_req, file, cb) => {
-    if (!ALLOWED_MIME.has(file.mimetype)) {
+    const ok =
+      IMAGE_MIME.has(file.mimetype) ||
+      file.mimetype === EPUB_MIME ||
+      file.mimetype === "application/zip" ||
+      path.extname(file.originalname).toLowerCase() === ".epub";
+    if (!ok) {
       cb(new Error("unsupported_file_type"));
       return;
     }
@@ -39,9 +51,22 @@ const upload = multer({
   },
 });
 
+function unlinkQuiet(p: string | undefined) {
+  if (!p) return;
+  try {
+    fs.unlinkSync(p);
+  } catch {
+    /* ignore */
+  }
+}
+
 export const uploadsRouter = Router();
 
-uploadsRouter.post("/uploads", uploadRateLimit, upload.single("file"), async (req, res) => {
+uploadsRouter.post(
+  "/uploads",
+  uploadRateLimit,
+  withRestoredRequestAuth(upload.single("file")),
+  async (req, res) => {
   try {
     const file = req.file;
     if (!file) {
@@ -56,13 +81,49 @@ uploadsRouter.post("/uploads", uploadRateLimit, upload.single("file"), async (re
     } finally {
       fs.closeSync(fd);
     }
-    const sniffed = sniffImageMime(head.subarray(0, n));
-    if (!sniffed) {
-      fs.unlinkSync(file.path);
-      sendError(res, 400, "unsupported_file_type", "Only jpeg, png, gif, webp allowed");
+    const buf = head.subarray(0, n);
+    const imageMime = sniffImageMime(buf);
+    const looksEpub =
+      sniffEpubZip(buf) &&
+      (file.mimetype === EPUB_MIME ||
+        file.mimetype === "application/zip" ||
+        path.extname(file.originalname).toLowerCase() === ".epub" ||
+        path.extname(file.filename).toLowerCase() === ".epub");
+
+    let mimeType: string;
+    let maxBytes: number;
+    if (imageMime) {
+      mimeType = imageMime;
+      maxBytes = MAX_IMAGE_BYTES;
+    } else if (looksEpub) {
+      mimeType = EPUB_MIME;
+      maxBytes = MAX_EPUB_BYTES;
+      // Ensure stored name ends with .epub
+      if (!file.filename.toLowerCase().endsWith(".epub")) {
+        const nextName = `${path.basename(file.filename, path.extname(file.filename))}.epub`;
+        const nextPath = path.join(path.dirname(file.path), nextName);
+        fs.renameSync(file.path, nextPath);
+        file.path = nextPath;
+        file.filename = nextName;
+      }
+    } else {
+      unlinkQuiet(file.path);
+      sendError(res, 400, "unsupported_file_type", "Only jpeg, png, gif, webp, or epub allowed");
       return;
     }
-    const mimeType = sniffed;
+
+    if (file.size > maxBytes) {
+      unlinkQuiet(file.path);
+      sendError(
+        res,
+        400,
+        "file_too_large",
+        mimeType === EPUB_MIME
+          ? `EPUB exceeds ${MAX_EPUB_BYTES} bytes`
+          : `Image exceeds ${MAX_IMAGE_BYTES} bytes`,
+      );
+      return;
+    }
 
     const ownerId = await getCurrentUserId(db);
     const [row] = await db
@@ -77,7 +138,7 @@ uploadsRouter.post("/uploads", uploadRateLimit, upload.single("file"), async (re
       .returning();
 
     if (!row) {
-      fs.unlinkSync(file.path);
+      unlinkQuiet(file.path);
       sendError(res, 500, "insert_failed", "Could not record upload");
       return;
     }
@@ -93,15 +154,13 @@ uploadsRouter.post("/uploads", uploadRateLimit, upload.single("file"), async (re
       },
     });
   } catch (err) {
-    if (req.file?.path) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch {
-        /* ignore */
-      }
-    }
+    unlinkQuiet(req.file?.path);
     if (err instanceof Error && err.message === "unsupported_file_type") {
-      sendError(res, 400, "unsupported_file_type", "Only jpeg, png, gif, webp allowed");
+      sendError(res, 400, "unsupported_file_type", "Only jpeg, png, gif, webp, or epub allowed");
+      return;
+    }
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      sendError(res, 400, "file_too_large", `File exceeds ${MULTER_MAX} bytes`);
       return;
     }
     handleRouteError(res, err);

@@ -51,7 +51,15 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
-export async function uploadFile(file: File): Promise<string> {
+export type UploadResult = {
+  id: number;
+  url: string;
+  storedName: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export async function uploadFileWithMeta(file: File): Promise<UploadResult> {
   const fd = new FormData();
   fd.append("file", file);
   const headers = new Headers();
@@ -62,12 +70,17 @@ export async function uploadFile(file: File): Promise<string> {
     headers,
     credentials: "include",
   });
-  const json = (await res.json()) as { data?: { url: string }; error?: { message: string } };
+  const json = (await res.json()) as { data?: UploadResult; error?: { message: string } };
   if (!res.ok) {
     throw new Error(json.error?.message ?? "Upload failed");
   }
-  if (!json.data?.url) {
-    throw new Error("Upload response missing url");
+  if (!json.data?.url || json.data.id == null) {
+    throw new Error("Upload response missing data");
   }
-  return json.data.url;
+  return json.data;
+}
+
+export async function uploadFile(file: File): Promise<string> {
+  const data = await uploadFileWithMeta(file);
+  return data.url;
 }

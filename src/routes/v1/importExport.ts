@@ -10,6 +10,7 @@ import {
   ImmutableFieldError,
 } from "../../lib/immutableFields.js";
 import { heavyWriteRateLimit } from "../../middleware/rateLimits.js";
+import { withRestoredRequestAuth } from "../../middleware/restoreRequestAuth.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
@@ -596,7 +597,11 @@ function entityParam(raw: string): "projects" | "tasks" | null {
   return null;
 }
 
-importExportRouter.post("/import/:entity", heavyWriteRateLimit, upload.single("file"), async (req, res) => {
+importExportRouter.post(
+  "/import/:entity",
+  heavyWriteRateLimit,
+  withRestoredRequestAuth(upload.single("file")),
+  async (req, res) => {
   try {
     const entity = entityParam(req.params.entity ?? "");
     if (!entity) {

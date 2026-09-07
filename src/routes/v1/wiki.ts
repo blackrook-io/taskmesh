@@ -19,6 +19,7 @@ import {
   nextWikiSort,
   wouldCreateCycle,
 } from "../../services/wiki.js";
+import { attachDocumentActor } from "../../services/documents.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const entityType = z.enum(["document", "canvas"]);
@@ -136,7 +137,7 @@ wikiRouter.post("/pages", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create wiki node");
       return;
     }
-    res.status(201).json({ data: { node, document: doc } });
+    res.status(201).json({ data: { node, document: await attachDocumentActor(db, doc) } });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -285,7 +286,7 @@ wikiRouter.get("/nodes/:nodeId", async (req, res) => {
         .select()
         .from(schema.projectDocuments)
         .where(eq(schema.projectDocuments.id, node.entityId));
-      document = doc ?? null;
+      document = doc ? await attachDocumentActor(db, doc) : null;
     } else if (node.entityType === "canvas") {
       const [c] = await db.select().from(schema.canvases).where(eq(schema.canvases.id, node.entityId));
       canvas = c ?? null;

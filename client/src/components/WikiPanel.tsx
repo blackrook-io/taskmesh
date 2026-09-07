@@ -16,6 +16,7 @@ import { sanitizePlainText } from "../lib/plainText";
 import type { Canvas, ProjectDocument, WikiNode, WikiTreeNode, WikiTreeResponse } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CanvasEditor } from "./CanvasEditor";
+import { EpubReader } from "./EpubReader";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { PencilIcon } from "./shared/PencilIcon";
 import { TagInput } from "./shared/TagInput";
@@ -296,9 +297,13 @@ export function WikiPanel({
     mutationFn: async () => {
       const doc = detailQuery.data?.document;
       if (!doc) throw new Error("No document");
+      const payload: Record<string, unknown> = { title: titleDraft.trim() || doc.title };
+      if ((doc.kind ?? "markdown") !== "epub") {
+        payload.body = bodyDraft;
+      }
       await apiJson(`/api/v1/projects/${projectId}/documents/${doc.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ title: titleDraft.trim() || doc.title, body: bodyDraft }),
+        body: JSON.stringify(payload),
       });
       if (activeId != null && titleDraft.trim()) {
         await patchNode.mutateAsync({ nodeId: activeId, title: titleDraft.trim() });
@@ -551,23 +556,76 @@ export function WikiPanel({
             </div>
 
             {pageEdit ? (
+              (detailQuery.data.document.kind ?? "markdown") === "epub" ? (
+                <>
+                  <p className="muted">
+                    This wiki entry points at an EPUB document. Use the EPUB viewer; Markdown body editing does
+                    not apply.
+                  </p>
+                  <div className="field">
+                    <label htmlFor="wiki-title">Title</label>
+                    <input
+                      id="wiki-title"
+                      type="text"
+                      value={titleDraft}
+                      onChange={(e) => setTitleDraft(sanitizePlainText(e.target.value))}
+                    />
+                  </div>
+                  <div className="field field--tags-below">
+                    <TagInput entityType="document" entityId={detailQuery.data.document.id} />
+                  </div>
+                  {detailQuery.data.document.fileUrl ? (
+                    <EpubReader
+                      key={detailQuery.data.document.fileUrl}
+                      fileUrl={detailQuery.data.document.fileUrl}
+                      title={detailQuery.data.document.fileOriginalName ?? undefined}
+                    />
+                  ) : (
+                    <p className="muted">EPUB file missing.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="field">
+                    <label htmlFor="wiki-title">Title</label>
+                    <input
+                      id="wiki-title"
+                      type="text"
+                      value={titleDraft}
+                      onChange={(e) => setTitleDraft(sanitizePlainText(e.target.value))}
+                    />
+                  </div>
+                  <div className="field field--tags-below">
+                    <TagInput entityType="document" entityId={detailQuery.data.document.id} />
+                  </div>
+                  <div className="field">
+                    <label>Body</label>
+                    <MarkdownEditor value={bodyDraft} onChange={setBodyDraft} height={420} />
+                  </div>
+                </>
+              )
+            ) : (detailQuery.data.document.kind ?? "markdown") === "epub" ? (
               <>
-                <div className="field">
-                  <label htmlFor="wiki-title">Title</label>
-                  <input
-                    id="wiki-title"
-                    type="text"
-                    value={titleDraft}
-                    onChange={(e) => setTitleDraft(sanitizePlainText(e.target.value))}
-                  />
-                </div>
+                <h1 className="wiki-page-title">
+                  {detailQuery.data?.node ? (
+                    <span className="muted">
+                      {formatEntityRef("wiki_node", detailQuery.data.node.number)}{" "}
+                    </span>
+                  ) : null}
+                  {displayTitle}
+                </h1>
                 <div className="field field--tags-below">
-                  <TagInput entityType="document" entityId={detailQuery.data.document.id} />
+                  <TagInput entityType="document" entityId={detailQuery.data.document.id} readOnly />
                 </div>
-                <div className="field">
-                  <label>Body</label>
-                  <MarkdownEditor value={bodyDraft} onChange={setBodyDraft} height={420} />
-                </div>
+                {detailQuery.data.document.fileUrl ? (
+                  <EpubReader
+                    key={detailQuery.data.document.fileUrl}
+                    fileUrl={detailQuery.data.document.fileUrl}
+                    title={detailQuery.data.document.fileOriginalName ?? undefined}
+                  />
+                ) : (
+                  <p className="muted">EPUB file missing.</p>
+                )}
               </>
             ) : (
               <>

@@ -1,0 +1,101 @@
+# T0091 — Implement epub.js reader
+
+**State:** implemented on `T0091-epub-reader`, awaiting QA / finish-up  
+**Branch:** `T0091-epub-reader`  
+**Deferred:** T0119 Implement PDF document reader (Draft; Depends on T0091)
+
+## Context
+
+Documents today are Markdown-only (`project_documents.title` / `body`). Uploads are images only (≤5 MB), metadata in Postgres, bytes under `UPLOAD_DIR`. T0058 shipped Markdown `#` references; documents use **N####** (ToDos took **D####** in T0104).
+
+## Decisions (interview)
+
+1. **EPUB only** in this Task; PDF deferred → **T0119**.
+2. Document `kind` (`markdown` | `epub`) + `uploadId` FK for binary docs.
+3. Create UX: **New Markdown** vs **Upload EPUB**; EPUB opens reader (not TipTap).
+4. Reader MVP: open book, TOC / chapter nav, next/prev, font size. Defer bookmarks, progress sync, in-book search.
+5. `#N####` Wiki/Markdown links must resolve and deep-link to EPUB Documents the same as Markdown docs (T0058). Full-text search of EPUB body text stays out of scope (title still searchable).
+6. Binary upload max **100 MB**. Store files on the **filesystem** (existing `uploads` pattern); DB holds metadata + FK only.
+
+### Storage / backups (Q6)
+
+| Concern | Answer |
+|---------|--------|
+| DB blob limit? | We will **not** store EPUB bytes in Postgres. `uploads` already keeps only `stored_name`, `mime_type`, `size_bytes`, etc. |
+| Where do bytes live? | `UPLOAD_DIR` (default `data/uploads/`, or `/var/lib/taskmesh/uploads` in INSTALL). |
+| Backups? | `runBackup()` already dumps SQL **and** `uploads-*.tar.gz` of `UPLOAD_DIR`. EPUB files ride along with images — no new backup path. |
+| `size_bytes` column | `integer` (~2 GB signed max) — fine for 100 MB. |
+
+## Outcome
+
+Users can create an EPUB Document in a project, open it in an epub.js reader, and link to it via `#N####` from Markdown/Wiki. Markdown Documents unchanged.
+
+## Approach
+
+### Schema (MINOR bump on finish-up)
+
+- `project_documents.kind` text not null default `'markdown'` (`markdown` | `epub`; PDF adds `pdf` in T0119).
+- `project_documents.upload_id` nullable FK → `uploads.id` (ON DELETE SET NULL or RESTRICT — prefer RESTRICT while doc exists, or cascade delete upload on doc delete; decide in impl: delete doc → remove upload file + row).
+- Fix stale schema comment that still says documents → D#### (should be N####).
+- Update `docs/database/` + `npm run docs:sync-schema` on finish-up.
+
+### Uploads API
+
+- Allow `application/epub+zip` (and sniff/validate ZIP/`mimetype` + `.epub` where needed).
+- Per-request or purpose-based max: **100 MB** for EPUB; keep **5 MB** for images (or env: `UPLOAD_MAX_BYTES` for images, `UPLOAD_MAX_BYTES_EPUB=104857600`).
+- Serve via existing `GET /api/v1/files/:storedName` with correct Content-Type (epub.js needs arrayBuffer/fetch of the file URL with credentials).
+
+### Documents API
+
+- List/get include `kind`, `uploadId`, and file URL / storedName when present.
+- Create Markdown: unchanged `{ title, body? }`.
+- Create EPUB: multipart or upload-then-link (`POST` upload → `POST` document with `kind: "epub", uploadId, title` from filename).
+- PATCH: Markdown may edit body; EPUB may rename title / replace file — do not treat EPUB as Markdown body.
+- Delete: confirm in UI; remove linked upload file when kind is epub.
+
+### Client
+
+- Documents tab: split create actions; branch editor → `MarkdownEditor` vs `EpubReader` (epub.js).
+- Deep link `?tab=documents&doc=` already used by references — ensure selecting an EPUB doc mounts the reader.
+- Verify `#N` typeahead / insert / click navigation for EPUB rows (reference search already queries all `project_documents`; should work once rows exist). Smoke-test so kind does not filter them out.
+
+### Out of scope (T0091)
+
+- PDF reader / `kind: pdf` → **T0119**
+- EPUB text extraction for search/assistant
+- Wiki page *body* as EPUB (wiki may still *link* to N#### docs)
+- Bookmarks, reading progress, annotations
+
+## Implementation sketch
+
+| Area | Work |
+|------|------|
+| Migration | `kind`, `upload_id` on `project_documents` |
+| `uploads` route | EPUB MIME + 100 MB path |
+| `documents` route/service | kind-aware create/get/patch/delete |
+| `client` | EpubReader + Documents tab UX |
+| Deps | `epubjs` (and any peer) in `client/` |
+| Docs | `docs/database/content-and-modules.md`, glossary if needed |
+
+## Risks
+
+- Large EPUB + epub.js memory on mobile — MVP acceptable; watch 100 MB edge.
+- CSRF/credentials on file fetch for the reader — use same-origin `/api/v1/files/…` with cookies.
+- Replacing MIME allowlist carefully so image paste path stays strict.
+
+## QA follow-ups
+
+- **Upload “Authentication required” (DEV):** Multer finishes on a later async turn and dropped `requestAuthContext`, so `getCurrentUserId()` threw after `requireAuth` had already passed. Wrapped multipart upload (and import) with `withRestoredRequestAuth` to re-bind ALS from `req.sessionUserId` / `req.apiKeyUserId`.
+- **Documents EPUB UX cleanup:** Create card is “New document” with stacked small Markdown/EPUB buttons (no title field). Upload extracts `dc:title` from the EPUB (filename fallback). Viewer header shows `N####` + book title (double-click to rename; save on Enter/blur). Removed separate Title field and Save title. Tags moved below the reader using `field--tags-below` like the Task modal.
+- **EPUB dark reading mode:** Toolbar “Dark page” / “Light page” toggle (persisted in `localStorage`). Dark mode uses app `--canvas-bg` / `--text` for page + body text, light-blue links (`#8ec7ff`); light mode keeps the cream paper surface. Theme apply uses a single `registerCss` stylesheet id so light fully replaces dark (rule-object themes were stacking and blocking the switch back). Re-apply on `rendered` / content hooks so Contents navigation keeps dark mode (epub.js skips serialized themes on new iframes).
+- **Documents create icons:** Replaced stacked Markdown/EPUB text buttons with a single row: label **New:** on the left, kind icons (Markdown / EPUB / PDF) anchored right. Icons traced from the provided art; rendered as inline SVG with `fill="currentColor"` so they follow `--text` / hover `--accent` (CSS-mask approach painted solid blocks and was replaced). PDF icon is visible but disabled (T0119). Borderless icon buttons; icon gap tightened to `0.05rem`.
+
+## QA checklist (preview)
+
+- [ ] New Markdown Document still edits/saves as today
+- [ ] Upload EPUB → Document appears with N####; opens reader (TOC, next/prev, font size)
+- [ ] Delete EPUB Document confirms and removes file
+- [ ] From another Markdown/Wiki note, `#N` finds the EPUB doc; click opens Documents tab + reader
+- [ ] Image upload still ≤5 MB and rejects non-images
+- [ ] EPUB >100 MB rejected; ~under 100 MB accepted
+- [ ] Backup includes new EPUB under uploads tar (spot-check optional)

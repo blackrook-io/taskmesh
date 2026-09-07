@@ -153,6 +153,9 @@ function DocumentsTocRow({
         onClick={onSelect}
       >
         {documentDisplayTitle(doc)}
+        {(doc.kind ?? "markdown") === "epub" ? (
+          <span className="documents-toc__kind">EPUB</span>
+        ) : null}
       </button>
     </div>
   );

@@ -434,13 +434,19 @@ export const taskDependencies = pgTable(
 
 export const projectDocuments = pgTable("project_documents", {
   id: serial("id").primaryKey(),
-  /** App-wide unique display number → D####. */
+  /** App-wide unique display number → N####. */
   number: integer("number").notNull().unique(),
   projectId: integer("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   body: text("body"),
+  /** `markdown` (default) or `epub` (binary via uploadId). PDF later. */
+  kind: text("kind").notNull().default("markdown"),
+  /** FK to uploads for binary document kinds (epub). */
+  uploadId: integer("upload_id").references((): AnyPgColumn => uploads.id, {
+    onDelete: "set null",
+  }),
   position: integer("position").notNull().default(0),
   updatedById: integer("updated_by_id").references(() => users.id, {
     onDelete: "set null",
@@ -1043,6 +1049,10 @@ export const projectDocumentsRelations = relations(projectDocuments, ({ one }) =
   project: one(projects, {
     fields: [projectDocuments.projectId],
     references: [projects.id],
+  }),
+  upload: one(uploads, {
+    fields: [projectDocuments.uploadId],
+    references: [uploads.id],
   }),
   updatedBy: one(users, {
     fields: [projectDocuments.updatedById],

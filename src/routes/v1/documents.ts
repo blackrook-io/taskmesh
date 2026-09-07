@@ -1,26 +1,62 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { EPUB_MIME } from "../../lib/epubMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateDocumentNumber } from "../../services/entityNumbers.js";
-import { attachDocumentActor, attachDocumentActors } from "../../services/documents.js";
+import {
+  attachDocumentActor,
+  attachDocumentActors,
+  deleteUploadById,
+} from "../../services/documents.js";
 import { getCurrentUserId } from "../../services/users.js";
 
-const docBody = z.object({
-  title: plainTitle(500),
-  body: optionalMarkdown(500_000),
-  position: z.number().int().optional(),
-});
+const documentKind = z.enum(["markdown", "epub"]);
+
+const docBody = z
+  .object({
+    title: plainTitle(500),
+    body: optionalMarkdown(500_000),
+    position: z.number().int().optional(),
+    kind: documentKind.optional(),
+    uploadId: z.number().int().positive().optional().nullable(),
+  })
+  .superRefine((val, ctx) => {
+    const kind = val.kind ?? "markdown";
+    if (kind === "epub") {
+      if (val.uploadId == null) {
+        ctx.addIssue({
+          code: "custom",
+          message: "EPUB documents require uploadId",
+          path: ["uploadId"],
+        });
+      }
+      if (val.body != null && val.body !== "") {
+        ctx.addIssue({
+          code: "custom",
+          message: "EPUB documents do not use a Markdown body",
+          path: ["body"],
+        });
+      }
+    } else if (val.uploadId != null) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Markdown documents cannot have uploadId",
+        path: ["uploadId"],
+      });
+    }
+  });
 
 const docPatch = z.object({
   title: optionalPlainTitle(500),
   body: optionalMarkdown(500_000),
   position: z.number().int().optional(),
+  uploadId: z.number().int().positive().optional().nullable(),
 });
 
 export const documentsRouter = Router({ mergeParams: true });
@@ -53,12 +89,24 @@ documentsRouter.post("/", async (req, res) => {
       return;
     }
     const parsed = docBody.parse(req.body);
+    const kind = parsed.kind ?? "markdown";
     const maxPos = await db
       .select({ p: schema.projectDocuments.position })
       .from(schema.projectDocuments)
       .where(eq(schema.projectDocuments.projectId, projectId));
     const nextPos =
       parsed.position ?? (maxPos.length ? Math.max(...maxPos.map((r) => r.p)) + 1 : 0);
+
+    let uploadId: number | null = null;
+    if (kind === "epub") {
+      const uid = parsed.uploadId!;
+      const [upload] = await db.select().from(schema.uploads).where(eq(schema.uploads.id, uid));
+      if (!upload || upload.mimeType !== EPUB_MIME) {
+        sendError(res, 400, "invalid_upload", "uploadId must reference an EPUB upload");
+        return;
+      }
+      uploadId = uid;
+    }
 
     const actorId = await getCurrentUserId(db);
     const number = await allocateDocumentNumber(db);
@@ -68,7 +116,9 @@ documentsRouter.post("/", async (req, res) => {
         number,
         projectId,
         title: parsed.title,
-        body: parsed.body ?? null,
+        body: kind === "markdown" ? (parsed.body ?? null) : null,
+        kind,
+        uploadId,
         position: nextPos,
         updatedById: actorId,
       })
@@ -103,8 +153,8 @@ documentsRouter.patch("/:docId", async (req, res) => {
     const projectId = parseRouteId(req, "projectId");
     const docId = parseRouteId(req, "docId");
     const parsed = docPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["title", "body", "position"])) {
-      sendError(res, 400, "empty_patch", "Provide title, body, and/or position");
+    if (!hasDefinedKeys(parsed, ["title", "body", "position", "uploadId"])) {
+      sendError(res, 400, "empty_patch", "Provide title, body, position, and/or uploadId");
       return;
     }
     const [existing] = await db
@@ -115,18 +165,57 @@ documentsRouter.patch("/:docId", async (req, res) => {
       sendError(res, 404, "not_found", "Document not found");
       return;
     }
+
+    if (existing.kind === "epub" && parsed.body !== undefined) {
+      sendError(res, 400, "invalid_patch", "EPUB documents do not use a Markdown body");
+      return;
+    }
+    if (existing.kind === "markdown" && parsed.uploadId !== undefined) {
+      sendError(res, 400, "invalid_patch", "Markdown documents cannot have uploadId");
+      return;
+    }
+
+    let nextUploadId = existing.uploadId;
+    let oldUploadToDelete: number | null = null;
+    if (existing.kind === "epub" && parsed.uploadId !== undefined) {
+      if (parsed.uploadId == null) {
+        sendError(res, 400, "invalid_upload", "EPUB documents require an upload");
+        return;
+      }
+      const [upload] = await db
+        .select()
+        .from(schema.uploads)
+        .where(eq(schema.uploads.id, parsed.uploadId));
+      if (!upload || upload.mimeType !== EPUB_MIME) {
+        sendError(res, 400, "invalid_upload", "uploadId must reference an EPUB upload");
+        return;
+      }
+      if (existing.uploadId != null && existing.uploadId !== parsed.uploadId) {
+        oldUploadToDelete = existing.uploadId;
+      }
+      nextUploadId = parsed.uploadId;
+    }
+
     const actorId = await getCurrentUserId(db);
     const [row] = await db
       .update(schema.projectDocuments)
       .set({
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
-        ...(parsed.body !== undefined ? { body: parsed.body } : {}),
+        ...(parsed.body !== undefined && existing.kind === "markdown" ? { body: parsed.body } : {}),
         ...(parsed.position !== undefined ? { position: parsed.position } : {}),
+        ...(existing.kind === "epub" && parsed.uploadId !== undefined
+          ? { uploadId: nextUploadId }
+          : {}),
         updatedAt: new Date(),
         updatedById: actorId,
       })
       .where(eq(schema.projectDocuments.id, docId))
       .returning();
+
+    if (oldUploadToDelete != null) {
+      await deleteUploadById(db, oldUploadToDelete);
+    }
+
     res.json({ data: await attachDocumentActor(db, row!) });
   } catch (err) {
     handleRouteError(res, err);
@@ -137,14 +226,18 @@ documentsRouter.delete("/:docId", async (req, res) => {
   try {
     const projectId = parseRouteId(req, "projectId");
     const docId = parseRouteId(req, "docId");
-    const deleted = await db
-      .delete(schema.projectDocuments)
-      .where(eq(schema.projectDocuments.id, docId))
-      .returning({ id: schema.projectDocuments.id, projectId: schema.projectDocuments.projectId });
-    const d = deleted[0];
-    if (!d || d.projectId !== projectId) {
+    const [existing] = await db
+      .select()
+      .from(schema.projectDocuments)
+      .where(and(eq(schema.projectDocuments.id, docId), eq(schema.projectDocuments.projectId, projectId)));
+    if (!existing) {
       sendError(res, 404, "not_found", "Document not found");
       return;
+    }
+    const uploadId = existing.uploadId;
+    await db.delete(schema.projectDocuments).where(eq(schema.projectDocuments.id, docId));
+    if (uploadId != null) {
+      await deleteUploadById(db, uploadId);
     }
     res.status(204).end();
   } catch (err) {

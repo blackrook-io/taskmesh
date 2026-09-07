@@ -238,6 +238,7 @@ Optional (from [`.env.example`](.env.example)):
 # Absolute path recommended in production
 UPLOAD_DIR=/var/lib/taskmesh/uploads
 UPLOAD_MAX_BYTES=5242880
+UPLOAD_MAX_BYTES_EPUB=104857600
 ```
 
 If you set `UPLOAD_DIR` outside the repo:

@@ -109,12 +109,19 @@ export type TaskActivityEntry = {
   createdAt: string;
 };
 
+export type DocumentKind = "markdown" | "epub";
+
 export type ProjectDocument = {
   id: number;
   number: number;
   projectId: number;
   title: string;
   body: string | null;
+  kind: DocumentKind;
+  uploadId: number | null;
+  fileUrl?: string | null;
+  fileMimeType?: string | null;
+  fileOriginalName?: string | null;
   position: number;
   updatedById?: number | null;
   updatedBy?: UserRef | null;

@@ -1,9 +1,11 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiJson } from "../api/client";
+import { apiJson, uploadFileWithMeta } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { EpubReader } from "../components/EpubReader";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
+import { DocumentKindIcon } from "../components/shared/DocumentKindIcon";
 import { PencilIcon } from "../components/shared/PencilIcon";
 import { TagInput } from "../components/shared/TagInput";
 import { PhaseManager } from "../components/PhaseManager";
@@ -25,6 +27,7 @@ import {
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
+import { resolveEpubDocumentTitle } from "../lib/epubMeta";
 import { sanitizePlainText } from "../lib/plainText";
 import { storageKeyForProjectTasks, emptyTaskListFilter, isFilterActive, parseTaskListFilterValue } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
@@ -119,7 +122,8 @@ export function ProjectDetailPage() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [requestOpenTask, setRequestOpenTask] = useState<Task | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
-  const [newDocTitle, setNewDocTitle] = useState("");
+  const [epubUploadError, setEpubUploadError] = useState<string | null>(null);
+  const epubFileInputRef = useRef<HTMLInputElement | null>(null);
   const [projectListId, setProjectListId] = useState<number | null>(null);
   const [pendingDeleteTodoList, setPendingDeleteTodoList] = useState<TodoList | null>(null);
 
@@ -481,23 +485,60 @@ export function ProjectDetailPage() {
     mutationFn: async () => {
       const res = await apiJson<{ data: ProjectDocument }>(`/api/v1/projects/${projectId}/documents`, {
         method: "POST",
-        body: JSON.stringify({ title: newDocTitle, body: "" }),
+        body: JSON.stringify({ title: "Untitled", body: "", kind: "markdown" }),
       });
       return res.data;
     },
     onSuccess: (doc) => {
-      setNewDocTitle("");
       setSelectedDocId(doc.id);
       void qc.invalidateQueries({ queryKey: ["documents", projectId] });
     },
   });
 
-  const saveDocument = useMutation({
-    mutationFn: async ({ docId, title, body }: { docId: number; title: string; body: string }) => {
-      const res = await apiJson<{ data: ProjectDocument }>(`/api/v1/projects/${projectId}/documents/${docId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ title, body }),
+  const createEpubDocument = useMutation({
+    mutationFn: async (file: File) => {
+      const [upload, title] = await Promise.all([
+        uploadFileWithMeta(file),
+        resolveEpubDocumentTitle(file),
+      ]);
+      const res = await apiJson<{ data: ProjectDocument }>(`/api/v1/projects/${projectId}/documents`, {
+        method: "POST",
+        body: JSON.stringify({ title, kind: "epub", uploadId: upload.id }),
       });
+      return res.data;
+    },
+    onSuccess: (doc) => {
+      setEpubUploadError(null);
+      setSelectedDocId(doc.id);
+      void qc.invalidateQueries({ queryKey: ["documents", projectId] });
+    },
+    onError: (err) => {
+      setEpubUploadError(err instanceof Error ? err.message : "EPUB upload failed");
+    },
+  });
+
+  const saveDocument = useMutation({
+    mutationFn: async ({
+      docId,
+      title,
+      body,
+      uploadId,
+    }: {
+      docId: number;
+      title: string;
+      body?: string;
+      uploadId?: number;
+    }) => {
+      const payload: Record<string, unknown> = { title };
+      if (body !== undefined) payload.body = body;
+      if (uploadId !== undefined) payload.uploadId = uploadId;
+      const res = await apiJson<{ data: ProjectDocument }>(
+        `/api/v1/projects/${projectId}/documents/${docId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+      );
       return res.data;
     },
     onSuccess: () => {
@@ -808,25 +849,62 @@ export function ProjectDetailPage() {
       {tab === "documents" ? (
         <div className="split-panel">
           <div className="documents-panel__sidebar">
-            <h3 className="documents-panel__heading">Documents</h3>
             <div className="card documents-panel__create">
-              <div className="documents-panel__create-form">
-                <input
-                  type="text"
-                  value={newDocTitle}
-                  placeholder="Title"
-                  aria-label="Document title"
-                  onChange={(e) => setNewDocTitle(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn primary small"
-                  disabled={!newDocTitle.trim() || createDocument.isPending}
-                  onClick={() => createDocument.mutate()}
-                >
-                  Create
-                </button>
+              <div className="documents-panel__create-row">
+                <span className="documents-panel__create-label">New:</span>
+                <div className="documents-panel__create-actions">
+                  <button
+                    type="button"
+                    className="btn small btn-icon documents-panel__create-icon-btn"
+                    disabled={createDocument.isPending || createEpubDocument.isPending}
+                    aria-label={createDocument.isPending ? "Creating Markdown document" : "New Markdown document"}
+                    title="New Markdown"
+                    onClick={() => createDocument.mutate()}
+                  >
+                    <DocumentKindIcon kind="markdown" size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn small btn-icon documents-panel__create-icon-btn"
+                    disabled={createDocument.isPending || createEpubDocument.isPending}
+                    aria-label={
+                      createEpubDocument.isPending ? "Uploading EPUB" : "Upload EPUB document"
+                    }
+                    title="Upload EPUB"
+                    onClick={() => {
+                      setEpubUploadError(null);
+                      epubFileInputRef.current?.click();
+                    }}
+                  >
+                    <DocumentKindIcon kind="epub" size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn small btn-icon documents-panel__create-icon-btn"
+                    disabled
+                    aria-label="New PDF document (coming soon)"
+                    title="PDF coming soon"
+                  >
+                    <DocumentKindIcon kind="pdf" size={16} />
+                  </button>
+                  <input
+                    ref={epubFileInputRef}
+                    type="file"
+                    accept=".epub,application/epub+zip"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) createEpubDocument.mutate(file);
+                    }}
+                  />
+                </div>
               </div>
+              {epubUploadError ? (
+                <p className="muted small" role="alert" style={{ margin: "0.4rem 0 0" }}>
+                  {epubUploadError}
+                </p>
+              ) : null}
             </div>
             <div className="card documents-panel__toc">
               {documentsQuery.isLoading ? (
@@ -845,7 +923,12 @@ export function ProjectDetailPage() {
               <DocumentEditor
                 key={selectedDoc.id}
                 doc={selectedDoc}
-                onSave={(title, body) => saveDocument.mutate({ docId: selectedDoc.id, title, body })}
+                onSaveMarkdown={(title, body) =>
+                  saveDocument.mutate({ docId: selectedDoc.id, title, body })
+                }
+                onSaveEpub={(title, uploadId) =>
+                  saveDocument.mutate({ docId: selectedDoc.id, title, uploadId })
+                }
                 onDelete={() => setPendingDocDelete(selectedDoc.id)}
                 busy={saveDocument.isPending}
               />
@@ -919,17 +1002,36 @@ export function ProjectDetailPage() {
 
 function DocumentEditor({
   doc,
-  onSave,
+  onSaveMarkdown,
+  onSaveEpub,
   onDelete,
   busy,
 }: {
   doc: ProjectDocument;
-  onSave: (title: string, body: string) => void;
+  onSaveMarkdown: (title: string, body: string) => void;
+  onSaveEpub: (title: string, uploadId?: number) => void;
   onDelete: () => void;
   busy: boolean;
 }) {
+  const kind = doc.kind ?? "markdown";
   const [title, setTitle] = useState(() => sanitizePlainText(doc.title));
   const [body, setBody] = useState(doc.body ?? "");
+  const [replaceError, setReplaceError] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(() => sanitizePlainText(doc.title));
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const skipTitleCommitRef = useRef(false);
+
+  useEffect(() => {
+    setTitle(sanitizePlainText(doc.title));
+    if (!editingTitle) setTitleDraft(sanitizePlainText(doc.title));
+  }, [doc.title, editingTitle]);
+
+  useEffect(() => {
+    if (editingTitle) titleInputRef.current?.focus();
+  }, [editingTitle]);
 
   useRegisterAssistantAttach(
     useMemo(
@@ -937,11 +1039,132 @@ function DocumentEditor({
         key: `document-${doc.id}`,
         label: title.trim() || `Document #${doc.id}`,
         getContext: () =>
-          `Document #${doc.id} (project #${doc.projectId})\nTitle: ${title}\n\n${body}`,
+          kind === "epub"
+            ? `Document #${doc.id} (project #${doc.projectId}, EPUB)\nTitle: ${title}\nFile: ${doc.fileOriginalName ?? doc.fileUrl ?? "(none)"}`
+            : `Document #${doc.id} (project #${doc.projectId})\nTitle: ${title}\n\n${body}`,
       }),
-      [doc.id, doc.projectId, title, body],
+      [doc.id, doc.projectId, doc.fileOriginalName, doc.fileUrl, title, body, kind],
     ),
   );
+
+  const commitEpubTitle = () => {
+    if (skipTitleCommitRef.current) {
+      skipTitleCommitRef.current = false;
+      return;
+    }
+    const next = sanitizePlainText(titleDraft).trim() || title;
+    setTitleDraft(next);
+    setEditingTitle(false);
+    if (next !== title) {
+      setTitle(next);
+      onSaveEpub(next);
+    }
+  };
+
+  const cancelEpubTitleEdit = () => {
+    skipTitleCommitRef.current = true;
+    setTitleDraft(title);
+    setEditingTitle(false);
+  };
+
+  if (kind === "epub") {
+    const headingTitle = title.replace(/\.epub$/i, "").trim() || title;
+    return (
+      <div className="document-editor document-editor--epub">
+        <div className="page-head document-editor__head">
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              className="document-editor__title-input"
+              aria-label="Document title"
+              value={titleDraft}
+              disabled={busy}
+              onChange={(e) => setTitleDraft(sanitizePlainText(e.target.value))}
+              onBlur={() => commitEpubTitle()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelEpubTitleEdit();
+                }
+              }}
+            />
+          ) : (
+            <h2
+              className="document-editor__title"
+              title="Double-click to rename"
+              onDoubleClick={() => {
+                setTitleDraft(headingTitle);
+                setEditingTitle(true);
+              }}
+            >
+              <span className="muted">{formatEntityRef("document", doc.number)} </span>
+              {headingTitle}
+            </h2>
+          )}
+          <div className="document-editor__head-actions">
+            <button
+              type="button"
+              className="btn small"
+              disabled={busy || replacing}
+              onClick={() => {
+                setReplaceError(null);
+                replaceInputRef.current?.click();
+              }}
+            >
+              {replacing ? "Replacing…" : "Replace EPUB"}
+            </button>
+            <button type="button" className="btn danger small" onClick={onDelete}>
+              Delete
+            </button>
+            <input
+              ref={replaceInputRef}
+              type="file"
+              accept=".epub,application/epub+zip"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                setReplacing(true);
+                setReplaceError(null);
+                void (async () => {
+                  try {
+                    const [upload, metaTitle] = await Promise.all([
+                      uploadFileWithMeta(file),
+                      resolveEpubDocumentTitle(file),
+                    ]);
+                    setTitle(metaTitle);
+                    setTitleDraft(metaTitle);
+                    onSaveEpub(metaTitle, upload.id);
+                  } catch (err) {
+                    setReplaceError(err instanceof Error ? err.message : "Replace failed");
+                  } finally {
+                    setReplacing(false);
+                  }
+                })();
+              }}
+            />
+          </div>
+        </div>
+        {replaceError ? (
+          <p className="muted small" role="alert">
+            {replaceError}
+          </p>
+        ) : null}
+        {doc.fileUrl ? (
+          <EpubReader key={doc.fileUrl} fileUrl={doc.fileUrl} />
+        ) : (
+          <p className="muted">EPUB file missing.</p>
+        )}
+        <div className="field field--tags-below">
+          <TagInput entityType="document" entityId={doc.id} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -959,16 +1182,20 @@ function DocumentEditor({
         <input id="doc-title" type="text" value={title} onChange={(e) => setTitle(sanitizePlainText(e.target.value))} />
       </div>
       <div className="field">
-        <label>Tags</label>
-        <TagInput entityType="document" entityId={doc.id} />
-      </div>
-      <div className="field">
         <label>Body</label>
         <MarkdownEditor value={body} onChange={setBody} autoHeight />
       </div>
-      <button type="button" className="btn primary" disabled={busy} onClick={() => onSave(title, body)}>
+      <button
+        type="button"
+        className="btn primary"
+        disabled={busy}
+        onClick={() => onSaveMarkdown(title, body)}
+      >
         Save document
       </button>
+      <div className="field field--tags-below">
+        <TagInput entityType="document" entityId={doc.id} />
+      </div>
     </div>
   );
 }
