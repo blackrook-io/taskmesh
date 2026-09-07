@@ -91,6 +91,10 @@ Split scan into two steps so static failures block while audit stays soft — ma
 - **Client lint soft-fail:** `npm run lint --prefix client` exits 1 with ~101 errors on current tree (mostly `react-hooks/set-state-in-effect`). Deferred to **T0125**; hard-gated client `build` (`tsc -b` + Vite) instead so CI stays green while still typechecking the SPA.
 - Soft `repo_npm_audit` remains until **T0124**.
 
+## QA follow-ups (2026-09-07)
+
+- **Unit tests failed on Actions** without `DATABASE_URL`: `apiKeyAuth.test.ts` / `rateLimits.test.ts` import modules that load `src/db/client.ts`, which throws if unset. Locally `.env` via dotenv masks this. Fix: set dummy `DATABASE_URL` on the workflow test step (no Postgres started; pool is query-lazy).
+
 ## Acceptance criteria
 
 - [x] `.github/workflows/…` runs on `push` + `pull_request` targeting `main`

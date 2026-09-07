@@ -36,7 +36,11 @@ jobs:
       - name: Install client dependencies
         run: npm ci --prefix client
 
+      # Middleware unit tests import db/client, which requires DATABASE_URL at load time.
+      # No Postgres is started; Pool is lazy until a query. Dummy URL is enough for import.
       - name: Unit tests (includes sanitizer / SSRF helpers)
+        env:
+          DATABASE_URL: postgres://taskmesh:taskmesh@127.0.0.1:5432/taskmesh
         run: npm test
 
       - name: API TypeScript build

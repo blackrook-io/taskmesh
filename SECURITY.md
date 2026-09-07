@@ -75,7 +75,7 @@ GitHub Actions [`.github/workflows/security-ci.yml`](.github/workflows/security-
 
 | Step | Gate |
 |------|------|
-| `npm test` (includes `secureInputs` / SSRF / magic-byte tests) | **hard** |
+| `npm test` (includes `secureInputs` / SSRF / magic-byte tests; CI sets dummy `DATABASE_URL` for middleware imports) | **hard** |
 | `npm run build` (API `tsc`) | **hard** |
 | `npm run build --prefix client` | **hard** |
 | `npm run lint --prefix client` | soft until **T0125** |

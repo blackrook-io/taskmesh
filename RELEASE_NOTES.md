@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.10 — 2026-09-07
+
+### Fixes
+- Security CI unit-test step sets a dummy `DATABASE_URL` so middleware tests that import `db/client` can load without a Postgres service (matches local `.env` behavior).
+
 ## 0.35.9 — 2026-09-07
 
 ### Enhancements
