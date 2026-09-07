@@ -66,7 +66,16 @@ python3 security/scan/run.py --skip-db --skip-repo
 
 `npm run security:scan` therefore exits **0** when the suite runs cleanly, even if e.g. `repo_npm_audit` reports high/critical advisories. Review console/HTML for findings. For a CI gate that fails the job on findings: `npm run security:scan -- --fail-on-findings` (T0086).
 
-## CI note (T0086)
+## CI (T0086)
 
-This suite is wired as `npm run security:scan` for manual and future CI use.
-**T0086** owns making it (or a subset) a required CI gate alongside unit sanitizer/SSRF tests and any SAST pass — see that Task for CI workflow work.
+GitHub Actions [`.github/workflows/security-ci.yml`](../../.github/workflows/security-ci.yml) (push/PR → `main`) invokes this suite for **repo** modules only — no live HTTP/DB in Actions:
+
+```bash
+# Hard gate (local parity: npm run security:ci)
+npm run security:scan -- --modules repo_static --fail-on-findings --no-html
+
+# Soft until T0124 remediates known high advisories
+npm run security:scan -- --modules repo_npm_audit --fail-on-findings --no-html
+```
+
+The same workflow also hard-gates `npm test`, API `build`, and client `build`, and soft-gates client ESLint until **T0125**. Full HTTP/CSRF/auth modules remain manual against PROD/DEV (optionally with credentials).

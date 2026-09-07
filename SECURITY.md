@@ -63,11 +63,26 @@ Defensive CLI audit (no exploit payloads):
 npm run security:scan
 # DEV API:
 npm run security:scan -- --base-url http://127.0.0.1:3001
+# CI-parity hard gate (repo static only):
+npm run security:ci
 ```
 
 Modules cover HTTP headers/auth/CSRF/API surface, repo static greps + `npm audit --omit=dev`, and optional Postgres role checks when `DATABASE_URL` is available. Color console + dated HTML logs under `security/scan/logs/`. Credentials optional via `~/.config/taskmesh/worktask.env`, `--env-file`, or `--prompt-creds` (auth checks **SKIP** with reason when missing). Full usage: [`security/scan/README.md`](security/scan/README.md).
 
-**CI gating** of this suite (and SAST) remains **T0086**.
+## Automated CI (T0086)
+
+GitHub Actions [`.github/workflows/security-ci.yml`](.github/workflows/security-ci.yml) runs on `push` / `pull_request` to **`main`**:
+
+| Step | Gate |
+|------|------|
+| `npm test` (includes `secureInputs` / SSRF / magic-byte tests) | **hard** |
+| `npm run build` (API `tsc`) | **hard** |
+| `npm run build --prefix client` | **hard** |
+| `npm run lint --prefix client` | soft until **T0125** |
+| `npm run security:scan -- --modules repo_static --fail-on-findings` | **hard** |
+| `npm run security:scan -- --modules repo_npm_audit --fail-on-findings` | soft until **T0124** |
+
+CI does **not** start the app or inject credentials — HTTP/CSRF/DB modules stay manual. The workflow calls the T0121 script; it does not re-implement checks in YAML.
 
 ## Re-audit checklist
 
@@ -85,13 +100,15 @@ Run after adding a route or query:
 
 | Task | Topic |
 |------|--------|
-| **T0086** | Automated security tests in CI (`npm audit`, SAST, and/or `npm run security:scan` from T0121) |
+| **T0086** | Automated security tests in CI (workflow on `main`; residuals → T0124 / T0125) |
+| **T0124** | Remediate production `npm audit` high/critical, then hard-gate `repo_npm_audit` in CI |
+| **T0125** | Clean client ESLint baseline, then hard-gate lint in CI |
 | **T0112** | Ownership schema + helpers (`ownerId`, backfill) — complete |
 | **T0113** | Project-tree list/get/mutate ownership enforcement — complete |
 | **T0114** | Standalone entities, per-user tags, uploads, creator-owned templates — complete |
 | **T0115** | Search / assistant / import-export scoping + admin ownership transfer — complete |
 
-**T0110** is the parent epic for T0112–T0115. Ownership enforcement (project tree, standalone, search, assistant, import/export) and admin transfer are complete. Remaining multi-user residuals are outside this epic (sharing/teams, automated security CI).
+**T0110** is the parent epic for T0112–T0115. Ownership enforcement (project tree, standalone, search, assistant, import/export) and admin transfer are complete. Remaining multi-user residuals are outside this epic (sharing/teams). Security CI residuals: dependency audit (**T0124**) and client lint hard-gate (**T0125**).
 
 ## Secrets and host hardening (T0087)
 

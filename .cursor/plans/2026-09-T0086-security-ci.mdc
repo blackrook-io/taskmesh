@@ -1,0 +1,112 @@
+# T0086 — Automated security tests in CI
+
+**Task:** T0086 (id `98`) — Automated security tests in CI  
+**State at plan:** `ready` · Priority: urgent · Project: TaskMesh (4)  
+**Branch (after approval):** `T0086-security-ci`  
+**Depends on:** none (open) · **Follows:** T0121 (complete) — `npm run security:scan`  
+**Deferred Task:** T0124 (Draft) — Remediate production npm audit high/critical (CI hard-gate); depends on T0086  
+**Deferred Task:** T0125 (Draft) — Clean client ESLint so CI can hard-gate lint; depends on T0086
+
+## Context
+
+Spawned from T0073. Unit tests already cover LIKE escaping, href allowlist, markdown sanitize, magic bytes, and private-IP checks (`src/lib/secureInputs.test.ts` via `npm test`). T0121 shipped a defensive scan CLI at `security/scan/` (`npm run security:scan`) with `--fail-on-findings` for CI. There is **no** `.github/` workflow yet.
+
+Goal: gate regressions in CI with unit security tests, a documented SAST/lint pass, and the T0121 scan suite (repo subset) — **call the script**, do not re-implement checks in YAML.
+
+## Interview decisions (confirmed)
+
+1. **CI platform:** GitHub Actions; triggers on `push` and `pull_request` to **`main` only**.
+2. **Scan scope in CI:** **Repo subset only** — no live HTTP/DB service in Actions:
+   ```bash
+   npm run security:scan -- --modules repo_static,repo_npm_audit --fail-on-findings --no-html
+   ```
+   Unauthenticated / no secrets. Full HTTP suite remains manual (PROD/DEV).
+3. **npm audit gate:** **Soft-fail / warn** for `repo_npm_audit` for now (known high: drizzle-orm, xlsx). Hard-gate `repo_static` + tests + lint. Deferred remediation → **T0124** (depends on T0086); after T0124, harden CI to fail on audit findings.
+4. **SAST / lint:** `npm test`, `npm run build` (API `tsc`), client **build** hard-gated; client ESLint soft until **T0125** (existing ~100 errors). No new root ESLint; CodeQL out of scope.
+5. **Branches:** `main` only.
+
+## Goal
+
+Ship a GitHub Actions workflow that, on PRs and pushes to `main`:
+
+1. Installs Node deps (root + client as needed)
+2. Runs `npm test` (includes sanitizer / SSRF / magic-byte / private-IP tests)
+3. Runs `npm run build` (API typecheck compile)
+4. Runs client production build (`npm run build --prefix client`) as hard typecheck/bundle gate; client ESLint soft until T0125
+5. Runs `npm run security:scan` for **repo_static** with `--fail-on-findings` (hard gate)
+6. Runs npm audit / `repo_npm_audit` in a **non-blocking** step (warn + annotate; do not fail the job) until T0124
+7. Documents the CI gate in `SECURITY.md` / README / `security/scan/README.md` (CI note)
+
+## Non-goals
+
+- Spinning up Postgres + Express for HTTP/CSRF modules in Actions
+- Injecting PROD credentials into CI secrets for auth modules
+- Remediating drizzle-orm / xlsx advisories (→ **T0124**)
+- Adding CodeQL / Semgrep / root ESLint from scratch
+- Changing branch protection settings on GitHub (operator owns required checks)
+
+## Implementation plan
+
+### Workflow
+
+Create `.github/workflows/security-ci.yml` (name TBD; keep focused on security + regression gate):
+
+| Job step | Command / action | Gate |
+|----------|------------------|------|
+| Checkout | `actions/checkout` | — |
+| Setup Node | `actions/setup-node` (≥20, cache npm) | — |
+| Install root | `npm ci` | fail |
+| Install client | `npm ci --prefix client` | fail |
+| Unit tests | `npm test` | **hard** |
+| API build | `npm run build` | **hard** |
+| Client lint | `npm run lint --prefix client` | **hard** |
+| Repo static scan | `npm run security:scan -- --modules repo_static --fail-on-findings --no-html` | **hard** |
+| npm audit (soft) | `npm run security:scan -- --modules repo_npm_audit --fail-on-findings --no-html` with `continue-on-error: true` + clear step name/summary | **soft** (warn) until T0124 |
+
+Python 3 is needed for the scan script (usually preinstalled on `ubuntu-latest`). Prefer system Python; add `setup-python` only if missing.
+
+Split scan into two steps so static failures block while audit stays soft — matches interview 3A without inventing new scan flags.
+
+### Docs
+
+- `SECURITY.md`: replace “CI gating remains T0086” with what CI runs; link workflow; note audit soft-fail → T0124.
+- `security/scan/README.md`: update “CI note” to describe the workflow + `--modules` used.
+- `README.md`: short CI / security scripts pointer if missing.
+- Optional: `package.json` convenience script e.g. `security:ci` wrapping the hard-gate scan command for local parity (nice-to-have).
+
+### Integration with T0121
+
+- Do **not** duplicate greps / audit logic in YAML — always invoke `npm run security:scan`.
+- Keep `--fail-on-findings` for hard steps; default exit-0 behavior unchanged for manual runs.
+
+### Versioning / release
+
+- No schema / no Drizzle migration → finish-up **PATCH** bump.
+- `RELEASE_NOTES.md`: Enhancement (CI security gate).
+- `FEATURES.md`: skip (developer/ops CI, not end-user product feature).
+
+## Implementation notes (2026-09-07)
+
+- Shipped `.github/workflows/security-ci.yml` + `npm run security:ci` + docs.
+- **Client lint soft-fail:** `npm run lint --prefix client` exits 1 with ~101 errors on current tree (mostly `react-hooks/set-state-in-effect`). Deferred to **T0125**; hard-gated client `build` (`tsc -b` + Vite) instead so CI stays green while still typechecking the SPA.
+- Soft `repo_npm_audit` remains until **T0124**.
+
+## Acceptance criteria
+
+- [x] `.github/workflows/…` runs on `push` + `pull_request` targeting `main`
+- [x] Hard gates: `npm test`, `npm run build`, client build, `repo_static` via `security:scan --fail-on-findings`
+- [x] Soft gate: `repo_npm_audit` does not fail the workflow while T0124 open; client lint soft while T0125 open
+- [x] Docs updated (SECURITY.md, scan README, README)
+- [x] Deferred Tasks **T0124** + **T0125** exist, Draft, depend on T0086
+- [x] Local: hard-gate commands pass; soft audit/lint may still report findings
+
+## Open after merge (operator)
+
+- Optionally mark the workflow as a **required status check** on `main` in GitHub branch protection.
+
+## QA checklist (for implementation pass)
+
+1. Push/PR simulation: confirm workflow YAML validates (act optional; at least `npm test` / `build` / `lint` / scan commands succeed locally).
+2. Confirm `repo_static --fail-on-findings` exits 0 on current `main`.
+3. Confirm soft audit step would exit non-zero if hard-gated (known highs) but workflow design uses `continue-on-error` / separate non-required pattern.
+4. Confirm docs point at T0121 suite + T0124 residual.

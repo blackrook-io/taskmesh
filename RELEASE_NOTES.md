@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.9 — 2026-09-07
+
+### Enhancements
+- GitHub Actions Security CI (`.github/workflows/security-ci.yml`) gates push/PR to `main` with unit tests, API and client builds, and the T0121 `security:scan` `repo_static` hard gate (`npm run security:ci`). Client ESLint and `repo_npm_audit` remain soft until T0125 / T0124.
+- SECURITY.md, README, and `security/scan/README.md` document the CI workflow and residual audit/lint Tasks.
+
 ## 0.35.8 — 2026-09-07
 
 ### New Functionality

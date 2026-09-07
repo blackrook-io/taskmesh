@@ -76,6 +76,7 @@ npm run dev:web
 | `npm run db:studio` | Drizzle Studio |
 | `npm run docs:sync-schema` | Copy-replace `docs/` schema Markdown into TaskMesh project Documents (PROD) |
 | `npm run security:scan` | Defensive security scan suite (HTTP / repo / optional DB) — see [`security/scan/README.md`](security/scan/README.md) |
+| `npm run security:ci` | CI-parity hard gate: `repo_static` with `--fail-on-findings` (see [`.github/workflows/security-ci.yml`](.github/workflows/security-ci.yml)) |
 
 After editing `src/db/schema.ts`: `npm run db:generate`, review `drizzle/`, then `npm run db:migrate`.
 
@@ -115,6 +116,8 @@ npm run security:scan -- --fail-on-findings   # exit 1 if any check FAILs (defau
 ```
 
 Color console output (PASS / FAIL / SKIP + Help on findings) and a dated HTML log under `security/scan/logs/` (gitignored). `DATABASE_URL` for DB checks comes from process env, `--env-file`, or repo `.env`.
+
+**CI (T0086):** on push/PR to `main`, GitHub Actions runs unit tests, API + client builds, soft client lint, hard `repo_static` scan, and soft `repo_npm_audit` (until T0124/T0125). Details: [`SECURITY.md`](SECURITY.md) and [`security/scan/README.md`](security/scan/README.md).
 
 ## Configuration
 
