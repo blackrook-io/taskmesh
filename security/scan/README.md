@@ -76,4 +76,4 @@ npm run security:scan -- --modules repo_static --fail-on-findings --no-html
 npm run security:scan -- --modules repo_npm_audit --fail-on-findings --no-html
 ```
 
-Local static-only parity: `npm run security:ci` (repo_static). The same workflow also hard-gates `npm test`, API `build`, and client `build`, and soft-gates client ESLint until **T0125**. Full HTTP/CSRF/auth modules remain manual against PROD/DEV (optionally with credentials).
+Local static-only parity: `npm run security:ci` (repo_static). The same workflow also hard-gates `npm test`, API `build`, client `build`, and client ESLint (errors; warnings OK). Full HTTP/CSRF/auth modules remain manual against PROD/DEV (optionally with credentials).

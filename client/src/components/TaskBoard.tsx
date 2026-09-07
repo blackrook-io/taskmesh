@@ -161,7 +161,7 @@ function sortRoots(roots: Task[], col: SortCol | null, dir: 1 | -1): Task[] {
   };
   const stateRank: Record<TaskState, number> = TASK_STATE_SORT_RANK;
   return [...roots].sort((a, b) => {
-    let cmp = 0;
+    let cmp: number;
     if (col === "number") cmp = a.number - b.number;
     else if (col === "title") cmp = a.title.localeCompare(b.title);
     else if (col === "state") cmp = stateRank[a.state] - stateRank[b.state];

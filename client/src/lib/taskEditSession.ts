@@ -45,17 +45,13 @@ export async function flushTaskEditSession(taskId: number): Promise<void> {
   const before = baselines.get(taskId);
   if (!before) return;
 
+  // On failure, leave baseline so a later Close/unmount can retry.
   const run = (async () => {
-    try {
-      await apiJson(`/api/v1/tasks/${taskId}/activity/session`, {
-        method: "POST",
-        body: JSON.stringify({ before }),
-      });
-      baselines.delete(taskId);
-    } catch (err) {
-      // Keep baseline so a later Close/unmount can retry.
-      throw err;
-    }
+    await apiJson(`/api/v1/tasks/${taskId}/activity/session`, {
+      method: "POST",
+      body: JSON.stringify({ before }),
+    });
+    baselines.delete(taskId);
   })();
 
   inFlight.set(taskId, run);
