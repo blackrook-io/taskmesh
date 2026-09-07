@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import type { Readable } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -236,22 +237,77 @@ function loadManifest(id: string): BackupManifest | null {
   }
 }
 
+function resolvedBackupDir(id: string): string | null {
+  const manifest = loadManifest(id);
+  if (!manifest) return null;
+  const dir = path.join(getBackupDir(), id);
+  const root = path.resolve(getBackupDir());
+  const resolved = path.resolve(dir);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    return null;
+  }
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+    return null;
+  }
+  return resolved;
+}
+
 /** Remove a backup directory (SQL + uploads tar + manifest) after validation. */
 export async function deleteBackup(id: string): Promise<{ id: string }> {
   return withBackupLock(async () => {
-    const manifest = loadManifest(id);
-    if (!manifest) {
+    const dir = resolvedBackupDir(id);
+    if (!dir) {
       throw new Error("Backup not found");
-    }
-    const dir = path.join(getBackupDir(), id);
-    const root = path.resolve(getBackupDir());
-    const resolved = path.resolve(dir);
-    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-      throw new Error("Invalid backup id");
     }
     fs.rmSync(dir, { recursive: true, force: true });
     return { id };
   });
+}
+
+export type BackupDownloadStream = {
+  filename: string;
+  contentType: string;
+  stream: Readable;
+  /** Kill the tar child if the client disconnects. */
+  abort: () => void;
+};
+
+/**
+ * Stream a gzip-compressed tar of the entire backup folder
+ * (SQL dump + uploads archive + manifest).
+ */
+export function openBackupDownloadStream(id: string): BackupDownloadStream {
+  const dir = resolvedBackupDir(id);
+  if (!dir) {
+    throw new Error("Backup not found");
+  }
+  const root = path.resolve(getBackupDir());
+  const child = spawn("tar", ["-czf", "-", "-C", root, id], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (!child.stdout) {
+    child.kill();
+    throw new Error("Failed to start backup download");
+  }
+  let stderr = "";
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    stderr += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+  });
+  child.on("close", (code) => {
+    if (code !== 0 && code !== null) {
+      child.stdout?.destroy(
+        new Error(stderr.trim() || `tar exited with code ${code}`),
+      );
+    }
+  });
+  return {
+    filename: `taskmesh-backup-${id}.tar.gz`,
+    contentType: "application/gzip",
+    stream: child.stdout,
+    abort: () => {
+      if (!child.killed) child.kill("SIGTERM");
+    },
+  };
 }
 
 export type RestoreResult = {
