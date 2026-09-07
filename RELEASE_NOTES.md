@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.35.15 — 2026-09-07
+
+### Enhancements
+- Finish-up workflow now requires publishing via feature-branch pull request (wait for required CI, then merge on GitHub) and SSH-only git remotes, so agents no longer push `main` directly or try HTTPS then fall back to SSH.
+
 ## 0.35.14 — 2026-09-07
 
 ### Enhancements

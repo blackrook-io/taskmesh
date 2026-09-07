@@ -47,7 +47,7 @@ Worktask:
 - [ ] 5. User approves plan → branch + In Progress + start comment
 - [ ] 6. Implement + QA checklist
 - [ ] 6b. QA follow-ups → update plan + Task comment + commit message
-- [ ] 7. User “finish up” → version bump + merge/deploy + Complete + finish comment
+- [ ] 7. User “finish up” → version bump + PR merge/deploy + Complete + finish comment
 ```
 
 ### 0. Auth (PROD)
@@ -124,7 +124,7 @@ Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still bein
 
 Only after the user approves the plan:
 
-1. `git switch main && git pull` (use SSH remote if HTTPS cannot auth — see reference), then `git switch -c T####-<slug>`.
+1. `git switch main && git pull` (**SSH only** — see [reference.md](reference.md) § Git ops), then `git switch -c T####-<slug>`.
 2. SetActiveBranch to that branch.
 3. PROD: `PATCH /api/v1/tasks/{id}` → `{ "state": "in_progress" }`.
 4. PROD: post a comment summarizing branch + plan (path + short summary). Template in [reference.md](reference.md).
@@ -141,14 +141,18 @@ When the user requests **new functionality or corrections** during QA:
 
 ### 6. Finish up (user says “finish up”)
 
-Do **all** of the following in order (same as development-rules, with Task bookkeeping last):
+Do **all** of the following in order (same as development-rules, with Task bookkeeping last). **`main` is protected** (required status checks) — never push commits directly to `main`.
 
 1. **Commit** remaining work on the feature branch (HEREDOC message; author env vars if needed). If QA follow-ups shipped, mention them in the message. **Bump app version** in this commit if it is not already on the branch — follow [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) (MINOR +1 / PATCH reset if this Task added a new `drizzle/*.sql` file; otherwise PATCH +1; set `createdAt` to UTC now; keep MAJOR at `0` unless breaking). T0076 ships `0.22.1`; increment from current `package.json`, do not re-count migrations. **Same commit:** update [`RELEASE_NOTES.md`](../../../RELEASE_NOTES.md) — recreate stub if missing/empty, then prepend the new version block (outcome-focused bullets; omit empty sections; Breaking Changes when schema/API breaks). If this Task shipped **major user-facing functionality**, update [`FEATURES.md`](../../../FEATURES.md) in that commit too (single-line website bullets; skip for bugfixes-only / internal workflow). See [development-rules.mdc](../../rules/development-rules.mdc).
-2. **Merge** into `main` (ff-only when possible); delete local (and remote if exists) `T####-*` branch after merge.
-3. **Publish** — push `main` (SSH URL if HTTPS origin fails: `git push git@github.com:blackrook-io/taskmesh.git main`).
-4. **Archive** the plan — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/`, commit on `main`, push again. Archived plan must include any QA follow-up notes.
-5. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed (script also stamps `data/prod-release.json`).
-6. **PROD Task** — completion comment (include original scope, **shipped version**, and QA follow-ups), then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
+2. **Archive the plan on the feature branch** — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/` (same filename), commit on the feature branch (can be the same finish-up commit as step 1, or immediately after). Archived plan must include any QA follow-up notes. Do **not** leave the archive commit for after merge to `main`.
+3. **Publish via PR (required)** — do **not** merge locally into `main` and push `main`:
+   1. Push the **feature branch** with SSH only (see [reference.md](reference.md) § Git ops).
+   2. Open a PR into `main` (`gh pr create`, or GitHub API + `~/.config/taskmesh/github.env` if `gh` is unavailable — see reference).
+   3. Wait until required checks succeed (e.g. “Tests, build, lint, repo scan”).
+   4. Merge the PR on GitHub (`gh pr merge` or API). Prefer merge commit unless the user asks otherwise.
+   5. `git switch main && git pull` (SSH), then delete local and remote `T####-*` branch.
+4. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed (script also stamps `data/prod-release.json`).
+5. **PROD Task** — completion comment (include original scope, **shipped version**, PR number if useful, and QA follow-ups), then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
    - If this task still has unfinished **direct children** (state not `complete` / `canceled` / `deleted`), the API **coerces Complete → Pending**. Prefer sending `complete` anyway and trust the coerce, or send `pending` explicitly.
    - When finishing a **child**, do not PATCH the parent yourself: if the parent is Pending and this was the last unfinished child, the API sets the parent to `complete`.
 

@@ -221,7 +221,7 @@ Post when implementing new functionality or corrections during QA (not only at C
 ```markdown
 **Worktask completed**
 
-- Merged branch `T0036-example-slug` → `main`
+- Merged PR #N (`T0036-example-slug` → `main`)
 - Plan archived: `.cursor/plans/executed/2026-08-T0036-example-slug.mdc`
 - Deployed to PROD (health checks OK)
 - App version: `0.22.1` (example)
@@ -277,16 +277,58 @@ EOF
 
 (Match name/email to recent `git log` authors in this repo.)
 
-**Push:** `origin` may be HTTPS without credentials. Prefer:
+### SSH only (no HTTPS git)
 
-```bash
-git push git@github.com:blackrook-io/taskmesh.git main
+Always use the SSH remote. **Never** attempt `https://github.com/...` for fetch/pull/push, and do **not** “try HTTPS then fall back to SSH.”
+
+Canonical remote:
+
+```text
+git@github.com:blackrook-io/taskmesh.git
 ```
 
-**Pull before branch:**
+If `origin` is already that URL, `git push -u origin HEAD` / `git pull origin main` is fine. If unsure, pass the SSH URL explicitly:
+
+```bash
+git pull git@github.com:blackrook-io/taskmesh.git main
+git push -u git@github.com:blackrook-io/taskmesh.git HEAD
+```
+
+### Pull before branch
 
 ```bash
 git switch main
 git pull git@github.com:blackrook-io/taskmesh.git main
 git switch -c T####-<slug>
+```
+
+### Finish-up publish (PR required)
+
+`main` requires status checks — **do not** `git push … main`. Push the feature branch, open a PR, wait for CI, merge on GitHub, then pull `main` locally.
+
+**Open / merge PR** — prefer `gh` when installed:
+
+```bash
+gh pr create --title "…" --body "…"
+# after checks green:
+gh pr merge --merge
+```
+
+If `gh` is missing, use the GitHub API with a token from `~/.config/taskmesh/github.env` (`GH_TOKEN` or `GITHUB_TOKEN` — never commit or paste the token into plans/comments):
+
+```bash
+set -a; source ~/.config/taskmesh/github.env; set +a
+TOKEN="${GH_TOKEN:-${GITHUB_TOKEN}}"
+# POST /repos/blackrook-io/taskmesh/pulls  → create
+# poll check-runs on head SHA until required checks succeed
+# PUT  /repos/blackrook-io/taskmesh/pulls/{n}/merge  → {"merge_method":"merge"}
+```
+
+Then:
+
+```bash
+git switch main
+git pull git@github.com:blackrook-io/taskmesh.git main
+git push git@github.com:blackrook-io/taskmesh.git --delete T####-<slug>   # if remote branch remains
+git branch -d T####-<slug>
 ```
