@@ -133,7 +133,7 @@ todosRouter.post("/", async (req, res) => {
     const parsed = createBody.parse(req.body);
     const actorId = await getCurrentUserId(db);
     if (parsed.projectId != null) {
-      await assertCanAccessProject(db, actorId, parsed.projectId);
+      await assertCanAccessProject(db, actorId, parsed.projectId, "write");
     }
     if (parsed.sourceIdeaId != null) {
       const [idea] = await db
@@ -229,9 +229,9 @@ todosRouter.patch("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, existing);
+    await assertCanAccessDualScoped(db, actorId, existing, "write");
     if (parsed.projectId !== undefined && parsed.projectId != null) {
-      await assertCanAccessProject(db, actorId, parsed.projectId);
+      await assertCanAccessProject(db, actorId, parsed.projectId, "write");
     }
     const nextProjectId =
       parsed.projectId !== undefined ? parsed.projectId : existing.projectId;
@@ -283,7 +283,7 @@ todosRouter.delete("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, existing);
+    await assertCanAccessDualScoped(db, actorId, existing, "write");
     const [row] = await db
       .update(schema.todos)
       .set({
@@ -317,7 +317,7 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
     const actorId = await getCurrentUserId(db);
     await assertCanAccessOwned(db, actorId, idea.ownerId);
     if (body.projectId != null) {
-      await assertCanAccessProject(db, actorId, body.projectId);
+      await assertCanAccessProject(db, actorId, body.projectId, "write");
     }
     const number = await allocateTodoNumber(db);
     const projectId = body.projectId ?? null;
@@ -372,11 +372,11 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, todo);
+    await assertCanAccessDualScoped(db, actorId, todo, "write");
     const projectId =
       parsed.projectId !== undefined ? parsed.projectId : todo.projectId;
     if (projectId != null) {
-      await assertCanAccessProject(db, actorId, projectId);
+      await assertCanAccessProject(db, actorId, projectId, "write");
     }
     const number = await allocateTaskNumber(db);
     let description = todo.description ?? "";

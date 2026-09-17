@@ -29,6 +29,15 @@ export function handleRouteError(res: Response, err: unknown): void {
     return;
   }
   if (err instanceof ProjectUsersError) {
+    if (err.details) {
+      if (!res.locals.logMessage) {
+        res.locals.logMessage = err.message.slice(0, 500);
+      }
+      res.status(err.status).json({
+        error: { code: err.code, message: err.message, ...err.details },
+      });
+      return;
+    }
     sendError(res, err.status, err.code, err.message);
     return;
   }

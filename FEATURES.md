@@ -7,7 +7,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, and Image Boards
 - Drag to reorder projects in the left nav; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
-- Administrators assign users to Managers, Members, and Viewers lists per project (role enforcement coming next)
+- Assign users to Managers, Members, and Viewers per project — Managers and Owners get Settings; Members write; Viewers read-only
 
 
 

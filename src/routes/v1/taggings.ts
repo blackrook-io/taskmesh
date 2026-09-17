@@ -103,7 +103,7 @@ taggingsRouter.post("/", async (req, res) => {
       sendError(res, 404, "not_found", "Entity not found");
       return;
     }
-    await assertCanAccessTaggableEntity(db, actorId, parsed.entityType, parsed.entityId);
+    await assertCanAccessTaggableEntity(db, actorId, parsed.entityType, parsed.entityId, "write");
 
     let tag: typeof schema.tags.$inferSelect | undefined;
 
@@ -194,7 +194,7 @@ taggingsRouter.delete("/", async (req, res) => {
     }
 
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessTaggableEntity(db, actorId, body.entityType, body.entityId);
+    await assertCanAccessTaggableEntity(db, actorId, body.entityType, body.entityId, "write");
 
     const deleted = await db
       .delete(schema.taggings)

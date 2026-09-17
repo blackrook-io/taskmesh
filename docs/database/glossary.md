@@ -89,9 +89,8 @@ Tables: `project_managers`, `project_members`, `project_viewers`.
 - **Assignee** (`tasks.assignee_id` / `todos.assignee_id`, T0117) is distinct from record **owner**. For project-scoped rows the assignee must be the Project Owner, a Manager, or a Member (not a Viewer). Unscoped rows and Ideas stay unassigned.
 - A user may be in at most one list per project (application rule).
 - Administrators are not listed; they already have full access.
-- **Until T0128**, list membership does not change record access (owner-or-Administrator only).
-
-Intended T0128 rights: Managers = R/W + Settings; Members = R/W; Viewers = read-only.
+- **Access (T0128):** Managers / Owner = read/write + Project Settings; Members = read/write; Viewers = read-only. Administrators always override. Delete project remains Administrator-only.
+- Removing a Manager or Member who still has project Tasks/ToDos assigned to them requires **reassign** (to another Owner/Manager/Member) or **blank** (`assignee_id` null) before the role row is deleted.
 
 ## Dependencies vs hierarchy
 

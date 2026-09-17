@@ -17,6 +17,11 @@ export type Project = {
   status: string;
   sortOrder: number;
   sourceIdeaId: number | null;
+  ownerId?: number;
+  /** Actor's effective role on this project (T0128). */
+  myRole?: "admin" | "owner" | "manager" | "member" | "viewer" | null;
+  canWrite?: boolean;
+  canManageSettings?: boolean;
   createdAt: string;
   updatedAt: string;
 };

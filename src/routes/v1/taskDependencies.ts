@@ -99,8 +99,8 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, task);
-    await assertCanAccessDualScoped(db, actorId, dependsOnTask);
+    await assertCanAccessDualScoped(db, actorId, task, "write");
+    await assertCanAccessDualScoped(db, actorId, dependsOnTask, "write");
     const result = await addDependency(db, taskId, parsed.dependsOnTaskId, {
       actorId,
       source: activitySourceFromRequest(req),
@@ -135,7 +135,7 @@ taskDependenciesRouter.delete(
         return;
       }
       const actorId = await getCurrentUserId(db);
-      await assertCanAccessDualScoped(db, actorId, task);
+      await assertCanAccessDualScoped(db, actorId, task, "write");
       const result = await removeDependency(db, taskId, dependsOnTaskId, {
         actorId,
         source: activitySourceFromRequest(req),

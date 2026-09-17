@@ -284,7 +284,7 @@ todoListsRouter.post("/", async (req, res) => {
     const parsed = listBody.parse(req.body);
     const ownerId = await getCurrentUserId(db);
     if (parsed.projectId != null) {
-      await assertCanAccessProject(db, ownerId, parsed.projectId);
+      await assertCanAccessProject(db, ownerId, parsed.projectId, "write");
     }
     const number = await allocateTodoListNumber(db);
     const [row] = await db
@@ -339,7 +339,7 @@ todoListsRouter.patch("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     if (list.kind === "inbox" && parsed.title !== undefined && parsed.title !== list.title) {
       // allow rename of inbox
     }
@@ -366,7 +366,7 @@ todoListsRouter.delete("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     if (list.kind === "inbox") {
       sendError(res, 400, "protected_list", "Cannot delete the Unsorted list");
       return;
@@ -405,7 +405,7 @@ todoListsRouter.post("/:id/items", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     if (list.kind === "inbox") {
       sendError(
         res,
@@ -476,7 +476,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     const parsed = createItemBody.parse(req.body);
     const title = parsed.title.trim();
     let entityType = parsed.entityType;
@@ -485,7 +485,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
     if (entityType === "todo") {
       const projectId = parsed.projectId ?? list.projectId ?? null;
       if (projectId != null) {
-        await assertCanAccessProject(db, actorId, projectId);
+        await assertCanAccessProject(db, actorId, projectId, "write");
       }
       const number = await allocateTodoNumber(db);
       const [todo] = await db
@@ -509,7 +509,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
       const projectId = parsed.projectId ?? list.projectId ?? null;
       let phaseId: number | null = null;
       if (projectId != null) {
-        await assertCanAccessProject(db, actorId, projectId);
+        await assertCanAccessProject(db, actorId, projectId, "write");
       }
       const number = await allocateTaskNumber(db);
       const [task] = await db
@@ -577,7 +577,7 @@ todoListsRouter.patch("/:id/items/reorder", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     if (list.kind === "inbox") {
       sendError(res, 400, "virtual_list", "Unsorted order is not persisted");
       return;
@@ -628,7 +628,7 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     const [existing] = await db
       .select()
       .from(schema.todoListItems)
@@ -663,7 +663,7 @@ todoListsRouter.delete("/:id/items/:itemId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     const deleted = await db
       .delete(schema.todoListItems)
       .where(
@@ -696,7 +696,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     const [item] = await db
       .select()
       .from(schema.todoListItems)
@@ -709,7 +709,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       sendError(res, 400, "invalid_item", "Only idea or ToDo items can convert to tasks");
       return;
     }
-    await assertCanAccessProject(db, actorId, parsed.projectId);
+    await assertCanAccessProject(db, actorId, parsed.projectId, "write");
 
     const number = await allocateTaskNumber(db);
     let title: string;
@@ -806,7 +806,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    await assertCanAccessDualScoped(db, actorId, list);
+    await assertCanAccessDualScoped(db, actorId, list, "write");
     const [item] = await db
       .select()
       .from(schema.todoListItems)
@@ -827,7 +827,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
     const projectId =
       parsed.projectId !== undefined ? parsed.projectId : list.projectId;
     if (projectId != null) {
-      await assertCanAccessProject(db, actorId, projectId);
+      await assertCanAccessProject(db, actorId, projectId, "write");
     }
     const number = await allocateTodoNumber(db);
     const [todo] = await db

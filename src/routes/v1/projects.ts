@@ -9,7 +9,8 @@ import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import {
   assertCanAccessProject,
-  ownerScope,
+  projectAccessListFilter,
+  resolveProjectActorRole,
 } from "../../services/ownership.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
@@ -26,10 +27,7 @@ import { phasesRouter } from "./phases.js";
 import { projectUsersRouter } from "./projectUsers.js";
 import { tasksRouter } from "./tasks.js";
 import { wikiRouter } from "./wiki.js";
-import {
-  NOT_ADMINISTRATOR_MESSAGE,
-  requireAdministrator,
-} from "../../middleware/requireAdministrator.js";
+import { NOT_ADMINISTRATOR_MESSAGE } from "../../middleware/requireAdministrator.js";
 
 const projectStatus = z.enum(["idea", "active", "paused", "done"]);
 
@@ -57,7 +55,7 @@ projectsRouter.get("/", async (_req, res) => {
   try {
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
+    const scope = projectAccessListFilter(db, actorId, isAdmin);
     const rows = await db
       .select()
       .from(schema.projects)
@@ -102,7 +100,7 @@ projectsRouter.patch("/reorder", async (req, res) => {
     const { orderedProjectIds } = reorderBody.parse(req.body);
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
+    const scope = projectAccessListFilter(db, actorId, isAdmin);
     const existing = await db
       .select({ id: schema.projects.id })
       .from(schema.projects)
@@ -118,7 +116,7 @@ projectsRouter.patch("/reorder", async (req, res) => {
         "invalid_reorder",
         isAdmin
           ? "orderedProjectIds must list every project exactly once"
-          : "orderedProjectIds must list every project you own exactly once",
+          : "orderedProjectIds must list every accessible project exactly once",
       );
       return;
     }
@@ -145,7 +143,16 @@ projectsRouter.get("/:id", async (req, res) => {
     const id = idParam.parse(req.params.id);
     const actorId = await getCurrentUserId(db);
     const row = await assertCanAccessProject(db, actorId, id);
-    res.json({ data: row });
+    const myRole = await resolveProjectActorRole(db, actorId, row);
+    res.json({
+      data: {
+        ...row,
+        myRole,
+        canWrite: myRole != null && myRole !== "viewer",
+        canManageSettings:
+          myRole === "admin" || myRole === "owner" || myRole === "manager",
+      },
+    });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -160,7 +167,7 @@ projectsRouter.patch("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessProject(db, actorId, id);
+    await assertCanAccessProject(db, actorId, id, "write");
     const [row] = await db
       .update(schema.projects)
       .set({
@@ -186,7 +193,7 @@ projectsRouter.delete("/:id", async (req, res) => {
       sendError(res, 403, "not_administrator", NOT_ADMINISTRATOR_MESSAGE);
       return;
     }
-    await assertCanAccessProject(db, actorId, id);
+    await assertCanAccessProject(db, actorId, id, "write");
     const deleted = await db
       .delete(schema.projects)
       .where(eq(schema.projects.id, id))
@@ -254,7 +261,26 @@ async function ensureNestedProjectAccess(
   try {
     const projectId = idParam.parse(req.params.projectId);
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessProject(db, actorId, projectId);
+    const method = req.method.toUpperCase();
+    const level =
+      method === "GET" || method === "HEAD" || method === "OPTIONS" ? "read" : "write";
+    await assertCanAccessProject(db, actorId, projectId, level);
+    next();
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+}
+
+/** Phases mutations are Settings (Admin/Owner/Manager); GET list is on /projects/:id/phases. */
+async function ensureNestedProjectSettings(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const projectId = idParam.parse(req.params.projectId);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, projectId, "settings");
     next();
   } catch (err) {
     handleRouteError(res, err);
@@ -262,15 +288,11 @@ async function ensureNestedProjectAccess(
 }
 
 projectsRouter.use("/:projectId/groups", ensureNestedProjectAccess, groupsRouter);
-projectsRouter.use("/:projectId/phases", ensureNestedProjectAccess, requireAdministrator, phasesRouter);
+projectsRouter.use("/:projectId/phases", ensureNestedProjectSettings, phasesRouter);
 projectsRouter.use("/:projectId/tasks", ensureNestedProjectAccess, tasksRouter);
 projectsRouter.use("/:projectId/documents", ensureNestedProjectAccess, documentsRouter);
 projectsRouter.use("/:projectId/modules", ensureNestedProjectAccess, modulesRouter);
 projectsRouter.use("/:projectId/boards", ensureNestedProjectAccess, boardsRouter);
 projectsRouter.use("/:projectId/wiki", ensureNestedProjectAccess, wikiRouter);
 projectsRouter.use("/:projectId/canvases", ensureNestedProjectAccess, canvasesRouter);
-projectsRouter.use(
-  "/:projectId/users",
-  ensureNestedProjectAccess,
-  projectUsersRouter,
-);
+projectsRouter.use("/:projectId/users", projectUsersRouter);

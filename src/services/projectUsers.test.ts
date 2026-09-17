@@ -19,4 +19,19 @@ describe("ProjectUsersError", () => {
     assert.equal(err.message, "inactive");
     assert.equal(err.name, "ProjectUsersError");
   });
+
+  it("may include assignment details", () => {
+    const err = new ProjectUsersError(409, "assignee_disposition_required", "need disposition", {
+      total: 3,
+      taskCount: 2,
+      todoCount: 1,
+    });
+    assert.equal(err.details?.total, 3);
+  });
+});
+
+describe("role labels coverage", () => {
+  it("exports three roles for API enums", () => {
+    assert.equal(PROJECT_USER_ROLES.length, 3);
+  });
 });

@@ -3,6 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import * as schema from "../db/schema.js";
 import { NotFoundError } from "../lib/notFound.js";
+import { findListedProjectRole, type ProjectUserRole } from "./projectUsers.js";
 import { userHasAdministrator } from "./roles.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -18,6 +19,36 @@ export class OwnershipAccessError extends Error {
     super(message);
     this.name = "OwnershipAccessError";
   }
+}
+
+/** Access level required for a project-scoped operation (T0128). */
+export type ProjectAccessLevel = "read" | "write" | "settings";
+
+/**
+ * Effective role for the actor on a project.
+ * `admin` is global; `owner` is implicit Manager; listed roles come from junction tables.
+ */
+export type ProjectActorRole = "admin" | "owner" | ProjectUserRole;
+
+export async function resolveProjectActorRole(
+  db: Db,
+  actorUserId: number,
+  project: { id: number; ownerId: number },
+): Promise<ProjectActorRole | null> {
+  if (await userHasAdministrator(db, actorUserId)) return "admin";
+  if (actorUserId === project.ownerId) return "owner";
+  return findListedProjectRole(db, project.id, actorUserId);
+}
+
+export function roleSatisfiesAccess(
+  role: ProjectActorRole | null,
+  level: ProjectAccessLevel,
+): boolean {
+  if (role == null) return false;
+  if (role === "admin" || role === "owner" || role === "manager") return true;
+  if (role === "member") return level === "read" || level === "write";
+  if (role === "viewer") return level === "read";
+  return false;
 }
 
 /** True when the actor is an Administrator or owns the record. */
@@ -66,14 +97,53 @@ export function ownerScope(
   return eq(ownerColumn, actorUserId);
 }
 
+/** Subqueries for project ids the actor owns or is listed on (any role). */
+function accessibleProjectIdClauses(db: Db, actorUserId: number): SQL[] {
+  const owned = db
+    .select({ id: schema.projects.id })
+    .from(schema.projects)
+    .where(eq(schema.projects.ownerId, actorUserId));
+  const asManager = db
+    .select({ id: schema.projectManagers.projectId })
+    .from(schema.projectManagers)
+    .where(eq(schema.projectManagers.userId, actorUserId));
+  const asMember = db
+    .select({ id: schema.projectMembers.projectId })
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.userId, actorUserId));
+  const asViewer = db
+    .select({ id: schema.projectViewers.projectId })
+    .from(schema.projectViewers)
+    .where(eq(schema.projectViewers.userId, actorUserId));
+  return [
+    inArray(schema.projects.id, owned),
+    inArray(schema.projects.id, asManager),
+    inArray(schema.projects.id, asMember),
+    inArray(schema.projects.id, asViewer),
+  ];
+}
+
 /**
- * Load a project and assert the actor may access it via `projects.ownerId`.
- * Missing project → 404; non-owner non-admin → 403.
+ * Projects list filter: admins see all; others see owned + role-list membership.
+ */
+export function projectAccessListFilter(
+  db: Db,
+  actorUserId: number,
+  isAdministrator: boolean,
+): SQL | undefined {
+  if (isAdministrator) return undefined;
+  return or(...accessibleProjectIdClauses(db, actorUserId));
+}
+
+/**
+ * Load a project and assert the actor may access it at the given level.
+ * Missing project → 404; insufficient role → 403.
  */
 export async function assertCanAccessProject(
   db: Db,
   actorUserId: number,
   projectId: number,
+  level: ProjectAccessLevel = "read",
 ): Promise<typeof schema.projects.$inferSelect> {
   const [proj] = await db
     .select()
@@ -82,7 +152,10 @@ export async function assertCanAccessProject(
   if (!proj) {
     throw new NotFoundError("Project not found");
   }
-  await assertCanAccessOwned(db, actorUserId, proj.ownerId);
+  const role = await resolveProjectActorRole(db, actorUserId, proj);
+  if (!roleSatisfiesAccess(role, level)) {
+    throw new OwnershipAccessError();
+  }
   return proj;
 }
 
@@ -94,22 +167,24 @@ export async function assertCanAccessViaProject(
   db: Db,
   actorUserId: number,
   projectId: number | null | undefined,
+  level: ProjectAccessLevel = "read",
 ): Promise<void> {
   if (projectId == null) return;
-  await assertCanAccessProject(db, actorUserId, projectId);
+  await assertCanAccessProject(db, actorUserId, projectId, level);
 }
 
 /**
- * Dual-scope get/mutate: project-backed → project owner; unsorted → row owner.
- * Admins pass via assertCanAccessOwned / assertCanAccessProject.
+ * Dual-scope get/mutate: project-backed → project role; unsorted → row owner.
+ * Admins pass via resolveProjectActorRole / assertCanAccessOwned.
  */
 export async function assertCanAccessDualScoped(
   db: Db,
   actorUserId: number,
   row: { projectId: number | null; ownerId: number },
+  level: ProjectAccessLevel = "read",
 ): Promise<void> {
   if (row.projectId != null) {
-    await assertCanAccessProject(db, actorUserId, row.projectId);
+    await assertCanAccessProject(db, actorUserId, row.projectId, level);
     return;
   }
   await assertCanAccessOwned(db, actorUserId, row.ownerId);
@@ -117,13 +192,14 @@ export async function assertCanAccessDualScoped(
 
 /**
  * Assert the actor may access a taggable entity (idea / project / task / todo / document).
- * Missing entity → 404; non-owner non-admin → 403.
+ * Missing entity → 404; insufficient access → 403.
  */
 export async function assertCanAccessTaggableEntity(
   db: Db,
   actorUserId: number,
   entityType: "idea" | "project" | "task" | "todo" | "document",
   entityId: number,
+  level: ProjectAccessLevel = "read",
 ): Promise<void> {
   switch (entityType) {
     case "idea": {
@@ -136,7 +212,7 @@ export async function assertCanAccessTaggableEntity(
       return;
     }
     case "project": {
-      await assertCanAccessProject(db, actorUserId, entityId);
+      await assertCanAccessProject(db, actorUserId, entityId, level);
       return;
     }
     case "task": {
@@ -148,7 +224,7 @@ export async function assertCanAccessTaggableEntity(
         .from(schema.tasks)
         .where(eq(schema.tasks.id, entityId));
       if (!row) throw new NotFoundError("Entity not found");
-      await assertCanAccessDualScoped(db, actorUserId, row);
+      await assertCanAccessDualScoped(db, actorUserId, row, level);
       return;
     }
     case "todo": {
@@ -160,7 +236,7 @@ export async function assertCanAccessTaggableEntity(
         .from(schema.todos)
         .where(eq(schema.todos.id, entityId));
       if (!row) throw new NotFoundError("Entity not found");
-      await assertCanAccessDualScoped(db, actorUserId, row);
+      await assertCanAccessDualScoped(db, actorUserId, row, level);
       return;
     }
     case "document": {
@@ -169,7 +245,7 @@ export async function assertCanAccessTaggableEntity(
         .from(schema.projectDocuments)
         .where(eq(schema.projectDocuments.id, entityId));
       if (!row) throw new NotFoundError("Entity not found");
-      await assertCanAccessProject(db, actorUserId, row.projectId);
+      await assertCanAccessProject(db, actorUserId, row.projectId, level);
       return;
     }
     default: {
@@ -182,7 +258,7 @@ export async function assertCanAccessTaggableEntity(
 /**
  * Dual-scope list filter (tasks, todos, lists, image boards):
  * - Admins: no filter
- * - Others: (`project_id IS NULL` AND `owner_id = actor`) OR project owned by actor
+ * - Others: (`project_id IS NULL` AND `owner_id = actor`) OR project accessible via ownership/role
  */
 export function dualScopeListFilter(
   db: Db,
@@ -196,16 +272,31 @@ export function dualScopeListFilter(
     .select({ id: schema.projects.id })
     .from(schema.projects)
     .where(eq(schema.projects.ownerId, actorUserId));
+  const managerProjectIds = db
+    .select({ id: schema.projectManagers.projectId })
+    .from(schema.projectManagers)
+    .where(eq(schema.projectManagers.userId, actorUserId));
+  const memberProjectIds = db
+    .select({ id: schema.projectMembers.projectId })
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.userId, actorUserId));
+  const viewerProjectIds = db
+    .select({ id: schema.projectViewers.projectId })
+    .from(schema.projectViewers)
+    .where(eq(schema.projectViewers.userId, actorUserId));
   return or(
     and(isNull(projectIdColumn), eq(ownerIdColumn, actorUserId)),
     inArray(projectIdColumn, ownedProjectIds),
+    inArray(projectIdColumn, managerProjectIds),
+    inArray(projectIdColumn, memberProjectIds),
+    inArray(projectIdColumn, viewerProjectIds),
   );
 }
 
 /**
  * List filter for project-nested rows (documents, boards, canvases, wiki):
  * - Admins: no filter
- * - Others: `project_id` in projects owned by actor
+ * - Others: `project_id` in projects the actor can access (owner or any role list)
  */
 export function projectOwnedListFilter(
   db: Db,
@@ -218,6 +309,22 @@ export function projectOwnedListFilter(
     .select({ id: schema.projects.id })
     .from(schema.projects)
     .where(eq(schema.projects.ownerId, actorUserId));
-  return inArray(projectIdColumn, ownedProjectIds);
+  const managerProjectIds = db
+    .select({ id: schema.projectManagers.projectId })
+    .from(schema.projectManagers)
+    .where(eq(schema.projectManagers.userId, actorUserId));
+  const memberProjectIds = db
+    .select({ id: schema.projectMembers.projectId })
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.userId, actorUserId));
+  const viewerProjectIds = db
+    .select({ id: schema.projectViewers.projectId })
+    .from(schema.projectViewers)
+    .where(eq(schema.projectViewers.userId, actorUserId));
+  return or(
+    inArray(projectIdColumn, ownedProjectIds),
+    inArray(projectIdColumn, managerProjectIds),
+    inArray(projectIdColumn, memberProjectIds),
+    inArray(projectIdColumn, viewerProjectIds),
+  );
 }
-

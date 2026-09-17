@@ -225,7 +225,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       );
       return;
     }
-    await assertCanAccessDualScoped(db, actorId, existing);
+    await assertCanAccessDualScoped(db, actorId, existing, "write");
 
     if (
       !hasDefinedKeys(parsed, [
@@ -256,7 +256,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       if (parsed.projectId === null) {
         nextPhaseId = null;
       } else {
-        await assertCanAccessProject(db, actorId, parsed.projectId);
+        await assertCanAccessProject(db, actorId, parsed.projectId, "write");
         // Project Phases are project-scoped; drop unless the client set a new phase.
         if (parsed.phaseId === undefined) {
           nextPhaseId = null;
@@ -367,7 +367,7 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, existing);
+    await assertCanAccessDualScoped(db, actorId, existing, "write");
     const deleteGate = await rejectDeleteIfBlocked(taskId);
     if (deleteGate.blocked) {
       sendError(res, 400, "dependency_required_by", deleteGate.message);

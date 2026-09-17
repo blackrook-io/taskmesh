@@ -24,10 +24,10 @@ type ProjectUsersLists = {
   owner: UserRef;
 };
 
-type AdminUserRow = UserRef & {
-  deactivatedAt: string | null;
-  lockedAt: string | null;
-  roles: { slug: string }[];
+type AssignmentSummary = {
+  taskCount: number;
+  todoCount: number;
+  total: number;
 };
 
 const ROLE_META: {
@@ -39,19 +39,19 @@ const ROLE_META: {
   {
     role: "manager",
     title: "Managers",
-    blurb: "Read/write + Settings (enforced in T0128). Owner is always an implicit Manager.",
+    blurb: "Read/write + Project Settings. Owner is always an implicit Manager.",
     listKey: "managers",
   },
   {
     role: "member",
     title: "Members",
-    blurb: "Read/write on project records (enforced in T0128).",
+    blurb: "Read/write on project records. No Settings access.",
     listKey: "members",
   },
   {
     role: "viewer",
     title: "Viewers",
-    blurb: "Read-only (enforced in T0128).",
+    blurb: "Read-only access to project records.",
     listKey: "viewers",
   },
 ];
@@ -60,12 +60,22 @@ type Props = {
   projectId: number;
 };
 
+type RemoveFlow =
+  | { kind: "confirm"; user: ProjectUserEntry }
+  | {
+      kind: "disposition";
+      user: ProjectUserEntry;
+      summary: AssignmentSummary;
+      mode: "reassign" | "blank";
+      reassignToUserId: number | null;
+    };
+
 export function ProjectUsersPanel({ projectId }: Props) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [addRole, setAddRole] = useState<ProjectUserRole | null>(null);
   const [search, setSearch] = useState("");
-  const [pendingRemove, setPendingRemove] = useState<ProjectUserEntry | null>(null);
+  const [removeFlow, setRemoveFlow] = useState<RemoveFlow | null>(null);
 
   const listsQuery = useQuery({
     queryKey: ["project-users", projectId],
@@ -77,42 +87,50 @@ export function ProjectUsersPanel({ projectId }: Props) {
     },
   });
 
-  const adminUsersQuery = useQuery({
-    queryKey: ["admin-users"],
+  const directoryQuery = useQuery({
+    queryKey: ["project-directory-users", projectId],
     enabled: addRole != null,
     queryFn: async () => {
-      const res = await apiJson<{ data: AdminUserRow[] }>("/api/v1/admin/users");
+      const res = await apiJson<{ data: UserRef[] }>(
+        `/api/v1/projects/${projectId}/users/directory`,
+      );
+      return res.data;
+    },
+  });
+
+  const assignableQuery = useQuery({
+    queryKey: ["assignable-users", projectId],
+    enabled: removeFlow?.kind === "disposition",
+    queryFn: async () => {
+      const res = await apiJson<{ data: UserRef[] }>(
+        `/api/v1/projects/${projectId}/assignable-users`,
+      );
       return res.data;
     },
   });
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["project-users", projectId] });
+    void qc.invalidateQueries({ queryKey: ["project-directory-users", projectId] });
+    void qc.invalidateQueries({ queryKey: ["assignable-users", projectId] });
+    void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
   };
 
-  const assignedIds = useMemo(() => {
-    const data = listsQuery.data;
-    if (!data) return new Set<number>();
-    return new Set([
-      data.owner.id,
-      ...data.managers.map((u) => u.id),
-      ...data.members.map((u) => u.id),
-      ...data.viewers.map((u) => u.id),
-    ]);
-  }, [listsQuery.data]);
-
   const candidates = useMemo(() => {
-    const users = adminUsersQuery.data ?? [];
+    const users = directoryQuery.data ?? [];
     const q = search.trim().toLowerCase();
     return users.filter((u) => {
-      if (u.deactivatedAt || u.lockedAt) return false;
-      if (u.roles.some((r) => r.slug === "administrator")) return false;
-      if (assignedIds.has(u.id)) return false;
       if (!q) return true;
       const hay = `${u.displayName} ${u.referenceId} ${u.email ?? ""}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [adminUsersQuery.data, assignedIds, search]);
+  }, [directoryQuery.data, search]);
+
+  const reassignCandidates = useMemo(() => {
+    if (removeFlow?.kind !== "disposition") return [];
+    const removedId = removeFlow.user.id;
+    return (assignableQuery.data ?? []).filter((u) => u.id !== removedId);
+  }, [assignableQuery.data, removeFlow]);
 
   const addUser = useMutation({
     mutationFn: async ({ userId, role }: { userId: number; role: ProjectUserRole }) => {
@@ -131,18 +149,58 @@ export function ProjectUsersPanel({ projectId }: Props) {
   });
 
   const removeUser = useMutation({
-    mutationFn: async (userId: number) => {
-      await apiJson(`/api/v1/projects/${projectId}/users/${userId}`, {
+    mutationFn: async (args: {
+      userId: number;
+      disposition?: "blank" | "reassign";
+      reassignToUserId?: number;
+    }) => {
+      const body =
+        args.disposition != null
+          ? {
+              disposition: args.disposition,
+              ...(args.disposition === "reassign"
+                ? { reassignToUserId: args.reassignToUserId }
+                : {}),
+            }
+          : undefined;
+      await apiJson(`/api/v1/projects/${projectId}/users/${args.userId}`, {
         method: "DELETE",
+        ...(body ? { body: JSON.stringify(body) } : {}),
       });
     },
     onSuccess: () => {
       setError(null);
-      setPendingRemove(null);
+      setRemoveFlow(null);
       invalidate();
     },
     onError: (err: Error) => setError(err.message),
   });
+
+  const beginRemove = async (user: ProjectUserEntry) => {
+    setError(null);
+    if (user.role === "viewer") {
+      setRemoveFlow({ kind: "confirm", user });
+      return;
+    }
+    try {
+      const res = await apiJson<{ data: AssignmentSummary }>(
+        `/api/v1/projects/${projectId}/users/${user.id}/assignments`,
+      );
+      if (res.data.total > 0) {
+        setRemoveFlow({
+          kind: "disposition",
+          user,
+          summary: res.data,
+          mode: "reassign",
+          reassignToUserId: null,
+        });
+      } else {
+        setRemoveFlow({ kind: "confirm", user });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not check assignments");
+    }
+  };
 
   const data = listsQuery.data;
 
@@ -150,9 +208,9 @@ export function ProjectUsersPanel({ projectId }: Props) {
     <div className="card" style={{ marginTop: "1rem" }}>
       <h2 style={{ marginTop: 0 }}>Users</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        Assign active users to Managers, Members, or Viewers. Until project Roles (T0128), these lists
-        do not grant record access — only the owner and Administrators can open project records.
-        Administrators are not listed (they already have full access).
+        Assign active users to Managers, Members, or Viewers. Role lists grant project access.
+        Administrators are not listed (they already have full access). The owner is an implicit
+        Manager.
       </p>
 
       {listsQuery.isLoading ? <p className="muted">Loading users…</p> : null}
@@ -241,10 +299,7 @@ export function ProjectUsersPanel({ projectId }: Props) {
                             type="button"
                             className="btn small ghost"
                             aria-label={`Remove ${u.displayName} from ${meta.title}`}
-                            onClick={() => {
-                              setError(null);
-                              setPendingRemove(u);
-                            }}
+                            onClick={() => void beginRemove(u)}
                           >
                             Remove
                           </button>
@@ -289,9 +344,9 @@ export function ProjectUsersPanel({ projectId }: Props) {
                 autoFocus
               />
             </div>
-            {adminUsersQuery.isLoading ? <p className="muted">Loading directory…</p> : null}
-            {adminUsersQuery.isError ? (
-              <p role="alert">{(adminUsersQuery.error as Error).message}</p>
+            {directoryQuery.isLoading ? <p className="muted">Loading directory…</p> : null}
+            {directoryQuery.isError ? (
+              <p role="alert">{(directoryQuery.error as Error).message}</p>
             ) : null}
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {candidates.slice(0, 40).map((u) => (
@@ -321,7 +376,7 @@ export function ProjectUsersPanel({ projectId }: Props) {
                 </li>
               ))}
             </ul>
-            {!adminUsersQuery.isLoading && candidates.length === 0 ? (
+            {!directoryQuery.isLoading && candidates.length === 0 ? (
               <p className="muted">No matching active users available.</p>
             ) : null}
             <div className="modal-actions" style={{ marginTop: "1rem" }}>
@@ -340,20 +395,126 @@ export function ProjectUsersPanel({ projectId }: Props) {
         </div>
       ) : null}
 
+      {removeFlow?.kind === "disposition" ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="project-users-disposition-title"
+          className="modal-backdrop"
+          onMouseDown={() => setRemoveFlow(null)}
+        >
+          <div
+            className="modal"
+            style={{ width: "min(460px, 100%)" }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="project-users-disposition-title" style={{ marginTop: 0 }}>
+              Reassign or clear assignments?
+            </h2>
+            <p>
+              {removeFlow.user.displayName} is assigned to {removeFlow.summary.total} task(s)/todo(s)
+              ({removeFlow.summary.taskCount} tasks, {removeFlow.summary.todoCount} todos). Choose how
+              to handle those before removing them from {removeFlow.user.role}s.
+            </p>
+            <fieldset className="field" style={{ border: "none", padding: 0, margin: "0 0 1rem" }}>
+              <legend className="muted" style={{ padding: 0 }}>
+                Disposition
+              </legend>
+              <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  type="radio"
+                  name="disposition"
+                  checked={removeFlow.mode === "reassign"}
+                  onChange={() =>
+                    setRemoveFlow({ ...removeFlow, mode: "reassign", reassignToUserId: null })
+                  }
+                />
+                Reassign to another Owner, Manager, or Member
+              </label>
+              <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.35rem" }}>
+                <input
+                  type="radio"
+                  name="disposition"
+                  checked={removeFlow.mode === "blank"}
+                  onChange={() =>
+                    setRemoveFlow({ ...removeFlow, mode: "blank", reassignToUserId: null })
+                  }
+                />
+                Clear assignee (leave unassigned)
+              </label>
+            </fieldset>
+            {removeFlow.mode === "reassign" ? (
+              <div className="field">
+                <label htmlFor="project-users-reassign">Reassign to</label>
+                <select
+                  id="project-users-reassign"
+                  value={removeFlow.reassignToUserId ?? ""}
+                  onChange={(e) =>
+                    setRemoveFlow({
+                      ...removeFlow,
+                      reassignToUserId: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                >
+                  <option value="">Select user…</option>
+                  {reassignCandidates.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.displayName} ({u.referenceId})
+                    </option>
+                  ))}
+                </select>
+                {assignableQuery.isLoading ? <p className="muted">Loading assignable users…</p> : null}
+              </div>
+            ) : null}
+            <div className="modal-actions" style={{ marginTop: "1rem" }}>
+              <button type="button" className="btn ghost" onClick={() => setRemoveFlow(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={
+                  removeUser.isPending ||
+                  (removeFlow.mode === "reassign" && removeFlow.reassignToUserId == null)
+                }
+                onClick={() => {
+                  if (removeFlow.mode === "blank") {
+                    removeUser.mutate({
+                      userId: removeFlow.user.id,
+                      disposition: "blank",
+                    });
+                  } else if (removeFlow.reassignToUserId != null) {
+                    removeUser.mutate({
+                      userId: removeFlow.user.id,
+                      disposition: "reassign",
+                      reassignToUserId: removeFlow.reassignToUserId,
+                    });
+                  }
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <ConfirmDialog
-        open={pendingRemove != null}
+        open={removeFlow?.kind === "confirm"}
         title="Remove user from project?"
         message={
-          pendingRemove
-            ? `Remove ${pendingRemove.displayName} (${pendingRemove.referenceId}) from ${pendingRemove.role}s? Reassignment of assigned records will arrive with T0128.`
+          removeFlow?.kind === "confirm"
+            ? `Remove ${removeFlow.user.displayName} (${removeFlow.user.referenceId}) from ${removeFlow.user.role}s?`
             : ""
         }
         confirmLabel="Remove"
         confirmTone="danger"
         confirmDisabled={removeUser.isPending}
-        onCancel={() => setPendingRemove(null)}
+        onCancel={() => setRemoveFlow(null)}
         onConfirm={() => {
-          if (pendingRemove) removeUser.mutate(pendingRemove.id);
+          if (removeFlow?.kind === "confirm") {
+            removeUser.mutate({ userId: removeFlow.user.id });
+          }
         }}
       />
     </div>

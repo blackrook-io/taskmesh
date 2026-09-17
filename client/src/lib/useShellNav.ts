@@ -194,7 +194,9 @@ export function useContextNavItems(): {
       });
 
       const items: ContextNavItem[] = PROJECT_MIDDLE.flatMap((entry) => {
-        if (entry.tab === "settings" && !isAdmin) return [];
+        const canManageSettings =
+          isAdmin || projectQuery.data?.canManageSettings === true;
+        if (entry.tab === "settings" && !canManageSettings) return [];
         const needsModule = entry.moduleKey != null;
         const isEnabled = !needsModule || enabled.has(entry.moduleKey!);
         if (needsModule && !isEnabled) return [];

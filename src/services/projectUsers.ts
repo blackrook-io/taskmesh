@@ -1,9 +1,10 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { NotFoundError } from "../lib/notFound.js";
 import { userCanAuthenticate } from "../lib/userAuth.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
+import { listAssignableUserIds } from "./assignees.js";
 import { userHasAdministrator } from "./roles.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -25,15 +26,32 @@ export type ProjectUsersLists = {
   owner: UserRef & { email: string | null };
 };
 
+export type AssigneeDisposition =
+  | { disposition: "blank" }
+  | { disposition: "reassign"; reassignToUserId: number };
+
+export type ProjectUserAssignmentSummary = {
+  taskCount: number;
+  todoCount: number;
+  total: number;
+};
+
 export class ProjectUsersError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly details?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = "ProjectUsersError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -72,7 +90,8 @@ async function loadProjectOrThrow(
   return proj;
 }
 
-async function findExistingRole(
+/** Listed role only (not owner/admin). Used by ownership.resolveProjectActorRole. */
+export async function findListedProjectRole(
   db: Db,
   projectId: number,
   userId: number,
@@ -199,7 +218,7 @@ export async function addProjectUser(
     );
   }
 
-  const existing = await findExistingRole(db, projectId, userId);
+  const existing = await findListedProjectRole(db, projectId, userId);
   if (existing) {
     throw new ProjectUsersError(
       409,
@@ -227,19 +246,148 @@ export async function addProjectUser(
   };
 }
 
+export async function countUserProjectAssignments(
+  db: Db,
+  projectId: number,
+  userId: number,
+): Promise<ProjectUserAssignmentSummary> {
+  const [taskRow] = await db
+    .select({ n: count() })
+    .from(schema.tasks)
+    .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.assigneeId, userId)));
+  const [todoRow] = await db
+    .select({ n: count() })
+    .from(schema.todos)
+    .where(and(eq(schema.todos.projectId, projectId), eq(schema.todos.assigneeId, userId)));
+  const taskCount = Number(taskRow?.n ?? 0);
+  const todoCount = Number(todoRow?.n ?? 0);
+  return { taskCount, todoCount, total: taskCount + todoCount };
+}
+
+/**
+ * Active, usable, non-administrator users for the Settings Add picker (Managers + Admins).
+ * Excludes the project owner and anyone already on a role list.
+ */
+export async function listProjectDirectoryUsers(
+  db: Db,
+  projectId: number,
+): Promise<Array<UserRef & { email: string | null }>> {
+  const proj = await loadProjectOrThrow(db, projectId);
+  const lists = await listProjectUsers(db, projectId);
+  const excluded = new Set<number>([
+    proj.ownerId,
+    ...lists.managers.map((u) => u.id),
+    ...lists.members.map((u) => u.id),
+    ...lists.viewers.map((u) => u.id),
+  ]);
+
+  const rows = await db.select().from(schema.users).orderBy(asc(schema.users.number));
+  const out: Array<UserRef & { email: string | null }> = [];
+  for (const user of rows) {
+    if (excluded.has(user.id)) continue;
+    if (!userCanAuthenticate(user)) continue;
+    if (await userHasAdministrator(db, user.id)) continue;
+    out.push({ ...toUserRef(user), email: user.email });
+  }
+  return out;
+}
+
 /**
  * Remove a user from whichever role list they are on for this project.
+ * Manager/Member with assignees require disposition (reassign or blank).
  * Returns the role they left, or null if they were not listed.
  */
 export async function removeProjectUser(
   db: Db,
   projectId: number,
   userId: number,
+  disposition?: AssigneeDisposition | null,
 ): Promise<ProjectUserRole | null> {
   await loadProjectOrThrow(db, projectId);
 
-  const existing = await findExistingRole(db, projectId, userId);
+  const existing = await findListedProjectRole(db, projectId, userId);
   if (!existing) return null;
+
+  const needsDisposition = existing === "manager" || existing === "member";
+  if (needsDisposition) {
+    const summary = await countUserProjectAssignments(db, projectId, userId);
+    if (summary.total > 0) {
+      if (!disposition) {
+        throw new ProjectUsersError(
+          409,
+          "assignee_disposition_required",
+          `This user is assigned to ${summary.total} task(s)/todo(s). Choose reassign or blank.`,
+          summary,
+        );
+      }
+      if (disposition.disposition === "reassign") {
+        const targetId = disposition.reassignToUserId;
+        if (targetId === userId) {
+          throw new ProjectUsersError(
+            400,
+            "invalid_reassign_target",
+            "Cannot reassign to the user being removed.",
+          );
+        }
+        const pool = await listAssignableUserIds(db, projectId);
+        const allowed = pool.filter((id) => id !== userId);
+        if (!allowed.includes(targetId)) {
+          throw new ProjectUsersError(
+            400,
+            "invalid_reassign_target",
+            "Reassign target must remain an Owner, Manager, or Member after removal.",
+          );
+        }
+        const [target] = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, targetId))
+          .limit(1);
+        if (!target || !userCanAuthenticate(target)) {
+          throw new ProjectUsersError(
+            400,
+            "invalid_reassign_target",
+            "Reassign target user is not available.",
+          );
+        }
+        await db.transaction(async (tx) => {
+          await tx
+            .update(schema.tasks)
+            .set({ assigneeId: targetId, updatedAt: new Date() })
+            .where(
+              and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.assigneeId, userId)),
+            );
+          await tx
+            .update(schema.todos)
+            .set({ assigneeId: targetId, updatedAt: new Date() })
+            .where(
+              and(eq(schema.todos.projectId, projectId), eq(schema.todos.assigneeId, userId)),
+            );
+          const table = tableForRole(existing);
+          await tx
+            .delete(table)
+            .where(and(eq(table.projectId, projectId), eq(table.userId, userId)));
+        });
+        return existing;
+      }
+      // blank
+      await db.transaction(async (tx) => {
+        await tx
+          .update(schema.tasks)
+          .set({ assigneeId: null, updatedAt: new Date() })
+          .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.assigneeId, userId)));
+        await tx
+          .update(schema.todos)
+          .set({ assigneeId: null, updatedAt: new Date() })
+          .where(and(eq(schema.todos.projectId, projectId), eq(schema.todos.assigneeId, userId)));
+        const table = tableForRole(existing);
+        await tx
+          .delete(table)
+          .where(and(eq(table.projectId, projectId), eq(table.userId, userId)));
+      });
+      return existing;
+    }
+  }
 
   const table = tableForRole(existing);
   await db

@@ -79,7 +79,7 @@ export async function createTemplate(
 ): Promise<TaskDescriptionTemplate> {
   const user = await getCurrentUser(db);
   if (input.projectId != null) {
-    await assertCanAccessProject(db, user.id, input.projectId);
+    await assertCanAccessProject(db, user.id, input.projectId, "write");
   }
 
   const [row] = await db

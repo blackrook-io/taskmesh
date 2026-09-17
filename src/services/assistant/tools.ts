@@ -10,6 +10,7 @@ import {
   assertCanAccessProject,
   dualScopeListFilter,
   ownerScope,
+  projectAccessListFilter,
   projectOwnedListFilter,
   OwnershipAccessError,
 } from "../ownership.js";
@@ -297,7 +298,7 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
   const { q } = z.object({ q: z.string().min(1).max(200) }).parse(args);
   const { actorUserId, isAdministrator } = requireActor(handlers);
   const ideaScope = ownerScope(schema.ideas.ownerId, actorUserId, isAdministrator);
-  const projectScope = ownerScope(schema.projects.ownerId, actorUserId, isAdministrator);
+  const projectScope = projectAccessListFilter(db, actorUserId, isAdministrator);
   const taskScope = dualScopeListFilter(
     db,
     schema.tasks.projectId,
@@ -536,7 +537,7 @@ async function toolProposeDocumentUpdate(args: unknown, handlers: ToolHandlers):
     );
   if (!existing) return JSON.stringify({ error: "Document not found" });
   try {
-    await assertCanAccessProject(db, requireActor(handlers).actorUserId, parsed.projectId);
+    await assertCanAccessProject(db, requireActor(handlers).actorUserId, parsed.projectId, "write");
   } catch (err) {
     if (err instanceof OwnershipAccessError) return accessDeniedMessage();
     throw err;
@@ -586,7 +587,7 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
     .where(and(eq(schema.tasks.id, parsed.taskId), eq(schema.tasks.projectId, parsed.projectId)));
   if (!existing) return JSON.stringify({ error: "Task not found" });
   try {
-    await assertCanAccessDualScoped(db, requireActor(handlers).actorUserId, existing);
+    await assertCanAccessDualScoped(db, requireActor(handlers).actorUserId, existing, "write");
   } catch (err) {
     if (err instanceof OwnershipAccessError) return accessDeniedMessage();
     throw err;
@@ -662,7 +663,7 @@ async function toolProposeDocumentCreate(args: unknown, handlers: ToolHandlers):
     .where(eq(schema.projects.id, parsed.projectId));
   if (!proj) return JSON.stringify({ error: "Project not found" });
   try {
-    await assertCanAccessOwned(db, requireActor(handlers).actorUserId, proj.ownerId);
+    await assertCanAccessProject(db, requireActor(handlers).actorUserId, parsed.projectId, "write");
   } catch (err) {
     if (err instanceof OwnershipAccessError) return accessDeniedMessage();
     throw err;
@@ -704,7 +705,7 @@ async function toolProposeTaskCreate(args: unknown, handlers: ToolHandlers): Pro
     .where(eq(schema.projects.id, parsed.projectId));
   if (!proj) return JSON.stringify({ error: "Project not found" });
   try {
-    await assertCanAccessOwned(db, requireActor(handlers).actorUserId, proj.ownerId);
+    await assertCanAccessProject(db, requireActor(handlers).actorUserId, parsed.projectId, "write");
   } catch (err) {
     if (err instanceof OwnershipAccessError) return accessDeniedMessage();
     throw err;
