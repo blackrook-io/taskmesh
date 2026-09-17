@@ -11,6 +11,8 @@ import {
 import type { ProjectModule, TaskGroup, Project } from "../types";
 import { shellIcons } from "../components/shell/shellIcons";
 import { isFilterActive, parseTaskListFilterValue } from "./taskListFilter";
+import { useAuth } from "./auth";
+import { userIsAdministrator } from "./roles";
 
 export type ContextNavItem = {
   id: string;
@@ -118,6 +120,8 @@ export function useContextNavItems(): {
   const projectId = useActiveProjectId();
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const { user } = useAuth();
+  const isAdmin = userIsAdministrator(user);
 
   const modulesQuery = useQuery({
     queryKey: ["project-modules", projectId],
@@ -190,6 +194,7 @@ export function useContextNavItems(): {
       });
 
       const items: ContextNavItem[] = PROJECT_MIDDLE.flatMap((entry) => {
+        if (entry.tab === "settings" && !isAdmin) return [];
         const needsModule = entry.moduleKey != null;
         const isEnabled = !needsModule || enabled.has(entry.moduleKey!);
         if (needsModule && !isEnabled) return [];
@@ -393,5 +398,6 @@ export function useContextNavItems(): {
     imageBoardsQuery.data,
     searchParams,
     location.pathname,
+    isAdmin,
   ]);
 }

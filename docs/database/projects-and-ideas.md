@@ -11,11 +11,17 @@ erDiagram
   ideas ||--o| projects : "source_idea_id"
   projects ||--o{ task_groups : "project_id"
   projects ||--o{ project_phases : "project_id"
+  projects ||--o{ project_managers : "project_id"
+  projects ||--o{ project_members : "project_id"
+  projects ||--o{ project_viewers : "project_id"
   tags ||--o{ task_groups : "auto_tag_id"
   task_groups ||--o{ task_group_members : "group_id"
   tasks ||--o{ task_group_members : "task_id"
   users ||--o{ ideas : "owner_id"
   users ||--o{ projects : "owner_id"
+  users ||--o{ project_managers : "user_id"
+  users ||--o{ project_members : "user_id"
+  users ||--o{ project_viewers : "user_id"
   ideas {
     int id PK
     int number UK
@@ -32,6 +38,21 @@ erDiagram
     int sort_order
     int source_idea_id FK
     int owner_id FK
+  }
+  project_managers {
+    int id PK
+    int project_id FK
+    int user_id FK
+  }
+  project_members {
+    int id PK
+    int project_id FK
+    int user_id FK
+  }
+  project_viewers {
+    int id PK
+    int project_id FK
+    int user_id FK
   }
   task_groups {
     int id PK
@@ -119,7 +140,34 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 
 ### Relationships (outbound ownership)
 
-Projects are parents of task groups, project phases, tasks (optional), documents, todo lists, modules, boards, wiki nodes, canvases, image boards (optional), and task description templates. See domain pages for cascade behavior.
+Projects are parents of task groups, project phases, project managers/members/viewers (T0127), tasks (optional), documents, todo lists, modules, boards, wiki nodes, canvases, image boards (optional), and task description templates. See domain pages for cascade behavior.
+
+---
+
+## `project_managers` / `project_members` / `project_viewers`
+
+Junction tables for project role lists (T0127). **Access enforcement for these roles lands in T0128** — until then, project record access remains owner-or-Administrator only. The project **owner** (`projects.owner_id`) is an **implicit Manager** and is not stored in `project_managers`. A user may appear in **at most one** of the three lists per project (application rule). Administrators are not added to these lists (they already have full access).
+
+### Columns (each table)
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `project_id` | integer | no | — | FK → `projects.id` |
+| `user_id` | integer | no | — | FK → `users.id` |
+| `created_at` | timestamptz | no | `now()` | When the user was added to the list |
+
+### Constraints (each table)
+
+- **PK:** `id`
+- **UNIQUE:** `(project_id, user_id)` — `project_managers_project_user_uidx` / `project_members_project_user_uidx` / `project_viewers_project_user_uidx`
+- **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
+- **FK:** `user_id` → `users.id` · **ON DELETE CASCADE**
+- **INDEX:** `user_id` for reverse lookups
+
+### Relationships
+
+- Owned by `projects`. Intended T0128 semantics: Managers = R/W + Settings; Members = R/W; Viewers = read-only.
 
 ---
 

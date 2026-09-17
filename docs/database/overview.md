@@ -18,7 +18,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Main domain** (full physical documentation):
 
-`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `tasks`, `todos`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
+`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `project_managers`, `project_members`, `project_viewers`, `tasks`, `todos`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `uploads`, `tags`, `taggings`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
 
 **Non-main** (inventory + minimal on diagrams):
 
@@ -26,7 +26,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 ## Conceptual model
 
-At a high level, a **Project** is the hub. An **Idea** can become a project or a **ToDo**. **ToDos** (display **D####**) are first-class scheduled items lighter than Tasks. Projects own task groups, project phases, tasks, todos, documents, module toggles, boards, wiki nodes, and canvases. Tasks and ToDos may also exist outside a project. **To Do lists** hold ToDo and Task memberships (legacy Idea rows may remain). Tags attach via polymorphic `(entity_type, entity_id)` pairs. Users and API keys support authorship and future auth; they are not the focus of product modeling.
+At a high level, a **Project** is the hub. An **Idea** can become a project or a **ToDo**. **ToDos** (display **D####**) are first-class scheduled items lighter than Tasks. Projects own task groups, project phases, role lists (managers / members / viewers — T0127; access enforcement in T0128), tasks, todos, documents, module toggles, boards, wiki nodes, and canvases. Tasks and ToDos may also exist outside a project. **To Do lists** hold ToDo and Task memberships (legacy Idea rows may remain). Tags attach via polymorphic `(entity_type, entity_id)` pairs. Users and API keys support authorship and future auth; they are not the focus of product modeling.
 
 ```mermaid
 erDiagram
@@ -36,6 +36,9 @@ erDiagram
   task_groups ||--o{ task_group_members : "manual members"
   tasks ||--o{ task_group_members : "manual groups"
   projects ||--o{ project_phases : has
+  projects ||--o{ project_managers : "role list"
+  projects ||--o{ project_members : "role list"
+  projects ||--o{ project_viewers : "role list"
   projects ||--o{ tasks : "may own"
   projects ||--o{ todos : "may own"
   projects ||--o{ project_documents : has
@@ -61,6 +64,9 @@ erDiagram
 
   users ||--o{ tasks : "createdBy / updatedBy"
   users ||--o{ todos : "createdBy / updatedBy"
+  users ||--o{ project_managers : "listed"
+  users ||--o{ project_members : "listed"
+  users ||--o{ project_viewers : "listed"
   users ||--o{ api_keys : has
   users ||--o{ user_roles : has
   roles ||--o{ user_roles : granted

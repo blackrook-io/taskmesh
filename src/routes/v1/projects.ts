@@ -22,8 +22,13 @@ import { boardsRouter } from "./boards.js";
 import { canvasesRouter } from "./canvases.js";
 import { groupsRouter } from "./groups.js";
 import { phasesRouter } from "./phases.js";
+import { projectUsersRouter } from "./projectUsers.js";
 import { tasksRouter } from "./tasks.js";
 import { wikiRouter } from "./wiki.js";
+import {
+  NOT_ADMINISTRATOR_MESSAGE,
+  requireAdministrator,
+} from "../../middleware/requireAdministrator.js";
 
 const projectStatus = z.enum(["idea", "active", "paused", "done"]);
 
@@ -175,6 +180,11 @@ projectsRouter.delete("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    if (!isAdmin) {
+      sendError(res, 403, "not_administrator", NOT_ADMINISTRATOR_MESSAGE);
+      return;
+    }
     await assertCanAccessProject(db, actorId, id);
     const deleted = await db
       .delete(schema.projects)
@@ -238,10 +248,15 @@ async function ensureNestedProjectAccess(
 }
 
 projectsRouter.use("/:projectId/groups", ensureNestedProjectAccess, groupsRouter);
-projectsRouter.use("/:projectId/phases", ensureNestedProjectAccess, phasesRouter);
+projectsRouter.use("/:projectId/phases", ensureNestedProjectAccess, requireAdministrator, phasesRouter);
 projectsRouter.use("/:projectId/tasks", ensureNestedProjectAccess, tasksRouter);
 projectsRouter.use("/:projectId/documents", ensureNestedProjectAccess, documentsRouter);
 projectsRouter.use("/:projectId/modules", ensureNestedProjectAccess, modulesRouter);
 projectsRouter.use("/:projectId/boards", ensureNestedProjectAccess, boardsRouter);
 projectsRouter.use("/:projectId/wiki", ensureNestedProjectAccess, wikiRouter);
 projectsRouter.use("/:projectId/canvases", ensureNestedProjectAccess, canvasesRouter);
+projectsRouter.use(
+  "/:projectId/users",
+  ensureNestedProjectAccess,
+  projectUsersRouter,
+);
