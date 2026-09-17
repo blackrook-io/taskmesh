@@ -44,10 +44,6 @@ export function Layout() {
     };
   }, [canUsePalette]);
 
-  useEffect(() => {
-    if (!canUsePalette && paletteOpen) setPaletteOpen(false);
-  }, [canUsePalette, paletteOpen]);
-
   return (
     <ThemeProvider>
       <SettingsProvider>
