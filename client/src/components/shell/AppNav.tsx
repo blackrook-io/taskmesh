@@ -27,7 +27,12 @@ import { useAdministration } from "../../lib/administration";
 import { useAuth } from "../../lib/auth";
 import { userIsAdministrator } from "../../lib/roles";
 import { useSettings } from "../../lib/settings";
-import { useActiveProjectId, useShellSection } from "../../lib/useShellNav";
+import {
+  useActiveProjectId,
+  useActiveProjectNavItems,
+  useShellSection,
+  type ContextNavItem,
+} from "../../lib/useShellNav";
 import type { Project } from "../../types";
 import { BrandWordmark } from "./BrandWordmark";
 import { MeshMark } from "./MeshMark";
@@ -47,11 +52,63 @@ type Props = {
   onNavigate?: () => void;
 };
 
+function ProjectModuleLink({
+  item,
+  onNavigate,
+  className,
+}: {
+  item: ContextNavItem;
+  onNavigate?: () => void;
+  className?: string;
+}) {
+  const nested = item.nested ? " app-nav__module--nested" : "";
+  const active = item.active ? " is-active" : "";
+  const glyph = item.swatch ? (
+    <span className="app-nav__glyph" aria-hidden>
+      <span className="app-nav__module-swatch" style={{ background: item.swatch }} />
+    </span>
+  ) : item.icon ? (
+    <span className="app-nav__glyph" aria-hidden>
+      <NavIcon icon={item.icon} />
+    </span>
+  ) : null;
+
+  const content = (
+    <>
+      {glyph}
+      <span className="app-nav__module-label">{item.label}</span>
+    </>
+  );
+
+  if (item.disabled || !item.path) {
+    return (
+      <span className={`${className ?? "app-nav__module"} is-disabled${active}${nested}`} title={item.title}>
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      to={item.path}
+      className={`${className ?? "app-nav__module"}${active}${nested}`}
+      title={item.title ?? item.label}
+      onClick={onNavigate}
+    >
+      {content}
+    </Link>
+  );
+}
+
 function SortableProjectNavItem({
   project,
+  active,
+  modules,
   onNavigate,
 }: {
   project: Project;
+  active: boolean;
+  modules: ContextNavItem[];
   onNavigate?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -63,12 +120,15 @@ function SortableProjectNavItem({
     transition,
   };
 
+  const mainModules = modules.filter((item) => item.pin !== "bottom");
+  const bottomModules = modules.filter((item) => item.pin === "bottom");
+
   return (
     <li ref={setNodeRef} style={style} className={isDragging ? "is-dragging" : undefined}>
       <NavLink
         to={`/projects/${project.id}`}
-        className={({ isActive }) =>
-          `app-nav__project${isActive ? " is-active" : ""}${isDragging ? " is-dragging" : ""}`
+        className={() =>
+          `app-nav__project${active ? " is-active" : ""}${isDragging ? " is-dragging" : ""}`
         }
         onClick={onNavigate}
         title="Drag to reorder"
@@ -78,6 +138,25 @@ function SortableProjectNavItem({
         <span className="app-nav__dot" aria-hidden />
         <span className="app-nav__project-name">{project.name}</span>
       </NavLink>
+      {active && modules.length > 0 ? (
+        <ul className="app-nav__modules" aria-label={`${project.name} modules`}>
+          {mainModules.map((item) => (
+            <li key={item.id}>
+              <ProjectModuleLink item={item} onNavigate={onNavigate} />
+            </li>
+          ))}
+          {bottomModules.length > 0 ? (
+            <>
+              <li className="app-nav__modules-sep" aria-hidden />
+              {bottomModules.map((item) => (
+                <li key={item.id}>
+                  <ProjectModuleLink item={item} onNavigate={onNavigate} />
+                </li>
+              ))}
+            </>
+          ) : null}
+        </ul>
+      ) : null}
     </li>
   );
 }
@@ -93,11 +172,12 @@ export function AppNav({
   const less = mode === "less";
   const section = useShellSection();
   const activeProjectId = useActiveProjectId();
+  const { items: projectModules } = useActiveProjectNavItems();
   const { open: settingsOpen, openSettings } = useSettings();
   const { open: adminOpen, openAdmin } = useAdministration();
   const { user } = useAuth();
   const showAdmin = userIsAdministrator(user);
-  const [projectsOpen, setProjectsOpen] = useState(section === "projects");
+  const [projectsOpen, setProjectsOpen] = useState(true);
   const [prevSection, setPrevSection] = useState(section);
   if (prevSection !== section) {
     setPrevSection(section);
@@ -166,8 +246,7 @@ export function AppNav({
     void reorderProjects.mutateAsync(next.map((p) => p.id));
   };
 
-  const itemClass = ({ isActive }: { isActive: boolean }) =>
-    `app-nav__item${isActive ? " is-active" : ""}`;
+  const lessModuleItems = projectModules.filter((item) => !item.nested && item.path);
 
   return (
     <aside className={`app-nav${less ? " app-nav--less" : ""}`} aria-label="App">
@@ -208,19 +287,35 @@ export function AppNav({
 
       <nav className="app-nav__sections">
         {less ? (
-          <button
-            type="button"
-            className={`app-nav__item${section === "projects" ? " is-active" : ""}`}
-            title="Projects"
-            aria-haspopup="dialog"
-            aria-expanded={projectSelectOpen}
-            onClick={() => setProjectSelectOpen(true)}
-          >
-            <span className="app-nav__glyph" aria-hidden>
-              <NavIcon icon={shellIcons.projects} />
-            </span>
-            <span className="app-nav__label">Projects</span>
-          </button>
+          <>
+            <button
+              type="button"
+              className={`app-nav__item${section === "projects" ? " is-active" : ""}`}
+              title="Projects"
+              aria-haspopup="dialog"
+              aria-expanded={projectSelectOpen}
+              onClick={() => setProjectSelectOpen(true)}
+            >
+              <span className="app-nav__glyph" aria-hidden>
+                <NavIcon icon={shellIcons.projects} />
+              </span>
+              <span className="app-nav__label">Projects</span>
+            </button>
+            {lessModuleItems.map((item) => (
+              <Link
+                key={item.id}
+                to={item.path!}
+                className={`app-nav__item${item.active ? " is-active" : ""}`}
+                title={item.label}
+                onClick={onNavigate}
+              >
+                <span className="app-nav__glyph" aria-hidden>
+                  {item.icon ? <NavIcon icon={item.icon} /> : null}
+                </span>
+                <span className="app-nav__label">{item.label}</span>
+              </Link>
+            ))}
+          </>
         ) : (
           <div className="app-nav__section">
             <button
@@ -258,7 +353,13 @@ export function AppNav({
                   </li>
                   <SortableContext items={projectIds} strategy={verticalListSortingStrategy}>
                     {projects.map((p) => (
-                      <SortableProjectNavItem key={p.id} project={p} onNavigate={onNavigate} />
+                      <SortableProjectNavItem
+                        key={p.id}
+                        project={p}
+                        active={activeProjectId === p.id}
+                        modules={activeProjectId === p.id ? projectModules : []}
+                        onNavigate={onNavigate}
+                      />
                     ))}
                   </SortableContext>
                   {projectsQuery.isLoading ? (
@@ -278,58 +379,23 @@ export function AppNav({
             ) : null}
           </div>
         )}
-
-        <NavLink to="/ideas" className={itemClass} title="Ideas" onClick={onNavigate}>
-          <span className="app-nav__glyph" aria-hidden>
-            <NavIcon icon={shellIcons.ideas} />
-          </span>
-          <span className="app-nav__label">Ideas</span>
-        </NavLink>
-        <NavLink to="/tasks" className={itemClass} title="Tasks" onClick={onNavigate}>
-          <span className="app-nav__glyph" aria-hidden>
-            <NavIcon icon={shellIcons.tasks} />
-          </span>
-          <span className="app-nav__label">Tasks</span>
-        </NavLink>
-        <NavLink to="/filesystem" className={itemClass} title="Filesystem" onClick={onNavigate}>
-          <span className="app-nav__glyph" aria-hidden>
-            <NavIcon icon={shellIcons.filesystem} />
-          </span>
-          <span className="app-nav__label">Filesystem</span>
-        </NavLink>
-        <NavLink to="/image-board" className={itemClass} title="Image board" onClick={onNavigate}>
-          <span className="app-nav__glyph" aria-hidden>
-            <NavIcon icon={shellIcons.imageBoard} />
-          </span>
-          <span className="app-nav__label">Image board</span>
-        </NavLink>
-        <NavLink to="/todos" className={itemClass} title="Lists" onClick={onNavigate}>
-          <span className="app-nav__glyph" aria-hidden>
-            <NavIcon icon={shellIcons.lists} />
-          </span>
-          <span className="app-nav__label">Lists</span>
-        </NavLink>
-        <NavLink to="/calendar" className={itemClass} title="Calendar" onClick={onNavigate}>
-          <span className="app-nav__glyph" aria-hidden>
-            <NavIcon icon={shellIcons.calendar} />
-          </span>
-          <span className="app-nav__label">Calendar</span>
-        </NavLink>
       </nav>
 
       <div className="app-nav__footer">
         {less ? (
           <div className="app-nav__tools app-nav__tools--less">
-            <button
-              type="button"
-              className="app-nav__icon-btn"
-              onClick={onOpenPalette}
-              title="Command palette (Ctrl/⌘K)"
-              aria-label="Command palette"
-              aria-keyshortcuts="Control+K Meta+K"
-            >
-              <NavIcon icon={shellIcons.search} />
-            </button>
+            {showAdmin ? (
+              <button
+                type="button"
+                className="app-nav__icon-btn"
+                onClick={onOpenPalette}
+                title="Command palette (Ctrl/⌘K)"
+                aria-label="Command palette"
+                aria-keyshortcuts="Control+K Meta+K"
+              >
+                <NavIcon icon={shellIcons.search} />
+              </button>
+            ) : null}
             {showAdmin ? (
               <button
                 type="button"
@@ -373,16 +439,18 @@ export function AppNav({
                 <NavIcon icon={shellIcons.assistant} className="app-nav__inline-icon" />
                 AI
               </button>
-              <button
-                type="button"
-                className="btn ghost small command-palette-trigger"
-                onClick={onOpenPalette}
-                title="Command palette (Ctrl/⌘K)"
-                aria-keyshortcuts="Control+K Meta+K"
-              >
-                <NavIcon icon={shellIcons.search} className="app-nav__inline-icon" />
-                ⌘K
-              </button>
+              {showAdmin ? (
+                <button
+                  type="button"
+                  className="btn ghost small command-palette-trigger"
+                  onClick={onOpenPalette}
+                  title="Command palette (Ctrl/⌘K)"
+                  aria-keyshortcuts="Control+K Meta+K"
+                >
+                  <NavIcon icon={shellIcons.search} className="app-nav__inline-icon" />
+                  ⌘K
+                </button>
+              ) : null}
             </div>
             {showAdmin ? (
               <button

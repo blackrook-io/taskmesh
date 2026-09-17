@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { installDomInputSanitizer } from "../lib/sanitizeDomInputs";
 import { ThemeProvider } from "../lib/ThemeProvider";
 import { AdministrationProvider } from "../lib/administration";
+import { useAuth } from "../lib/auth";
+import { userIsAdministrator } from "../lib/roles";
 import { SettingsProvider } from "../lib/settings";
 import { AssistantAttachProvider } from "../lib/assistantAttach";
 import { AssistantPanel } from "./AssistantPanel";
@@ -13,6 +15,8 @@ import { SettingsModal } from "./shell/SettingsModal";
 export function Layout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const { user } = useAuth();
+  const canUsePalette = userIsAdministrator(user);
 
   useEffect(() => {
     return installDomInputSanitizer();
@@ -21,6 +25,7 @@ export function Layout() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        if (!canUsePalette) return;
         e.preventDefault();
         setPaletteOpen((open) => !open);
         return;
@@ -37,7 +42,7 @@ export function Layout() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("taskmesh:open-assistant", onOpenAssistant);
     };
-  }, []);
+  }, [canUsePalette]);
 
   return (
     <ThemeProvider>
@@ -45,12 +50,16 @@ export function Layout() {
         <AdministrationProvider>
           <AssistantAttachProvider>
             <AppShell
-              onOpenPalette={() => setPaletteOpen(true)}
+              onOpenPalette={() => {
+                if (canUsePalette) setPaletteOpen(true);
+              }}
               onOpenAssistant={() => setAssistantOpen(true)}
             />
             <SettingsModal />
             <AdministrationModal />
-            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+            {canUsePalette ? (
+              <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+            ) : null}
             <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
           </AssistantAttachProvider>
         </AdministrationProvider>

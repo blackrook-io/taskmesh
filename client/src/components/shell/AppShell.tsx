@@ -3,7 +3,6 @@ import { Outlet, useLocation } from "react-router-dom";
 import type { AppNavMode } from "../../lib/appNavMode";
 import { useAppNavMode } from "../../lib/useAppNavMode";
 import { AppNav } from "./AppNav";
-import { ContextNav } from "./ContextNav";
 
 const MOBILE_NAV_MQ = "(max-width: 960px)";
 
@@ -28,30 +27,24 @@ function useIsMobileNav(): boolean {
 
 export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
   const [navOpen, setNavOpen] = useState(false);
-  const [contextOpen, setContextOpen] = useState(false);
   const location = useLocation();
   const { mode, collapse, expand, restoreFromHidden } = useAppNavMode();
   const isMobileNav = useIsMobileNav();
   const desktopMode: AppNavMode = isMobileNav ? "full" : mode;
 
-  const closeDrawers = () => {
-    setNavOpen(false);
-    setContextOpen(false);
-  };
+  const closeDrawer = () => setNavOpen(false);
 
   const locationKey = `${location.pathname}${location.search}`;
   const [prevLocationKey, setPrevLocationKey] = useState(locationKey);
   if (prevLocationKey !== locationKey) {
     setPrevLocationKey(locationKey);
     setNavOpen(false);
-    setContextOpen(false);
   }
 
   const shellClass = [
     "app-shell",
     `app-shell--nav-${desktopMode}`,
     navOpen ? "app-shell--nav-open" : "",
-    contextOpen ? "app-shell--context-open" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -64,35 +57,20 @@ export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
           className="btn ghost small"
           aria-expanded={navOpen}
           aria-controls="app-nav-drawer"
-          onClick={() => {
-            setNavOpen((o) => !o);
-            setContextOpen(false);
-          }}
+          onClick={() => setNavOpen((o) => !o)}
         >
           Menu
         </button>
-        <button
-          type="button"
-          className="btn ghost small"
-          aria-expanded={contextOpen}
-          aria-controls="context-nav-drawer"
-          onClick={() => {
-            setContextOpen((o) => !o);
-            setNavOpen(false);
-          }}
-        >
-          Section
-        </button>
       </header>
 
-      {(navOpen || contextOpen) && (
+      {navOpen ? (
         <button
           type="button"
           className="app-shell__backdrop"
           aria-label="Close navigation"
-          onClick={closeDrawers}
+          onClick={closeDrawer}
         />
-      )}
+      ) : null}
 
       {!isMobileNav && mode === "hidden" ? (
         <button
@@ -116,11 +94,8 @@ export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
           onExpand={expand}
           onOpenPalette={onOpenPalette}
           onOpenAssistant={onOpenAssistant}
-          onNavigate={closeDrawers}
+          onNavigate={closeDrawer}
         />
-      </div>
-      <div id="context-nav-drawer" className="app-shell__context">
-        <ContextNav />
       </div>
       <main className="app-shell__main">
         <Outlet />
