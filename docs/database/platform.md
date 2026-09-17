@@ -15,6 +15,8 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 | `user_roles` | User ↔ role membership (composite PK). U0001 is seeded as Administrator. Removing the last Administrator assignment is blocked, as are lock / deactivate / delete of the last Administrator. | FKs `user_id` → `users` · **CASCADE**; `role_id` → `roles` · **CASCADE**. |
 | `api_keys` | Programmatic API keys (`taskmesh_{ro\|rw}_…`). Prefix for display; **SHA-256** of full secret in `key_hash`. Access `readonly` \| `readwrite`; status `active` \| `suspended` \| `expired` \| `revoked`. Max **3 active** per user; default/max expiry **60 days**. Request auth via Bearer / X-API-Key (T0063). | FK `user_id` → `users` · **CASCADE**. Referenced by `api_request_logs`. |
 | `system_properties` | System-wide key/value settings (`key` text PK, `value` jsonb). Known keys include `api_rate_limit_per_minute`, `login_failure_threshold` (default **3**), `session_timeout_minutes` (default **60**, stored for cookie lifetime and future enforcement), and `default_theme` (accent theme id string, seeded `green`). | Standalone; no FKs. |
+| `entity_fields` | Schema metadata for List View columns (T0056): per-`entity_type` field catalog with `field_key`, `label`, `displayable`, `default_visible`, `default_sort_order`, `sortable`, optional `scope` (`global` = global Tasks only). Non-displayable rows never appear in Personalize or as columns. Seeded in migration; maintain alongside schema changes. | Standalone; unique `(entity_type, field_key)`. |
+| `user_list_view_prefs` | Per-user List View column order/visibility (T0056). One row per `(user_id, list_view_key)` (`tasks` \| `ideas`); `columns` jsonb is ordered `{ fieldKey, visible }[]`. Shared across projects for `tasks`. Missing row → defaults from `entity_fields`. | FK `user_id` → `users` · **CASCADE**. |
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag, request/response byte counts). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
 | `db_stats_snapshots` | Periodic gauges of the connected app database (size, user table count) for Administration → Database charts. | Standalone; no FKs. |
 
@@ -26,10 +28,12 @@ erDiagram
   users ||--o{ sessions : "login"
   users ||--o{ password_history : "prior hashes"
   users ||--o{ user_roles : has
+  users ||--o{ user_list_view_prefs : "list columns"
   roles ||--o{ user_roles : granted
   users ||--o{ api_request_logs : "optional"
   api_keys ||--o{ api_request_logs : "optional"
   users }o--o| uploads : avatar
+  entity_fields }|..|{ entity_fields : "field catalog"
   users {
     int id PK
     int number UK
@@ -56,6 +60,16 @@ erDiagram
   }
   system_properties {
     text key PK
+  }
+  entity_fields {
+    int id PK
+    text entity_type
+    text field_key
+  }
+  user_list_view_prefs {
+    int id PK
+    int user_id FK
+    text list_view_key
   }
   api_request_logs {
     int id PK

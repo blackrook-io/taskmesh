@@ -318,6 +318,62 @@ export const systemProperties = pgTable("system_properties", {
     .defaultNow(),
 });
 
+/**
+ * Schema metadata for List View columns (T0056).
+ * Seeded/maintained with schema development; `displayable: false` hides a field
+ * from Personalize and from list columns.
+ */
+export const entityFields = pgTable(
+  "entity_fields",
+  {
+    id: serial("id").primaryKey(),
+    /** Matches EntityType for listable entities (`task`, `idea`, …). */
+    entityType: text("entity_type").notNull(),
+    /** Stable field key used in prefs JSON and UI (e.g. title, dueDate). */
+    fieldKey: text("field_key").notNull(),
+    label: text("label").notNull(),
+    displayable: boolean("displayable").notNull().default(true),
+    defaultVisible: boolean("default_visible").notNull().default(false),
+    defaultSortOrder: integer("default_sort_order").notNull().default(0),
+    sortable: boolean("sortable").notNull().default(false),
+    /**
+     * Optional surface filter: `null` = all surfaces for this list-view type;
+     * `global` = only global Tasks list (e.g. Project column).
+     */
+    scope: text("scope"),
+  },
+  (t) => [
+    unique("entity_fields_entity_type_field_key_uidx").on(t.entityType, t.fieldKey),
+    index("entity_fields_entity_type_idx").on(t.entityType),
+  ],
+);
+
+export type ListViewColumnPref = {
+  fieldKey: string;
+  visible: boolean;
+};
+
+/** Per-user List View column order/visibility (T0056). One row per list-view type. */
+export const userListViewPrefs = pgTable(
+  "user_list_view_prefs",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** `tasks` | `ideas` — not scoped by project. */
+    listViewKey: text("list_view_key").notNull(),
+    columns: jsonb("columns").$type<ListViewColumnPref[]>().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("user_list_view_prefs_user_list_uidx").on(t.userId, t.listViewKey),
+    index("user_list_view_prefs_user_id_idx").on(t.userId),
+  ],
+);
+
 /** Append-only API request / auth audit log for Admin APIs + Logging. */
 export const apiRequestLogs = pgTable("api_request_logs", {
   id: serial("id").primaryKey(),
@@ -1065,6 +1121,14 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   apiKeys: many(apiKeys),
   userRoles: many(userRoles),
   passwordHistory: many(passwordHistory),
+  listViewPrefs: many(userListViewPrefs),
+}));
+
+export const userListViewPrefsRelations = relations(userListViewPrefs, ({ one }) => ({
+  user: one(users, {
+    fields: [userListViewPrefs.userId],
+    references: [users.id],
+  }),
 }));
 
 export const passwordHistoryRelations = relations(passwordHistory, ({ one }) => ({

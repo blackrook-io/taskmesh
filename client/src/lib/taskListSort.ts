@@ -7,6 +7,9 @@ export const TASK_LIST_SORT_COLS = [
   "priority",
   "dueDate",
   "project",
+  "phase",
+  "createdAt",
+  "updatedAt",
 ] as const;
 
 export type TaskListSortCol = (typeof TASK_LIST_SORT_COLS)[number];

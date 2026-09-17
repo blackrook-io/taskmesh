@@ -29,11 +29,10 @@ import {
   TASK_PRIORITY_LABELS,
   SELECTABLE_TASK_STATES,
   TASK_STATE_LABELS,
-  taskPriorityClass,
-  taskStateClass,
   formatTaskNumber,
   nextTaskState,
   TASK_STATE_SORT_RANK,
+  taskStateClass,
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
@@ -61,7 +60,17 @@ import {
   loadTaskDescriptionEditorHeight,
   saveTaskDescriptionEditorHeight,
 } from "../lib/taskDescriptionEditorHeight";
-import { RowTagChips } from "./shared/RowTagChips";
+import {
+  TaskListColumnHeaders,
+  renderTaskColumnCell,
+} from "./shared/TaskListColumnCells";
+import { ListViewHeaderMenu, type ListViewHeaderMenuState } from "./shared/ListViewHeaderMenu";
+import { ListViewPersonalizeModal } from "./shared/ListViewPersonalizeModal";
+import {
+  buildTaskListGridTemplate,
+  type ResolvedListColumn,
+} from "../lib/listViewColumns";
+import { useListViewColumns } from "../lib/useListViewColumns";
 import { TagInput } from "./shared/TagInput";
 import { TaskDescriptionTemplatesMenu } from "./shared/TaskDescriptionTemplatesMenu";
 import {
@@ -71,9 +80,9 @@ import {
 } from "./shared/TaskDependencyLists";
 import { TaskHistory } from "./shared/TaskHistory";
 import { TaskTimeline } from "./shared/TaskTimeline";
-import { TaskListSortHeaderBtn } from "./shared/TaskListSortHeaderBtn";
 import {
   DEFAULT_PROJECT_TASK_LIST_SORT,
+  TASK_LIST_SORT_COLS,
   storageKeyForProjectTaskSort,
   type TaskListSortCol,
 } from "../lib/taskListSort";
@@ -171,7 +180,13 @@ function sortRoots(roots: Task[], col: SortCol | null, dir: 1 | -1): Task[] {
     else if (col === "title") cmp = a.title.localeCompare(b.title);
     else if (col === "state") cmp = stateRank[a.state] - stateRank[b.state];
     else if (col === "priority") cmp = priRank[a.priority] - priRank[b.priority];
-    else {
+    else if (col === "createdAt") {
+      cmp = a.createdAt.localeCompare(b.createdAt);
+    } else if (col === "updatedAt") {
+      cmp = a.updatedAt.localeCompare(b.updatedAt);
+    } else if (col === "phase") {
+      cmp = (a.phaseId ?? 0) - (b.phaseId ?? 0);
+    } else {
       const da = taskDue(a) ?? "";
       const db = taskDue(b) ?? "";
       cmp = da.localeCompare(db);
@@ -946,6 +961,9 @@ function SortableTaskRow({
   onCycleState,
   onPatch,
   onContextMenu,
+  visibleColumns,
+  phaseName,
+  gridTemplate,
 }: {
   task: Task;
   depth: number;
@@ -958,6 +976,9 @@ function SortableTaskRow({
   onCycleState: () => void;
   onPatch: (patch: TaskPatch) => void;
   onContextMenu: (e: React.MouseEvent, task: Task) => void;
+  visibleColumns: ResolvedListColumn[];
+  phaseName: (id: number | null) => string;
+  gridTemplate: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `task-${groupKey}-${task.id}`,
@@ -966,7 +987,9 @@ function SortableTaskRow({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    gridTemplateColumns: gridTemplate,
   };
+  const showTagsInTitle = !visibleColumns.some((c) => c.fieldKey === "tags");
 
   return (
     <div
@@ -987,78 +1010,20 @@ function SortableTaskRow({
         ::
       </span>
       <StateCheckbox state={task.state} onCycle={onCycleState} />
-      <span className="task-list-row__num">
-        <span className="muted">{formatTaskNumber(task.number)}</span>
-        {hasChildren ? (
-          <button
-            type="button"
-            className="task-list-row__twist"
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? "Expand child tasks" : "Collapse child tasks"}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleCollapse();
-            }}
-          >
-            {collapsed ? "▸" : "▾"}
-          </button>
-        ) : null}
-      </span>
-      <span className="task-list-row__title">
-        {depth > 0 ? (
-          <span
-            className="task-list-row__child-indent"
-            style={{ width: depth * CHILD_TITLE_INDENT_PX }}
-            aria-hidden
-          >
-            <span className="task-list-row__child-mark">↳</span>
-          </span>
-        ) : null}
-        <span className="task-list-row__title-text">{task.title}</span>
-        {duplicate ? (
-          <span className="task-list-row__duplicate" title="Also shown in another group">
-            Duplicate
-          </span>
-        ) : null}
-        <RowTagChips entityType="task" entityId={task.id} />
-      </span>
-      <span
-        className={taskStateClass("task-list-row__state", task.state)}
-        data-ctx-field="state"
-      >
-        {TASK_STATE_LABELS[task.state]}
-      </span>
-      <span className="task-list-row__assignee" title={task.assignee?.displayName ?? undefined}>
-        {task.assignee?.displayName ?? (
-          <span className="muted">—</span>
-        )}
-      </span>
-      <select
-        className={taskPriorityClass("task-list-row__priority", task.priority)}
-        value={task.priority}
-        data-ctx-field="priority"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        onChange={(e) => onPatch({ priority: e.target.value as TaskPriority })}
-        aria-label="Priority"
-      >
-        {TASK_PRIORITIES.map((p) => (
-          <option key={p} value={p}>
-            {TASK_PRIORITY_LABELS[p]}
-          </option>
-        ))}
-      </select>
-      <input
-        type="date"
-        className="task-list-row__date"
-        value={taskDue(task) ?? ""}
-        data-ctx-field="dueDate"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        onChange={(e) => onPatch({ dueDate: e.target.value || null })}
-        aria-label="Due date"
-      />
+      {visibleColumns.map((col) =>
+        renderTaskColumnCell(col.fieldKey, {
+          task,
+          depth,
+          duplicate,
+          hasChildren,
+          collapsed,
+          onToggleCollapse,
+          onPatch,
+          phaseName,
+          showTagsInTitle,
+          childIndentPx: CHILD_TITLE_INDENT_PX,
+        }),
+      )}
     </div>
   );
 }
@@ -1276,6 +1241,17 @@ export function TaskBoard({
   const { phaseNames } = usePhaseFilterOptions(projectId);
   const { filterCtx: tagCtx } = useTaskFilterLookups({ includeProjects: false });
   const filterCtx = useMemo(() => ({ ...tagCtx, phaseNames }), [tagCtx, phaseNames]);
+  const {
+    visibleColumns,
+    personalizeRows,
+    save: saveListCols,
+    reset: resetListCols,
+  } = useListViewColumns("tasks", "project");
+  const gridTemplate = useMemo(
+    () => buildTaskListGridTemplate(visibleColumns, "project"),
+    [visibleColumns],
+  );
+  const phaseName = (id: number | null) => (id != null ? (phaseNames.get(id) ?? "") : "");
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
@@ -1293,6 +1269,9 @@ export function TaskBoard({
   const [pendingAutoTagDrop, setPendingAutoTagDrop] = useState<PendingAutoTagDrop | null>(null);
   const [dndInfo, setDndInfo] = useState<{ title: string; message: string } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
+  const [headerMenu, setHeaderMenu] = useState<ListViewHeaderMenuState>(null);
+  const [personalizeOpen, setPersonalizeOpen] = useState(false);
+  const [personalizeError, setPersonalizeError] = useState<string | null>(null);
   const [moveTaskId, setMoveTaskId] = useState<number | null>(null);
   const [parentTaskId, setParentTaskId] = useState<number | null>(null);
   const [assignTaskId, setAssignTaskId] = useState<number | null>(null);
@@ -1307,19 +1286,32 @@ export function TaskBoard({
   };
 
   const rows = useMemo(() => {
-    const boardSortCol: SortCol | null = sortCol === "project" ? null : sortCol;
+    const visibleSortKeys = new Set(visibleColumns.filter((c) => c.sortable).map((c) => c.fieldKey));
+    const effectiveSort: SortCol | null =
+      sortCol != null && visibleSortKeys.has(sortCol) && sortCol !== "project" ? sortCol : null;
     return buildRows(
       groups,
       tasks,
       listFilter,
       collapsed,
       collapsedParents,
-      boardSortCol,
+      effectiveSort,
       sortDir,
       navListView,
       filterCtx,
     );
-  }, [groups, tasks, listFilter, collapsed, collapsedParents, sortCol, sortDir, navListView, filterCtx]);
+  }, [
+    groups,
+    tasks,
+    listFilter,
+    collapsed,
+    collapsedParents,
+    sortCol,
+    sortDir,
+    navListView,
+    filterCtx,
+    visibleColumns,
+  ]);
 
   const displayRows = useMemo(() => {
     if (!navListView) return rows;
@@ -1364,9 +1356,11 @@ export function TaskBoard({
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const headerSort = (col: SortCol) => {
+  const headerSort = (col: string) => {
+    if (!(TASK_LIST_SORT_COLS as readonly string[]).includes(col)) return;
+    const sortKey = col as SortCol;
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: 1 },
+      prev.col === sortKey ? { col: sortKey, dir: prev.dir === 1 ? -1 : 1 } : { col: sortKey, dir: 1 },
     );
   };
 
@@ -1636,6 +1630,9 @@ export function TaskBoard({
       onOpen={() => setModalTaskId(row.task.id)}
       onCycleState={() => cycleTaskState(row.task)}
       onPatch={(patch) => void onPatchTask(row.task.id, patch)}
+      visibleColumns={visibleColumns}
+      phaseName={phaseName}
+      gridTemplate={gridTemplate}
       onContextMenu={(e, task) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1717,46 +1714,24 @@ export function TaskBoard({
   return (
     <>
       <div className="task-list">
-        <div className="task-list-header">
+        <div
+          className="task-list-header"
+          style={{ gridTemplateColumns: gridTemplate }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setHeaderMenu({ x: e.clientX, y: e.clientY });
+          }}
+        >
           <span className="task-list-header__stripe" />
           <span />
           <span />
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "number"}
-            dir={sortDir}
-            onDoubleClick={() => headerSort("number")}
-          >
-            Number
-          </TaskListSortHeaderBtn>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "title"}
-            dir={sortDir}
-            onDoubleClick={() => headerSort("title")}
-          >
-            Title
-          </TaskListSortHeaderBtn>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "state"}
-            dir={sortDir}
-            onDoubleClick={() => headerSort("state")}
-          >
-            State
-          </TaskListSortHeaderBtn>
-          <span>Assignee</span>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "priority"}
-            dir={sortDir}
-            onDoubleClick={() => headerSort("priority")}
-          >
-            Priority
-          </TaskListSortHeaderBtn>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "dueDate"}
-            dir={sortDir}
-            onDoubleClick={() => headerSort("dueDate")}
-          >
-            Due date
-          </TaskListSortHeaderBtn>
+          <TaskListColumnHeaders
+            columns={visibleColumns}
+            sortCol={sortCol}
+            sortDir={sortDir}
+            onSort={headerSort}
+            sortTrigger="doubleClick"
+          />
         </div>
 
         <DndContext
@@ -1931,6 +1906,37 @@ export function TaskBoard({
         menu={ctxMenu}
         onClose={() => setCtxMenu(null)}
         items={ctxMenuItems}
+      />
+      <ListViewHeaderMenu
+        menu={headerMenu}
+        onClose={() => setHeaderMenu(null)}
+        onPersonalize={() => {
+          setPersonalizeError(null);
+          setPersonalizeOpen(true);
+        }}
+      />
+      <ListViewPersonalizeModal
+        open={personalizeOpen}
+        title="Personalize task list"
+        rows={personalizeRows}
+        saving={saveListCols.isPending}
+        resetting={resetListCols.isPending}
+        error={personalizeError}
+        onClose={() => setPersonalizeOpen(false)}
+        onSave={(columns) => {
+          setPersonalizeError(null);
+          saveListCols.mutate(columns, {
+            onSuccess: () => setPersonalizeOpen(false),
+            onError: (err) => setPersonalizeError((err as Error).message),
+          });
+        }}
+        onReset={() => {
+          setPersonalizeError(null);
+          resetListCols.mutate(undefined, {
+            onSuccess: () => setPersonalizeOpen(false),
+            onError: (err) => setPersonalizeError((err as Error).message),
+          });
+        }}
       />
 
       <MoveTaskToProjectModal

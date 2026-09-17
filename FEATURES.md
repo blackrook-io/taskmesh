@@ -16,6 +16,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Capture work as simple list lines, then expand into due dates, notes, priority, color, phase, and tags
 - Organize with parent/child hierarchies, dependencies, phases, and filterable task groups
 - Drag-and-drop reorder and group membership; right-click for quick state, priority, and due-date changes
+- Personalize List View columns from the header context menu — show, hide, and reorder fields with a server-saved layout shared across projects
 - Track progress with states (Draft through Complete), activity history, and a visual change timeline
 - Soft-delete with restore; move tasks between projects or keep them in a global Tasks view
 - Assign project Tasks (and ToDos) to Owners, Managers, or Members from the list context menu or edit form
@@ -25,6 +26,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Ideas
 
 - Park lightweight Markdown ideas with tags before they become real work
+- Personalize the Ideas list columns the same way as Tasks (server-saved layout)
 - Convert an idea into a Project or a To Do in one step
 
 

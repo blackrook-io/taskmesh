@@ -121,6 +121,7 @@ export async function loadUserMap(
 export type TaskWithActors = typeof schema.tasks.$inferSelect & {
   createdBy: UserRef | null;
   updatedBy: UserRef | null;
+  owner: UserRef | null;
   assignee: UserRef | null;
 };
 
@@ -134,6 +135,7 @@ export async function attachTaskActors(
     ...row,
     createdBy: byId.get(row.createdById) ?? null,
     updatedBy: byId.get(row.updatedById) ?? null,
+    owner: byId.get(row.ownerId) ?? null,
     assignee: row.assigneeId != null ? (byId.get(row.assigneeId) ?? null) : null,
   }));
 }
@@ -144,7 +146,7 @@ export async function attachTaskActor(
 ): Promise<TaskWithActors> {
   const [withActors] = await attachTaskActors(db, [row]);
   if (!withActors) {
-    return { ...row, createdBy: null, updatedBy: null, assignee: null };
+    return { ...row, createdBy: null, updatedBy: null, owner: null, assignee: null };
   }
   return withActors;
 }

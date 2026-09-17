@@ -22,7 +22,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Non-main** (inventory + minimal on diagrams):
 
-`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `api_request_logs`, `db_stats_snapshots`
+`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `api_request_logs`, `db_stats_snapshots`
 
 ## Conceptual model
 
@@ -74,6 +74,8 @@ erDiagram
   users ||--o{ api_request_logs : "optional"
   users }o--o| uploads : avatar
   system_properties }|..|{ system_properties : "key-value"
+  users ||--o{ user_list_view_prefs : "list columns"
+  entity_fields }|..|{ entity_fields : "field catalog"
 
   projects {
     string name
@@ -101,7 +103,7 @@ erDiagram
   }
 ```
 
-Non-main entities (`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `api_request_logs`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
+Non-main entities (`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `api_request_logs`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
 
 ## Domain pages
 
