@@ -3,11 +3,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { setSessionExpiredHandler } from "../api/sessionExpired";
 import type { UserProfile } from "../types";
 
 type AuthContextValue = {
@@ -68,6 +70,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setUser = useCallback((next: UserProfile) => {
     setLoginUser(next);
     qc.setQueryData(["auth", "session"], next);
+  }, [qc]);
+
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setLoginUser(null);
+      qc.setQueryData(["auth", "session"], null);
+      qc.removeQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return !(Array.isArray(key) && key[0] === "auth" && key[1] === "session");
+        },
+      });
+    });
+    return () => setSessionExpiredHandler(null);
   }, [qc]);
 
   const value = useMemo(

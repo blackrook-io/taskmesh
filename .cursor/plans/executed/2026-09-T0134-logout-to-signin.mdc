@@ -1,0 +1,57 @@
+# T0134 — Logout to sign-in screen
+
+**Task:** T0134 (id 147) · **Project:** TaskMesh (4)  
+**Branch (after approval):** `T0134-logout-to-signin`  
+**State at plan:** `ready`
+
+## Problem
+
+When a session is invalidated mid-use, protected API calls return `401` with message `"Authentication required."`. The SPA’s `apiJson` throws that as a normal `Error`, and many pages render it as an alert at the top of the page instead of forcing re-authentication.
+
+`AuthGate` already redirects to `/login` when there is no user, but it only reacts to the session query — not to 401s from other requests while React Query still thinks the user is logged in.
+
+## Decisions (interview)
+
+1. **Return path:** Preserve current page via existing `?returnTo=` (same rules as `AuthGate` / `LoginPage.safeReturnTo`).
+2. **Status:** Redirect on **401 only** (not 403).
+3. **Banner:** On forced session-loss redirect, show a short notice on the login screen explaining the session ended.
+4. **Explicit Log out:** Leave Profile “Log out” as-is (navigate to `/login`, no session-expired banner).
+
+## Approach
+
+Centralize handling in the client API layer so every protected call behaves the same — no per-page error UI changes.
+
+1. **`client/src/api/client.ts`**
+   - On `res.status === 401` in `apiJson` and upload helpers, invoke a shared session-expired handler (once; guard against duplicate redirects under parallel failures).
+   - **Do not** treat `POST /api/v1/auth/login` 401 as session expiry (invalid credentials stay on the form).
+   - Other public routes (`GET /auth/session`, `GET /config`) either use raw `fetch` or won’t 401 for this reason; keep them out of the redirect path if they ever return 401.
+
+2. **Session-expired handler** (auth + router wiring)
+   - Clear in-memory auth user and React Query cache (same spirit as `logout`).
+   - Navigate to `/login?returnTo=<current>&reason=session` (param name can be `reason=session`).
+   - Because `AuthProvider` sits outside `BrowserRouter` today, register a navigate callback from a tiny component inside the router (or equivalent) so we get SPA navigation + `returnTo` without a full reload. Fallback: `window.location.assign` if needed.
+
+3. **`LoginPage`**
+   - If `reason=session` (or equivalent) is present, show a non-error info banner, e.g. “Your session ended. Sign in again to continue.”
+   - After successful login, navigate to `returnTo` as today; banner goes away with the query string.
+
+4. **Explicit logout**
+   - No change to Profile logout → `/login` without `reason=session`.
+
+5. **Out of scope**
+   - 403 handling, API-key auth UX, server message text changes, per-page alert cleanup beyond what the global redirect fixes.
+
+## Acceptance
+
+- Invalidate/expire session while on a protected page → immediate redirect to login with return path + session banner; no lingering “Authentication required.” alert as the primary UX.
+- Failed login credentials still show the normal login error (no false “session ended” banner).
+- Explicit Log out still goes to login without the session-expired banner.
+- After re-auth, user lands on the page they were on (`returnTo`).
+
+## QA checklist (draft)
+
+- [ ] While logged in, clear/invalidate the session cookie (or log out in another tab) and trigger any page load/action → redirected to `/login` with banner; URL includes `returnTo`.
+- [ ] Sign in again → returned to the prior page.
+- [ ] Wrong password on login → credential error only; no session banner from that 401.
+- [ ] Profile → Log out → `/login` without session-expired banner.
+- [ ] Cold visit to a protected URL while logged out → login with `returnTo`, no session banner.

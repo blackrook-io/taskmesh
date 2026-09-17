@@ -1,4 +1,4 @@
-import { applySpaClientHeaders } from "./client";
+import { applySpaClientHeaders, maybeNotifySessionExpired } from "./client";
 
 export type AssistantStatus = {
   enabled: boolean;
@@ -29,6 +29,7 @@ export async function fetchAssistantStatus(): Promise<AssistantStatus> {
   const res = await fetch("/api/v1/assistant/status", { credentials: "include" });
   const json = (await res.json()) as { data?: AssistantStatus; error?: { message: string } };
   if (!res.ok) {
+    maybeNotifySessionExpired("/api/v1/assistant/status", res.status);
     throw new Error(json.error?.message ?? "Failed to load assistant status");
   }
   if (!json.data) throw new Error("Missing assistant status");
@@ -66,6 +67,7 @@ export async function streamAssistantChat(args: {
   });
 
   if (!res.ok) {
+    maybeNotifySessionExpired("/api/v1/assistant/chat", res.status);
     let message = res.statusText;
     try {
       const text = await res.text();

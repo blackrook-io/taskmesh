@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { faArrowUp, faCheck, faDownload, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { useState } from "react";
-import { apiJson, applySpaClientHeaders } from "../api/client";
+import { apiJson, applySpaClientHeaders, maybeNotifySessionExpired } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { NavIcon } from "../components/shell/NavIcon";
 
@@ -72,6 +72,7 @@ async function downloadBackupArchive(id: string): Promise<void> {
     credentials: "include",
   });
   if (!res.ok) {
+    maybeNotifySessionExpired(`/api/v1/backups/${id}/download`, res.status);
     let message = res.statusText || "Download failed";
     try {
       const json = (await res.json()) as { error?: { message?: string } };

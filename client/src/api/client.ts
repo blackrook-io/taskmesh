@@ -1,4 +1,5 @@
 import type { ApiErrorBody } from "../types";
+import { isLoginCredentialRequest, notifySessionExpired } from "./sessionExpired";
 
 export const SPA_CLIENT_HEADER = "X-TaskMesh-Client";
 export const SPA_CLIENT_VALUE = "ui";
@@ -6,6 +7,12 @@ export const SPA_CLIENT_VALUE = "ui";
 export function applySpaClientHeaders(headers: Headers): void {
   if (!headers.has(SPA_CLIENT_HEADER)) {
     headers.set(SPA_CLIENT_HEADER, SPA_CLIENT_VALUE);
+  }
+}
+
+export function maybeNotifySessionExpired(path: string, status: number): void {
+  if (status === 401 && !isLoginCredentialRequest(path)) {
+    notifySessionExpired();
   }
 }
 
@@ -45,6 +52,7 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const json = (await readJsonOrThrow(res, path)) as T | ApiErrorBody;
   if (!res.ok) {
+    maybeNotifySessionExpired(path, res.status);
     const err = json as ApiErrorBody;
     throw new Error(err.error?.message ?? res.statusText);
   }
@@ -72,6 +80,7 @@ export async function uploadFileWithMeta(file: File): Promise<UploadResult> {
   });
   const json = (await res.json()) as { data?: UploadResult; error?: { message: string } };
   if (!res.ok) {
+    maybeNotifySessionExpired("/api/v1/uploads", res.status);
     throw new Error(json.error?.message ?? "Upload failed");
   }
   if (!json.data?.url || json.data.id == null) {
