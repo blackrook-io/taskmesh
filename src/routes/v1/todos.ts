@@ -24,7 +24,8 @@ import {
 import { userHasAdministrator } from "../../services/roles.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { copyTaggings } from "../../services/copyTaggings.js";
-import { getCurrentUserId } from "../../services/users.js";
+import { getCurrentUserId, attachAssignees, attachAssignee, attachTaskActor } from "../../services/users.js";
+import { resolveAssigneeId } from "../../services/assignees.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -42,6 +43,7 @@ const createBody = z.object({
   priority: taskPrioritySchema.optional(),
   projectId: z.number().int().positive().optional().nullable(),
   sourceIdeaId: z.number().int().positive().optional().nullable(),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const patchBody = z.object({
@@ -53,6 +55,7 @@ const patchBody = z.object({
   state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   projectId: z.number().int().positive().nullable().optional(),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const listQuery = z.object({
@@ -119,7 +122,7 @@ todosRouter.get("/", async (req, res) => {
       .from(schema.todos)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(schema.todos.updatedAt), desc(schema.todos.id));
-    res.json({ data: rows });
+    res.json({ data: await attachAssignees(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -144,6 +147,12 @@ todosRouter.post("/", async (req, res) => {
       await assertCanAccessOwned(db, actorId, idea.ownerId);
     }
     const number = await allocateTodoNumber(db);
+    const projectId = parsed.projectId ?? null;
+    const assigneeId = await resolveAssigneeId(db, {
+      projectId,
+      requested: parsed.assigneeId,
+      creating: true,
+    });
     const [row] = await db
       .insert(schema.todos)
       .values({
@@ -155,19 +164,20 @@ todosRouter.post("/", async (req, res) => {
         color: parsed.color ?? null,
         state: parsed.state ?? "new",
         priority: parsed.priority ?? "none",
-        projectId: parsed.projectId ?? null,
+        projectId,
         sourceIdeaId: parsed.sourceIdeaId ?? null,
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
         ownerId: actorId,
+        assigneeId,
       })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create ToDo");
       return;
     }
-    res.status(201).json({ data: row });
+    res.status(201).json({ data: await attachAssignee(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -183,7 +193,7 @@ todosRouter.get("/:id", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     await assertCanAccessDualScoped(db, actorId, row);
-    res.json({ data: row });
+    res.json({ data: await attachAssignee(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -203,6 +213,7 @@ todosRouter.patch("/:id", async (req, res) => {
         "state",
         "priority",
         "projectId",
+        "assigneeId",
       ])
     ) {
       sendError(res, 400, "empty_patch", "Provide at least one field to update");
@@ -222,6 +233,16 @@ todosRouter.patch("/:id", async (req, res) => {
     if (parsed.projectId !== undefined && parsed.projectId != null) {
       await assertCanAccessProject(db, actorId, parsed.projectId);
     }
+    const nextProjectId =
+      parsed.projectId !== undefined ? parsed.projectId : existing.projectId;
+    const projectChanging =
+      parsed.projectId !== undefined && parsed.projectId !== existing.projectId;
+    const nextAssigneeId = await resolveAssigneeId(db, {
+      projectId: nextProjectId,
+      requested: parsed.assigneeId,
+      previousAssigneeId: existing.assigneeId,
+      projectChanging,
+    });
     const [row] = await db
       .update(schema.todos)
       .set({
@@ -235,12 +256,15 @@ todosRouter.patch("/:id", async (req, res) => {
         ...(parsed.state !== undefined ? { state: parsed.state } : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.projectId !== undefined ? { projectId: parsed.projectId } : {}),
+        ...(parsed.assigneeId !== undefined || nextAssigneeId !== existing.assigneeId
+          ? { assigneeId: nextAssigneeId }
+          : {}),
         updatedById: actorId,
         updatedAt: new Date(),
       })
       .where(eq(schema.todos.id, id))
       .returning();
-    res.json({ data: row });
+    res.json({ data: row ? await attachAssignee(db, row) : row });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -296,13 +320,18 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
       await assertCanAccessProject(db, actorId, body.projectId);
     }
     const number = await allocateTodoNumber(db);
+    const projectId = body.projectId ?? null;
+    const assigneeId = await resolveAssigneeId(db, {
+      projectId,
+      creating: true,
+    });
     const [todo] = await db
       .insert(schema.todos)
       .values({
         number,
         title: body.title ?? idea.title,
         description: idea.body,
-        projectId: body.projectId ?? null,
+        projectId,
         sourceIdeaId: idea.id,
         state: "new",
         priority: "none",
@@ -310,6 +339,7 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
         createdById: actorId,
         updatedById: actorId,
         ownerId: actorId,
+        assigneeId,
       })
       .returning();
     if (!todo) {
@@ -321,7 +351,7 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
       { entityType: "idea", entityId: idea.id },
       { entityType: "todo", entityId: todo.id },
     );
-    res.status(201).json({ data: todo });
+    res.status(201).json({ data: await attachAssignee(db, todo) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -354,6 +384,11 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
       const note = `Action by: ${todo.actionBy.toISOString()}`;
       description = description ? `${description}\n\n${note}` : note;
     }
+    const assigneeId = await resolveAssigneeId(db, {
+      projectId: projectId ?? null,
+      requested: todo.assigneeId != null ? todo.assigneeId : undefined,
+      creating: true,
+    });
     const [task] = await db
       .insert(schema.tasks)
       .values({
@@ -369,6 +404,7 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
         createdById: actorId,
         updatedById: actorId,
         ownerId: actorId,
+        assigneeId,
       })
       .returning();
     if (!task) {
@@ -380,7 +416,7 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
       { entityType: "todo", entityId: todo.id },
       { entityType: "task", entityId: task.id },
     );
-    res.status(201).json({ data: task });
+    res.status(201).json({ data: await attachTaskActor(db, task) });
   } catch (err) {
     handleRouteError(res, err);
   }

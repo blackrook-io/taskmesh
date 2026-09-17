@@ -220,10 +220,11 @@ First-class **ToDo** records (UI label “ToDo”). Display number → **D####**
 | `created_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
 | `updated_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
+| `assignee_id` | integer | yes | — | FK → `users.id` — assigned user (T0117); same pool rules as tasks when `project_id` is set |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `number`; FKs as above.
+**Constraints:** PK `id`; UNIQUE `number`; FKs as above (`assignee_id` · **ON DELETE SET NULL**).
 
 ---
 

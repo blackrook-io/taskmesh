@@ -33,6 +33,7 @@ const sessionBody = z.object({
     phaseId: z.number().int().positive().nullable(),
     parentId: z.number().int().positive().nullable(),
     projectId: z.number().int().positive().nullable(),
+    assigneeId: z.number().int().positive().nullable().optional(),
   }),
 });
 
@@ -93,6 +94,7 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       phaseId: parsed.before.phaseId,
       parentId: parsed.before.parentId,
       projectId: parsed.before.projectId,
+      assigneeId: parsed.before.assigneeId ?? null,
     };
     const after: TaskLike = {
       title: task.title,
@@ -104,6 +106,7 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       phaseId: task.phaseId,
       parentId: task.parentId,
       projectId: task.projectId,
+      assigneeId: task.assigneeId,
     };
     const row = await recordTaskChanges(db, taskId, before, after, {
       actorId,

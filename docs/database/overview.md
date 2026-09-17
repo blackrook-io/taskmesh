@@ -62,8 +62,8 @@ erDiagram
   task_groups }o--o| tags : "auto_tag"
   wiki_nodes ||--o{ wiki_nodes : "parent"
 
-  users ||--o{ tasks : "createdBy / updatedBy"
-  users ||--o{ todos : "createdBy / updatedBy"
+  users ||--o{ tasks : "createdBy / updatedBy / owner / assignee"
+  users ||--o{ todos : "createdBy / updatedBy / owner / assignee"
   users ||--o{ project_managers : "listed"
   users ||--o{ project_members : "listed"
   users ||--o{ project_viewers : "listed"

@@ -41,6 +41,7 @@ import {
   rejectDeleteIfHasChildren,
 } from "./taskDependencies.js";
 import { applyTaskGroupAutoTags } from "../../services/taskGroupAutoTag.js";
+import { resolveAssigneeId } from "../../services/assignees.js";
 
 const taskBody = z.object({
   title: plainTitle(2000),
@@ -54,6 +55,7 @@ const taskBody = z.object({
   state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const taskPatch = z.object({
@@ -67,6 +69,7 @@ const taskPatch = z.object({
   state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const reorderBody = z.object({
@@ -144,6 +147,11 @@ tasksRouter.post("/", async (req, res) => {
     const number = await allocateTaskNumber(db);
     const dueDate = resolveDueDate(parsed) ?? null;
     const initialState = parsed.state ?? "new";
+    const assigneeId = await resolveAssigneeId(db, {
+      projectId,
+      requested: parsed.assigneeId,
+      creating: true,
+    });
 
     const [row] = await db
       .insert(schema.tasks)
@@ -162,6 +170,7 @@ tasksRouter.post("/", async (req, res) => {
         createdById: actorId,
         updatedById: actorId,
         ownerId: actorId,
+        assigneeId,
       })
       .returning();
     if (!row) {
@@ -308,11 +317,21 @@ tasksRouter.patch("/:taskId", async (req, res) => {
         "state",
         "priority",
         "sortOrder",
+        "assigneeId",
       ]) || dueDate !== undefined;
     if (!hasFieldChange) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
     }
+
+    const nextAssigneeId =
+      parsed.assigneeId !== undefined
+        ? await resolveAssigneeId(db, {
+            projectId,
+            requested: parsed.assigneeId,
+            previousAssigneeId: existing.assigneeId,
+          })
+        : existing.assigneeId;
 
     if (parsed.parentId !== undefined) {
       if (await wouldCreateParentCycle(db, taskId, parsed.parentId)) {
@@ -361,6 +380,7 @@ tasksRouter.patch("/:taskId", async (req, res) => {
         ...(persistedState !== undefined ? { state: persistedState } : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
+        ...(parsed.assigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
         updatedAt: new Date(),
         updatedById: actorId,
       })

@@ -50,6 +50,8 @@ import {
 } from "./TaskListContextMenu";
 import { MoveTaskToProjectModal } from "./MoveTaskToProjectModal";
 import { SetTaskParentModal } from "./SetTaskParentModal";
+import { AssignToUserModal } from "./AssignToUserModal";
+import { AssigneeSelectField } from "./AssigneeSelectField";
 import { FilterIcon } from "./TaskListFilterBar";
 import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
@@ -120,6 +122,7 @@ type TaskPatch = {
   projectId?: number | null;
   state?: TaskState;
   priority?: TaskPriority;
+  assigneeId?: number | null;
 };
 
 type TaskSnapshot = {
@@ -131,6 +134,7 @@ type TaskSnapshot = {
   projectId: number | null;
   state: TaskState;
   priority: TaskPriority;
+  assigneeId: number | null;
 };
 
 function taskDue(task: Task): string | null {
@@ -147,6 +151,7 @@ function snapshotFromTask(task: Task): TaskSnapshot {
     projectId: task.projectId,
     state: task.state,
     priority: task.priority,
+    assigneeId: task.assigneeId ?? null,
   };
 }
 
@@ -374,6 +379,8 @@ export function TaskEditorFields({
   const [projectId, setProjectId] = useState(initial.projectId);
   const [state, setState] = useState(initial.state);
   const [priority, setPriority] = useState(initial.priority);
+  const [assigneeId, setAssigneeId] = useState(initial.assigneeId);
+  const [assignee, setAssignee] = useState(task.assignee ?? null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -392,6 +399,7 @@ export function TaskEditorFields({
     phaseId: task.phaseId,
     parentId: task.parentId,
     projectId: task.projectId,
+    assigneeId: task.assigneeId ?? null,
   });
 
   const flushSessionHistory = async () => {
@@ -453,6 +461,7 @@ export function TaskEditorFields({
     projectId,
     state,
     priority,
+    assigneeId,
   });
 
   const applySnap = (snap: TaskSnapshot) => {
@@ -464,6 +473,7 @@ export function TaskEditorFields({
     setProjectId(snap.projectId);
     setState(snap.state);
     setPriority(snap.priority);
+    setAssigneeId(snap.assigneeId);
   };
 
   const applyServerTask = (row: Task) => {
@@ -475,6 +485,8 @@ export function TaskEditorFields({
     setProjectId(row.projectId);
     setState(row.state);
     setPriority(row.priority);
+    setAssigneeId(row.assigneeId ?? null);
+    setAssignee(row.assignee ?? null);
   };
 
   const commit = async (previous: TaskSnapshot, patch: TaskPatch) => {
@@ -770,6 +782,17 @@ export function TaskEditorFields({
             </div>
           </div>
         </div>
+        <AssigneeSelectField
+          id={`t-assignee-${task.id}`}
+          projectId={projectId}
+          assigneeId={assigneeId}
+          assignee={assignee}
+          onChange={(next) => {
+            const prev = { ...currentSnap(), assigneeId };
+            setAssigneeId(next);
+            void commit(prev, { assigneeId: next });
+          }}
+        />
       </div>
       <div className="field task-expand__notes">
         <div className="task-expand__notes-head">
@@ -1005,6 +1028,11 @@ function SortableTaskRow({
         data-ctx-field="state"
       >
         {TASK_STATE_LABELS[task.state]}
+      </span>
+      <span className="task-list-row__assignee" title={task.assignee?.displayName ?? undefined}>
+        {task.assignee?.displayName ?? (
+          <span className="muted">—</span>
+        )}
       </span>
       <select
         className={taskPriorityClass("task-list-row__priority", task.priority)}
@@ -1267,6 +1295,7 @@ export function TaskBoard({
   const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
   const [moveTaskId, setMoveTaskId] = useState<number | null>(null);
   const [parentTaskId, setParentTaskId] = useState<number | null>(null);
+  const [assignTaskId, setAssignTaskId] = useState<number | null>(null);
 
   const toggleParentCollapse = (taskId: number) => {
     setCollapsedParents((prev) => {
@@ -1624,6 +1653,8 @@ export function TaskBoard({
   const moveTask = moveTaskId != null ? (tasks.find((t) => t.id === moveTaskId) ?? null) : null;
   const parentTask =
     parentTaskId != null ? (tasks.find((t) => t.id === parentTaskId) ?? null) : null;
+  const assignTask =
+    assignTaskId != null ? (tasks.find((t) => t.id === assignTaskId) ?? null) : null;
 
   const ctxMenuItems: TaskListContextMenuItem[] = (() => {
     if (!ctxMenu || !ctxTask) return [];
@@ -1638,6 +1669,11 @@ export function TaskBoard({
         type: "action",
         label: "Set Parent…",
         onSelect: () => setParentTaskId(ctxTask.id),
+      },
+      {
+        type: "action",
+        label: "Assign to…",
+        onSelect: () => setAssignTaskId(ctxTask.id),
       },
     ];
     items.push({ type: "separator" });
@@ -1706,6 +1742,7 @@ export function TaskBoard({
           >
             State
           </TaskListSortHeaderBtn>
+          <span>Assignee</span>
           <TaskListSortHeaderBtn
             sorted={sortCol === "priority"}
             dir={sortDir}
@@ -1914,6 +1951,18 @@ export function TaskBoard({
         onSave={async (nextParentId) => {
           if (!parentTask) return;
           await onPatchTask(parentTask.id, { parentId: nextParentId });
+        }}
+      />
+
+      <AssignToUserModal
+        open={assignTask != null}
+        projectId={assignTask?.projectId ?? null}
+        currentAssigneeId={assignTask?.assigneeId ?? null}
+        currentAssignee={assignTask?.assignee ?? null}
+        onClose={() => setAssignTaskId(null)}
+        onSave={async (nextAssigneeId) => {
+          if (!assignTask) return;
+          await onPatchTask(assignTask.id, { assigneeId: nextAssigneeId });
         }}
       />
     </>

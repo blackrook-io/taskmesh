@@ -86,6 +86,7 @@ Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the 
 Tables: `project_managers`, `project_members`, `project_viewers`.
 
 - **Owner** (`projects.owner_id`) is an implicit Manager (not duplicated in `project_managers`).
+- **Assignee** (`tasks.assignee_id` / `todos.assignee_id`, T0117) is distinct from record **owner**. For project-scoped rows the assignee must be the Project Owner, a Manager, or a Member (not a Viewer). Unscoped rows and Ideas stay unassigned.
 - A user may be in at most one list per project (application rule).
 - Administrators are not listed; they already have full access.
 - **Until T0128**, list membership does not change record access (owner-or-Administrator only).

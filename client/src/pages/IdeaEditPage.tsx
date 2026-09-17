@@ -5,6 +5,7 @@ import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { TagInput } from "../components/shared/TagInput";
+import { AssigneeSelectField } from "../components/AssigneeSelectField";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { formatEntityRef } from "../lib/entityRef";
 import { sanitizePlainText } from "../lib/plainText";
@@ -163,6 +164,15 @@ export function IdeaEditPage() {
         <label htmlFor="idea-title">Title</label>
         <input id="idea-title" type="text" value={title} onChange={(e) => setTitle(sanitizePlainText(e.target.value))} />
       </div>
+
+      <AssigneeSelectField
+        id="idea-assignee"
+        projectId={null}
+        assigneeId={idea?.assigneeId ?? null}
+        assignee={idea?.assignee ?? null}
+        disabled
+        disabledHint="Ideas have no project pool — assignment is not available"
+      />
 
       <div className="field">
         <label>Body</label>

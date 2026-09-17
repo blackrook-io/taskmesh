@@ -10,6 +10,7 @@ export type TaskEditSessionBaseline = {
   phaseId: number | null;
   parentId: number | null;
   projectId: number | null;
+  assigneeId: number | null;
 };
 
 /** Open modal sessions: baseline preserved across remounts so History stays one line. */

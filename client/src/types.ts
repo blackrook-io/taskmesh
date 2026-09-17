@@ -3,6 +3,8 @@ export type Idea = {
   number: number;
   title: string;
   body: string | null;
+  assigneeId?: number | null;
+  assignee?: UserRef | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -86,8 +88,10 @@ export type Task = {
   sortOrder: number;
   createdById?: number;
   updatedById?: number;
+  assigneeId?: number | null;
   createdBy?: UserRef | null;
   updatedBy?: UserRef | null;
+  assignee?: UserRef | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -153,6 +157,8 @@ export type Todo = {
   sourceIdeaId: number | null;
   createdById: number;
   updatedById: number;
+  assigneeId?: number | null;
+  assignee?: UserRef | null;
   createdAt: string;
   updatedAt: string;
 };

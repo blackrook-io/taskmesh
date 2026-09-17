@@ -46,6 +46,7 @@ import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
+import { AssigneeSelectField } from "./AssigneeSelectField";
 
 function inlineStateOptions(current: string | undefined): readonly string[] {
   if (current === "pending") return ["pending", ...INLINE_TODO_LIST_STATES];
@@ -311,6 +312,13 @@ function TodoEditorFields({
             }}
           />
         </div>
+        <AssigneeSelectField
+          id={`d-assignee-${todo.id}`}
+          projectId={todo.projectId}
+          assigneeId={todo.assigneeId ?? null}
+          assignee={todo.assignee ?? null}
+          onChange={(next) => void patch({ assigneeId: next })}
+        />
       </div>
       <div className="field task-expand__notes">
         <div className="task-expand__notes-head">

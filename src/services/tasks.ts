@@ -141,6 +141,7 @@ const TRACKED_FIELDS = [
   "phaseId",
   "parentId",
   "projectId",
+  "assigneeId",
 ] as const;
 
 type TrackedField = (typeof TRACKED_FIELDS)[number];
@@ -155,6 +156,7 @@ const FIELD_LABELS: Record<TrackedField, string> = {
   phaseId: "Phase",
   parentId: "Parent",
   projectId: "Project",
+  assigneeId: "Assignee",
 };
 
 export type TaskLike = Pick<typeof schema.tasks.$inferSelect, TrackedField>;
@@ -201,6 +203,17 @@ async function formatChangeValue(
         .from(schema.tasks)
         .where(eq(schema.tasks.id, Number(value)));
       return parent ? formatTaskNumber(parent.number) : `#${String(value)}`;
+    }
+    case "assigneeId": {
+      const [user] = await db
+        .select({
+          displayName: schema.users.displayName,
+          number: schema.users.number,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, Number(value)));
+      if (!user) return `#${String(value)}`;
+      return user.displayName || `U${String(user.number).padStart(4, "0")}`;
     }
     case "description":
     case "title":

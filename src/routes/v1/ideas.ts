@@ -13,16 +13,19 @@ import {
 } from "../../services/ownership.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { userHasAdministrator } from "../../services/roles.js";
-import { getCurrentUserId } from "../../services/users.js";
+import { getCurrentUserId, attachAssignees, attachAssignee } from "../../services/users.js";
+import { resolveIdeaAssigneeId } from "../../services/assignees.js";
 
 const ideaBody = z.object({
   title: plainTitle(500),
   body: optionalMarkdown(500_000),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const ideaPatch = z.object({
   title: optionalPlainTitle(500),
   body: optionalMarkdown(500_000),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const idParam = z.coerce.number().int().positive();
@@ -39,7 +42,7 @@ ideasRouter.get("/", async (_req, res) => {
       .from(schema.ideas)
       .where(scope)
       .orderBy(desc(schema.ideas.updatedAt));
-    res.json({ data: rows });
+    res.json({ data: await attachAssignees(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -50,6 +53,7 @@ ideasRouter.post("/", async (req, res) => {
     const parsed = ideaBody.parse(req.body);
     const number = await allocateIdeaNumber(db);
     const ownerId = await getCurrentUserId(db);
+    const assigneeId = resolveIdeaAssigneeId(parsed.assigneeId);
     const [row] = await db
       .insert(schema.ideas)
       .values({
@@ -57,13 +61,14 @@ ideasRouter.post("/", async (req, res) => {
         title: parsed.title,
         body: parsed.body ?? null,
         ownerId,
+        assigneeId,
       })
       .returning();
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create idea");
       return;
     }
-    res.status(201).json({ data: row });
+    res.status(201).json({ data: await attachAssignee(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -79,7 +84,7 @@ ideasRouter.get("/:id", async (req, res) => {
       return;
     }
     await assertCanAccessOwned(db, actorId, row.ownerId);
-    res.json({ data: row });
+    res.json({ data: await attachAssignee(db, row) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -89,7 +94,7 @@ ideasRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const parsed = ideaPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["title", "body"])) {
+    if (!hasDefinedKeys(parsed, ["title", "body", "assigneeId"])) {
       sendError(res, 400, "empty_patch", "Provide title and/or body");
       return;
     }
@@ -100,16 +105,21 @@ ideasRouter.patch("/:id", async (req, res) => {
       return;
     }
     await assertCanAccessOwned(db, actorId, existing.ownerId);
+    const assigneeId =
+      parsed.assigneeId !== undefined
+        ? resolveIdeaAssigneeId(parsed.assigneeId)
+        : undefined;
     const [row] = await db
       .update(schema.ideas)
       .set({
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.body !== undefined ? { body: parsed.body } : {}),
+        ...(assigneeId !== undefined ? { assigneeId } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.ideas.id, id))
       .returning();
-    res.json({ data: row });
+    res.json({ data: row ? await attachAssignee(db, row) : row });
   } catch (err) {
     handleRouteError(res, err);
   }

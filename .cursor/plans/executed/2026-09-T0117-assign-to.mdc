@@ -1,0 +1,97 @@
+# T0117 — List context menu: Assign to… (assignee)
+
+**Branch (after approval):** `T0117-assign-to`  
+**Task:** T0117 (id 130) · project 4 · depends on T0045 (complete)  
+**Version on finish-up:** PATCH bump (schema change → **MINOR** +1, PATCH `0`)
+
+## Goal
+
+Add a dedicated mutable **Assigned to** field (`assigneeId`, not `ownerId`) on Tasks, ToDos, and Ideas; expose it in API + edit UI; add list-view **Assign to…** (Tasks) with row display; restrict candidates to Project **Owner + Managers + Members** (exclude Viewers).
+
+## Interview decisions
+
+| # | Decision |
+|---|----------|
+| 1 | Assignee pool = **Managers + Members** of the applicable Project; **Project Owner** is always an implicit Manager → include Owner in the pool. **Exclude Viewers.** |
+| 2 | Show assignee on **task list rows** (chip/name), not only menu + edit. |
+| 3 | Ideas / ToDos: **schema + API + edit UI only** (no list context menu for those). |
+| 4 | Default assignee = **`null`**, except solo-owner projects (see Auto-assign). |
+| 5 | **Clear / unassign** supported from modal and edit UI. |
+
+## Auto-assign (solo-owner projects)
+
+A project is **solo-owner** when `project_managers`, `project_members`, and `project_viewers` are all empty (Owner only; Owner is not stored in those tables).
+
+- On **create** of a Task/ToDo with that `projectId`: stamp `assigneeId = project.ownerId`.
+- On **move** into such a project (Task `projectId` change): if the new project is solo-owner, set `assigneeId = project.ownerId` (overwrite previous assignee or null → Owner).
+- **Migration backfill:** for existing Tasks/ToDos whose `projectId` is solo-owner and `assigneeId` is null, set to that project’s Owner.
+- Adding users later does **not** clear existing assignees. Removing the last non-owner user does **not** bulk-reassign historical rows (only create/move + one-time backfill).
+
+## Unscoped / Ideas (no applicable Project)
+
+- **Tasks/ToDos with `projectId = null`:** `assigneeId` must stay `null`. API rejects non-null assignee. UI: Assign disabled with short hint (“Link to a project to assign”).
+- **Ideas** (no `projectId` column): same — field exists for API/edit consistency; UI shows Unassigned + disabled picker (no project pool). Clear is a no-op. No auto-assign. (Deferred product: project-linked Ideas if ever added.)
+
+## Scope
+
+### Schema + migration
+
+- Add nullable `assignee_id` → `users.id` (ON DELETE SET NULL) on `tasks`, `todos`, `ideas`.
+- Indexes on `assignee_id` (and keep docs in sync).
+- Backfill solo-owner project Tasks/ToDos as above.
+
+### API
+
+- Create/PATCH/list for tasks (nested + standalone), todos, ideas: accept `assigneeId` (`number | null`); embed `assignee: UserRef | null` on reads (mirror `createdBy`).
+- Validate: if `projectId` set, `assigneeId` must be null or in Owner∪managers∪members; if no project, only null.
+- Apply auto-assign on create/move when solo-owner.
+- **New** authenticated (non-admin) endpoint, e.g. `GET /api/v1/projects/:projectId/assignable-users` → `{ data: UserRef[] }` = Owner + managers + members (active/auth-capable only). Callers need project access per existing rules (T0128); not admin-gated.
+- Do **not** mutate immutable `ownerId`.
+
+### Client — Tasks (primary)
+
+- **`AssignToUserModal`**: same pattern as Move / Set Parent; search/filter assignable users; **Clear assignee**; Cancel leaves unchanged.
+- **Context menu** “Assign to…” on `TaskBoard` + `TasksListPage` (next to Move / Set Parent).
+- **`TaskEditorFields`**: Assigned to control (picker + clear).
+- **List rows**: compact assignee display (displayName; muted “Unassigned” optional — prefer show only when set to reduce noise).
+
+### Client — ToDos / Ideas
+
+- `TodoEditorFields` + Idea edit form: Assigned to field (project-scoped picker when `projectId` set; otherwise disabled).
+
+### Docs
+
+- Update `docs/database/` (tasks, todos/ideas, overview ERD if needed, glossary).
+- Run `npm run docs:sync-schema` after migrate.
+
+## Out of scope
+
+- Rebuilding T0045 menu chrome beyond the Assign entry.
+- Assign context menu on ToDo/Idea lists.
+- Viewers in the assignable pool.
+- Changing ownership (`ownerId`) or admin ownership transfer.
+- Filtering list views by assignee (follow-up Task if desired).
+
+## Implementation order
+
+1. Schema + migration (+ solo-owner backfill) + docs.
+2. Shared assignee validation + attach helper; wire tasks/todos/ideas routes; assignable-users endpoint.
+3. `AssignToUserModal` + context menu + list row chip + `TaskEditorFields`.
+4. Todo + Idea edit fields.
+5. QA on project TaskBoard, global `/tasks`, solo-owner auto-assign, clear, unscoped rejection.
+
+## Risks / notes
+
+- Project Owner must appear in assignable list even when not in `project_managers`.
+- Moving between projects may invalidate an assignee → validation or auto-clear/reassign on move (solo-owner → Owner; otherwise if current assignee not in new pool → clear to null, unless solo-owner rule applies).
+- `platform-rules.mdc` historically said no assignment; this Task supersedes that for assignee.
+
+## Finish-up reminders
+
+- MINOR bump (new Drizzle SQL); `RELEASE_NOTES.md`; `FEATURES.md` (user-facing Assign).
+- Archive this plan → `.cursor/plans/executed/` on the feature branch.
+- PR → merge → `deploy:prod` → PROD Task complete + comment.
+
+## QA follow-ups
+
+- **Assigned to dropdown labels:** drop `(U####)` / `referenceId` from option text in `AssigneeSelectField` — show display name only (Task edit modal and shared select).
