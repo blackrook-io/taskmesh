@@ -7,7 +7,8 @@ export function HomePage() {
       </h1>
       <p className="muted">Personal projects, ideas, and Markdown — on your server.</p>
       <p className="muted" style={{ marginTop: "1rem" }}>
-        Use the left rail to open Projects, Ideas, Lists, or Settings. Press ⌘K / Ctrl+K to jump anywhere.
+        Use the left rail to open a project and its modules, or Settings. Administrators can press ⌘K
+        / Ctrl+K to search globally.
       </p>
     </div>
   );

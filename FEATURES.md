@@ -5,7 +5,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 - Turn Ideas into structured projects with Markdown overviews, tags, and status
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, and Image Boards
-- Drag to reorder projects in the left nav; pick projects quickly from a compact picker when the rail is collapsed
+- Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
 - Assign users to Managers, Members, and Viewers per project — Managers and Owners get Settings; Members write; Viewers read-only
 
@@ -66,7 +66,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 ## Search & navigation
 
-- Jump anywhere with ⌘K / Ctrl+K: recent items, live search hits, and quick actions
+- Administrators jump anywhere with ⌘K / Ctrl+K: recent items, live search hits, and quick actions
 - Full-text search across ideas, projects, tasks, documents, boards, canvases, wiki, and lists
 - Browse by tag; collapse or hide the left rail for more canvas space
 

@@ -1,0 +1,96 @@
+# T0133 — Redesign app nav panels
+
+**Task:** T0133 (id 146) · **Priority:** high · **State at plan:** ready  
+**Branch (after approval):** `T0133-nav-redesign`
+
+## Goal
+
+Collapse the desktop two-column left chrome (`AppNav` + `ContextNav`) into a **single** left rail so the landscape is narrower and project navigation is nested under the active project. Remove global list destinations from the rail to avoid membership/permission confusion. Restrict **⌘K / command palette** to Administrators.
+
+## Decisions (interview)
+
+1. **Remove** left-nav entries for Tasks, Ideas, Filesystem, Image Board, Lists, Calendar. Do **not** expose global lists as primary navigation. **Only Admins** may use global search (⌘K / palette trigger + shortcut).
+2. Project modules expand **only under the active project** (option A); other projects stay flat links.
+3. **Less (icon) mode:** repurpose the collapsed rail icons for **project-specific** module entries (Overview, Tasks, To Dos, …) when a project is active — not the removed global destinations.
+4. **Mobile:** merge Menu + Section drawers into **one** drawer mirroring the single column.
+5. Dashboard / external-links card idea — **out of scope**; user will open a separate Task later (no deferred Task created by this workstream).
+6. Multi-user membership redesign — **non-goal**; keep existing Admin/Settings and project-module permission gates.
+7. No extra one-click destinations beyond the retained chrome below.
+
+## Retained in the single rail
+
+- TaskMesh logo + tagline (full mode)
+- Project list (All projects, DnD projects, New project)
+- Active-project **submenu**: current ContextNav project items (Overview, Tasks + pinned groups, To Dos, Documents, Kanban, Canvas, Images, Wiki if enabled, Settings pinned) under the selected project name
+- ⌘K — **Administrators only** (button + Ctrl/⌘K)
+- Administration (admins), Settings, version, clock (full); Less: project-module icons + Admin/Settings/version as space allows
+- AI assistant control (full footer) — keep unless it crowds Less; Less can keep omitting AI as today
+
+## Non-goals
+
+- New Dashboard / link cards
+- Changing project membership / RBAC model beyond Admin-only palette
+- Deleting global routes (`/ideas`, `/tasks`, …) — leave pages reachable by URL for Admin/deep-link; just remove primary nav affordances for non-admins (and palette for non-admins)
+- Schema / API changes
+
+## Implementation outline
+
+### Layout / CSS
+
+- `AppShell.tsx` + `index.css`: drop the center context column on desktop (2-column grid: nav + main). Remove `--context-nav-width` from the desktop track (or set unused).
+- Mobile: one drawer / one toggle that hosts the unified `AppNav`; delete separate Section drawer wiring.
+
+### AppNav
+
+- Remove global `NavLink`s for Ideas / Tasks / Filesystem / Image board / Lists / Calendar.
+- Under the **active** project row, render nested items from `useContextNavItems()` (or a focused `useProjectNavItems(projectId)` helper split from `useShellNav.ts`).
+- Non-active projects: single `NavLink` to `/projects/:id` (no nested list).
+- Full mode: nested labels under active project; Settings stays in the project submenu (permission-gated as today), not only global Settings.
+- Less mode: when `activeProjectId` is set, show icon buttons for that project’s module tabs (`?tab=`); project switcher via existing `ProjectSelectModal` (or MeshMark/home). When no project active, Less shows project picker + footer only.
+- Gate palette button (and pass-through) on `userIsAdministrator`.
+
+### ContextNav
+
+- Stop mounting `ContextNav` from `AppShell`. Prefer deleting the component **or** extracting a shared nested-list renderer reused by `AppNav` then delete the standalone pane.
+
+### Command palette / Layout
+
+- `Layout.tsx`: only open palette / bind Ctrl/⌘K when `userIsAdministrator(user)`.
+- Hide or no-op the AppNav ⌘K control for non-admins.
+- Optional light polish: HomePage copy that still mentions Ideas/Lists/⌘K for everyone — update to match new IA.
+
+### useShellNav
+
+- Keep project middle-tab builders; trim or leave unused section branches (ideas/tasks/lists context) for Admin deep-links / future — no need to delete route pages.
+- Ensure active highlighting still uses `?tab=` / task-group params.
+
+### Smoke / regression
+
+- Project switch preserves last tab behavior as today.
+- Module-gated wiki / settings visibility unchanged.
+- Admin vs non-admin: palette present only for admin.
+- Full / less / hidden density still works; mobile single drawer closes on navigate.
+
+## Files (expected)
+
+| Area | Files |
+|------|--------|
+| Shell | `AppShell.tsx`, `AppNav.tsx`, `ContextNav.tsx` (remove/reuse), maybe `ProjectSelectModal.tsx` |
+| Hook | `useShellNav.ts`, possibly `useAppNavMode.ts` / `appNavMode.ts` if width keys change |
+| Styles | `client/src/index.css` |
+| Gate | `Layout.tsx`, maybe `CommandPalette.tsx` |
+| Copy | `HomePage.tsx` (if it still advertises removed nav) |
+
+## Out of scope follow-ups (user-owned)
+
+- Dashboard / embed-links exploration Task (user will create).
+
+## Acceptance
+
+- [x] Desktop shows one left rail; center ContextNav column gone.
+- [x] Active project shows nested project modules; other projects do not.
+- [x] Global Ideas/Tasks/Filesystem/Image Board/Lists/Calendar absent from left rail.
+- [x] ⌘K / palette only for Administrators.
+- [x] Less mode icons drive active-project modules.
+- [x] Mobile: single nav drawer with the same IA.
+- [x] Logo, projects, New project, Admin, Settings, version, clock retained appropriately by density mode.
