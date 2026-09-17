@@ -18,6 +18,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Drag-and-drop reorder and group membership; right-click for quick state, priority, and due-date changes
 - Track progress with states (Draft through Complete), activity history, and a visual change timeline
 - Soft-delete with restore; move tasks between projects or keep them in a global Tasks view
+- Assign project Tasks (and ToDos) to Owners, Managers, or Members from the list context menu or edit form
 
 
 

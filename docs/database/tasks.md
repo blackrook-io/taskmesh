@@ -11,7 +11,7 @@ erDiagram
   projects ||--o{ tasks : "project_id"
   project_phases ||--o{ tasks : "phase_id"
   tasks ||--o{ tasks : "parent_id"
-  users ||--o{ tasks : "created_by / updated_by / owner"
+  users ||--o{ tasks : "created_by / updated_by / owner / assignee"
   tasks ||--o{ task_activity : "task_id"
   tasks ||--o{ task_dependencies : "task_id"
   tasks ||--o{ task_dependencies : "depends_on_task_id"
@@ -80,6 +80,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 | `created_by_id` | integer | no | — | FK → `users.id` |
 | `updated_by_id` | integer | no | — | FK → `users.id` |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112); unsorted tasks rely on this |
+| `assignee_id` | integer | yes | — | FK → `users.id` — assigned user (T0117); distinct from ownership. When `project_id` is set, must be Project Owner, Manager, or Member (not Viewer). Null when unassigned or unscoped. |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -93,6 +94,8 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 - **FK:** `created_by_id` → `users.id` · **ON DELETE RESTRICT**
 - **FK:** `updated_by_id` → `users.id` · **ON DELETE RESTRICT**
 - **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
+- **FK:** `assignee_id` → `users.id` · **ON DELETE SET NULL**
+- **INDEX:** `assignee_id`
 
 ---
 

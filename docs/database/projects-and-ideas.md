@@ -17,7 +17,7 @@ erDiagram
   tags ||--o{ task_groups : "auto_tag_id"
   task_groups ||--o{ task_group_members : "group_id"
   tasks ||--o{ task_group_members : "task_id"
-  users ||--o{ ideas : "owner_id"
+  users ||--o{ ideas : "owner_id / assignee_id"
   users ||--o{ projects : "owner_id"
   users ||--o{ project_managers : "user_id"
   users ||--o{ project_members : "user_id"
@@ -97,6 +97,7 @@ Captures early thoughts that may later convert into a project. Display number �
 | `title` | text | no | — | |
 | `body` | text | yes | — | Markdown / notes |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
+| `assignee_id` | integer | yes | — | FK → `users.id` — assigned user (T0117). Ideas have no project pool; product keeps this null. |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -105,6 +106,8 @@ Captures early thoughts that may later convert into a project. Display number �
 - **PK:** `id`
 - **UNIQUE:** `number`
 - **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
+- **FK:** `assignee_id` → `users.id` · **ON DELETE SET NULL**
+- **INDEX:** `assignee_id`
 
 ### Relationships
 

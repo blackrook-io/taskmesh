@@ -25,6 +25,13 @@ export const ideas = pgTable("ideas", {
   ownerId: integer("owner_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  /**
+   * Optional assignee (T0117). Distinct from ownership.
+   * Ideas have no project pool — product UI keeps this null.
+   */
+  assigneeId: integer("assignee_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -396,6 +403,13 @@ export const tasks = pgTable("tasks", {
   ownerId: integer("owner_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  /**
+   * Optional assignee (T0117). Distinct from ownership.
+   * When project-scoped: must be Project Owner, Manager, or Member (not Viewer).
+   */
+  assigneeId: integer("assignee_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -625,6 +639,13 @@ export const todos = pgTable("todos", {
   ownerId: integer("owner_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  /**
+   * Optional assignee (T0117). Distinct from ownership.
+   * When project-scoped: must be Project Owner, Manager, or Member (not Viewer).
+   */
+  assigneeId: integer("assignee_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -879,6 +900,11 @@ export const ideasRelations = relations(ideas, ({ one, many }) => ({
     references: [users.id],
     relationName: "idea_owner",
   }),
+  assignee: one(users, {
+    fields: [ideas.assigneeId],
+    references: [users.id],
+    relationName: "idea_assignee",
+  }),
   projects: many(projects),
   todos: many(todos),
 }));
@@ -932,6 +958,11 @@ export const todosRelations = relations(todos, ({ one }) => ({
     fields: [todos.ownerId],
     references: [users.id],
     relationName: "todo_owner",
+  }),
+  assignee: one(users, {
+    fields: [todos.assigneeId],
+    references: [users.id],
+    relationName: "todo_assignee",
   }),
 }));
 
@@ -1010,10 +1041,13 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   createdTasks: many(tasks, { relationName: "task_created_by" }),
   updatedTasks: many(tasks, { relationName: "task_updated_by" }),
   ownedTasks: many(tasks, { relationName: "task_owner" }),
+  assignedTasks: many(tasks, { relationName: "task_assignee" }),
   createdTodos: many(todos, { relationName: "todo_created_by" }),
   updatedTodos: many(todos, { relationName: "todo_updated_by" }),
   ownedTodos: many(todos, { relationName: "todo_owner" }),
+  assignedTodos: many(todos, { relationName: "todo_assignee" }),
   ownedIdeas: many(ideas, { relationName: "idea_owner" }),
+  assignedIdeas: many(ideas, { relationName: "idea_assignee" }),
   ownedProjects: many(projects, { relationName: "project_owner" }),
   ownedUploads: many(uploads, { relationName: "upload_owner" }),
   ownedTags: many(tags, { relationName: "tag_owner" }),
@@ -1127,6 +1161,11 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     fields: [tasks.ownerId],
     references: [users.id],
     relationName: "task_owner",
+  }),
+  assignee: one(users, {
+    fields: [tasks.assigneeId],
+    references: [users.id],
+    relationName: "task_assignee",
   }),
   activity: many(taskActivity),
   dependencies: many(taskDependencies, { relationName: "task_depends_on" }),

@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.37.0 — 2026-09-17
+
+### New Functionality
+- Assign Tasks and ToDos to Project Owners, Managers, or Members via list context menu **Assign to…**, list-row display, and edit forms (dedicated assignee field, distinct from ownership).
+- Solo-owner projects auto-assign new and moved records to the Project Owner; Ideas expose Assigned to as unassigned (no project pool).
+
+### Enhancements
+- Assigned-to dropdown labels show display names only (no U#### suffix).
+
 ## 0.36.0 — 2026-09-17
 
 ### New Functionality

@@ -16,6 +16,7 @@ import { ensureProjectModules } from "../../services/projectModules.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
 import { getCurrentUserId } from "../../services/users.js";
+import { listAssignableUsers } from "../../services/assignees.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
@@ -227,6 +228,19 @@ projectsRouter.get("/:id/phases", async (req, res) => {
       .where(eq(schema.projectPhases.projectId, id))
       .orderBy(asc(schema.projectPhases.sortOrder));
     res.json({ data: rows });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+/** Assignable users for T0117 (Owner + Managers + Members; not Viewers). */
+projectsRouter.get("/:id/assignable-users", async (req, res) => {
+  try {
+    const id = idParam.parse(req.params.id);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
+    const users = await listAssignableUsers(db, id);
+    res.json({ data: users });
   } catch (err) {
     handleRouteError(res, err);
   }

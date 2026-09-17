@@ -121,6 +121,7 @@ export async function loadUserMap(
 export type TaskWithActors = typeof schema.tasks.$inferSelect & {
   createdBy: UserRef | null;
   updatedBy: UserRef | null;
+  assignee: UserRef | null;
 };
 
 export async function attachTaskActors(
@@ -133,6 +134,7 @@ export async function attachTaskActors(
     ...row,
     createdBy: byId.get(row.createdById) ?? null,
     updatedBy: byId.get(row.updatedById) ?? null,
+    assignee: row.assigneeId != null ? (byId.get(row.assigneeId) ?? null) : null,
   }));
 }
 
@@ -142,7 +144,34 @@ export async function attachTaskActor(
 ): Promise<TaskWithActors> {
   const [withActors] = await attachTaskActors(db, [row]);
   if (!withActors) {
-    return { ...row, createdBy: null, updatedBy: null };
+    return { ...row, createdBy: null, updatedBy: null, assignee: null };
   }
   return withActors;
+}
+
+export type WithAssignee<T extends { assigneeId: number | null }> = T & {
+  assignee: UserRef | null;
+};
+
+export async function attachAssignees<T extends { assigneeId: number | null }>(
+  db: Db,
+  rows: T[],
+): Promise<WithAssignee<T>[]> {
+  if (rows.length === 0) return [];
+  const byId = await loadUserMap(db);
+  return rows.map((row) => ({
+    ...row,
+    assignee: row.assigneeId != null ? (byId.get(row.assigneeId) ?? null) : null,
+  }));
+}
+
+export async function attachAssignee<T extends { assigneeId: number | null }>(
+  db: Db,
+  row: T,
+): Promise<WithAssignee<T>> {
+  const [withAssignee] = await attachAssignees(db, [row]);
+  if (!withAssignee) {
+    return { ...row, assignee: null };
+  }
+  return withAssignee;
 }

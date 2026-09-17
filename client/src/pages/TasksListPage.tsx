@@ -12,6 +12,7 @@ import {
 } from "../components/TaskListContextMenu";
 import { MoveTaskToProjectModal } from "../components/MoveTaskToProjectModal";
 import { SetTaskParentModal } from "../components/SetTaskParentModal";
+import { AssignToUserModal } from "../components/AssignToUserModal";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
 import { RowTagChips } from "../components/shared/RowTagChips";
@@ -135,6 +136,7 @@ export function TasksListPage() {
   const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
   const [moveTaskId, setMoveTaskId] = useState<number | null>(null);
   const [parentTaskId, setParentTaskId] = useState<number | null>(null);
+  const [assignTaskId, setAssignTaskId] = useState<number | null>(null);
   const [prevWantNew, setPrevWantNew] = useState(wantNew);
   const [urlCreateNonce, setUrlCreateNonce] = useState(() => (wantNew ? 1 : 0));
 
@@ -406,6 +408,7 @@ export function TasksListPage() {
           >
             State
           </TaskListSortHeaderBtn>
+          <span>Assignee</span>
           <TaskListSortHeaderBtn
             sorted={sortCol === "priority"}
             dir={sortDir}
@@ -520,6 +523,9 @@ export function TasksListPage() {
               >
                 {TASK_STATE_LABELS[task.state]}
               </span>
+              <span className="task-list-row__assignee" title={task.assignee?.displayName ?? undefined}>
+                {task.assignee?.displayName ?? <span className="muted">—</span>}
+              </span>
               <select
                 className={taskPriorityClass("task-list-row__priority", task.priority)}
                 value={task.priority}
@@ -633,6 +639,11 @@ export function TasksListPage() {
               label: "Set Parent…",
               onSelect: () => setParentTaskId(ctxTask.id),
             },
+            {
+              type: "action" as const,
+              label: "Assign to…",
+              onSelect: () => setAssignTaskId(ctxTask.id),
+            },
           ];
         })()}
       />
@@ -642,6 +653,8 @@ export function TasksListPage() {
         const moveTask = moveTaskId != null ? (all.find((t) => t.id === moveTaskId) ?? null) : null;
         const parentTask =
           parentTaskId != null ? (all.find((t) => t.id === parentTaskId) ?? null) : null;
+        const assignTask =
+          assignTaskId != null ? (all.find((t) => t.id === assignTaskId) ?? null) : null;
         return (
           <>
             <MoveTaskToProjectModal
@@ -666,6 +679,20 @@ export function TasksListPage() {
                 await patchTask.mutateAsync({
                   id: parentTask.id,
                   patch: { parentId: nextParentId },
+                });
+              }}
+            />
+            <AssignToUserModal
+              open={assignTask != null}
+              projectId={assignTask?.projectId ?? null}
+              currentAssigneeId={assignTask?.assigneeId ?? null}
+              currentAssignee={assignTask?.assignee ?? null}
+              onClose={() => setAssignTaskId(null)}
+              onSave={async (nextAssigneeId) => {
+                if (!assignTask) return;
+                await patchTask.mutateAsync({
+                  id: assignTask.id,
+                  patch: { assigneeId: nextAssigneeId },
                 });
               }}
             />

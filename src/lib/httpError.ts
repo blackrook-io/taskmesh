@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { AuthenticationError } from "./authErrors.js";
 import { ImmutableFieldError } from "./immutableFields.js";
 import { NotFoundError } from "./notFound.js";
+import { AssigneeError } from "../services/assignees.js";
 import { OwnershipAccessError } from "../services/ownership.js";
 import { ProjectUsersError } from "../services/projectUsers.js";
 
@@ -28,6 +29,10 @@ export function handleRouteError(res: Response, err: unknown): void {
     return;
   }
   if (err instanceof ProjectUsersError) {
+    sendError(res, err.status, err.code, err.message);
+    return;
+  }
+  if (err instanceof AssigneeError) {
     sendError(res, err.status, err.code, err.message);
     return;
   }

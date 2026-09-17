@@ -43,6 +43,7 @@ import {
   getCurrentUserId,
 } from "../../services/users.js";
 import { applyTaskGroupAutoTags } from "../../services/taskGroupAutoTag.js";
+import { resolveAssigneeId } from "../../services/assignees.js";
 import {
   rejectCompleteIfBlocked,
   rejectDeleteIfBlocked,
@@ -59,6 +60,7 @@ const createBody = z.object({
   state: selectableTaskStateSchema.optional(),
   priority: taskPrioritySchema.optional(),
   parentId: z.number().int().positive().optional().nullable(),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const patchBody = z.object({
@@ -71,6 +73,7 @@ const patchBody = z.object({
   parentId: z.number().int().positive().nullable().optional(),
   projectId: z.number().int().positive().nullable().optional(),
   phaseId: z.number().int().positive().nullable().optional(),
+  assigneeId: z.number().int().positive().nullable().optional(),
 });
 
 const listQuery = z.object({
@@ -163,6 +166,11 @@ standaloneTasksRouter.post("/", async (req, res) => {
     }
     const number = await allocateTaskNumber(db);
     const sortOrder = await nextSiblingSortOrder(db, null, parentId);
+    const assigneeId = await resolveAssigneeId(db, {
+      projectId: null,
+      requested: parsed.assigneeId,
+      creating: true,
+    });
     const [row] = await db
       .insert(schema.tasks)
       .values({
@@ -180,6 +188,7 @@ standaloneTasksRouter.post("/", async (req, res) => {
         createdById: actorId,
         updatedById: actorId,
         ownerId: actorId,
+        assigneeId,
       })
       .returning();
     if (!row) {
@@ -229,6 +238,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         "parentId",
         "projectId",
         "phaseId",
+        "assigneeId",
       ])
     ) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
@@ -239,6 +249,8 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       parsed.projectId !== undefined ? parsed.projectId : existing.projectId;
     let nextPhaseId = parsed.phaseId !== undefined ? parsed.phaseId : existing.phaseId;
     let nextParentId = parsed.parentId !== undefined ? parsed.parentId : existing.parentId;
+    const projectChanging =
+      parsed.projectId !== undefined && parsed.projectId !== existing.projectId;
 
     if (parsed.projectId !== undefined && parsed.projectId !== existing.projectId) {
       if (parsed.projectId === null) {
@@ -255,6 +267,13 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         nextParentId = null;
       }
     }
+
+    const nextAssigneeId = await resolveAssigneeId(db, {
+      projectId: nextProjectId,
+      requested: parsed.assigneeId,
+      previousAssigneeId: existing.assigneeId,
+      projectChanging,
+    });
 
     if (nextParentId != null) {
       nextPhaseId = await inheritPhaseFromParent(db, nextParentId);
@@ -304,6 +323,10 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
           : {}),
         ...(parsed.parentId !== undefined || nextParentId !== existing.parentId
           ? { parentId: nextParentId }
+          : {}),
+        ...(parsed.assigneeId !== undefined ||
+        nextAssigneeId !== existing.assigneeId
+          ? { assigneeId: nextAssigneeId }
           : {}),
         updatedAt: new Date(),
         updatedById: actorId,
