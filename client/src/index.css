@@ -6715,6 +6715,17 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.login-form__banner {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-chip, 6px);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
 .login-form__error {
   margin: 0;
 }

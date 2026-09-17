@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { resetSessionExpiredGuard } from "../api/sessionExpired";
 import { useAuth } from "../lib/auth";
 import {
   applyInstanceFavicon,
@@ -12,6 +13,7 @@ import { MeshMark } from "../components/shell/MeshMark";
 import type { UserProfile } from "../types";
 
 const LOGIN_ERROR = "Invalid email or password.";
+const SESSION_ENDED_MESSAGE = "Your session ended. Sign in again to continue.";
 
 function safeReturnTo(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
@@ -24,10 +26,15 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const { user, setUser } = useAuth();
   const returnTo = safeReturnTo(params.get("returnTo"));
+  const sessionEnded = params.get("reason") === "session";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    resetSessionExpiredGuard();
+  }, []);
 
   const configQuery = useQuery({
     queryKey: ["config", "public"],
@@ -104,6 +111,12 @@ export function LoginPage() {
         </header>
 
         <form className="login-form" onSubmit={onSubmit} noValidate>
+          {sessionEnded ? (
+            <p className="login-form__banner" role="status">
+              {SESSION_ENDED_MESSAGE}
+            </p>
+          ) : null}
+
           <label className="field">
             <span>Email</span>
             <input
