@@ -81,6 +81,17 @@ Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the 
 
 `source`: `ui` when the SPA identifies itself; otherwise `api`.
 
+## Project role lists (T0127 / T0128)
+
+Tables: `project_managers`, `project_members`, `project_viewers`.
+
+- **Owner** (`projects.owner_id`) is an implicit Manager (not duplicated in `project_managers`).
+- A user may be in at most one list per project (application rule).
+- Administrators are not listed; they already have full access.
+- **Until T0128**, list membership does not change record access (owner-or-Administrator only).
+
+Intended T0128 rights: Managers = R/W + Settings; Members = R/W; Viewers = read-only.
+
 ## Dependencies vs hierarchy
 
 - **`tasks.parent_id`** — subtask tree (hierarchy)

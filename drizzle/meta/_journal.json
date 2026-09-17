@@ -246,6 +246,13 @@
       "when": 1788781829045,
       "tag": "0034_worried_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1789606545095,
+      "tag": "0035_burly_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,18 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.36.0 — 2026-09-17
+
+### New Functionality
+- Administrators can assign active users to per-project Managers, Members, and Viewers lists under Project Settings → Users (schema ready for role enforcement in T0128).
+- Project Settings (modules, phases, users, and delete) is Administrator-only until project Roles land; the project owner remains an implicit Manager and is not duplicated in the managers list.
+
+### Enhancements
+- Nested project Settings mutations (module toggles, phases, and project delete) are Administrator-gated on the API to match the Settings UI.
+
+### Fixes
+- Bumped `multer` to clear a high-severity production npm audit finding that blocked Security CI.
+
 ## 0.35.15 — 2026-09-07
 
 ### Enhancements

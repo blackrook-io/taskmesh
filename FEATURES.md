@@ -7,6 +7,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, and Image Boards
 - Drag to reorder projects in the left nav; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
+- Administrators assign users to Managers, Members, and Viewers lists per project (role enforcement coming next)
 
 
 
@@ -89,6 +90,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Email/password sign-in with secure session cookies and CSRF protection on mutations
 - Personal API keys with read/write scopes and expiry
 - Admin hub for users, keys, API usage, database stats, system logs, properties, and templates
+- Project Settings restricted to Administrators until project Roles expand access to Managers
 - Ownership transfer and role labels for multi-user homes
 
 

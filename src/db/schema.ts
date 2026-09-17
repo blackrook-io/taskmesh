@@ -103,6 +103,79 @@ export const projectPhases = pgTable("project_phases", {
     .defaultNow(),
 });
 
+/**
+ * Project Managers list (T0127 schema; role enforcement in T0128).
+ * Owner (`projects.owner_id`) is an implicit Manager and is not stored here.
+ * A user may appear in at most one of managers/members/viewers per project (app rule).
+ */
+export const projectManagers = pgTable(
+  "project_managers",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("project_managers_project_user_uidx").on(t.projectId, t.userId),
+    index("project_managers_user_id_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Project Members list (T0127 schema; R/W enforcement in T0128).
+ * A user may appear in at most one of managers/members/viewers per project (app rule).
+ */
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("project_members_project_user_uidx").on(t.projectId, t.userId),
+    index("project_members_user_id_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Project Viewers list (T0127 schema; read-only enforcement in T0128).
+ * A user may appear in at most one of managers/members/viewers per project (app rule).
+ */
+export const projectViewers = pgTable(
+  "project_viewers",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("project_viewers_project_user_uidx").on(t.projectId, t.userId),
+    index("project_viewers_user_id_idx").on(t.userId),
+  ],
+);
+
 /** App users. Display → U####. */
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -822,6 +895,9 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   }),
   taskGroups: many(taskGroups),
   phases: many(projectPhases),
+  managers: many(projectManagers),
+  members: many(projectMembers),
+  viewers: many(projectViewers),
   tasks: many(tasks),
   todos: many(todos),
   documents: many(projectDocuments),
@@ -879,6 +955,42 @@ export const taskGroupMembersRelations = relations(taskGroupMembers, ({ one }) =
   task: one(tasks, {
     fields: [taskGroupMembers.taskId],
     references: [tasks.id],
+  }),
+}));
+
+export const projectManagersRelations = relations(projectManagers, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectManagers.projectId],
+    references: [projects.id],
+  }),
+  user: one(users, {
+    fields: [projectManagers.userId],
+    references: [users.id],
+    relationName: "project_manager_user",
+  }),
+}));
+
+export const projectMembersRelations = relations(projectMembers, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectMembers.projectId],
+    references: [projects.id],
+  }),
+  user: one(users, {
+    fields: [projectMembers.userId],
+    references: [users.id],
+    relationName: "project_member_user",
+  }),
+}));
+
+export const projectViewersRelations = relations(projectViewers, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectViewers.projectId],
+    references: [projects.id],
+  }),
+  user: one(users, {
+    fields: [projectViewers.userId],
+    references: [users.id],
+    relationName: "project_viewer_user",
   }),
 }));
 

@@ -10,6 +10,7 @@ import { DocumentKindIcon } from "../components/shared/DocumentKindIcon";
 import { PencilIcon } from "../components/shared/PencilIcon";
 import { TagInput } from "../components/shared/TagInput";
 import { PhaseManager } from "../components/PhaseManager";
+import { ProjectUsersPanel } from "../components/ProjectUsersPanel";
 import { TaskBoard } from "../components/TaskBoard";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { TodoListTabBar } from "../components/TodoListTabBar";
@@ -26,6 +27,8 @@ import {
   type ProjectModuleKey,
 } from "../lib/projectModules";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
+import { useAuth } from "../lib/auth";
+import { userIsAdministrator } from "../lib/roles";
 import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
 import { resolveEpubDocumentTitle } from "../lib/epubMeta";
@@ -90,6 +93,8 @@ export function ProjectDetailPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = userIsAdministrator(user);
 
   const tab = parseTab(searchParams.get("tab"));
   const groupParam = parseIdParam(searchParams.get("group"));
@@ -357,6 +362,18 @@ export function ProjectDetailPage() {
       { replace: true },
     );
   }, [navListView, groupParam, groups, groupsQuery.isSuccess, setSearchParams]);
+
+  useEffect(() => {
+    if (tab !== "settings" || isAdmin) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("tab");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [tab, isAdmin, setSearchParams]);
 
   const takeOverListFilter = (next: typeof taskListFilter | "clear") => {
     if (next === "clear") clearTaskListFilter();
@@ -715,7 +732,7 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
 
-      {tab === "settings" ? (
+      {tab === "settings" && isAdmin ? (
         <>
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Project modules</h2>
@@ -765,6 +782,7 @@ export function ProjectDetailPage() {
               })}
           </div>
         </div>
+        <ProjectUsersPanel projectId={projectId} />
         <div style={{ marginTop: "1rem" }}>
           <PhaseManager projectId={projectId} phases={phasesQuery.data ?? []} />
         </div>

@@ -4,6 +4,7 @@ import { AuthenticationError } from "./authErrors.js";
 import { ImmutableFieldError } from "./immutableFields.js";
 import { NotFoundError } from "./notFound.js";
 import { OwnershipAccessError } from "../services/ownership.js";
+import { ProjectUsersError } from "../services/projectUsers.js";
 
 export function sendError(
   res: Response,
@@ -23,6 +24,10 @@ export function handleRouteError(res: Response, err: unknown): void {
     return;
   }
   if (err instanceof OwnershipAccessError) {
+    sendError(res, err.status, err.code, err.message);
+    return;
+  }
+  if (err instanceof ProjectUsersError) {
     sendError(res, err.status, err.code, err.message);
     return;
   }

@@ -1,0 +1,82 @@
+# T0127 — User assignment to Projects
+
+**Branch (after approval):** `T0127-project-users`  
+**PROD Task:** T0127 (id 140) · Ready · high · project TaskMesh  
+**Related:** T0128 Associate Roles to a Project (schema+UI lists land here; role enforcement in T0128)
+
+## Goal
+
+Let Administrators assign active users to a project’s **Managers / Members / Viewers** lists under Project Settings. Create the membership schema T0128 will enforce. Until T0128, **record access stays owner-or-admin only** (owner always treated as Manager for future roles). Entire Project Settings is **Administrator-only** until T0128.
+
+## Interview decisions (locked)
+
+1. **Settings** — whole Settings tab Admin-only until T0128 (modules, phases, delete, Users).
+2. **Lists** — create `project_managers`, `project_members`, `project_viewers` now (for T0128). `projects.ownerId` stays separate; owner always implies Manager.
+3. **Who manages lists** — Administrators only (Settings is Admin-only).
+4. **Access until Roles** — owner (and always Admin) only; membership rows do **not** grant project access yet.
+5. **Picker** — active, usable (non-deactivated / non-unusable) users; deactivated users lose effective access as today; do not add Administrators to lists (they already have explicit rights).
+6. **No new Task** — handoff notes go on T0128; no deferred Task created.
+
+## Out of scope (T0128)
+
+- Granting Managers/Members/Viewers access via `assertCanAccessProject` / list filters
+- Read-only Viewer enforcement
+- Managers opening Settings (non-admin)
+- Reassign / blank assignments when removing a Manager/Member with assigned items
+- Per-record assignment UI (assignee fields) if not already present
+
+## Plan
+
+### 1. Schema + docs
+
+- Add three junction tables (CASCADE on project delete; RESTRICT or CASCADE on user per platform norms — prefer CASCADE membership rows on user delete, or RESTRICT if user delete is soft-only):
+  - `project_managers (id, project_id, user_id, created_at)` unique `(project_id, user_id)`
+  - `project_members` — same shape
+  - `project_viewers` — same shape
+- App rule: a user may appear in **at most one** of the three lists for a given project (reject add if already in another list or is Admin or is inactive).
+- Do **not** auto-insert the owner into `project_managers`; owner is implicit Manager.
+- Migration via `npm run db:generate` → review → migrate.
+- Update `docs/database/projects-and-ideas.md` (+ glossary/overview if needed); `npm run docs:sync-schema`.
+
+### 2. API
+
+- Nested under projects (Admin-gated for mutations and Settings-facing reads):
+  - `GET /api/v1/projects/:id/users` → `{ managers, members, viewers }` (profiles: id, referenceId, displayName, email, active flags)
+  - `POST /api/v1/projects/:id/users` → `{ role: "manager"|"member"|"viewer", userId }` (or role-specific paths)
+  - `DELETE /api/v1/projects/:id/users/:userId` (or role + userId)
+- Gate list management with `requireAdministrator` (or equivalent assert). Non-admins get 403 even if they own the project.
+- User directory for picker: reuse Admin users list or a slim active-users endpoint usable only by Admins.
+- Reject: inactive/unusable users, Administrators, duplicate role, same user in another role list, unknown user/project.
+- **No change** to `assertCanAccessProject` / dual-scope filters for membership (T0128).
+
+### 3. UI
+
+- `ProjectDetailPage` Settings tab:
+  - Hide/redirect Settings for non-Administrators (entire tab).
+  - Add **Users** section with three widgets (Managers / Members / Viewers): list, Add (search active users), Remove (confirm). No reassignment modal yet (T0128).
+- Keep modules / phases / danger zone visible only to Admins (same gate).
+
+### 4. Tests + handoff
+
+- Service/route tests: add/remove, uniqueness across roles, reject admin/inactive, Admin-only gate; access still owner-only for a member user.
+- PROD comment on **T0128** summarizing schema names, implicit owner=Manager, Admin-not-listable, Settings stay Admin-only until T0128 opens Settings to Managers, and that ACL wiring is T0128’s job.
+
+## Acceptance
+
+- [ ] Admin can open Project → Settings → Users and manage three lists
+- [ ] Non-admin (including project owner) cannot open Settings
+- [ ] Non-member non-owner still cannot see project; **member/viewer/manager rows also do not grant access yet**
+- [ ] Owner + Admin retain access as today
+- [ ] Admins / inactive users cannot be added to lists
+- [ ] Schema + docs + migration shipped; T0128 comment posted
+
+## Versioning (finish-up)
+
+Schema migration → **MINOR** bump (PATCH reset to 0); `RELEASE_NOTES.md` + `FEATURES.md` (major user-facing: project user assignment UI).
+
+## QA checklist (draft)
+
+1. As Admin: open a project Settings → see Users with three lists; add/remove users; try add Admin → rejected; try add same user to two roles → rejected.
+2. As non-admin owner: Settings tab unavailable; project records still accessible.
+3. As user listed only as Member: still **no** project access until T0128.
+4. As Admin: still see all projects; deactivated user cannot use API/UI as today.
