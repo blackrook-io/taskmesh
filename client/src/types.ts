@@ -94,8 +94,10 @@ export type Task = {
   createdById?: number;
   updatedById?: number;
   assigneeId?: number | null;
+  ownerId?: number;
   createdBy?: UserRef | null;
   updatedBy?: UserRef | null;
+  owner?: UserRef | null;
   assignee?: UserRef | null;
   createdAt: string;
   updatedAt: string;

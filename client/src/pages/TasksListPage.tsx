@@ -15,22 +15,22 @@ import { SetTaskParentModal } from "../components/SetTaskParentModal";
 import { AssignToUserModal } from "../components/AssignToUserModal";
 import { TaskListFilterBar } from "../components/TaskListFilterBar";
 import { ElementShell } from "../components/shared/ElementShell";
-import { RowTagChips } from "../components/shared/RowTagChips";
+import {
+  TaskListColumnHeaders,
+  renderTaskColumnCell,
+} from "../components/shared/TaskListColumnCells";
+import { ListViewHeaderMenu, type ListViewHeaderMenuState } from "../components/shared/ListViewHeaderMenu";
+import { ListViewPersonalizeModal } from "../components/shared/ListViewPersonalizeModal";
 import {
   fetchOpenDependsOn,
   formatCompleteBlockMessage,
 } from "../components/shared/TaskDependencyLists";
-import { TaskListSortHeaderBtn } from "../components/shared/TaskListSortHeaderBtn";
+import { buildTaskListGridTemplate } from "../lib/listViewColumns";
+import { useListViewColumns } from "../lib/useListViewColumns";
 import {
-  TASK_PRIORITIES,
-  TASK_PRIORITY_LABELS,
-  TASK_STATE_LABELS,
   formatTaskNumber,
   nextTaskState,
   TASK_STATE_SORT_RANK,
-  taskPriorityClass,
-  taskStateClass,
-  type TaskPriority,
 } from "../lib/taskFields";
 import {
   evaluateTaskListFilter,
@@ -41,6 +41,7 @@ import { usePhaseFilterOptions } from "../lib/usePhaseFilterOptions";
 import { useTaskFilterLookups } from "../lib/useTaskFilterLookups";
 import {
   DEFAULT_GLOBAL_TASK_LIST_SORT,
+  TASK_LIST_SORT_COLS,
   storageKeyForGlobalTaskSort,
   type TaskListSortCol,
 } from "../lib/taskListSort";
@@ -88,6 +89,12 @@ function sortTasks(list: Task[], col: SortCol | null, dir: 1 | -1, projectName: 
       cmp = da.localeCompare(db);
     } else if (col === "project") {
       cmp = projectName(a.projectId).localeCompare(projectName(b.projectId));
+    } else if (col === "createdAt") {
+      cmp = a.createdAt.localeCompare(b.createdAt);
+    } else if (col === "updatedAt") {
+      cmp = a.updatedAt.localeCompare(b.updatedAt);
+    } else if (col === "phase") {
+      cmp = (a.phaseId ?? 0) - (b.phaseId ?? 0);
     }
     return (cmp || a.id - b.id) * dir;
   });
@@ -134,11 +141,24 @@ export function TasksListPage() {
     DEFAULT_GLOBAL_TASK_LIST_SORT,
   );
   const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
+  const [headerMenu, setHeaderMenu] = useState<ListViewHeaderMenuState>(null);
+  const [personalizeOpen, setPersonalizeOpen] = useState(false);
+  const [personalizeError, setPersonalizeError] = useState<string | null>(null);
   const [moveTaskId, setMoveTaskId] = useState<number | null>(null);
   const [parentTaskId, setParentTaskId] = useState<number | null>(null);
   const [assignTaskId, setAssignTaskId] = useState<number | null>(null);
   const [prevWantNew, setPrevWantNew] = useState(wantNew);
   const [urlCreateNonce, setUrlCreateNonce] = useState(() => (wantNew ? 1 : 0));
+  const {
+    visibleColumns,
+    personalizeRows,
+    save: saveListCols,
+    reset: resetListCols,
+  } = useListViewColumns("tasks", "global");
+  const gridTemplate = useMemo(
+    () => buildTaskListGridTemplate(visibleColumns, "global"),
+    [visibleColumns],
+  );
 
   // Adopt ?open= during render (do not clear modal when the param is stripped).
   if (parsedOpenId != null && parsedOpenId !== modalTaskId) {
@@ -189,21 +209,27 @@ export function TasksListPage() {
     () => ({ ...tagProjectCtx, phaseNames }),
     [tagProjectCtx, phaseNames],
   );
+  const phaseNameFn = (id: number | null) => (id != null ? (phaseNames.get(id) ?? "") : "");
 
   const filteredTasks = useMemo(() => {
     return evaluateTaskListFilter(tasksQuery.data ?? [], taskListFilter, filterCtx);
   }, [tasksQuery.data, taskListFilter, filterCtx]);
+
+  const effectiveSortCol = useMemo(() => {
+    const visibleSortKeys = new Set(visibleColumns.filter((c) => c.sortable).map((c) => c.fieldKey));
+    return sortCol != null && visibleSortKeys.has(sortCol) ? sortCol : null;
+  }, [visibleColumns, sortCol]);
 
   const displayRows = useMemo(
     () =>
       buildGlobalDisplayRows(
         filteredTasks,
         collapsedParents,
-        sortCol,
+        effectiveSortCol,
         sortDir,
         (id) => (id == null ? "—" : (projectNameById.get(id) ?? `Project #${id}`)),
       ),
-    [filteredTasks, collapsedParents, sortCol, sortDir, projectNameById],
+    [filteredTasks, collapsedParents, effectiveSortCol, sortDir, projectNameById],
   );
 
   /** Flat filtered list still used for modal lookup / editor “all tasks”. */
@@ -320,9 +346,11 @@ export function TasksListPage() {
     createTaskMutate(title.trim());
   }, [urlCreateNonce, setSearchParams, createTaskMutate]);
 
-  const headerSort = (col: SortCol) => {
+  const headerSort = (col: string) => {
+    if (!(TASK_LIST_SORT_COLS as readonly string[]).includes(col)) return;
+    const sortKey = col as SortCol;
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: 1 },
+      prev.col === sortKey ? { col: sortKey, dir: prev.dir === 1 ? -1 : 1 } : { col: sortKey, dir: 1 },
     );
   };
 
@@ -383,53 +411,24 @@ export function TasksListPage() {
       />
 
       <div className="task-list task-list--global">
-        <div className="task-list-header">
+        <div
+          className="task-list-header"
+          style={{ gridTemplateColumns: gridTemplate }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setHeaderMenu({ x: e.clientX, y: e.clientY });
+          }}
+        >
           <span className="task-list-header__stripe" />
           <span />
           <span />
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "number"}
-            dir={sortDir}
-            onClick={() => headerSort("number")}
-          >
-            Number
-          </TaskListSortHeaderBtn>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "title"}
-            dir={sortDir}
-            onClick={() => headerSort("title")}
-          >
-            Title
-          </TaskListSortHeaderBtn>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "state"}
-            dir={sortDir}
-            onClick={() => headerSort("state")}
-          >
-            State
-          </TaskListSortHeaderBtn>
-          <span>Assignee</span>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "priority"}
-            dir={sortDir}
-            onClick={() => headerSort("priority")}
-          >
-            Priority
-          </TaskListSortHeaderBtn>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "dueDate"}
-            dir={sortDir}
-            onClick={() => headerSort("dueDate")}
-          >
-            Due date
-          </TaskListSortHeaderBtn>
-          <TaskListSortHeaderBtn
-            sorted={sortCol === "project"}
-            dir={sortDir}
-            onClick={() => headerSort("project")}
-          >
-            Project
-          </TaskListSortHeaderBtn>
+          <TaskListColumnHeaders
+            columns={visibleColumns}
+            sortCol={sortCol}
+            sortDir={sortDir}
+            onSort={headerSort}
+            sortTrigger="click"
+          />
         </div>
 
         {displayRows.length === 0 ? (
@@ -437,10 +436,13 @@ export function TasksListPage() {
             {isFilterActive(taskListFilter) ? "No tasks match this filter." : "No tasks yet."}
           </p>
         ) : (
-          displayRows.map(({ task, depth, hasChildren }) => (
+          displayRows.map(({ task, depth, hasChildren }) => {
+            const showTagsInTitle = !visibleColumns.some((c) => c.fieldKey === "tags");
+            return (
             <div
               key={task.id}
               className={`task-list-row${depth > 0 ? " task-list-row--child" : ""}${task.state === "complete" ? " task-list-row--complete" : ""}`}
+              style={{ gridTemplateColumns: gridTemplate }}
               onDoubleClick={() => openModal(task.id)}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -485,85 +487,23 @@ export function TasksListPage() {
                   });
                 }}
               />
-              <span className="task-list-row__num">
-                <span className="muted">{formatTaskNumber(task.number)}</span>
-                {hasChildren ? (
-                  <button
-                    type="button"
-                    className="task-list-row__twist"
-                    aria-expanded={!collapsedParents.has(task.id)}
-                    aria-label={
-                      collapsedParents.has(task.id) ? "Expand child tasks" : "Collapse child tasks"
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleParentCollapse(task.id);
-                    }}
-                  >
-                    {collapsedParents.has(task.id) ? "▸" : "▾"}
-                  </button>
-                ) : null}
-              </span>
-              <span className="task-list-row__title">
-                {depth > 0 ? (
-                  <span
-                    className="task-list-row__child-indent"
-                    style={{ width: depth * CHILD_TITLE_INDENT_PX }}
-                    aria-hidden
-                  >
-                    <span className="task-list-row__child-mark">↳</span>
-                  </span>
-                ) : null}
-                <span className="task-list-row__title-text">{task.title}</span>
-                <RowTagChips entityType="task" entityId={task.id} />
-              </span>
-              <span
-                className={taskStateClass("task-list-row__state", task.state)}
-                data-ctx-field="state"
-              >
-                {TASK_STATE_LABELS[task.state]}
-              </span>
-              <span className="task-list-row__assignee" title={task.assignee?.displayName ?? undefined}>
-                {task.assignee?.displayName ?? <span className="muted">—</span>}
-              </span>
-              <select
-                className={taskPriorityClass("task-list-row__priority", task.priority)}
-                value={task.priority}
-                data-ctx-field="priority"
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) =>
-                  void patchTask.mutateAsync({
-                    id: task.id,
-                    patch: { priority: e.target.value as TaskPriority },
-                  })
-                }
-                aria-label="Priority"
-              >
-                {TASK_PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {TASK_PRIORITY_LABELS[p]}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="date"
-                className="task-list-row__date"
-                value={taskDue(task) ?? ""}
-                data-ctx-field="dueDate"
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) =>
-                  void patchTask.mutateAsync({
-                    id: task.id,
-                    patch: { dueDate: e.target.value || null },
-                  })
-                }
-                aria-label="Due date"
-              />
-              <span className="task-list-row__project muted" title={projectLabel(task.projectId)}>
-                {projectLabel(task.projectId)}
-              </span>
+              {visibleColumns.map((col) =>
+                renderTaskColumnCell(col.fieldKey, {
+                  task,
+                  depth,
+                  hasChildren,
+                  collapsed: collapsedParents.has(task.id),
+                  onToggleCollapse: () => toggleParentCollapse(task.id),
+                  onPatch: (patch) => void patchTask.mutateAsync({ id: task.id, patch }),
+                  projectName: projectLabel,
+                  phaseName: phaseNameFn,
+                  showTagsInTitle,
+                  childIndentPx: CHILD_TITLE_INDENT_PX,
+                }),
+              )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -646,6 +586,37 @@ export function TasksListPage() {
             },
           ];
         })()}
+      />
+      <ListViewHeaderMenu
+        menu={headerMenu}
+        onClose={() => setHeaderMenu(null)}
+        onPersonalize={() => {
+          setPersonalizeError(null);
+          setPersonalizeOpen(true);
+        }}
+      />
+      <ListViewPersonalizeModal
+        open={personalizeOpen}
+        title="Personalize task list"
+        rows={personalizeRows}
+        saving={saveListCols.isPending}
+        resetting={resetListCols.isPending}
+        error={personalizeError}
+        onClose={() => setPersonalizeOpen(false)}
+        onSave={(columns) => {
+          setPersonalizeError(null);
+          saveListCols.mutate(columns, {
+            onSuccess: () => setPersonalizeOpen(false),
+            onError: (err) => setPersonalizeError((err as Error).message),
+          });
+        }}
+        onReset={() => {
+          setPersonalizeError(null);
+          resetListCols.mutate(undefined, {
+            onSuccess: () => setPersonalizeOpen(false),
+            onError: (err) => setPersonalizeError((err as Error).message),
+          });
+        }}
       />
 
       {(() => {

@@ -1,0 +1,121 @@
+# T0056 — List View configuration (Personalize)
+
+**Task:** T0056 (id 63) · **Branch (on approval):** `T0056-list-view-personalize`  
+**State at plan:** `ready` · no Depends-on blockers · nothing deferred
+
+## Goal
+
+Right-click the **column header bar** on every product List View → **Personalize…** modal → reorder / show / hide displayable columns; persist **server-side** for the signed-in user across browsers; remember one layout **per list-view type** (not per project). Mark fields **non-displayable** in schema metadata so they never appear as columns or in Personalize.
+
+## Interview decisions (locked)
+
+| # | Decision |
+|---|----------|
+| 1 | **Any** product List View with a column header bar (Tasks project + global, Ideas) |
+| 2 | **Server-side** prefs (localStorage sort/filter stay as-is; migrate later) |
+| 3 | **One** column layout per list-view type — same Tasks prefs on every project and on `/tasks` |
+| 4 | **Schema metadata** table for field displayability (not client-only flags) |
+| 5 | **Expose extras** beyond today’s hardcoded columns |
+| 6 | Chrome (stripe / drag / checkbox / row actions) stays **fixed**, not personalizable |
+| 7 | **Reset to defaults** in the Personalize modal |
+| 8 | Nothing deferred to a follow-up Task |
+
+Out of scope: admin HTML tables; TodoListView (no column header today); migrating sort/filter to server.
+
+## Product List Views in scope
+
+| Surface | File | List-view key |
+|---------|------|---------------|
+| Project Tasks (incl. nav list) | `client/src/components/TaskBoard.tsx` | `tasks` |
+| Global `/tasks` (+ unassigned) | `client/src/pages/TasksListPage.tsx` | `tasks` (same prefs) |
+| Ideas | `client/src/pages/IdeasListPage.tsx` | `ideas` |
+
+`Project` column: available in catalog; **rendered only** when the surface has a project context column (global Tasks). Order/visibility still stored in the shared `tasks` prefs.
+
+## Data model (new migration → MINOR bump on finish-up)
+
+### 1. `entity_fields` (schema metadata)
+
+Developer-owned catalog of list-displayable fields per entity.
+
+| Column | Notes |
+|--------|--------|
+| `id` | serial PK |
+| `entity_type` | `task` \| `idea` (matches `EntityType`) |
+| `field_key` | stable id: `number`, `title`, `state`, `assignee`, `priority`, `dueDate`, `project`, `phase`, `tags`, `createdAt`, `updatedAt`, `owner`, `createdBy`, … |
+| `label` | UI label |
+| `displayable` | boolean — `false` → never a column, never in Personalize |
+| `default_visible` | boolean — default Personalize / Reset |
+| `default_sort_order` | int — default column order among displayable fields |
+| `sortable` | boolean — whether header sort is offered when visible |
+| `scope` | text nullable — e.g. `global` for Project-only-on-global; `null` = all surfaces |
+
+Unique `(entity_type, field_key)`. Seeded in the migration for tasks + ideas.
+
+**Non-displayable seeds (examples):** raw `id`, `sortOrder`, `description` / body blobs, soft-delete internals, FK-only keys that have a friendlier display field, etc.
+
+**Displayable extras (tasks):** at least Phase, Tags, Created, Updated, Owner, Created by (plus existing Number, Title, State, Assignee, Priority, Due date, Project).  
+**Displayable extras (ideas):** keep Title, Tags, Created; add any sensible extras already on the Idea API payload (e.g. Updated) if present.
+
+When schema work later adds a column that should be listable, add a row here (same change set as the migration / docs).
+
+### 2. `user_list_view_prefs`
+
+| Column | Notes |
+|--------|--------|
+| `id` | serial PK |
+| `user_id` | FK → `users` CASCADE |
+| `list_view_key` | `tasks` \| `ideas` |
+| `columns` | jsonb — ordered array of `{ fieldKey: string, visible: boolean }` for **displayable** fields only |
+| `updated_at` | timestamptz |
+
+Unique `(user_id, list_view_key)`. No project scope column.
+
+Missing row → treat as defaults from `entity_fields`.
+
+### Docs
+
+Update `docs/database/platform.md` (+ overview inventory if needed), then `npm run docs:sync-schema` after migrate.
+
+## API
+
+- `GET /api/v1/list-views/:listViewKey/fields` — displayable (+ optionally all for admin later; v1 returns displayable only) field defs for Personalize + header render.
+- `GET /api/v1/list-views/:listViewKey/prefs` — current user’s column prefs (or defaults).
+- `PUT /api/v1/list-views/:listViewKey/prefs` — body `{ columns: [...] }`; validate field keys against displayable `entity_fields`; reject unknown / non-displayable.
+- `DELETE /api/v1/list-views/:listViewKey/prefs` — Reset to defaults (delete row).
+
+Auth: session / API key like other `/api/v1` routes. CSRF headers for mutating session calls.
+
+## Client architecture
+
+1. **Column registry consumer** — load fields + prefs (React Query); merge → ordered visible columns; build dynamic `grid-template-columns` (fixed chrome tracks + flexible data tracks).
+2. **Shared header chrome** — right-click on `.task-list-header` / `.ideas-list-header` → small menu with **Personalize…** (reuse portal pattern from `TaskListContextMenu`).
+3. **Personalize modal** — PhaseManager-style dnd-kit reorder + visibility toggles; Save → PUT; Reset → DELETE + refetch; Cancel.
+4. **Refactor** TaskBoard + TasksListPage + IdeasListPage to render header cells and row cells from the visible column list (cell renderers keyed by `fieldKey`).
+5. **Sorting** — keep existing localStorage sort; only offer sort UI for columns that are visible **and** `sortable`. If current sort col is hidden, fall back to default sort for that surface.
+6. **Cell data** — ensure list payloads already include extras (phase name/id, tags, owner, createdBy, timestamps); extend list API/select only if a chosen extra is missing.
+
+## Implementation steps
+
+1. Schema + migration + seed `entity_fields` + empty prefs table; update platform docs.
+2. Service + routes for fields/prefs; unit tests for validation / defaults / reset.
+3. Client API hooks + Personalize modal + header context menu.
+4. Wire Tasks (project + global) to dynamic columns; add cell renderers for extras.
+5. Wire Ideas the same way.
+6. CSS: dynamic grids; keep chrome tracks fixed.
+7. Manual QA on DEV (`npm run dev:web`).
+
+## Acceptance criteria
+
+- [ ] Right-click header on project Tasks, global Tasks, and Ideas → menu with Personalize…
+- [ ] Modal lists only **displayable** fields; can reorder, show/hide; Save persists; Reload / other browser (same user) keeps layout
+- [ ] Same Tasks layout on every project and on `/tasks`
+- [ ] Reset restores seed defaults
+- [ ] Non-displayable fields never appear in UI or prefs API
+- [ ] Sorting still works for visible sortable columns
+- [ ] Chrome columns never appear in Personalize
+- [ ] Docs synced for new tables
+
+## Versioning (finish-up)
+
+Schema change → **MINOR +1**, PATCH `0`; update `RELEASE_NOTES.md` + `FEATURES.md` (major user-facing personalization).

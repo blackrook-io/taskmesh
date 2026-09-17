@@ -59,6 +59,18 @@ export function handleRouteError(res: Response, err: unknown): void {
     return;
   }
   if (
+    err instanceof Error &&
+    typeof (err as unknown as { status?: unknown }).status === "number" &&
+    typeof (err as unknown as { code?: unknown }).code === "string"
+  ) {
+    const status = (err as unknown as { status: number }).status;
+    const code = (err as unknown as { code: string }).code;
+    if (status >= 400 && status < 600) {
+      sendError(res, status, code, err.message);
+      return;
+    }
+  }
+  if (
     typeof err === "object" &&
     err !== null &&
     "code" in err &&
