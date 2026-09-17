@@ -1,0 +1,126 @@
+# T0128 — Associate Roles to a Project
+
+**Branch (after approval):** `T0128-project-roles`  
+**PROD Task:** T0128 (id 141) · Ready · high · project TaskMesh  
+**Depends on (shipped):** T0127 (role lists + Admin Settings UI), T0117 (`assigneeId` on tasks/todos)
+
+## Goal
+
+Enforce project roles so membership grants real access:
+
+| Role | Access |
+|------|--------|
+| **Administrator** | Unchanged global override; can edit any role list; Delete project |
+| **Owner** | Implicit Manager (not stored in `project_managers`) |
+| **Manager** | Read/Write + Project Settings (Modules, Phases, Users); edit all three role lists |
+| **Member** | Read/Write; no Settings |
+| **Viewer** | Read-only; no Settings |
+
+When removing a **Manager** or **Member** who still has project Tasks/ToDos with `assigneeId` set to them, require **Reassign** (to another assignable user) or **Blank** before dropping the role row. Viewer remove: no assignee prompt.
+
+## Interview decisions (locked)
+
+1. **Assigned items** — Use T0117 `assigneeId` on project-scoped **tasks** and **todos** (`project_id` + `assignee_id`). Ideas stay null; not in scope for remove.
+2. **Who edits lists** — Admins always; Managers may edit Managers / Members / Viewers. Members and Viewers cannot open Project Settings.
+3. **Delete project** — Administrator only.
+4. **Owner** — Implicit Manager with full Manager rights (Settings + Users) without a `project_managers` row.
+5. **Viewer remove** — No reassignment UI; just remove the list row.
+6. **Settings for Managers** — Full Settings tab except Delete (Admin-only): Modules, Phases, Users.
+
+## Out of scope
+
+- Changing `projects.ownerId` / ownership transfer (existing Admin transfer)
+- Assignee picker / Assign-to UI (already T0117)
+- Making Ideas assignable
+- Multi-role per user on one project (still at most one list)
+
+## Plan
+
+### 1. Role resolution helpers
+
+Centralize in `src/services/projectUsers.ts` (or thin sibling used by `ownership.ts`):
+
+- `resolveProjectRole(db, actorUserId, projectId)` →  
+  `'admin' | 'owner' | 'manager' | 'member' | 'viewer' | null`  
+  (admin via role table; owner via `projects.ownerId`; else which junction table).
+- `assertCanAccessProject` — allow any of the above (not only owner/admin).
+- `assertCanWriteProject` — deny Viewer (and null); allow admin/owner/manager/member.
+- `assertCanManageProjectSettings` — admin / owner / manager only.
+- List helpers: extend `ownerScope` for projects list, `dualScopeListFilter`, and `projectOwnedListFilter` so non-admins also see projects where they appear on any of the three role tables (union of owned + membership).
+
+Touch call sites that gate Settings mutations today as Admin-only:
+
+- `projectUsers` router — Admin **or** Manager (settings assert)
+- `phases` mount — same
+- `modules` `requireSettingsAdmin` — Admin **or** Manager for that project
+- Project **DELETE** — keep Administrator only
+- Project PATCH name/status/description — treat as write (Manager/Member), not Settings-only
+
+### 2. Viewer read-only
+
+On mutating routes that already call `assertCanAccessProject` / dual-scope asserts, also call write assert (or fold write into a shared pattern for POST/PATCH/DELETE). GETs stay access-only.
+
+Cover nested project resources (tasks, todos, docs, boards, wiki, canvases, image boards, modules reorder if Settings-gated separately, import/export mutate, etc.). Prefer one helper used from middleware / existing assert points rather than one-off checks.
+
+### 3. Remove + assignee disposition
+
+Extend `removeProjectUser` (and `DELETE /api/v1/projects/:id/users/:userId`):
+
+- Count / list assigned `tasks` + `todos` for `(projectId, userId)`.
+- If role is Manager or Member **and** count > 0:
+  - Require body: `{ disposition: "reassign", reassignToUserId: number }` **or** `{ disposition: "blank" }`.
+  - Missing disposition → `409` (or `400`) with code e.g. `assignee_disposition_required` + count.
+  - Reassign target must be in assignable pool **after** removal (Owner ∪ remaining Managers ∪ Members; not Viewers; not the removed user). Reuse `listAssignableUsers` / pool logic from `assignees.ts`.
+  - Apply: set `assigneeId` on matching tasks/todos, then delete role row (same transaction).
+- Viewer (or Manager/Member with zero assignees): delete row; optional empty body.
+- Optional `GET …/users/:userId/assignment-summary` or include counts on list for UI — keep minimal (DELETE error payload + client pre-check count via list endpoint enrichment is fine).
+
+### 4. Manager-usable user directory
+
+Settings Add-user today hits `/api/v1/admin/users` (Admin-only). Add a slim endpoint Managers can call, e.g.:
+
+- `GET /api/v1/projects/:id/directory-users?q=` — active, usable, non-admin users (same reject rules as add), gated by `assertCanManageProjectSettings`.
+
+Wire `ProjectUsersPanel` to that instead of admin users.
+
+### 5. UI
+
+- `ProjectDetailPage` / `useShellNav`: show Settings when Admin **or** project role is owner/manager (need role on project payload or a small `GET`/embedded `myRole` on project detail).
+- Hide Delete / danger zone unless Admin.
+- Members/Viewers: no Settings tab (redirect if deep-linked).
+- `ProjectUsersPanel`: reassignment modal when Remove hits disposition-required (or after a preflight count): choose another assignable user or Blank; then DELETE with body.
+- Viewer Remove: simple confirm only.
+
+Expose `myRole` (or `canManageSettings` / `canWrite`) on `GET /api/v1/projects/:id` so the client does not guess from list membership alone (owner is not in `project_managers`).
+
+### 6. Docs + tests
+
+- Update `docs/database/glossary.md` / `projects-and-ideas.md` — remove “until T0128” language; document role matrix + remove disposition.
+- Tests: membership grants list/get; Viewer 403 on write; Manager Settings OK; Member Settings 403; remove with reassign/blank; Viewer remove without disposition; Admin still overrides.
+
+## Acceptance
+
+- [ ] Manager/Member/Viewer (and Owner) can open the project; non-members still cannot
+- [ ] Projects list / search / dual-scope lists include membership projects
+- [ ] Viewer can read; mutations return 403
+- [ ] Manager sees Settings (Modules, Phases, Users); Member/Viewer do not; Delete remains Admin-only
+- [ ] Manager and Admin can add/remove any of the three role lists
+- [ ] Remove Manager/Member with assignees → must reassign or blank; Viewer remove is simple
+- [ ] Owner has Manager rights without a managers row
+- [ ] Docs + tests updated
+
+## Versioning (finish-up)
+
+No new Drizzle migration expected → **PATCH** +1. `RELEASE_NOTES.md` + `FEATURES.md` (major user-facing: project role access).
+
+## QA checklist (draft)
+
+1. As Admin: add Manager/Member/Viewer; confirm lists; delete project still works.
+2. As Manager: open Settings; add/remove users on all three lists; edit modules/phases; cannot delete project.
+3. As Member: R/W on tasks; no Settings tab.
+4. As Viewer: can view project content; cannot create/edit/delete.
+5. As non-member: project hidden from list / 403 on direct URL.
+6. Remove Member with assigned tasks → modal; reassign to another Member; verify `assigneeId` updates.
+7. Remove Manager with assignees → Blank; verify assignees null.
+8. Remove Viewer → no disposition UI.
+9. Owner (not on managers list) still has Settings + access.

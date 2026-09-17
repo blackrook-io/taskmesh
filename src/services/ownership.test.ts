@@ -8,6 +8,7 @@ import {
   dualScopeListFilter,
   isAdminOrOwner,
   ownerScope,
+  roleSatisfiesAccess,
 } from "./ownership.js";
 
 describe("isAdminOrOwner", () => {
@@ -58,7 +59,7 @@ describe("dualScopeListFilter", () => {
         from() {
           return {
             where() {
-              return "owned-ids-subquery";
+              return "subquery";
             },
           };
         },
@@ -73,7 +74,7 @@ describe("dualScopeListFilter", () => {
     );
   });
 
-  it("returns a filter for non-administrators (unsorted owned OR owned projects)", () => {
+  it("returns a filter for non-administrators (unsorted owned OR accessible projects)", () => {
     const clause = dualScopeListFilter(
       fakeDb,
       todos.projectId,
@@ -82,5 +83,25 @@ describe("dualScopeListFilter", () => {
       false,
     );
     assert.ok(clause);
+  });
+});
+
+describe("roleSatisfiesAccess", () => {
+  it("allows viewers only for read", () => {
+    assert.equal(roleSatisfiesAccess("viewer", "read"), true);
+    assert.equal(roleSatisfiesAccess("viewer", "write"), false);
+    assert.equal(roleSatisfiesAccess("viewer", "settings"), false);
+  });
+
+  it("allows members for read and write but not settings", () => {
+    assert.equal(roleSatisfiesAccess("member", "read"), true);
+    assert.equal(roleSatisfiesAccess("member", "write"), true);
+    assert.equal(roleSatisfiesAccess("member", "settings"), false);
+  });
+
+  it("allows managers for settings", () => {
+    assert.equal(roleSatisfiesAccess("manager", "settings"), true);
+    assert.equal(roleSatisfiesAccess("owner", "settings"), true);
+    assert.equal(roleSatisfiesAccess("admin", "settings"), true);
   });
 });

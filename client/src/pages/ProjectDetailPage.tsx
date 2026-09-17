@@ -320,6 +320,8 @@ export function ProjectDetailPage() {
   });
 
   const project = projectQuery.data;
+  const canManageSettings = isAdmin || project?.canManageSettings === true;
+  const canWrite = project?.canWrite === true;
   const modules = useMemo(() => modulesQuery.data ?? [], [modulesQuery.data]);
   const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
   const tasks = tasksQuery.data ?? [];
@@ -364,7 +366,7 @@ export function ProjectDetailPage() {
   }, [navListView, groupParam, groups, groupsQuery.isSuccess, setSearchParams]);
 
   useEffect(() => {
-    if (tab !== "settings" || isAdmin) return;
+    if (tab !== "settings" || canManageSettings) return;
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -373,7 +375,7 @@ export function ProjectDetailPage() {
       },
       { replace: true },
     );
-  }, [tab, isAdmin, setSearchParams]);
+  }, [tab, canManageSettings, setSearchParams]);
 
   const takeOverListFilter = (next: typeof taskListFilter | "clear") => {
     if (next === "clear") clearTaskListFilter();
@@ -673,7 +675,7 @@ export function ProjectDetailPage() {
                       Save overview
                     </button>
                   </>
-                ) : (
+                ) : canWrite ? (
                   <button
                     type="button"
                     className="btn small btn-icon"
@@ -683,7 +685,7 @@ export function ProjectDetailPage() {
                   >
                     <PencilIcon />
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -717,7 +719,7 @@ export function ProjectDetailPage() {
                   {projectStatusLabel(project.status)}
                 </p>
                 <div className="field field--tags-below">
-                  <TagInput entityType="project" entityId={projectId} readOnly />
+                  <TagInput entityType="project" entityId={projectId} readOnly={!canWrite || !overviewEdit} />
                 </div>
                 <MarkdownEditor
                   value={project.description ?? ""}
@@ -732,7 +734,7 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
 
-      {tab === "settings" && isAdmin ? (
+      {tab === "settings" && canManageSettings ? (
         <>
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Project modules</h2>
@@ -786,6 +788,7 @@ export function ProjectDetailPage() {
         <div style={{ marginTop: "1rem" }}>
           <PhaseManager projectId={projectId} phases={phasesQuery.data ?? []} />
         </div>
+        {isAdmin ? (
         <div className="card" style={{ marginTop: "1rem" }}>
           <h2 style={{ marginTop: 0 }}>Danger zone</h2>
           <p className="muted" style={{ marginTop: 0 }}>
@@ -796,11 +799,13 @@ export function ProjectDetailPage() {
             Delete project
           </button>
         </div>
+        ) : null}
         </>
       ) : null}
 
       {tab === "tasks" ? (
         <div>
+          {canWrite ? (
           <div className="card" style={{ marginBottom: "1rem" }}>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>New task</label>
@@ -829,6 +834,7 @@ export function ProjectDetailPage() {
               </div>
             </div>
           </div>
+          ) : null}
           <TaskListFilterBar
             key={navGroup ? `group-${navGroup.id}` : "list"}
             projectId={projectId}

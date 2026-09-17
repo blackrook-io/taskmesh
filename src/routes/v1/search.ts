@@ -9,6 +9,7 @@ import { searchRateLimit } from "../../middleware/rateLimits.js";
 import {
   dualScopeListFilter,
   ownerScope,
+  projectAccessListFilter,
   projectOwnedListFilter,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
@@ -72,7 +73,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
     const ideaScope = ownerScope(schema.ideas.ownerId, actorId, isAdmin) ?? sql`true`;
-    const projectScope = ownerScope(schema.projects.ownerId, actorId, isAdmin) ?? sql`true`;
+    const projectScope = projectAccessListFilter(db, actorId, isAdmin) ?? sql`true`;
     const taskScope =
       dualScopeListFilter(db, schema.tasks.projectId, schema.tasks.ownerId, actorId, isAdmin) ??
       sql`true`;

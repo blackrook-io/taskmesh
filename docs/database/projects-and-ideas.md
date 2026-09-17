@@ -149,7 +149,7 @@ Projects are parents of task groups, project phases, project managers/members/vi
 
 ## `project_managers` / `project_members` / `project_viewers`
 
-Junction tables for project role lists (T0127). **Access enforcement for these roles lands in T0128** — until then, project record access remains owner-or-Administrator only. The project **owner** (`projects.owner_id`) is an **implicit Manager** and is not stored in `project_managers`. A user may appear in **at most one** of the three lists per project (application rule). Administrators are not added to these lists (they already have full access).
+Junction tables for project role lists (T0127). **Access is enforced in T0128:** Managers (and Owner) = read/write + Settings; Members = read/write; Viewers = read-only. Administrators retain global access. The project **owner** (`projects.owner_id`) is an **implicit Manager** and is not stored in `project_managers`. A user may appear in **at most one** of the three lists per project (application rule). Administrators are not added to these lists (they already have full access).
 
 ### Columns (each table)
 
@@ -170,7 +170,7 @@ Junction tables for project role lists (T0127). **Access enforcement for these r
 
 ### Relationships
 
-- Owned by `projects`. Intended T0128 semantics: Managers = R/W + Settings; Members = R/W; Viewers = read-only.
+- Owned by `projects`. Managers / Owner = R/W + Settings; Members = R/W; Viewers = read-only (T0128). Delete project remains Administrator-only.
 
 ---
 

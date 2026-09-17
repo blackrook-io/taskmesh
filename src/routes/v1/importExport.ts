@@ -15,7 +15,10 @@ import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { allocateTaskNumber, assertPhaseForProject } from "../../services/tasks.js";
-import { assertCanAccessProject, ownerScope } from "../../services/ownership.js";
+import {
+  assertCanAccessProject,
+  projectAccessListFilter,
+} from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
 import {
@@ -104,10 +107,8 @@ importExportRouter.get("/export/projects", async (req, res) => {
     const format = formatQuery.parse(req.query.format ?? "csv");
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
-    const rows = scope
-      ? await db.select().from(schema.projects).where(scope)
-      : await db.select().from(schema.projects);
+    const scope = projectAccessListFilter(db, actorId, isAdmin);
+    const rows = await db.select().from(schema.projects).where(scope);
     await sendDownload(
       res,
       format,
@@ -135,13 +136,13 @@ importExportRouter.get("/export/tasks", async (req, res) => {
         .from(schema.tasks)
         .where(eq(schema.tasks.projectId, projectId));
     } else {
-      const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
+      const scope = projectAccessListFilter(db, actorId, isAdmin);
       if (scope) {
-        const ownedProjects = await db
+        const accessibleProjects = await db
           .select({ id: schema.projects.id })
           .from(schema.projects)
           .where(scope);
-        const ids = ownedProjects.map((p) => p.id);
+        const ids = accessibleProjects.map((p) => p.id);
         rows = ids.length
           ? await db.select().from(schema.tasks).where(inArray(schema.tasks.projectId, ids))
           : [];
@@ -171,10 +172,8 @@ importExportRouter.get("/export/bundle", async (req, res) => {
     const format = formatQuery.parse(req.query.format ?? "xlsx");
     const actorId = await getCurrentUserId(db);
     const isAdmin = await userHasAdministrator(db, actorId);
-    const scope = ownerScope(schema.projects.ownerId, actorId, isAdmin);
-    const projects = scope
-      ? await db.select().from(schema.projects).where(scope)
-      : await db.select().from(schema.projects);
+    const scope = projectAccessListFilter(db, actorId, isAdmin);
+    const projects = await db.select().from(schema.projects).where(scope);
     let tasks;
     if (scope) {
       const ids = projects.map((p) => p.id);
@@ -431,7 +430,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
       continue;
     }
     try {
-      await assertCanAccessProject(db, await getCurrentUserId(db), projectId);
+      await assertCanAccessProject(db, await getCurrentUserId(db), projectId, "write");
     } catch {
       discarded.push({
         row: rowNum,

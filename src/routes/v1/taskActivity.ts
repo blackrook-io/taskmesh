@@ -83,7 +83,7 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, task);
+    await assertCanAccessDualScoped(db, actorId, task, "write");
     const before: TaskLike = {
       title: parsed.before.title,
       description: parsed.before.description,
@@ -132,7 +132,7 @@ taskActivityRouter.post("/:taskId/activity", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, task);
+    await assertCanAccessDualScoped(db, actorId, task, "write");
     const parsed = commentBody.parse(req.body);
     const [row] = await db
       .insert(schema.taskActivity)
@@ -165,7 +165,7 @@ taskActivityRouter.patch("/:taskId/activity/:entryId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, task);
+    await assertCanAccessDualScoped(db, actorId, task, "write");
     const parsed = commentBody.parse(req.body);
     const [existing] = await db
       .select()

@@ -5,25 +5,27 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { parseRouteId } from "../../lib/routeParams.js";
-import { NOT_ADMINISTRATOR_MESSAGE } from "../../middleware/requireAdministrator.js";
+import { assertCanAccessProject } from "../../services/ownership.js";
 import {
   isProjectModuleKey,
   listProjectModules,
   PROJECT_MODULE_KEYS,
   setModuleEnabled,
 } from "../../services/projectModules.js";
-import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
 
-async function requireSettingsAdmin(
+async function requireProjectSettings(
   res: Parameters<typeof sendError>[0],
+  projectId: number,
 ): Promise<boolean> {
-  const actorId = await getCurrentUserId(db);
-  if (!(await userHasAdministrator(db, actorId))) {
-    sendError(res, 403, "not_administrator", NOT_ADMINISTRATOR_MESSAGE);
+  try {
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, projectId, "settings");
+    return true;
+  } catch (err) {
+    handleRouteError(res, err);
     return false;
   }
-  return true;
 }
 
 const modulePatch = z.object({
@@ -53,8 +55,8 @@ modulesRouter.get("/", async (req, res) => {
 
 modulesRouter.patch("/reorder", async (req, res) => {
   try {
-    if (!(await requireSettingsAdmin(res))) return;
     const projectId = parseRouteId(req, "projectId");
+    if (!(await requireProjectSettings(res, projectId))) return;
     const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
     if (!proj) {
       sendError(res, 404, "not_found", "Project not found");
@@ -87,8 +89,8 @@ modulesRouter.patch("/reorder", async (req, res) => {
 
 modulesRouter.patch("/:moduleKey", async (req, res) => {
   try {
-    if (!(await requireSettingsAdmin(res))) return;
     const projectId = parseRouteId(req, "projectId");
+    if (!(await requireProjectSettings(res, projectId))) return;
     const moduleKeyRaw = String(req.params.moduleKey ?? "");
     if (!isProjectModuleKey(moduleKeyRaw)) {
       sendError(res, 400, "invalid_module", `Unknown module: ${moduleKeyRaw}`);

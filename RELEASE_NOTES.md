@@ -4,6 +4,16 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.37.1 — 2026-09-17
+
+### New Functionality
+- Project Managers, Members, and Viewers now receive real access from role lists: Managers (and Owners) get read/write plus Settings; Members get read/write; Viewers are read-only. Shared projects appear in lists and search for listed users.
+- Removing a Manager or Member who still has assigned Tasks/ToDos requires reassigning those items to another Owner/Manager/Member or clearing the assignee before the role row is removed.
+
+### Enhancements
+- Project Settings (modules, phases, and Users) is available to Managers as well as Administrators; Delete project remains Administrator-only.
+- Project detail responses include the actor’s effective role (`myRole`) plus `canWrite` / `canManageSettings` flags for the UI.
+
 ## 0.37.0 — 2026-09-17
 
 ### New Functionality

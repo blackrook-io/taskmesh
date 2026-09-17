@@ -129,7 +129,7 @@ imageBoardsRouter.post("/", async (req, res) => {
     const projectId = parsed.projectId === undefined ? null : parsed.projectId;
     const actorId = await getCurrentUserId(db);
     if (projectId != null) {
-      await assertCanAccessProject(db, actorId, projectId);
+      await assertCanAccessProject(db, actorId, projectId, "write");
     }
     const sortOrder = await nextSortOrder(projectId);
     const number = await allocateImageBoardNumber(db);
@@ -238,7 +238,7 @@ imageBoardsRouter.patch("/:imageBoardId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, existing);
+    await assertCanAccessDualScoped(db, actorId, existing, "write");
     const parsed = patchBody.parse(req.body);
     if (
       parsed.title === undefined &&
@@ -250,7 +250,7 @@ imageBoardsRouter.patch("/:imageBoardId", async (req, res) => {
       return;
     }
     if (parsed.projectId != null) {
-      await assertCanAccessProject(db, actorId, parsed.projectId);
+      await assertCanAccessProject(db, actorId, parsed.projectId, "write");
     }
 
     const [row] = await db
@@ -291,7 +291,7 @@ imageBoardsRouter.delete("/:imageBoardId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessDualScoped(db, actorId, existing);
+    await assertCanAccessDualScoped(db, actorId, existing, "write");
     await db.delete(schema.imageBoards).where(eq(schema.imageBoards.id, id));
     res.status(204).send();
   } catch (err) {
