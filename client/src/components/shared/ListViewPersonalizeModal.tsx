@@ -8,7 +8,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ResolvedListColumn } from "../../lib/listViewColumns";
 
 type Props = {
@@ -62,25 +62,18 @@ function SortableColumnRow({
   );
 }
 
-export function ListViewPersonalizeModal({
-  open,
-  title = "Personalize list",
+function ListViewPersonalizeBody({
+  title,
   rows,
-  saving = false,
-  resetting = false,
-  error = null,
+  saving,
+  resetting,
+  error,
   onClose,
   onSave,
   onReset,
-}: Props) {
-  const [draft, setDraft] = useState<ResolvedListColumn[]>(rows);
+}: Omit<Props, "open">) {
+  const [draft, setDraft] = useState<ResolvedListColumn[]>(() => rows);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-
-  useEffect(() => {
-    if (open) setDraft(rows);
-  }, [open, rows]);
-
-  if (!open) return null;
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -155,5 +148,33 @@ export function ListViewPersonalizeModal({
         </div>
       </div>
     </div>
+  );
+}
+
+export function ListViewPersonalizeModal({
+  open,
+  title = "Personalize list",
+  rows,
+  saving = false,
+  resetting = false,
+  error = null,
+  onClose,
+  onSave,
+  onReset,
+}: Props) {
+  if (!open) return null;
+  const draftKey = rows.map((r) => `${r.fieldKey}:${r.visible ? 1 : 0}`).join("|");
+  return (
+    <ListViewPersonalizeBody
+      key={draftKey}
+      title={title}
+      rows={rows}
+      saving={saving}
+      resetting={resetting}
+      error={error}
+      onClose={onClose}
+      onSave={onSave}
+      onReset={onReset}
+    />
   );
 }

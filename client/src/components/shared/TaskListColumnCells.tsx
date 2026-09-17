@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- header component + cell renderer helpers */
 import type { ReactNode } from "react";
 import { RowTagChips } from "./RowTagChips";
 import { TaskListSortHeaderBtn } from "./TaskListSortHeaderBtn";

@@ -11,6 +11,9 @@ import {
   type ResolvedListColumn,
 } from "./listViewColumns";
 
+const EMPTY_FIELDS: ListViewField[] = [];
+const EMPTY_PREFS: ListViewPrefsPayload["columns"] = [];
+
 export function useListViewColumns(listViewKey: ListViewKey, surface: ListViewSurface) {
   const qc = useQueryClient();
 
@@ -34,8 +37,8 @@ export function useListViewColumns(listViewKey: ListViewKey, surface: ListViewSu
     },
   });
 
-  const fields = fieldsQuery.data ?? [];
-  const prefs = prefsQuery.data?.columns ?? [];
+  const fields = fieldsQuery.data ?? EMPTY_FIELDS;
+  const prefs = prefsQuery.data?.columns ?? EMPTY_PREFS;
 
   const visibleColumns: ResolvedListColumn[] = useMemo(
     () => resolveVisibleColumns(fields, prefs, surface),
