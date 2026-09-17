@@ -13,6 +13,9 @@ A future **Build release** skill will use this file to populate GitHub Release n
 ### Enhancements
 - Nested project Settings mutations (module toggles, phases, and project delete) are Administrator-gated on the API to match the Settings UI.
 
+### Fixes
+- Bumped `multer` to clear a high-severity production npm audit finding that blocked Security CI.
+
 ## 0.35.15 — 2026-09-07
 
 ### Enhancements
