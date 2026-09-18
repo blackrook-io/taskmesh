@@ -8,6 +8,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
 - Assign users to Managers, Members, and Viewers per project — Managers and Owners get Settings; Members write; Viewers read-only
+- Organize people into User Groups (G####) from Administration, assign platform Roles to Groups, and add Groups to project role lists with live membership expansion
 
 
 

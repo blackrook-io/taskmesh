@@ -6,18 +6,27 @@ import { parseRouteId } from "../../lib/routeParams.js";
 import { assertCanAccessProject } from "../../services/ownership.js";
 import {
   PROJECT_USER_ROLES,
+  addProjectGroup,
   addProjectUser,
   countUserProjectAssignments,
+  listProjectDirectoryGroups,
   listProjectDirectoryUsers,
   listProjectUsers,
+  removeProjectGroup,
   removeProjectUser,
 } from "../../services/projectUsers.js";
 import { getCurrentUserId } from "../../services/users.js";
 
-const addBody = z.object({
-  userId: z.number().int().positive(),
-  role: z.enum(PROJECT_USER_ROLES),
-});
+const addBody = z
+  .object({
+    userId: z.number().int().positive().optional(),
+    groupId: z.number().int().positive().optional(),
+    role: z.enum(PROJECT_USER_ROLES),
+  })
+  .strict()
+  .refine((b) => (b.userId != null) !== (b.groupId != null), {
+    message: "Provide exactly one of userId or groupId",
+  });
 
 const removeBody = z
   .object({
@@ -55,7 +64,11 @@ projectUsersRouter.get("/directory", async (req, res) => {
   try {
     const projectId = await ensureSettingsAccess(req, res);
     if (projectId == null) return;
-    res.json({ data: await listProjectDirectoryUsers(db, projectId) });
+    const [users, groups] = await Promise.all([
+      listProjectDirectoryUsers(db, projectId),
+      listProjectDirectoryGroups(db, projectId),
+    ]);
+    res.json({ data: { users, groups } });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -77,8 +90,29 @@ projectUsersRouter.post("/", async (req, res) => {
     const projectId = await ensureSettingsAccess(req, res);
     if (projectId == null) return;
     const parsed = addBody.parse(req.body);
-    const entry = await addProjectUser(db, projectId, parsed.userId, parsed.role);
+    if (parsed.groupId != null) {
+      const entry = await addProjectGroup(db, projectId, parsed.groupId, parsed.role);
+      res.status(201).json({ data: entry });
+      return;
+    }
+    const entry = await addProjectUser(db, projectId, parsed.userId!, parsed.role);
     res.status(201).json({ data: entry });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+projectUsersRouter.delete("/groups/:groupId", async (req, res) => {
+  try {
+    const projectId = await ensureSettingsAccess(req, res);
+    if (projectId == null) return;
+    const groupId = z.coerce.number().int().positive().parse(req.params.groupId);
+    const removed = await removeProjectGroup(db, projectId, groupId);
+    if (!removed) {
+      sendError(res, 404, "not_found", "Group is not on any role list for this project");
+      return;
+    }
+    res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);
   }

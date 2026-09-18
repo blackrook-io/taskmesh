@@ -282,6 +282,126 @@ export const userRoles = pgTable(
   ],
 );
 
+/**
+ * User Groups (T0130) — org/people groups, distinct from Task Groups (`task_groups`).
+ * Display → G####. Admins manage via Administration → Groups.
+ */
+export const groups = pgTable("groups", {
+  id: serial("id").primaryKey(),
+  /** App-wide unique display number → G####. */
+  number: integer("number").notNull().unique(),
+  name: text("name").notNull().unique(),
+  createdById: integer("created_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Group ↔ user membership. */
+export const groupMembers = pgTable(
+  "group_members",
+  {
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.groupId, t.userId] }),
+    index("group_members_user_id_idx").on(t.userId),
+  ],
+);
+
+/** Group ↔ platform role grants (live expansion to members). */
+export const groupRoles = pgTable(
+  "group_roles",
+  {
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    roleId: integer("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.groupId, t.roleId] }),
+    index("group_roles_role_id_idx").on(t.roleId),
+  ],
+);
+
+/**
+ * Project Managers list — Groups (T0130). Live expansion via group_members.
+ * A group may appear in at most one of managers/members/viewers per project (app rule).
+ */
+export const projectManagerGroups = pgTable(
+  "project_manager_groups",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("project_manager_groups_project_group_uidx").on(t.projectId, t.groupId),
+    index("project_manager_groups_group_id_idx").on(t.groupId),
+  ],
+);
+
+/** Project Members list — Groups (T0130). */
+export const projectMemberGroups = pgTable(
+  "project_member_groups",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("project_member_groups_project_group_uidx").on(t.projectId, t.groupId),
+    index("project_member_groups_group_id_idx").on(t.groupId),
+  ],
+);
+
+/** Project Viewers list — Groups (T0130). */
+export const projectViewerGroups = pgTable(
+  "project_viewer_groups",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("project_viewer_groups_project_group_uidx").on(t.projectId, t.groupId),
+    index("project_viewer_groups_group_id_idx").on(t.groupId),
+  ],
+);
+
 /** API keys (admin bridge; Profile CRUD + enforcement in T0063). */
 export const apiKeys = pgTable("api_keys", {
   id: serial("id").primaryKey(),

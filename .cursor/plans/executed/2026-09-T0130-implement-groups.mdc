@@ -1,0 +1,102 @@
+# T0130 — Implement Groups
+
+**Task:** T0130 (id `143`) · Project TaskMesh · state Ready at plan time  
+**Branch (after approval):** `T0130-implement-groups`  
+**Version on finish-up:** MINOR bump (new Drizzle migration)
+
+## Decisions (interview)
+
+| Topic | Decision |
+|-------|----------|
+| Admin UI label | **Groups** (tab directly under Users) |
+| API | `/api/v1/admin/groups` (no clash with project Task Groups) |
+| Group → Roles | Live expansion; **Administrator** on a Group grants Administration to members; custom roles remain labels-only |
+| Project membership | Store **group** on project role lists; expand live when membership changes |
+| Overlap | Project: Manager > Member > Viewer (highest wins). Platform roles: **union** of direct + group roles |
+| Lifecycle | Hard-delete with confirm; empty Groups allowed; display id **G####** |
+| Who manages | Administrators only |
+
+**Scope:** Full description — Admin Groups + Project Users group add + Group Roles. No deferred follow-up Task.
+
+## Naming
+
+- Domain entity: **Group** (people / org). Distinct from **Task Groups** (`task_groups`, `/api/v1/projects/:id/groups`).
+- Tables: `groups`, `group_members`, `group_roles`, plus `project_manager_groups` / `project_member_groups` / `project_viewer_groups` (or one polymorphic table — prefer three mirrors of existing user junction tables for consistency with T0127).
+- Avoid renaming Task Group routes/UI.
+
+## Schema (migration)
+
+1. **`groups`** — `id`, `number` (unique, G####), `name` (unique, trimmed), `created_at` / `updated_at`, optional `created_by_id`.
+2. **`group_members`** — `(group_id, user_id)` PK; CASCADE on group/user delete; unique pair.
+3. **`group_roles`** — `(group_id, role_id)` PK; same semantics as `user_roles` for platform roles.
+4. **Project group junctions** — three tables mirroring `project_managers` / `project_members` / `project_viewers`, but `group_id` instead of `user_id`; UNIQUE `(project_id, group_id)`.
+5. Update `docs/database/platform.md` (+ project membership notes in `projects-and-ideas.md`); `npm run docs:sync-schema` after migrate.
+
+## Effective permissions
+
+### Platform Roles
+
+- Extend `userHasAdministrator` / role listing used by session & admin gates to include roles via `group_members` → `group_roles`.
+- Last-Administrator safeguards: count users who have Administrator **directly or via any Group**; block removing the last effective Administrator (group role removal, group delete, member remove, etc.).
+- Session / `isAdministrator` must reflect group-granted Admin.
+
+### Project access
+
+- When resolving `myRole` / list filters / write gates: collect roles from direct user junctions **and** from groups the user belongs to that are on the project; take **highest** of {manager, member, viewer}; owner still implicit Manager; Administrators still global bypass as today.
+- Listing Project Users: return **users** and **groups** separately (or tagged entries) so UI can denote Groups specially.
+- Adding a Group to a role list does **not** flatten members into user rows.
+- Same user may appear as direct member and via group; effective role = highest; UI still shows both entries where applicable (direct user row + group row).
+
+## API (`requireAdministrator` for admin groups)
+
+| Method | Path | Notes |
+|--------|------|--------|
+| GET/POST | `/api/v1/admin/groups` | List / create `{ name }` → next G#### |
+| GET/PATCH/DELETE | `/api/v1/admin/groups/:id` | Detail (members + roles); rename; hard-delete (confirm client-side) |
+| POST/DELETE | `/api/v1/admin/groups/:id/members` | `{ userId }` add/remove |
+| POST/DELETE | `/api/v1/admin/groups/:id/roles` | `{ roleId }` — same rules as user role assign |
+
+### Project Users (extend existing)
+
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/api/v1/projects/:id/users` | Include `managerGroups` / `memberGroups` / `viewerGroups` (or unified tagged lists) |
+| GET | `/api/v1/projects/:id/users/directory` | Optionally also expose groups directory, or separate `…/groups/directory` |
+| POST | `/api/v1/projects/:id/users` | Accept `{ groupId, role }` **or** `{ userId, role }` |
+| DELETE | `/api/v1/projects/:id/users` | Accept group removal by `groupId` + `role` |
+
+Removing a **Group** from a project role list does not require assignee disposition (disposition stays user-only). Removing a **user** who also has group access: keep current disposition rules for their **direct** row only; effective access may remain via group.
+
+## UI
+
+1. **Administration** — Insert `groups` in `ADMIN_SECTIONS` immediately after `users`; labels, path `/admin/groups`, icon, `AdministrationModal` panel.
+2. **AdminGroupsPanel** — List Groups (G####, name, member count); create; open detail: name edit, member add/remove (user search), role chips (same pattern as Users), delete with ConfirmDialog.
+3. **ProjectUsersPanel** — Each of Managers / Members / Viewers Add modal: search **Users and Groups**; Groups shown with distinct badge/style (e.g. “Group” chip / different row treatment). Lists show Group rows distinctly. Remove Group → confirm only.
+
+## Out of scope
+
+- Changing Task Groups product behavior or routes.
+- Making custom platform Roles grant new capabilities (still labels).
+- Soft-delete / deactivate for Groups (hard-delete only).
+- Nested Groups.
+
+## Implementation order
+
+1. Schema + migration + docs  
+2. Group CRUD + members + roles services/routes; wire effective Administrator  
+3. Admin Groups UI tab  
+4. Project group junctions + access resolution + API  
+5. ProjectUsersPanel UI  
+6. Tests for effective Admin + project highest-wins  
+
+## QA checklist (draft)
+
+- [ ] Admin → Groups tab under Users; create empty Group → G####  
+- [ ] Add/remove members; assign Administrator role to Group → member can open Administration without direct Admin  
+- [ ] Remove last effective Admin (direct or via group) blocked  
+- [ ] Delete Group with confirm; cascades memberships/roles/project links  
+- [ ] Project Settings → Users: Add Group to Managers/Members/Viewers; Group rows look distinct  
+- [ ] User in Viewer Group + direct Manager → effective Manager  
+- [ ] Change Group membership → project access updates without re-adding Group  
+- [ ] Task Groups UI/API unchanged  
+- [ ] Non-admin cannot hit `/api/v1/admin/groups`  

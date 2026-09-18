@@ -11,6 +11,7 @@ import {
 
 export const ADMIN_SECTIONS = [
   "users",
+  "groups",
   "keys",
   "apis",
   "database",
@@ -26,6 +27,7 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number];
 
 export const ADMIN_SECTION_LABELS: Record<AdminSection, string> = {
   users: "Users",
+  groups: "Groups",
   keys: "Keys",
   apis: "APIs",
   database: "Database",
@@ -44,6 +46,7 @@ export function isAdminSection(value: string): value is AdminSection {
 export function adminSectionFromPath(pathname: string): AdminSection | null {
   if (pathname === "/admin" || pathname === "/admin/") return "users";
   if (pathname === "/admin/users") return "users";
+  if (pathname === "/admin/groups") return "groups";
   if (pathname === "/admin/keys") return "keys";
   if (pathname === "/admin/apis") return "apis";
   if (pathname === "/admin/database") return "database";

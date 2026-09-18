@@ -16,7 +16,7 @@ export class AssigneeError extends Error {
   }
 }
 
-/** True when the project has no managers, members, or viewers (Owner only). */
+/** True when the project has no managers, members, or viewers (Owner only) — users or Groups. */
 export async function isSoloOwnerProject(db: Db, projectId: number): Promise<boolean> {
   const [mgr] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -30,10 +30,29 @@ export async function isSoloOwnerProject(db: Db, projectId: number): Promise<boo
     .select({ n: sql<number>`count(*)::int` })
     .from(schema.projectViewers)
     .where(eq(schema.projectViewers.projectId, projectId));
-  return (mgr?.n ?? 0) === 0 && (mem?.n ?? 0) === 0 && (view?.n ?? 0) === 0;
+  const [mgrG] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.projectManagerGroups)
+    .where(eq(schema.projectManagerGroups.projectId, projectId));
+  const [memG] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.projectMemberGroups)
+    .where(eq(schema.projectMemberGroups.projectId, projectId));
+  const [viewG] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.projectViewerGroups)
+    .where(eq(schema.projectViewerGroups.projectId, projectId));
+  return (
+    (mgr?.n ?? 0) === 0 &&
+    (mem?.n ?? 0) === 0 &&
+    (view?.n ?? 0) === 0 &&
+    (mgrG?.n ?? 0) === 0 &&
+    (memG?.n ?? 0) === 0 &&
+    (viewG?.n ?? 0) === 0
+  );
 }
 
-/** Assignable user ids for a project: Owner ∪ managers ∪ members (exclude viewers). */
+/** Assignable user ids for a project: Owner ∪ managers ∪ members (exclude viewers), including via Groups. */
 export async function listAssignableUserIds(db: Db, projectId: number): Promise<number[]> {
   const [proj] = await db
     .select({ ownerId: schema.projects.ownerId })
@@ -42,7 +61,7 @@ export async function listAssignableUserIds(db: Db, projectId: number): Promise<
     .limit(1);
   if (!proj) return [];
 
-  const [managers, members] = await Promise.all([
+  const [managers, members, managerGroups, memberGroups] = await Promise.all([
     db
       .select({ userId: schema.projectManagers.userId })
       .from(schema.projectManagers)
@@ -51,11 +70,32 @@ export async function listAssignableUserIds(db: Db, projectId: number): Promise<
       .select({ userId: schema.projectMembers.userId })
       .from(schema.projectMembers)
       .where(eq(schema.projectMembers.projectId, projectId)),
+    db
+      .select({ groupId: schema.projectManagerGroups.groupId })
+      .from(schema.projectManagerGroups)
+      .where(eq(schema.projectManagerGroups.projectId, projectId)),
+    db
+      .select({ groupId: schema.projectMemberGroups.groupId })
+      .from(schema.projectMemberGroups)
+      .where(eq(schema.projectMemberGroups.projectId, projectId)),
   ]);
 
   const ids = new Set<number>([proj.ownerId]);
   for (const row of managers) ids.add(row.userId);
   for (const row of members) ids.add(row.userId);
+
+  const groupIds = [
+    ...managerGroups.map((g) => g.groupId),
+    ...memberGroups.map((g) => g.groupId),
+  ];
+  if (groupIds.length > 0) {
+    const memberRows = await db
+      .select({ userId: schema.groupMembers.userId })
+      .from(schema.groupMembers)
+      .where(inArray(schema.groupMembers.groupId, groupIds));
+    for (const row of memberRows) ids.add(row.userId);
+  }
+
   return [...ids];
 }
 

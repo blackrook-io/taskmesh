@@ -20,6 +20,7 @@ Most user-facing entities store an app-wide unique integer `number` and format i
 | I | `ideas` | I0042 |
 | P | `projects` | P0007 |
 | U | `users` | U0001 |
+| G | `groups` | G0001 |
 | T | `tasks` | T0065 |
 | D | `todos` | D0012 |
 | N | `project_documents` | N0012 |
