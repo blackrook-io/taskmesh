@@ -26,7 +26,7 @@ type AdminOauthProvider = {
 
 type RoleRef = { id: number; name: string; slug: string };
 
-function OauthHelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function OauthHelpDialog({ onClose }: { onClose: () => void }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -45,12 +45,6 @@ function OauthHelpDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setOffset({ x: 0, y: 0 });
-      setDragging(false);
-      dragRef.current = null;
-      return;
-    }
     const t = window.setTimeout(() => closeRef.current?.focus(), 0);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -63,7 +57,7 @@ function OauthHelpDialog({ open, onClose }: { open: boolean; onClose: () => void
       window.clearTimeout(t);
       window.removeEventListener("keydown", onKey);
     };
-  }, [open, onClose]);
+  }, [onClose]);
 
   function onDragHandlePointerDown(e: React.PointerEvent<HTMLElement>) {
     if (e.button !== 0) return;
@@ -114,8 +108,6 @@ function OauthHelpDialog({ open, onClose }: { open: boolean; onClose: () => void
     dragRef.current = null;
     setDragging(false);
   }
-
-  if (!open) return null;
 
   return createPortal(
     <div
@@ -526,7 +518,7 @@ export function AdminOauthPanel() {
         })}
       </div>
 
-      <OauthHelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {helpOpen ? <OauthHelpDialog onClose={() => setHelpOpen(false)} /> : null}
     </div>
   );
 }
