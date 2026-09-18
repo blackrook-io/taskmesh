@@ -21,8 +21,11 @@ import { listAssignableUsers } from "../../services/assignees.js";
 import {
   getUserOverviewPrefs,
   putUserOverviewPrefs,
+  resetUserOverviewPrefs,
+  getProjectOverviewDefault,
+  putProjectOverviewDefault,
 } from "../../services/overviewPrefs.js";
-import type { OverviewPanelPref } from "../../db/schema.js";
+import type { OverviewPanelInstance } from "../../db/schema.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
@@ -48,14 +51,24 @@ const projectPatch = z.object({
   status: projectStatus.optional(),
 });
 
-const overviewPanelPrefSchema = z.object({
+const overviewPanelInstanceSchema = z.object({
+  id: z.string().min(1).max(80),
+  type: z.string().min(1).max(80),
   limit: z.union([z.literal(5), z.literal(10), z.literal(20)]),
   days: z.number().int().min(1).max(365).optional(),
 });
 
-const overviewPrefsPutSchema = z.object({
-  panels: z.record(z.string(), overviewPanelPrefSchema),
-  mode: z.enum(["replace", "merge"]).optional(),
+const overviewPrefsPutSchema = z.union([
+  z.object({
+    reset: z.literal(true),
+  }),
+  z.object({
+    layout: z.array(overviewPanelInstanceSchema),
+  }),
+]);
+
+const overviewDefaultPutSchema = z.object({
+  layout: z.array(overviewPanelInstanceSchema),
 });
 
 const reorderBody = z.object({
@@ -221,15 +234,42 @@ projectsRouter.put("/:id/overview-prefs", async (req, res) => {
     const parsed = overviewPrefsPutSchema.parse(req.body);
     const actorId = await getCurrentUserId(db);
     await assertCanAccessProject(db, actorId, id);
+    if ("reset" in parsed && parsed.reset) {
+      res.json({ data: await resetUserOverviewPrefs(db, actorId, id) });
+      return;
+    }
     res.json({
       data: await putUserOverviewPrefs(
         db,
         actorId,
         id,
-        parsed.panels as Record<string, OverviewPanelPref>,
-        parsed.mode ?? "merge",
+        (parsed as { layout: OverviewPanelInstance[] }).layout,
       ),
     });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+projectsRouter.get("/:id/overview-default", async (req, res) => {
+  try {
+    const id = idParam.parse(req.params.id);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
+    res.json({ data: { layout: await getProjectOverviewDefault(db, id) } });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+projectsRouter.put("/:id/overview-default", async (req, res) => {
+  try {
+    const id = idParam.parse(req.params.id);
+    const parsed = overviewDefaultPutSchema.parse(req.body);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id, "settings");
+    const layout = await putProjectOverviewDefault(db, id, parsed.layout, actorId);
+    res.json({ data: { layout } });
   } catch (err) {
     handleRouteError(res, err);
   }

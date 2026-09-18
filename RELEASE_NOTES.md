@@ -4,6 +4,16 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.41.0 — 2026-09-18
+
+### New Functionality
+- Project Overview panels are a personalizable canvas: add from a catalog, remove, and drag-and-drop rearrange on the responsive grid.
+- Layout is per user, with a project default set by Owners/Managers/Admins and a Reset control to restore it.
+- New catalog panel **My Tasks Today** lists incomplete tasks assigned to you that are due today.
+
+### Breaking Changes
+- Overview prefs API now stores ordered panel instances (`layout`) instead of a fixed key→prefs map; project defaults live in `project_overview_defaults`.
+
 ## 0.40.0 — 2026-09-18
 
 ### New Functionality

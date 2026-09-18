@@ -500,7 +500,42 @@ export type OverviewPanelPref = {
   days?: number;
 };
 
-/** Per-user Project Overview panel prefs (T0135). One row per (user, project). */
+/** One Overview canvas panel instance (T0136). Ordered in layout arrays. */
+export type OverviewPanelInstance = {
+  id: string;
+  type: string;
+  limit: 5 | 10 | 20;
+  days?: number;
+};
+
+/** Project-wide Overview default layout (Manager/Owner/Admin). One row per project. */
+export const projectOverviewDefaults = pgTable(
+  "project_overview_defaults",
+  {
+    id: serial("id").primaryKey(),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Ordered panel instances. */
+    layout: jsonb("layout").$type<OverviewPanelInstance[]>().notNull(),
+    updatedById: integer("updated_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("project_overview_defaults_project_uidx").on(t.projectId),
+    index("project_overview_defaults_project_id_idx").on(t.projectId),
+  ],
+);
+
+/**
+ * Per-user Project Overview canvas layout (T0135/T0136).
+ * One row per (user, project). Missing row → follow project default.
+ * `layout` is ordered instances; legacy T0135 key→prefs maps are accepted on read and rewritten.
+ */
 export const userProjectOverviewPrefs = pgTable(
   "user_project_overview_prefs",
   {
@@ -511,8 +546,8 @@ export const userProjectOverviewPrefs = pgTable(
     projectId: integer("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    /** Map of panel key → { limit, days? }. */
-    panels: jsonb("panels").$type<Record<string, OverviewPanelPref>>().notNull(),
+    /** Ordered panel instances (or legacy map until rewritten). */
+    panels: jsonb("panels").$type<OverviewPanelInstance[] | Record<string, OverviewPanelPref>>().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1140,6 +1175,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   canvases: many(canvases),
   imageBoards: many(imageBoards),
   overviewPrefs: many(userProjectOverviewPrefs),
+  overviewDefault: many(projectOverviewDefaults),
 }));
 
 export const todosRelations = relations(todos, ({ one }) => ({
@@ -1293,6 +1329,20 @@ export const userProjectOverviewPrefsRelations = relations(
     project: one(projects, {
       fields: [userProjectOverviewPrefs.projectId],
       references: [projects.id],
+    }),
+  }),
+);
+
+export const projectOverviewDefaultsRelations = relations(
+  projectOverviewDefaults,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [projectOverviewDefaults.projectId],
+      references: [projects.id],
+    }),
+    updatedBy: one(users, {
+      fields: [projectOverviewDefaults.updatedById],
+      references: [users.id],
     }),
   }),
 );

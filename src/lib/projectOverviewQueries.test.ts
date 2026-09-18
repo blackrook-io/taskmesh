@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 import {
   addDaysYmd,
   localYmd,
+  selectMyTasksToday,
   selectNextDue,
   selectOverdue,
   selectRecentlyCompleted,
   selectUpcoming,
+  type OverviewAssigneeRecord,
   type OverviewDueRecord,
 } from "./projectOverviewQueries.js";
 
@@ -18,6 +20,19 @@ function row(
     dueDate: null,
     updatedAt: "2026-01-01T00:00:00.000Z",
     sortOrder: partial.id,
+    ...partial,
+  };
+}
+
+function assigneeRow(
+  partial: Partial<OverviewAssigneeRecord> & Pick<OverviewAssigneeRecord, "id">,
+): OverviewAssigneeRecord {
+  return {
+    state: "ready",
+    dueDate: null,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    sortOrder: partial.id,
+    assigneeId: null,
     ...partial,
   };
 }
@@ -78,6 +93,26 @@ describe("projectOverviewQueries", () => {
     assert.deepEqual(
       selectUpcoming(todos, 5, 14, now).map((t) => t.id),
       [2, 3],
+    );
+  });
+
+  it("my tasks today filters assignee and due today", () => {
+    const today = localYmd(now);
+    const rows = selectMyTasksToday(
+      [
+        assigneeRow({ id: 1, assigneeId: 7, dueDate: today }),
+        assigneeRow({ id: 2, assigneeId: 7, dueDate: "2026-09-17" }),
+        assigneeRow({ id: 3, assigneeId: 9, dueDate: today }),
+        assigneeRow({ id: 4, assigneeId: 7, dueDate: today, state: "complete" }),
+        assigneeRow({ id: 5, assigneeId: 7, dueDate: today, state: "in_progress" }),
+      ],
+      7,
+      5,
+      now,
+    );
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      [1, 5],
     );
   });
 });
