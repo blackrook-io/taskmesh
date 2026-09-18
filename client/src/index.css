@@ -6951,6 +6951,43 @@ a:focus-visible {
   }
 }
 
+.overview-canvas-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.overview-canvas-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.overview-canvas-banner {
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  font-size: 0.85rem;
+}
+
+.overview-catalog {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.overview-catalog__item {
+  font-size: 0.8rem;
+}
+
+.overview-canvas-empty {
+  margin: 0.25rem 0 0;
+}
+
 .overview-panel {
   margin: 0;
   min-width: 0;
@@ -6959,12 +6996,41 @@ a:focus-visible {
   gap: 0.45rem;
 }
 
+.overview-panel.is-dragging {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
 .overview-panel__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.15rem;
+}
+
+.overview-panel__drag {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  font: inherit;
+  line-height: 1;
+  letter-spacing: -0.08em;
+}
+
+.overview-panel__drag:hover,
+.overview-panel__drag:focus-visible {
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
+}
+
+.overview-panel__drag:active {
+  cursor: grabbing;
 }
 
 .overview-panel__title {
@@ -7005,6 +7071,27 @@ a:focus-visible {
 
 .overview-panel__days {
   width: 3.25rem;
+}
+
+.overview-panel__remove {
+  margin: 0;
+  padding: 0 0.3rem;
+  min-height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.overview-panel__remove:hover,
+.overview-panel__remove:focus-visible {
+  color: var(--danger, #e07070);
+  border-color: var(--border);
+  outline: none;
 }
 
 .overview-panel__empty {

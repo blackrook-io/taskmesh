@@ -774,6 +774,8 @@ export function ProjectDetailPage() {
             projectId={projectId}
             tasks={tasks}
             todos={projectTodos}
+            userId={user?.id ?? null}
+            canManageSettings={canManageSettings}
             loading={tasksQuery.isLoading || projectTodosQuery.isLoading}
           />
         </div>

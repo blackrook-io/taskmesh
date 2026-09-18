@@ -1,0 +1,128 @@
+# T0136 — Overview panel canvas: add / remove / rearrange
+
+**Branch (after approval):** `T0136-overview-panel-canvas`  
+**Task:** T0136 (id 149) · Project 4 (TaskMesh) · Draft (continuing by interview) · Medium  
+**Depends on:** T0135 (complete)
+
+## Goal
+
+Extend the T0135 Overview panel grid into a personalizable canvas: users add panels from a catalog, remove them, and rearrange via drag-and-drop on a responsive CSS grid. Layout persists per user; the project default layout is owned by Manager / Owner / Admin, with Reset to restore it. Description stays pinned above the canvas.
+
+## Decisions (interview)
+
+| Topic | Decision |
+|-------|----------|
+| Layout ownership | **Per-user** override. **Project default** set by Project Manager, Owner, or Admin. Customized users get a **Reset** control to restore the default. |
+| Starting default | T0135’s four panels remain the seed default layout. |
+| New catalog type | **My Tasks Today** — tasks where `assigneeId` = current user and `dueDate` = local today. Incomplete only (exclude `complete` / `canceled`). |
+| Rearrange | Drag-and-drop on the screen-determined responsive grid (`@dnd-kit`, same stack as lists/boards). |
+| Description | Always pinned at top; canvas is below (not removable / not in layout). |
+| Remove semantics | Soft-hide if the panel instance comes from the **project default** (still in system for Reset / other users). If the user **added** the instance themselves, confirm that remove **deletes** it from their layout and they must re-add from the catalog later. |
+
+## Out of scope
+
+- Extra report types beyond **My Tasks Today** (+ the existing four).
+- Shared live sync of default edits into already-customized personal layouts (Reset is the path).
+- Dedicated overview list API (keep client-side filtering of existing task/todo fetches).
+- Making the description block part of the canvas.
+
+## Data model
+
+### Panel instance (jsonb)
+
+Replace the fixed key→prefs map as the layout authority with an **ordered layout array**:
+
+```ts
+type OverviewPanelInstance = {
+  id: string;           // stable uuid
+  type: OverviewPanelType; // catalog key
+  limit: 5 | 10 | 20;
+  days?: number;        // when type uses days
+};
+```
+
+Catalog types (extend T0135 keys):
+
+- `recently_completed_tasks`
+- `next_tasks_due`
+- `todos_overdue`
+- `todos_upcoming`
+- `my_tasks_today` (new; limit only, no days)
+
+### Project default
+
+New table e.g. `project_overview_defaults`:
+
+- `projectId` (unique)
+- `layout` jsonb — `OverviewPanelInstance[]`
+- `updatedAt`, optional `updatedById`
+
+Missing row → built-in seed = four T0135 panels with fresh uuids + default prefs (limit 5, days 14 where applicable).
+
+**Write auth:** project `settings` (Owner / Manager / Admin). **Read:** project `read`.
+
+### Per-user prefs (extend `user_project_overview_prefs`)
+
+- Keep table; evolve `panels` → **`layout`** jsonb (`OverviewPanelInstance[] | null`)
+  - `null` / missing customized layout → **use project default** (not a personal copy until first edit)
+- Add **`customized`** boolean (or derive: personal layout row present and non-null) so UI can show Reset
+- Migration: existing key→prefs maps → ordered layout of four instances (preserve limit/days); mark customized if row existed (viewer already saved prefs) **or** treat existing rows as customized personal layouts seeded from their prefs — prefer: existing rows become personal layouts (customized=true) so limit/days are not lost; users who never touched prefs keep following default
+
+**Write auth:** any authenticated member with project `read` (personal). Reset = clear personal layout / `customized=false`.
+
+### Origin for remove UX
+
+Compare instance `id` to the **current project default** layout:
+
+- `id` ∈ default → soft remove from personal only; confirm copy: hide from your Overview (still available via Reset / catalog if type still offered).
+- `id` ∉ default → hard delete from personal layout; confirm: this panel was added by you and will be removed; re-add from catalog later.
+
+When editing the **project default**, remove always deletes from the default (manager confirm).
+
+## API
+
+- `GET/PUT /api/v1/projects/:id/overview-prefs` — evolve payload:
+  - Response: `{ layout, customized, defaultLayout }` (default included for origin checks + Reset preview)
+  - PUT body: `{ layout }` (sets personalized) or `{ reset: true }` to clear personalization
+  - Pref fields still mergeable per-instance via full layout replace (debounce on DnD / prefs controls)
+- `GET/PUT /api/v1/projects/:id/overview-default` — project default layout (settings to PUT)
+
+Update `docs/database/` + `npm run docs:sync-schema`. Version bump on finish-up: **MINOR** (new migration).
+
+## UI
+
+1. **Description** — unchanged gate; stays above canvas.
+2. **Canvas toolbar** (Overview only):
+   - **Add panel** → catalog picker (all five types; allow multiple instances of same type)
+   - **Reset** — visible when `customized`; confirm then reset to project default
+   - **Edit project default** — Owner/Manager/Admin only; toggles edit mode that writes to overview-default instead of personal prefs (banner so mode is obvious)
+3. **Panel chrome** — existing limit/days controls; add remove (×) with confirm per origin rules; drag handle for reorder.
+4. **Grid DnD** — `@dnd-kit` sortable over the responsive CSS grid (1 col mobile, 2–3 desktop). Persist order on drag end.
+5. **My Tasks Today** — client filter: `assigneeId === session.user.id`, `dueDate === localYmd()`, incomplete states; show limit control only.
+
+## Implementation outline
+
+1. Schema migration + services (default seed, migrate old prefs shape, validation for layout arrays / types / prefs).
+2. Routes: extend overview-prefs; add overview-default.
+3. Client registry: add `my_tasks_today`; replace `OVERVIEW_PANEL_LAYOUT` constant with loaded layout.
+4. Overview UI: toolbar, DnD grid, remove confirms, Reset, default-edit mode.
+5. Tests: prefs merge/migrate, my-tasks-today selector, default vs personal remove origin.
+6. Schema docs sync; finish-up: MINOR version, `RELEASE_NOTES.md`, `FEATURES.md` (canvas personalization is user-facing).
+
+## Test plan (QA)
+
+- [ ] Fresh project / never-customized user sees four default panels + description pinned above
+- [ ] Manager edits project default (add/remove/reorder); non-customized viewers see it after refresh
+- [ ] Member adds **My Tasks Today**, rearranges via DnD, changes limit; survives reload
+- [ ] My Tasks Today lists only assignee=me + due today + incomplete
+- [ ] Remove a default-origin panel → soft-hide; Reset restores it
+- [ ] Remove a user-added panel → warning; gone until re-added from catalog
+- [ ] Reset clears personalization and matches current project default
+- [ ] Member cannot PUT overview-default (403); can still personalize
+- [ ] Mobile: single-column stack; DnD still works; description remains above
+
+## Risks / notes
+
+- Grid DnD with CSS multi-column can be fiddly; may use rect sorting strategy and accept “reorder list mapped onto grid” semantics.
+- Existing overview-prefs rows: migrate carefully so saved limit/days are not wiped.
+- Duplicate catalog types allowed (simpler instance model).

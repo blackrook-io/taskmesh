@@ -4,7 +4,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Projects
 
 - Turn Ideas into structured projects with Markdown overviews, tags, and status
-- Project Overview dashboard with compact header and configurable list panels (recently completed tasks, next due, overdue and upcoming ToDos) with per-viewer prefs
+- Project Overview dashboard with a pinned description and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including My Tasks Today)
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, and Image Boards
 - Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme

@@ -1,15 +1,19 @@
-/** Project Overview panel registry + client-side list queries (T0135). */
+/** Project Overview panel registry + client-side list queries (T0135 / T0136). */
 
 import type { Task, Todo } from "../types";
 
-export const OVERVIEW_PANEL_KEYS = [
+export const OVERVIEW_PANEL_TYPES = [
   "recently_completed_tasks",
   "next_tasks_due",
   "todos_overdue",
   "todos_upcoming",
+  "my_tasks_today",
 ] as const;
 
-export type OverviewPanelKey = (typeof OVERVIEW_PANEL_KEYS)[number];
+export type OverviewPanelType = (typeof OVERVIEW_PANEL_TYPES)[number];
+
+/** @deprecated Use OverviewPanelType */
+export type OverviewPanelKey = OverviewPanelType;
 
 export const OVERVIEW_PANEL_LIMITS = [5, 10, 20] as const;
 export type OverviewPanelLimit = (typeof OVERVIEW_PANEL_LIMITS)[number];
@@ -19,15 +23,20 @@ export type OverviewPanelPref = {
   days?: number;
 };
 
-export type OverviewPanelsPrefs = Record<OverviewPanelKey, OverviewPanelPref>;
+export type OverviewPanelInstance = {
+  id: string;
+  type: OverviewPanelType;
+  limit: OverviewPanelLimit;
+  days?: number;
+};
 
-export const OVERVIEW_PANELS_WITH_DAYS: ReadonlySet<OverviewPanelKey> = new Set([
+export const OVERVIEW_PANELS_WITH_DAYS: ReadonlySet<OverviewPanelType> = new Set([
   "recently_completed_tasks",
   "todos_upcoming",
 ]);
 
 export const OVERVIEW_PANEL_META: Record<
-  OverviewPanelKey,
+  OverviewPanelType,
   { title: string; entity: "task" | "todo"; usesDays: boolean }
 > = {
   recently_completed_tasks: {
@@ -50,10 +59,19 @@ export const OVERVIEW_PANEL_META: Record<
     entity: "todo",
     usesDays: true,
   },
+  my_tasks_today: {
+    title: "My Tasks Today",
+    entity: "task",
+    usesDays: false,
+  },
 };
 
-/** Fixed layout order — T0136 will replace with stored canvas layout. */
-export const OVERVIEW_PANEL_LAYOUT: OverviewPanelKey[] = [...OVERVIEW_PANEL_KEYS];
+export const OVERVIEW_DEFAULT_PANEL_TYPES: readonly OverviewPanelType[] = [
+  "recently_completed_tasks",
+  "next_tasks_due",
+  "todos_overdue",
+  "todos_upcoming",
+];
 
 const ACTIVE_TASK_STATES = new Set([
   "new",
@@ -143,15 +161,35 @@ export function selectUpcomingTodos(
     .slice(0, limit);
 }
 
+/** Assignee = user, due date = local today, incomplete. */
+export function selectMyTasksToday(
+  tasks: Task[],
+  userId: number,
+  limit: number,
+  now = new Date(),
+): Task[] {
+  const today = localYmd(now);
+  return tasks
+    .filter(
+      (t) =>
+        isIncomplete(t.state) &&
+        t.assigneeId === userId &&
+        t.dueDate === today,
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)
+    .slice(0, limit);
+}
+
 export function rowsForPanel(
-  key: OverviewPanelKey,
+  type: OverviewPanelType,
   tasks: Task[],
   todos: Todo[],
   pref: OverviewPanelPref,
+  opts?: { userId?: number | null },
 ): Array<{ id: number; number: number; title: string; meta: string | null; color: string | null }> {
   const limit = pref.limit;
   const days = pref.days ?? 14;
-  if (key === "recently_completed_tasks") {
+  if (type === "recently_completed_tasks") {
     return selectRecentlyCompletedTasks(tasks, limit, days).map((t) => ({
       id: t.id,
       number: t.number,
@@ -160,7 +198,7 @@ export function rowsForPanel(
       color: t.color,
     }));
   }
-  if (key === "next_tasks_due") {
+  if (type === "next_tasks_due") {
     return selectNextTasksDue(tasks, limit).map((t) => ({
       id: t.id,
       number: t.number,
@@ -169,8 +207,19 @@ export function rowsForPanel(
       color: t.color,
     }));
   }
-  if (key === "todos_overdue") {
+  if (type === "todos_overdue") {
     return selectOverdueTodos(todos, limit).map((t) => ({
+      id: t.id,
+      number: t.number,
+      title: t.title,
+      meta: t.dueDate,
+      color: t.color,
+    }));
+  }
+  if (type === "my_tasks_today") {
+    const userId = opts?.userId;
+    if (userId == null) return [];
+    return selectMyTasksToday(tasks, userId, limit).map((t) => ({
       id: t.id,
       number: t.number,
       title: t.title,
@@ -185,4 +234,25 @@ export function rowsForPanel(
     meta: t.dueDate,
     color: t.color,
   }));
+}
+
+export function newPanelInstance(type: OverviewPanelType): OverviewPanelInstance {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `panel-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const usesDays = OVERVIEW_PANELS_WITH_DAYS.has(type);
+  return {
+    id,
+    type,
+    limit: 5,
+    ...(usesDays ? { days: 14 } : {}),
+  };
+}
+
+export function isDefaultOriginPanel(
+  instanceId: string,
+  defaultLayout: OverviewPanelInstance[],
+): boolean {
+  return defaultLayout.some((p) => p.id === instanceId);
 }

@@ -1,5 +1,5 @@
 /**
- * Pure Project Overview list selectors (T0135).
+ * Pure Project Overview list selectors (T0135 / T0136).
  * Kept on the server for unit tests; mirrored in client/src/lib/projectOverview.ts.
  */
 
@@ -9,6 +9,10 @@ export type OverviewDueRecord = {
   dueDate: string | null;
   updatedAt: string;
   sortOrder: number;
+};
+
+export type OverviewAssigneeRecord = OverviewDueRecord & {
+  assigneeId: number | null;
 };
 
 const ACTIVE_STATES = new Set([
@@ -99,5 +103,23 @@ export function selectUpcoming<T extends OverviewDueRecord>(
         t.dueDate <= latest,
     )
     .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "") || a.id - b.id)
+    .slice(0, limit);
+}
+
+export function selectMyTasksToday<T extends OverviewAssigneeRecord>(
+  rows: T[],
+  userId: number,
+  limit: number,
+  now = new Date(),
+): T[] {
+  const today = localYmd(now);
+  return rows
+    .filter(
+      (t) =>
+        isIncomplete(t.state) &&
+        t.assigneeId === userId &&
+        t.dueDate === today,
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)
     .slice(0, limit);
 }
