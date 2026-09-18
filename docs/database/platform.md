@@ -21,6 +21,7 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 | `system_properties` | System-wide key/value settings (`key` text PK, `value` jsonb). Known keys include `api_rate_limit_per_minute`, `login_failure_threshold` (default **3**), `session_timeout_minutes` (default **60**, stored for cookie lifetime and future enforcement), and `default_theme` (accent theme id string, seeded `green`). | Standalone; no FKs. |
 | `entity_fields` | Schema metadata for List View columns (T0056): per-`entity_type` field catalog with `field_key`, `label`, `displayable`, `default_visible`, `default_sort_order`, `sortable`, optional `scope` (`global` = global Tasks only). Non-displayable rows never appear in Personalize or as columns. Seeded in migration; maintain alongside schema changes. | Standalone; unique `(entity_type, field_key)`. |
 | `user_list_view_prefs` | Per-user List View column order/visibility (T0056). One row per `(user_id, list_view_key)` (`tasks` \| `ideas`); `columns` jsonb is ordered `{ fieldKey, visible }[]`. Shared across projects for `tasks`. Missing row → defaults from `entity_fields`. | FK `user_id` → `users` · **CASCADE**. |
+| `user_project_overview_prefs` | Per-user Project Overview panel prefs (T0135). One row per `(user_id, project_id)`; `panels` jsonb maps panel keys (`recently_completed_tasks`, `next_tasks_due`, `todos_overdue`, `todos_upcoming`) to `{ limit: 5\|10\|20, days? }`. Missing row → defaults (limit 5, days 14 where applicable). | FKs `user_id` → `users`, `project_id` → `projects` · **CASCADE**. |
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag, request/response byte counts). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
 | `db_stats_snapshots` | Periodic gauges of the connected app database (size, user table count) for Administration → Database charts. | Standalone; no FKs. |
 
@@ -33,6 +34,8 @@ erDiagram
   users ||--o{ password_history : "prior hashes"
   users ||--o{ user_roles : has
   users ||--o{ user_list_view_prefs : "list columns"
+  users ||--o{ user_project_overview_prefs : "overview panels"
+  projects ||--o{ user_project_overview_prefs : "overview panels"
   roles ||--o{ user_roles : granted
   users ||--o{ api_request_logs : "optional"
   api_keys ||--o{ api_request_logs : "optional"
@@ -74,6 +77,11 @@ erDiagram
     int id PK
     int user_id FK
     text list_view_key
+  }
+  user_project_overview_prefs {
+    int id PK
+    int user_id FK
+    int project_id FK
   }
   api_request_logs {
     int id PK

@@ -18,6 +18,11 @@ import { userHasAdministrator } from "../../services/roles.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { listAssignableUsers } from "../../services/assignees.js";
+import {
+  getUserOverviewPrefs,
+  putUserOverviewPrefs,
+} from "../../services/overviewPrefs.js";
+import type { OverviewPanelPref } from "../../db/schema.js";
 import { documentsRouter } from "./documents.js";
 import { modulesRouter } from "./modules.js";
 import { boardsRouter } from "./boards.js";
@@ -41,6 +46,16 @@ const projectPatch = z.object({
   name: optionalPlainTitle(500),
   description: optionalMarkdown(500_000),
   status: projectStatus.optional(),
+});
+
+const overviewPanelPrefSchema = z.object({
+  limit: z.union([z.literal(5), z.literal(10), z.literal(20)]),
+  days: z.number().int().min(1).max(365).optional(),
+});
+
+const overviewPrefsPutSchema = z.object({
+  panels: z.record(z.string(), overviewPanelPrefSchema),
+  mode: z.enum(["replace", "merge"]).optional(),
 });
 
 const reorderBody = z.object({
@@ -167,7 +182,12 @@ projectsRouter.patch("/:id", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    await assertCanAccessProject(db, actorId, id, "write");
+    // Description is Owner/Manager/Admin only; name/status remain write-level.
+    if (parsed.description !== undefined) {
+      await assertCanAccessProject(db, actorId, id, "settings");
+    } else {
+      await assertCanAccessProject(db, actorId, id, "write");
+    }
     const [row] = await db
       .update(schema.projects)
       .set({
@@ -179,6 +199,37 @@ projectsRouter.patch("/:id", async (req, res) => {
       .where(eq(schema.projects.id, id))
       .returning();
     res.json({ data: row });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+projectsRouter.get("/:id/overview-prefs", async (req, res) => {
+  try {
+    const id = idParam.parse(req.params.id);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
+    res.json({ data: await getUserOverviewPrefs(db, actorId, id) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+projectsRouter.put("/:id/overview-prefs", async (req, res) => {
+  try {
+    const id = idParam.parse(req.params.id);
+    const parsed = overviewPrefsPutSchema.parse(req.body);
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessProject(db, actorId, id);
+    res.json({
+      data: await putUserOverviewPrefs(
+        db,
+        actorId,
+        id,
+        parsed.panels as Record<string, OverviewPanelPref>,
+        parsed.mode ?? "merge",
+      ),
+    });
   } catch (err) {
     handleRouteError(res, err);
   }
