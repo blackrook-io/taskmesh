@@ -140,7 +140,7 @@ Back up **Postgres** and the uploads directory together. Commands and scheduling
 
 Human-readable Postgres schema reference (conceptual / logical Mermaid ERDs, physical column tables, glossary):
 
-→ **[docs/](docs/README.md)** · start at **[docs/database/overview.md](docs/database/overview.md)**
+→ **[docs/](docs/README.md)** · start at **[docs/database/overview.md](docs/database/overview.md)** · OAuth admin setup **[docs/OAUTH_SETUP.md](docs/OAUTH_SETUP.md)**
 
 Drizzle source of truth remains [`src/db/schema.ts`](src/db/schema.ts). Keep the docs in sync when the schema changes (see [`.cursor/rules/schema-docs.mdc`](.cursor/rules/schema-docs.mdc)), then mirror into the TaskMesh project Documents with `npm run docs:sync-schema`.
 

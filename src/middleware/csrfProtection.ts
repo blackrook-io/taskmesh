@@ -7,10 +7,13 @@ export const SPA_CLIENT_VALUE = "ui";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-/** Login establishes a session; cross-site login CSRF is low risk and must work without a prior cookie. */
+/** Login and OAuth IdP callbacks establish/continue auth without SPA CSRF headers. */
 function isCsrfExemptRoute(method: string, path: string): boolean {
   const normalized = path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
-  return method === "POST" && normalized === "/auth/login";
+  if (method === "POST" && normalized === "/auth/login") return true;
+  // Apple Sign in with Apple uses response_mode=form_post (cross-site POST).
+  if (method === "POST" && /^\/auth\/oauth\/[^/]+\/callback$/.test(normalized)) return true;
+  return false;
 }
 
 function hasSpaClientHeader(req: Request): boolean {

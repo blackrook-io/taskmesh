@@ -22,6 +22,7 @@ if (process.env.NODE_ENV === "production") {
 }
 app.use(securityHeaders);
 app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use("/api", attachApiVersionMeta);
 
 app.get("/api/health", async (_req, res) => {

@@ -288,6 +288,13 @@
       "when": 1789742604061,
       "tag": "0040_last_hannibal_king",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789766886406,
+      "tag": "0041_spooky_leper_queen",
+      "breakpoints": true
     }
   ]
 }

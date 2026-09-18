@@ -15,11 +15,23 @@ import type { UserProfile } from "../types";
 const LOGIN_ERROR = "Invalid email or password.";
 const SESSION_ENDED_MESSAGE = "Your session ended. Sign in again to continue.";
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  oauth_denied: "Sign-in was cancelled.",
+  oauth_failed: "Sign-in with the identity provider failed.",
+  oauth_expired: "Sign-in timed out. Please try again.",
+  oauth_no_account:
+    "No TaskMesh account matches that identity. Ask an administrator to create your account or enable JIT for the provider.",
+  oauth_misconfigured: "This sign-in provider is not configured correctly.",
+  oauth_conflict: "That identity is already linked to another account.",
+};
+
 function safeReturnTo(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
   if (raw.startsWith("/login")) return "/";
   return raw;
 }
+
+type PublicProvider = { slug: string; name: string };
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -27,6 +39,7 @@ export function LoginPage() {
   const { user, setUser } = useAuth();
   const returnTo = safeReturnTo(params.get("returnTo"));
   const sessionEnded = params.get("reason") === "session";
+  const oauthError = params.get("error");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,6 +48,12 @@ export function LoginPage() {
   useEffect(() => {
     resetSessionExpiredGuard();
   }, []);
+
+  useEffect(() => {
+    if (oauthError) {
+      setError(OAUTH_ERROR_MESSAGES[oauthError] ?? OAUTH_ERROR_MESSAGES.oauth_failed);
+    }
+  }, [oauthError]);
 
   const configQuery = useQuery({
     queryKey: ["config", "public"],
@@ -46,6 +65,14 @@ export function LoginPage() {
           instanceTheme?: string | null;
         };
       }>("/api/v1/config");
+      return res.data;
+    },
+  });
+
+  const oauthQuery = useQuery({
+    queryKey: ["auth", "oauth-providers"],
+    queryFn: async () => {
+      const res = await apiJson<{ data: PublicProvider[] }>("/api/v1/auth/oauth/providers");
       return res.data;
     },
   });
@@ -65,8 +92,6 @@ export function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      // Confirm the session cookie stuck (Secure PROD cookie on the same host used
-      // to block DEV's non-Secure Set-Cookie when both shared `taskmesh_session`).
       const sessionRes = await fetch("/api/v1/auth/session", {
         credentials: "include",
         headers: { "X-TaskMesh-Client": "ui" },
@@ -102,6 +127,8 @@ export function LoginPage() {
     loginMutation.mutate();
   }
 
+  const providers = oauthQuery.data ?? [];
+
   return (
     <div className="login-page">
       <div className="login-card">
@@ -109,6 +136,28 @@ export function LoginPage() {
           <MeshMark className="login-card__mark" title="TaskMesh" />
           <h1 className="login-card__title">TaskMesh</h1>
         </header>
+
+        {providers.length > 0 ? (
+          <div className="login-oauth">
+            {providers.map((p) => {
+              const startUrl = new URL(
+                `/api/v1/auth/oauth/${p.slug}/start`,
+                window.location.origin,
+              );
+              if (returnTo !== "/") startUrl.searchParams.set("returnTo", returnTo);
+              return (
+                <a
+                  key={p.slug}
+                  className="btn secondary login-oauth__btn"
+                  href={startUrl.pathname + startUrl.search}
+                >
+                  Continue with {p.name}
+                </a>
+              );
+            })}
+            <p className="login-oauth__divider muted">or</p>
+          </div>
+        ) : null}
 
         <form className="login-form" onSubmit={onSubmit} noValidate>
           {sessionEnded ? (

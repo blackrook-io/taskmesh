@@ -6,6 +6,7 @@ import { AdminDatabasePanel } from "../admin/AdminDatabasePanel";
 import { AdminDeletedTasksPanel } from "../admin/AdminDeletedTasksPanel";
 import { AdminGroupsPanel } from "../admin/AdminGroupsPanel";
 import { AdminKeysPanel } from "../admin/AdminKeysPanel";
+import { AdminOauthPanel } from "../admin/AdminOauthPanel";
 import { AdminLoggingPanel } from "../admin/AdminLoggingPanel";
 import { AdminSystemPropertiesPanel } from "../admin/AdminSystemPropertiesPanel";
 import { AdminOwnershipPanel } from "../admin/AdminOwnershipPanel";
@@ -27,6 +28,7 @@ const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
   users: shellIcons.profile,
   groups: shellIcons.profile,
   keys: shellIcons.keys,
+  oauth: shellIcons.profile,
   apis: shellIcons.chart,
   database: shellIcons.database,
   logging: shellIcons.logging,
@@ -121,6 +123,7 @@ export function AdministrationModal() {
             {section === "users" ? <AdminUsersPanel /> : null}
             {section === "groups" ? <AdminGroupsPanel /> : null}
             {section === "keys" ? <AdminKeysPanel /> : null}
+            {section === "oauth" ? <AdminOauthPanel /> : null}
             {section === "apis" ? <AdminApisPanel /> : null}
             {section === "database" ? <AdminDatabasePanel /> : null}
             {section === "logging" ? <AdminLoggingPanel /> : null}

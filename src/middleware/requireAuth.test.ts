@@ -9,6 +9,14 @@ describe("isPublicV1Route", () => {
     assert.equal(isPublicV1Route("GET", "/auth/session"), true);
   });
 
+  it("allows public OAuth provider list and callbacks", () => {
+    assert.equal(isPublicV1Route("GET", "/auth/oauth/providers"), true);
+    assert.equal(isPublicV1Route("GET", "/auth/oauth/google/start"), true);
+    assert.equal(isPublicV1Route("GET", "/auth/oauth/google/callback"), true);
+    assert.equal(isPublicV1Route("POST", "/auth/oauth/apple/callback"), true);
+    assert.equal(isPublicV1Route("POST", "/auth/oauth/google/start"), false);
+  });
+
   it("allows public config", () => {
     assert.equal(isPublicV1Route("GET", "/config"), true);
     assert.equal(isPublicV1Route("GET", "/config/"), true);

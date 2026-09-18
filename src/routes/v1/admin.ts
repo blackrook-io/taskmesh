@@ -65,6 +65,12 @@ import {
   patchSystemProperties,
 } from "../../services/systemProperties.js";
 import {
+  listOauthProviders,
+  patchOauthProvider,
+  toAdminOauthProvider,
+  isOauthSlug,
+} from "../../services/oauth/providers.js";
+import {
   deleteAdminTemplate,
   listAdminTemplates,
   patchAdminTemplate,
@@ -883,6 +889,46 @@ adminRouter.post("/ownership/transfer", async (req, res) => {
       sendError(res, err.status, err.code, err.message);
       return;
     }
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.get("/oauth-providers", async (_req, res) => {
+  try {
+    const rows = await listOauthProviders(db);
+    res.json({ data: rows.map(toAdminOauthProvider) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const oauthProviderPatch = z
+  .object({
+    enabled: z.boolean().optional(),
+    clientId: z.string().trim().max(500).nullable().optional(),
+    clientSecret: z.string().max(4000).nullable().optional(),
+    appleTeamId: z.string().trim().max(64).nullable().optional(),
+    appleKeyId: z.string().trim().max(64).nullable().optional(),
+    applePrivateKey: z.string().max(16_000).nullable().optional(),
+    scopes: z.string().trim().max(500).nullable().optional(),
+    jitEnabled: z.boolean().optional(),
+    defaultRoleId: z.number().int().positive().nullable().optional(),
+  })
+  .strict();
+
+adminRouter.patch("/oauth-providers/:slug", async (req, res) => {
+  try {
+    const slug = String(req.params.slug ?? "");
+    if (!isOauthSlug(slug)) {
+      sendError(res, 404, "not_found", "Unknown OAuth provider.");
+      return;
+    }
+    const parsed = oauthProviderPatch.parse(req.body ?? {});
+    const data = await patchOauthProvider(db, slug, parsed);
+    res.locals.logMessage = `OAuth provider updated: ${slug}`;
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
     handleRouteError(res, err);
   }
 });

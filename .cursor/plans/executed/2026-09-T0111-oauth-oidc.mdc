@@ -1,0 +1,191 @@
+# T0111 — OAuth 2.0 and OIDC
+
+**Branch (after approval):** `T0111-oauth-oidc`  
+**Task:** T0111 (id 123) · Project 4 (TaskMesh) · Ready · Low  
+**Depends on:** T0084 Authentication and session binding ✅  
+**Required by:** T0129 User signup (owns signup flows; this Task is federated login + link/unlink only)  
+**Epic context:** Deferred federation from T0095 / T0084 — local email/password + sessions + API keys already ship.
+
+## Goal
+
+Let users sign in with **Google**, **Apple**, and **GitHub**, then mint the **same TaskMesh session cookie** used today. Support **link / unlink** of those providers to an existing local user. Keep Administrators in control of which of the three are enabled and whether new accounts can be created from federation.
+
+## Providers (fixed for this Task)
+
+| Slug | Protocol | Notes |
+|------|----------|--------|
+| `google` | **OIDC** | Discovery at Google’s issuer; scopes `openid email profile`; require verified email |
+| `apple` | **OIDC** (Sign in with Apple) | Special client-secret JWT (ES256 with Apple `.p8` key); name often only on first consent; email may be private relay — still treat as the account email when present; form_post vs query per Apple config |
+| `github` | **OAuth 2.0** (no OIDC) | Auth Code + PKCE; fetch profile + primary verified email from GitHub APIs |
+
+No generic / arbitrary OIDC IdP in this Task. Extra providers (Microsoft, etc.) → separate follow-up Task if needed.
+
+## Non-goals (separate future Tasks)
+
+- MFA / TOTP / WebAuthn passkeys  
+- Forgot-password / forgot-username / magic-link email flows  
+- Making TaskMesh itself an OAuth/OIDC **authorization server** (we are a **relying party / client** only)  
+- Replacing API keys or session cookies with bearer access tokens for the SPA  
+- Social “sign up for anyone on the internet” without Admin policy  
+- Generic discovery-based OIDC for arbitrary issuers  
+- SCIM / directory sync / IdP group→role mapping  
+
+## Size / split
+
+One Task for the shared federation core **plus** the three branded adapters is fine. Apple’s secret-JWT and email/name quirks are the main complexity spike — keep them inside this Task rather than shipping Google/GitHub first unless QA forces a split.
+
+**Recommended deferrals (create PROD Tasks when deferred during interview/implement):**
+
+| Slice | Why defer |
+|-------|-----------|
+| Additional IdPs (Microsoft, generic OIDC, …) | Out of agreed adapter set |
+| SCIM / directory sync | Out of band from login federation |
+| Group → role mapping from IdP claims | Needs claim design + Admin UX |
+| Device / native app / Apple native SDK flows | Web Auth Code flow only for now |
+
+## Decisions (interview — locked)
+
+| Topic | Decision |
+|-------|----------|
+| Protocol | Google + Apple: **OIDC Authorization Code + PKCE**. GitHub: **OAuth 2.0 Authorization Code + PKCE** + userinfo/emails |
+| Session | After successful IdP callback → `createSession` + existing `Set-Cookie` (same as password login). No long-lived IdP access token required for API calls |
+| Account match | **Verified email** → existing `users.email` (case-insensitive); else fail unless JIT on |
+| JIT provisioning | **Off by default** per provider; when on, create user with null password + default role **Editor** |
+| Adapters | **Google, Apple, GitHub only** — ship all three in this Task; no generic OIDC |
+| Admin | Configure/enable the **three seeded** providers only (no create-arbitrary IdP) |
+| Provider secrets | Encrypted at rest with **`OAUTH_CREDENTIALS_KEY`** (new env var). Google/GitHub: client secret. Apple: Team ID, Key ID, Services ID (client id), `.p8` private key. Admin UI: write-only (set/rotate, never re-display). KEK is **not** a System Property (same-DB key+ciphertext is unsafe) |
+| Signup | **T0129** owns user signup; this Task is federated **login** + Profile link/unlink only |
+| Link / unlink | Logged-in user can link another of the three from Profile; unlink only if password **or** another linked provider remains |
+| Password-only / passwordless | Password login unchanged; passwordless-only OK when null password + ≥1 linked identity |
+| CSRF / login state | `state` + PKCE `code_verifier` in short-lived server-side row; single-use; Apple/Google `nonce` as needed |
+| Public routes | Add OAuth start/callback to `isPublicV1Route` allowlist; Apple callback may be POST (form_post) |
+
+## Architecture
+
+```text
+Login UI ──► GET /api/v1/auth/oauth/:slug/start   (google | apple | github)
+                │  store state+pkce, redirect to IdP
+                ▼
+             IdP authorize
+                │
+                ▼
+         GET|/POST /api/v1/auth/oauth/:slug/callback
+                │  exchange code, validate id_token (Google/Apple),
+                │  map GitHub profile+email, resolve/link user,
+                │  createSession, Set-Cookie
+                ▼
+             SPA /login?returnTo=…  (or direct returnTo)
+```
+
+**Adapter module shape:** `src/services/oauth/adapters/{google,apple,github}.ts` sharing start/callback orchestration, state store, identity link, and session mint.
+
+**Libraries (suggested):** `openid-client` for Google/Apple OIDC; thin OAuth2 helper for GitHub; `jose` for Apple client-secret JWT signing.
+
+**Reuse existing:** `createSession` / `destroySession`, `userCanAuthenticate`, `requireAuth` public allowlist, login rate limit (extend to OAuth start), `api_request_logs` outcomes, Profile / Admin patterns.
+
+## Schema (MINOR version bump)
+
+### `oauth_providers` (Admin-managed; seed three slugs)
+
+| Column | Notes |
+|--------|-------|
+| `id`, `slug` (unique), `name`, `enabled` | Seed: `google`, `apple`, `github` |
+| `protocol` | `oidc` \| `oauth2` (derived from slug / stored) |
+| `client_id`, `client_secret_enc` | GitHub/Google secret; Apple may store signed-JWT inputs instead |
+| `apple_team_id`, `apple_key_id`, `apple_private_key_enc` | Apple-only (nullable for others) |
+| `scopes` | Per-provider defaults |
+| `jit_enabled`, `default_role_id` | JIT policy |
+| `sort_order`, `created_at`, `updated_at` | |
+
+Issuer / endpoint URLs for Google & Apple can be **constants in adapters** (not Admin-editable) to avoid misconfiguration; GitHub endpoints likewise fixed.
+
+### `user_identities`
+
+| Column | Notes |
+|--------|-------|
+| `id`, `user_id` → users CASCADE | |
+| `provider_id` → oauth_providers | |
+| `subject` | IdP stable subject (`sub` / GitHub user id) |
+| `email_at_link`, `raw_profile` (jsonb, optional, redact tokens) | |
+| `linked_at`, unique `(provider_id, subject)` | |
+
+### `oauth_login_states` (ephemeral)
+
+Short-lived rows: `state`, `code_verifier`, `nonce` (Apple/Google), `provider_id`, `return_to`, `mode` (`login` \| `link`), `user_id` (for link), `expires_at`. Purge on use / expiry.
+
+**Docs:** update `docs/database/platform.md` + glossary; `npm run docs:sync-schema`.
+
+## API
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/v1/auth/oauth/providers` | public | Enabled among google/apple/github (slug, name only) |
+| GET | `/api/v1/auth/oauth/:slug/start` | public (or session for link) | Redirect to IdP |
+| GET or POST | `/api/v1/auth/oauth/:slug/callback` | public | Code exchange → session or error redirect (Apple may POST) |
+| GET | `/api/v1/users/me/identities` | session | List linked providers |
+| DELETE | `/api/v1/users/me/identities/:id` | session | Unlink (guard against lockout) |
+| GET/PATCH | `/api/v1/admin/oauth-providers` | Administrator | Enable + credentials for the three seeded providers (no create-arbitrary) |
+
+Callback failure → redirect to `/login?error=oauth_…` with generic messages (no account enumeration).
+
+## UI
+
+- **Login:** “Continue with Google / Apple / GitHub” for each **enabled** provider; keep email/password form.  
+- **Profile:** Linked accounts — link / unlink with confirm.  
+- **Admin:** Panel for the three providers — enable, credentials (Apple fields distinct), JIT toggle.  
+- **SECURITY.md:** extend threat model (redirect URI allowlist, state/PKCE/nonce, Apple key handling, account linking risks).
+
+## Ops / env
+
+- Add `OAUTH_CREDENTIALS_KEY` to `.env.example` / INSTALL (random 32+ byte secret; required when enabling any provider).
+- Document redirect URIs for Google / Apple / GitHub consoles pointing at `/api/v1/auth/oauth/{slug}/callback`.
+
+## Security checklist
+
+- Exact redirect URI registration per provider console; no open redirects via `returnTo` (reuse `safeReturnTo` rules).  
+- Validate OIDC `id_token` for Google/Apple (`iss`, `aud`, `exp`, `nonce`).  
+- GitHub: require a **verified** primary email before match/JIT.  
+- Do not log tokens, codes, or Apple private keys.  
+- Rate-limit OAuth start (and failed callback) like login.  
+- Locked / deactivated users cannot complete federation login.  
+- CSRF: browser navigations for start/callback; session mutations for unlink keep existing SPA CSRF headers.  
+- CSP: top-level IdP redirects only; no need to loosen `script-src` for IdPs.
+
+## Implementation phases
+
+1. **Schema + services** — tables, encrypt helper, Admin GET/PATCH for seeded providers.  
+2. **Google OIDC** — start/callback, session mint.  
+3. **GitHub OAuth2** — profile + verified email mapping.  
+4. **Apple Sign in** — client-secret JWT, callback shape, name/email quirks.  
+5. **Link / unlink** — Profile + lockout guards; email-match login linking.  
+6. **JIT** — per-provider flag; role assignment.  
+7. **UI + SECURITY.md + tests** — Login buttons, Admin panel, unit/integration for state/PKCE/nonce and unlink guard.  
+8. **Finish-up** — MINOR bump, RELEASE_NOTES, FEATURES.md (major user-facing), deploy.
+
+## Acceptance
+
+- Admin can enable Google, Apple, and GitHub independently; each enabled provider signs a user in end-to-end with a working TaskMesh session cookie.  
+- Existing password login unchanged.  
+- Link / unlink from Profile; cannot unlink last auth factor if no password.  
+- JIT off: unknown email cannot create an account via IdP.  
+- JIT on: new user created with expected role and can sign in again via same `sub`.  
+- Failed/cancelled IdP flows land on Login with a safe error.  
+- SECURITY.md + schema docs updated; tests cover public allowlist, state replay rejection, unlink guard, and Apple secret JWT generation (unit).
+
+## Risks / notes
+
+- Email-only matching can merge accounts incorrectly if IdP email is unverified — require verified email when the provider exposes that signal (Google `email_verified`, GitHub verified emails; Apple relay emails are still unique to the user+app).  
+- Apple hides the human name after the first authorization — persist display name on first link/JIT only.  
+- Users with `passwordHash` null must keep ≥1 identity.  
+- Multi-instance deploy: ephemeral state table is shared via Postgres (good).
+
+## Attachments
+
+- Repo plan: `.cursor/plans/2026-09-T0111-oauth-oidc.mdc`  
+- In-app Document (TaskMesh project 4): **#10** — T0111 — OAuth 2.0 and OIDC implementation plan (`id` 26) → `/projects/4?tab=documents`
+
+## QA follow-ups
+
+- **2026-09-18 — Admin OAuth help:** Added a `?` control on Administration → OAuth that opens a field guide (env key, shared fields, Google/Apple/GitHub setup, sign-in matching / JIT / link-unlink notes).
+- **2026-09-18 — Draggable help panel:** Help is a non-blocking floating panel; drag the title bar to reposition while editing OAuth fields (Escape / Close / Got it still dismiss).
+- **2026-09-18 — OAuth setup doc:** Added [`docs/OAUTH_SETUP.md`](../../docs/OAUTH_SETUP.md) with step-by-step Google / Apple / GitHub console setup, official links, and account/subscription/payment requirements; indexed from `docs/README.md` and README.
