@@ -17,6 +17,10 @@ import {
 } from "../../services/apiKeys.js";
 import { attachRolesToProfile } from "../../services/roles.js";
 import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
+import {
+  listIdentitiesForUser,
+  unlinkIdentity,
+} from "../../services/oauth/flow.js";
 
 /** Required valid email when provided — null/empty not allowed (T0062). */
 const emailSchema = z.string().trim().email().max(320);
@@ -233,6 +237,27 @@ usersRouter.delete("/me/api-keys/:id", async (req, res) => {
     res.locals.logApiKeyId = key.id;
     res.locals.logMessage = `API key revoked: ${key.name} (${key.prefix})`;
     res.json({ data: key });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.get("/me/identities", async (_req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    res.json({ data: await listIdentitiesForUser(db, user.id) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.delete("/me/identities/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const user = await getCurrentUser(db);
+    await unlinkIdentity(db, user.id, id);
+    res.status(204).send();
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);

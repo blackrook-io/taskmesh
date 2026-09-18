@@ -15,8 +15,13 @@ import {
   destroySession,
   getUserById,
   loginWithEmailPassword,
-  LOGIN_ERROR_MESSAGE,
 } from "../../services/auth.js";
+import {
+  completeOauthCallback,
+  safeOauthReturnTo,
+  startOauthFlow,
+} from "../../services/oauth/flow.js";
+import { isOauthSlug, listPublicOauthProviders } from "../../services/oauth/providers.js";
 
 const loginBody = z
   .object({
@@ -51,6 +56,15 @@ function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boole
     return true;
   }
   return false;
+}
+
+function loginRedirect(errorCode?: string, returnTo?: string): string {
+  const params = new URLSearchParams();
+  if (errorCode) params.set("error", errorCode);
+  const rt = safeOauthReturnTo(returnTo ?? null);
+  if (rt !== "/") params.set("returnTo", rt);
+  const q = params.toString();
+  return q ? `/login?${q}` : "/login";
 }
 
 export const authRouter = Router();
@@ -100,6 +114,117 @@ authRouter.get("/session", async (req, res) => {
       return;
     }
     res.json({ data: await profileForUser(user) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+authRouter.get("/oauth/providers", async (_req, res) => {
+  try {
+    res.json({ data: await listPublicOauthProviders(db) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+authRouter.get("/oauth/:slug/start", loginRateLimit, async (req, res) => {
+  try {
+    const slug = String(req.params.slug ?? "");
+    if (!isOauthSlug(slug)) {
+      sendError(res, 404, "not_found", "Unknown OAuth provider.");
+      return;
+    }
+    const mode = req.query.mode === "link" ? "link" : "login";
+    const returnTo =
+      typeof req.query.returnTo === "string" ? req.query.returnTo : null;
+    if (mode === "link" && req.sessionUserId == null) {
+      sendError(res, 401, "not_authenticated", AUTH_REQUIRED_MESSAGE);
+      return;
+    }
+    const { redirectUrl } = await startOauthFlow(db, {
+      slug,
+      req,
+      mode,
+      returnTo,
+      linkUserId: mode === "link" ? req.sessionUserId : null,
+    });
+    res.redirect(302, redirectUrl);
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+async function handleOauthCallback(
+  req: import("express").Request,
+  res: import("express").Response,
+) {
+  const slug = String(req.params.slug ?? "");
+  if (!isOauthSlug(slug)) {
+    res.redirect(302, loginRedirect("oauth_failed"));
+    return;
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const code =
+    typeof req.query.code === "string"
+      ? req.query.code
+      : typeof (body as { code?: unknown }).code === "string"
+        ? (body as { code: string }).code
+        : null;
+  const state =
+    typeof req.query.state === "string"
+      ? req.query.state
+      : typeof (body as { state?: unknown }).state === "string"
+        ? (body as { state: string }).state
+        : null;
+  const error =
+    typeof req.query.error === "string"
+      ? req.query.error
+      : typeof (body as { error?: unknown }).error === "string"
+        ? (body as { error: string }).error
+        : null;
+  const appleUser =
+    typeof (body as { user?: unknown }).user === "string"
+      ? (body as { user: string }).user
+      : typeof req.query.user === "string"
+        ? req.query.user
+        : null;
+
+  const result = await completeOauthCallback(db, {
+    slug,
+    req,
+    code,
+    state,
+    error,
+    appleUserJson: appleUser,
+  });
+
+  if (!result.ok) {
+    res.redirect(302, loginRedirect(result.errorCode));
+    return;
+  }
+
+  if (result.mode === "login") {
+    setSessionCookie(res, result.sessionId, result.maxAgeSeconds);
+    res.locals.logMessage = `OAuth login (${slug})`;
+    res.redirect(302, result.returnTo);
+    return;
+  }
+
+  res.redirect(302, result.returnTo);
+}
+
+authRouter.get("/oauth/:slug/callback", async (req, res) => {
+  try {
+    await handleOauthCallback(req, res);
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+authRouter.post("/oauth/:slug/callback", async (req, res) => {
+  try {
+    await handleOauthCallback(req, res);
   } catch (err) {
     handleRouteError(res, err);
   }

@@ -12,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -231,6 +232,90 @@ export const sessions = pgTable(
       .defaultNow(),
   },
   (t) => [index("sessions_user_id_idx").on(t.userId)],
+);
+
+/**
+ * Seeded OAuth/OIDC providers (T0111): google | apple | github.
+ * Client secrets / Apple key material encrypted with OAUTH_CREDENTIALS_KEY.
+ */
+export const oauthProviders = pgTable("oauth_providers", {
+  id: serial("id").primaryKey(),
+  /** Stable slug: google | apple | github */
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  /** oidc | oauth2 */
+  protocol: text("protocol").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  clientId: text("client_id"),
+  /** AES-GCM ciphertext (base64url); null when unset */
+  clientSecretEnc: text("client_secret_enc"),
+  /** Apple Sign in with Apple only */
+  appleTeamId: text("apple_team_id"),
+  appleKeyId: text("apple_key_id"),
+  applePrivateKeyEnc: text("apple_private_key_enc"),
+  scopes: text("scopes"),
+  jitEnabled: boolean("jit_enabled").notNull().default(false),
+  /** Role assigned on JIT create; null → ensure Editor by slug */
+  defaultRoleId: integer("default_role_id").references(
+    (): AnyPgColumn => roles.id,
+    { onDelete: "set null" },
+  ),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Linked external identities (T0111). */
+export const userIdentities = pgTable(
+  "user_identities",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    providerId: integer("provider_id")
+      .notNull()
+      .references(() => oauthProviders.id, { onDelete: "cascade" }),
+    /** IdP subject (`sub` or GitHub user id string) */
+    subject: text("subject").notNull(),
+    emailAtLink: text("email_at_link"),
+    rawProfile: jsonb("raw_profile").$type<Record<string, unknown> | null>(),
+    linkedAt: timestamp("linked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("user_identities_provider_subject_uidx").on(t.providerId, t.subject),
+    index("user_identities_user_id_idx").on(t.userId),
+  ],
+);
+
+/** Short-lived OAuth login/link state + PKCE (T0111). */
+export const oauthLoginStates = pgTable(
+  "oauth_login_states",
+  {
+    state: text("state").primaryKey(),
+    providerId: integer("provider_id")
+      .notNull()
+      .references(() => oauthProviders.id, { onDelete: "cascade" }),
+    codeVerifier: text("code_verifier").notNull(),
+    nonce: text("nonce"),
+    returnTo: text("return_to"),
+    /** login | link */
+    mode: text("mode").notNull().default("login"),
+    userId: integer("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("oauth_login_states_expires_idx").on(t.expiresAt)],
 );
 
 /**
@@ -1308,8 +1393,40 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   apiKeys: many(apiKeys),
   userRoles: many(userRoles),
   passwordHistory: many(passwordHistory),
+  identities: many(userIdentities),
   listViewPrefs: many(userListViewPrefs),
   overviewPrefs: many(userProjectOverviewPrefs),
+}));
+
+export const oauthProvidersRelations = relations(oauthProviders, ({ one, many }) => ({
+  defaultRole: one(roles, {
+    fields: [oauthProviders.defaultRoleId],
+    references: [roles.id],
+  }),
+  identities: many(userIdentities),
+  loginStates: many(oauthLoginStates),
+}));
+
+export const userIdentitiesRelations = relations(userIdentities, ({ one }) => ({
+  user: one(users, {
+    fields: [userIdentities.userId],
+    references: [users.id],
+  }),
+  provider: one(oauthProviders, {
+    fields: [userIdentities.providerId],
+    references: [oauthProviders.id],
+  }),
+}));
+
+export const oauthLoginStatesRelations = relations(oauthLoginStates, ({ one }) => ({
+  provider: one(oauthProviders, {
+    fields: [oauthLoginStates.providerId],
+    references: [oauthProviders.id],
+  }),
+  user: one(users, {
+    fields: [oauthLoginStates.userId],
+    references: [users.id],
+  }),
 }));
 
 export const userListViewPrefsRelations = relations(userListViewPrefs, ({ one }) => ({

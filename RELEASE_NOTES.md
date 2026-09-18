@@ -4,6 +4,20 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.42.0 — 2026-09-18
+
+### New Functionality
+- Sign in with Google, Apple, or GitHub (OIDC / OAuth 2.0) in addition to email and password; successful federation creates the same TaskMesh session cookie.
+- Administrators configure the three seeded providers under Administration → OAuth (write-only encrypted secrets, per-provider enable and JIT).
+- Profile → Linked accounts lets users link or unlink providers without orphaning passwordless accounts.
+- Administrator setup guide at `docs/OAUTH_SETUP.md` (console steps, official links, and account/fee requirements).
+
+### Enhancements
+- OAuth Admin help is a draggable, non-blocking field guide so credentials can be entered while reading instructions.
+
+### Breaking Changes
+- New tables `oauth_providers`, `user_identities`, and `oauth_login_states` (migration `0041`); enabling providers requires env `OAUTH_CREDENTIALS_KEY`.
+
 ## 0.41.0 — 2026-09-18
 
 ### New Functionality

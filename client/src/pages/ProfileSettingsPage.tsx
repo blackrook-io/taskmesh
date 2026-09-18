@@ -10,6 +10,7 @@ import {
 } from "../lib/password";
 import type { UserProfile } from "../types";
 import { ProfileApiKeysSection } from "../components/ProfileApiKeysSection";
+import { ProfileLinkedAccountsSection } from "../components/ProfileLinkedAccountsSection";
 
 type Props = {
   embedded?: boolean;
@@ -279,6 +280,8 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
               </div>
             ) : null}
           </div>
+
+          <ProfileLinkedAccountsSection />
 
           <ProfileApiKeysSection />
 

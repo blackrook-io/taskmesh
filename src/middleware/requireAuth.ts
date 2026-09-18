@@ -8,6 +8,15 @@ export function isPublicV1Route(method: string, path: string): boolean {
   if (method === "POST" && normalized === "/auth/login") return true;
   if (method === "POST" && normalized === "/auth/logout") return true;
   if (method === "GET" && normalized === "/auth/session") return true;
+  if (method === "GET" && normalized === "/auth/oauth/providers") return true;
+  if (
+    (method === "GET" || method === "POST") &&
+    /^\/auth\/oauth\/[^/]+\/(start|callback)$/.test(normalized)
+  ) {
+    // start requires auth when mode=link — enforced in the route handler
+    if (normalized.endsWith("/start") && method !== "GET") return false;
+    return true;
+  }
   if (method === "GET" && (normalized === "/config" || normalized.startsWith("/config/"))) {
     return true;
   }

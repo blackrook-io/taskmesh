@@ -2,6 +2,12 @@
 
 Administrator and developer reference docs for this repository. These files are **git-tracked** and meant to stay accurate as the product evolves.
 
+## Authentication
+
+| Page | Contents |
+|------|----------|
+| [OAuth / OIDC setup](OAUTH_SETUP.md) | Administrator guide: Google, Apple, and GitHub — accounts/fees, console steps, TaskMesh Admin fields, troubleshooting |
+
 ## Database schema
 
 Authoritative Drizzle definitions live in [`src/db/schema.ts`](../src/db/schema.ts). Human-readable schema docs:

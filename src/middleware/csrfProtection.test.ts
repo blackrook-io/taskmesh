@@ -32,6 +32,21 @@ describe("csrfProtection", () => {
     assert.equal(nextCalled, true);
   });
 
+  it("passes POST OAuth callback even with a session cookie (Apple form_post)", () => {
+    let nextCalled = false;
+    const req = {
+      method: "POST",
+      path: "/auth/oauth/apple/callback",
+      sessionUserId: 1,
+      get: () => undefined,
+      headers: { cookie: "taskmesh_session=abc" },
+    } as unknown as import("express").Request;
+    csrfProtection(req, { locals: {} } as import("express").Response, () => {
+      nextCalled = true;
+    });
+    assert.equal(nextCalled, true);
+  });
+
   it("rejects mutating requests with session cookie but no SPA header", () => {
     let nextCalled = false;
     let statusCode = 0;

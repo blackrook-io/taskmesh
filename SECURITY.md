@@ -2,9 +2,11 @@
 
 Living record of input-path audits and hardening. Update this file when routes, query construction, uploads, or outbound fetch change.
 
-**Threat model (current):** multi-user app with **email/password login** and **httpOnly session cookies** (T0096/T0084), plus **API keys** (T0063) as a second auth path on `/api/v1/*`. Public exceptions: health check, login/logout/session bootstrap, and public theme config.
+**Threat model (current):** multi-user app with **email/password login**, **httpOnly session cookies** (T0096/T0084), **API keys** (T0063), and optional **OAuth/OIDC federation** via Google, Apple, and GitHub (T0111) on `/api/v1/*`. Public exceptions: health check, login/logout/session bootstrap, OAuth start/callback, and public theme config.
 
-**CSRF (T0087):** mutating `/api/v1/*` requests that carry a session cookie must include `X-TaskMesh-Client: ui` (SPA) and pass same-origin `Origin`/`Referer` checks when those headers are sent. `POST /auth/login` is exempt. **API key** requests bypass the CSRF header gate.
+**CSRF (T0087):** mutating `/api/v1/*` requests that carry a session cookie must include `X-TaskMesh-Client: ui` (SPA) and pass same-origin `Origin`/`Referer` checks when those headers are sent. `POST /auth/login` and `POST /auth/oauth/:slug/callback` (Apple `form_post`) are exempt. **API key** requests bypass the CSRF header gate.
+
+**OAuth / OIDC (T0111):** Google and Apple (OIDC Auth Code + PKCE) and GitHub (OAuth 2.0 + PKCE). Provider client secrets / Apple `.p8` keys are AES-GCM encrypted with env `OAUTH_CREDENTIALS_KEY` (never a System Property). Admin UI is write-only for secrets. Account match uses verified email; JIT provisioning is off by default. Unlink rejects removing the last auth factor when the user has no password. Redirect `returnTo` is same-origin path only.
 
 **API keys (T0063):** `Authorization: Bearer` or `X-API-Key` (never query string). Secrets are hashed at rest (`taskmesh_{ro|rw}_…`); max 3 active keys per user; default/max expiry 60 days. Read-only keys may only GET/HEAD/OPTIONS. Suspended keys → 403 `key_suspended`. Key-auth traffic is logged with `[ADMIN KEY]` / `admin_key` **only when the key’s owner holds the Administrator role** (T0108). Per-key rate limit uses Admin `api_rate_limit_per_minute`.
 
@@ -28,6 +30,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | 2026-08-27 | T0113 | Project-tree list/get/mutate via `projects.ownerId`; nested inherit; dual-scope project branch | Standalone/unsorted/tags/uploads → T0114; search/import/transfer → T0115 |
 | 2026-08-27 | T0114 | Standalone ideas, unsorted dual-scope (`ownerId`), per-user tags, upload GET scope, creator-owned templates | Search/assistant/import/transfer → T0115 |
 | 2026-08-27 | T0115 | Search/assistant/import-export ownership scoping; admin ownership transfer API + UI | T0110 epic residual closed |
+| 2026-09-18 | T0111 | OAuth/OIDC Google+Apple+GitHub; encrypted provider secrets; CSRF exempt for Apple form_post; public start/callback | Env KEK; write-only Admin secrets; link/unlink lockout guard |
 
 ## Surfaces
 

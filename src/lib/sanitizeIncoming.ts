@@ -7,6 +7,8 @@ const SKIP_KEYS = new Set([
   "passwordhash",
   "currentpassword",
   "rawkey",
+  "clientsecret",
+  "appleprivatekey",
 ]);
 const MARKDOWN_KEYS = new Set(["body", "description", "message", "pagecontext", "content"]);
 const MAX_DEPTH = 16;
