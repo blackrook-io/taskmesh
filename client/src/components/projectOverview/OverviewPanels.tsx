@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { apiJson } from "../../api/client";
 import { formatEntityRef } from "../../lib/entityRef";
 import { patchTaskRecord } from "../../lib/patchTask";
@@ -192,17 +192,20 @@ function OverviewListPanel({
   saving: boolean;
 }) {
   const meta = OVERVIEW_PANEL_META[panelKey];
-  const [daysDraft, setDaysDraft] = useState(String(pref.days ?? 14));
+  const prefDays = pref.days ?? 14;
+  const [daysDraft, setDaysDraft] = useState(String(prefDays));
+  const [daysSource, setDaysSource] = useState(prefDays);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    setDaysDraft(String(pref.days ?? 14));
-  }, [pref.days]);
+  if (prefDays !== daysSource) {
+    setDaysSource(prefDays);
+    setDaysDraft(String(prefDays));
+  }
 
   const commitDays = (raw: string) => {
     const n = Number.parseInt(raw, 10);
     if (!Number.isFinite(n) || n < 1 || n > 365) {
-      setDaysDraft(String(pref.days ?? 14));
+      setDaysDraft(String(prefDays));
       return;
     }
     if (n === pref.days) return;
