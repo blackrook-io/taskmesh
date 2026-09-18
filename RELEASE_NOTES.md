@@ -4,6 +4,16 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.40.0 — 2026-09-18
+
+### New Functionality
+- Project Overview is a dashboard: compact project header plus four list panels (recently completed tasks, next tasks due, overdue ToDos, upcoming ToDos) in a responsive grid.
+- Each panel has per-viewer Show (5/10/20) and Days controls that persist on the server for that user and project.
+- Clicking a panel row opens the Task or ToDo detail modal.
+
+### Enhancements
+- Project description on Overview is editable only by Owners and Managers; Members can still edit name, status, and tags.
+
 ## 0.39.0 — 2026-09-18
 
 ### New Functionality

@@ -1,0 +1,108 @@
+# T0135 — Project Overview Dashboard
+
+**Branch (after approval):** `T0135-project-overview-dashboard`  
+**Task:** T0135 (id 148) · Project 4 (TaskMesh) · Ready · High  
+**Deferred:** [T0136](http://127.0.0.1:3000/projects/4?tab=tasks) — Overview panel canvas add/remove/rearrange (Draft; depends on T0135)
+
+## Goal
+
+Turn Project Overview (`?tab=overview`) into a panel-oriented dashboard: description block (Owner/Managers editable) plus four fixed list panels in a responsive grid. Per-viewer panel prefs persist to the server. No dedicated overview API — client filters existing list endpoints. Layout is a **canvas foundation** for T0136 (add/remove/rearrange + more report types later).
+
+## Decisions (interview)
+
+| Topic | Decision |
+|-------|----------|
+| Description edit | Owner / Managers / Admin only (`canManageSettings` / `"settings"`). Name/status/tags stay Member-editable (`canWrite`) as today. |
+| Panels this Task | Fixed four always shown (no add/remove UI yet). |
+| Canvas future | Structure panels so T0136 can catalog/add/remove/rearrange; defer that work to **T0136**. |
+| Recently completed | `state === "complete"`, order by `updatedAt` desc, within last N days. |
+| Next due | Incomplete tasks with `dueDate`, soonest first; **includes overdue**. |
+| Overdue / upcoming ToDos | Use `dueDate` (not `actionBy`). Upcoming = due in next N days, not overdue. |
+| Prefs | Per user × project × panel: `limit` ∈ {5,10,20}, `days` (integer) where relevant. Defaults: limit **5**, days **14**. |
+| Row click | Open existing Task / ToDo detail (same as list views). |
+| Data loading | **UI only** — `GET` project tasks + todos; filter/slice in the client. No `/overview` API. |
+
+## Out of scope (T0136+)
+
+- Add / remove / rearrange panels
+- Extra report types (e.g. My Tasks Today)
+- Shared vs personal layout catalog
+- `completedAt` column (use `updatedAt` for “recently completed”)
+
+## Implementation
+
+### 1. Schema + prefs API (MINOR bump on finish-up)
+
+New table e.g. `user_project_overview_prefs`:
+
+- `userId`, `projectId`
+- `panels` jsonb — map of panel key → `{ limit: 5|10|20, days?: number }`
+- Unique `(userId, projectId)`
+
+Panel keys (stable for T0136):
+
+- `recently_completed_tasks`
+- `next_tasks_due`
+- `todos_overdue`
+- `todos_upcoming`
+
+API (mirror list-view prefs style):
+
+- `GET /api/v1/projects/:id/overview-prefs`
+- `PUT /api/v1/projects/:id/overview-prefs` (partial merge OK)
+- Auth: project `read` to get; any authenticated project member with `read` to put (viewer prefs are personal)
+
+Update `docs/database/` + `npm run docs:sync-schema` when migrating.
+
+### 2. Description block gate
+
+- Overview description edit (pencil / Save): require `canManageSettings` (not `canWrite`).
+- PATCH project description: assert `"settings"` when `description` is in the body (or always require settings for description changes). Keep name/status/tags at `"write"`.
+- Viewers/Members: read-only description; Members still edit name/status/tags if those remain in the same card.
+
+### 3. Overview UI — panel canvas foundation
+
+Refactor Overview in `ProjectDetailPage.tsx` (extract components under e.g. `client/src/components/projectOverview/`):
+
+1. **Description panel** — existing Markdown card, tighter edit gate.
+2. **Panel grid** — CSS grid: 1 col mobile, 2–3 cols wide desktop; rounded box panels.
+3. **Four list panels** — each with:
+   - Title
+   - Far-right compact controls (Task List filter-bar trail vibe): limit select `5|10|20`; days integer input when panel is date-windowed (recently completed + upcoming todos; optionally next-due if useful — **days applies to recently completed + upcoming** per interview; next-due and overdue use limit only)
+   - Clickable rows → open Task/ToDo detail
+
+Client data:
+
+- Load `GET /api/v1/projects/:id/tasks` and project todos (existing endpoints).
+- Pure helpers to filter/sort/slice per panel definition + prefs.
+- Debounced PUT prefs on control change.
+
+Extensibility (for T0136, no UI yet):
+
+- Panel registry: key → title, query fn, which prefs fields apply
+- Fixed layout array for now; later replace with stored layout
+
+### 4. Docs / features
+
+- Schema docs for new prefs table
+- On finish-up: PATCH version (MINOR — new migration), `RELEASE_NOTES.md`, `FEATURES.md` (major user-facing Overview dashboard)
+
+## Test plan (QA)
+
+- [ ] Overview shows description + four panels; responsive 1 / 2–3 column layout
+- [ ] Member: can edit name/status/tags; **cannot** edit description
+- [ ] Owner/Manager/Admin: can edit description
+- [ ] Each panel lists correct records per definitions above
+- [ ] Limit 5/10/20 and days persist after reload (per user, per project)
+- [ ] Row click opens Task / ToDo detail
+- [ ] Viewer can change personal panel prefs; empty project shows empty panels cleanly
+- [ ] No new overview list API under `/api/v1` (prefs endpoints only)
+
+## Risks / notes
+
+- Large projects: full task/todo fetch may be heavy — acceptable for T0135; optimize later if needed.
+- “Recently completed” via `updatedAt` can drift if a completed task is edited — accepted without `completedAt`.
+
+## QA follow-ups
+
+- **2026-09-18 — Description card chrome:** Compact Overview meta card; project name top-left in larger accent color; status label moved far-right beside the edit icon; description body capped (~7.5rem) with scroll so the section stays smaller.

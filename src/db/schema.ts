@@ -494,6 +494,36 @@ export const userListViewPrefs = pgTable(
   ],
 );
 
+export type OverviewPanelPref = {
+  limit: 5 | 10 | 20;
+  /** Days window for date-based panels (recently completed, upcoming). */
+  days?: number;
+};
+
+/** Per-user Project Overview panel prefs (T0135). One row per (user, project). */
+export const userProjectOverviewPrefs = pgTable(
+  "user_project_overview_prefs",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Map of panel key → { limit, days? }. */
+    panels: jsonb("panels").$type<Record<string, OverviewPanelPref>>().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("user_project_overview_prefs_user_project_uidx").on(t.userId, t.projectId),
+    index("user_project_overview_prefs_user_id_idx").on(t.userId),
+    index("user_project_overview_prefs_project_id_idx").on(t.projectId),
+  ],
+);
+
 /** Append-only API request / auth audit log for Admin APIs + Logging. */
 export const apiRequestLogs = pgTable("api_request_logs", {
   id: serial("id").primaryKey(),
@@ -1109,6 +1139,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   wikiNodes: many(wikiNodes),
   canvases: many(canvases),
   imageBoards: many(imageBoards),
+  overviewPrefs: many(userProjectOverviewPrefs),
 }));
 
 export const todosRelations = relations(todos, ({ one }) => ({
@@ -1242,6 +1273,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   userRoles: many(userRoles),
   passwordHistory: many(passwordHistory),
   listViewPrefs: many(userListViewPrefs),
+  overviewPrefs: many(userProjectOverviewPrefs),
 }));
 
 export const userListViewPrefsRelations = relations(userListViewPrefs, ({ one }) => ({
@@ -1250,6 +1282,20 @@ export const userListViewPrefsRelations = relations(userListViewPrefs, ({ one })
     references: [users.id],
   }),
 }));
+
+export const userProjectOverviewPrefsRelations = relations(
+  userProjectOverviewPrefs,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userProjectOverviewPrefs.userId],
+      references: [users.id],
+    }),
+    project: one(projects, {
+      fields: [userProjectOverviewPrefs.projectId],
+      references: [projects.id],
+    }),
+  }),
+);
 
 export const passwordHistoryRelations = relations(passwordHistory, ({ one }) => ({
   user: one(users, {

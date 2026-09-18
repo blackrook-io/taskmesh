@@ -20,6 +20,7 @@ import { WikiPanel } from "../components/WikiPanel";
 import { CanvasesPanel } from "../components/CanvasesPanel";
 import { DocumentsToc } from "../components/DocumentsToc";
 import { ImageBoardList } from "../components/imageBoard/ImageBoardList";
+import { OverviewPanels } from "../components/projectOverview/OverviewPanels";
 import {
   isProjectModuleKey,
   MODULE_BLURBS,
@@ -43,6 +44,7 @@ import type {
   ProjectPhase,
   Task,
   TaskGroup,
+  Todo,
   TodoList,
   TodoListDetail,
 } from "../types";
@@ -214,6 +216,17 @@ export function ProjectDetailPage() {
     },
   });
 
+  const projectTodosQuery = useQuery({
+    queryKey: ["project-todos", projectId],
+    enabled: !invalidId && tab === "overview",
+    queryFn: async () => {
+      const res = await apiJson<{ data: Todo[] }>(
+        `/api/v1/todos?projectId=${projectId}`,
+      );
+      return res.data;
+    },
+  });
+
   const documentsQuery = useQuery({
     queryKey: ["documents", projectId],
     enabled: !invalidId,
@@ -325,6 +338,7 @@ export function ProjectDetailPage() {
   const modules = useMemo(() => modulesQuery.data ?? [], [modulesQuery.data]);
   const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
   const tasks = tasksQuery.data ?? [];
+  const projectTodos = projectTodosQuery.data ?? [];
   const documents = useMemo(() => documentsQuery.data ?? [], [documentsQuery.data]);
 
   const taskListFilterKey = storageKeyForProjectTasks(projectId);
@@ -468,9 +482,13 @@ export function ProjectDetailPage() {
 
   const saveMeta = useMutation({
     mutationFn: async () => {
+      const body: Record<string, unknown> = { name, status };
+      if (canManageSettings) {
+        body.description = description;
+      }
       const res = await apiJson<{ data: Project }>(`/api/v1/projects/${projectId}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, status, description }),
+        body: JSON.stringify(body),
       });
       return res.data;
     },
@@ -657,10 +675,16 @@ export function ProjectDetailPage() {
       ) : null}
 
       {tab === "overview" ? (
-        <div className="grid" style={{ gap: "1rem" }}>
-          <div className="card">
-            <div className="wiki-panel__main-head wiki-panel__main-head--actions-only">
-              <div className="wiki-panel__main-actions">
+        <div className="grid overview-canvas" style={{ gap: "1rem" }}>
+          <div className="card overview-meta">
+            <div className="overview-meta__head">
+              <h2 className="overview-meta__name">{project.name}</h2>
+              <div className="overview-meta__actions">
+                {!overviewEdit ? (
+                  <span className="overview-meta__status muted">
+                    {projectStatusLabel(project.status)}
+                  </span>
+                ) : null}
                 {overviewEdit ? (
                   <>
                     <button type="button" className="btn small ghost" onClick={cancelOverviewEdit}>
@@ -708,29 +732,50 @@ export function ProjectDetailPage() {
                 <div className="field field--tags-below">
                   <TagInput entityType="project" entityId={projectId} />
                 </div>
-                <div className="field">
-                  <label>Description</label>
-                  <MarkdownEditor value={description} onChange={setDescription} autoHeight />
-                </div>
+                {canManageSettings ? (
+                  <div className="field">
+                    <label>Description</label>
+                    <MarkdownEditor value={description} onChange={setDescription} autoHeight />
+                  </div>
+                ) : (
+                  <div className="field">
+                    <label>Description</label>
+                    <MarkdownEditor
+                      value={project.description ?? ""}
+                      onChange={() => undefined}
+                      autoHeight
+                      readOnly
+                    />
+                    <p className="muted" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
+                      Only the project Owner or Managers can edit the description.
+                    </p>
+                  </div>
+                )}
               </>
             ) : (
               <>
-                <p className="muted" style={{ marginTop: "-0.15rem", marginBottom: "0.75rem" }}>
-                  {projectStatusLabel(project.status)}
-                </p>
-                <div className="field field--tags-below">
+                <div className="field field--tags-below overview-meta__tags">
                   <TagInput entityType="project" entityId={projectId} readOnly={!canWrite || !overviewEdit} />
                 </div>
-                <MarkdownEditor
-                  value={project.description ?? ""}
-                  onChange={() => undefined}
-                  autoHeight
-                  readOnly
-                />
+                <div className="overview-meta__description">
+                  <MarkdownEditor
+                    value={project.description ?? ""}
+                    onChange={() => undefined}
+                    autoHeight
+                    readOnly
+                  />
+                </div>
               </>
             )}
             {saveMeta.isError ? <p role="alert">{(saveMeta.error as Error).message}</p> : null}
           </div>
+
+          <OverviewPanels
+            projectId={projectId}
+            tasks={tasks}
+            todos={projectTodos}
+            loading={tasksQuery.isLoading || projectTodosQuery.isLoading}
+          />
         </div>
       ) : null}
 
