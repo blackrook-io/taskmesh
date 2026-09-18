@@ -151,6 +151,8 @@ Projects are parents of task groups, project phases, project managers/members/vi
 
 Junction tables for project role lists (T0127). **Access is enforced in T0128:** Managers (and Owner) = read/write + Settings; Members = read/write; Viewers = read-only. Administrators retain global access. The project **owner** (`projects.owner_id`) is an **implicit Manager** and is not stored in `project_managers`. A user may appear in **at most one** of the three lists per project (application rule). Administrators are not added to these lists (they already have full access).
 
+**Groups (T0130):** parallel junctions `project_manager_groups` / `project_member_groups` / `project_viewer_groups` store Groups on the same three role areas. Membership expands live via `group_members`. Effective project role for a user is the **highest** of direct list membership and any Group they belong to (Manager > Member > Viewer). A Group may appear in at most one of the three lists per project. Groups with the Administrator role are not listable.
+
 ### Columns (each table)
 
 | Column | Type | Nullable | Default | Notes |

@@ -97,7 +97,7 @@ export function ownerScope(
   return eq(ownerColumn, actorUserId);
 }
 
-/** Subqueries for project ids the actor owns or is listed on (any role). */
+/** Subqueries for project ids the actor owns or is listed on (any role, including via Group). */
 function accessibleProjectIdClauses(db: Db, actorUserId: number): SQL[] {
   const owned = db
     .select({ id: schema.projects.id })
@@ -115,11 +115,30 @@ function accessibleProjectIdClauses(db: Db, actorUserId: number): SQL[] {
     .select({ id: schema.projectViewers.projectId })
     .from(schema.projectViewers)
     .where(eq(schema.projectViewers.userId, actorUserId));
+  const actorGroups = db
+    .select({ groupId: schema.groupMembers.groupId })
+    .from(schema.groupMembers)
+    .where(eq(schema.groupMembers.userId, actorUserId));
+  const asManagerGroup = db
+    .select({ id: schema.projectManagerGroups.projectId })
+    .from(schema.projectManagerGroups)
+    .where(inArray(schema.projectManagerGroups.groupId, actorGroups));
+  const asMemberGroup = db
+    .select({ id: schema.projectMemberGroups.projectId })
+    .from(schema.projectMemberGroups)
+    .where(inArray(schema.projectMemberGroups.groupId, actorGroups));
+  const asViewerGroup = db
+    .select({ id: schema.projectViewerGroups.projectId })
+    .from(schema.projectViewerGroups)
+    .where(inArray(schema.projectViewerGroups.groupId, actorGroups));
   return [
     inArray(schema.projects.id, owned),
     inArray(schema.projects.id, asManager),
     inArray(schema.projects.id, asMember),
     inArray(schema.projects.id, asViewer),
+    inArray(schema.projects.id, asManagerGroup),
+    inArray(schema.projects.id, asMemberGroup),
+    inArray(schema.projects.id, asViewerGroup),
   ];
 }
 

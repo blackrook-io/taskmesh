@@ -56,6 +56,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="settings/assistant" element={<SettingsHubPage />} />
                 <Route path="admin" element={<AdminHubPage />} />
                 <Route path="admin/users" element={<AdminHubPage />} />
+                <Route path="admin/groups" element={<AdminHubPage />} />
                 <Route path="admin/keys" element={<AdminHubPage />} />
                 <Route path="admin/apis" element={<AdminHubPage />} />
                 <Route path="admin/database" element={<AdminHubPage />} />

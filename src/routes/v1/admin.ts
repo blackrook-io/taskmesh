@@ -33,6 +33,17 @@ import {
   unlockUser,
 } from "../../services/adminUsers.js";
 import {
+  addGroupMember,
+  assignGroupRole,
+  createGroup,
+  deleteGroup,
+  getGroup,
+  listGroups,
+  removeGroupMember,
+  removeGroupRole,
+  renameGroup,
+} from "../../services/groups.js";
+import {
   assignRole,
   createRole,
   deleteRole,
@@ -296,6 +307,147 @@ adminRouter.delete("/users/:id/roles/:roleId", async (req, res) => {
     const roles = await removeRole(db, id, roleId);
     res.locals.logUserId = actor.id;
     res.locals.logMessage = `Role removed: user ${id} role ${roleId}`;
+    res.json({ data: roles });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+// ── Groups (T0130) ─────────────────────────────────────────────────────────
+
+adminRouter.get("/groups", async (_req, res) => {
+  try {
+    res.json({ data: await listGroups(db) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const createGroupBody = z
+  .object({
+    name: plainTitle(200),
+  })
+  .strict();
+
+adminRouter.post("/groups", async (req, res) => {
+  try {
+    const parsed = createGroupBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const data = await createGroup(db, parsed.name, actor.id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Group created: ${data.referenceId} (${data.name})`;
+    res.status(201).json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.get("/groups/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    res.json({ data: await getGroup(db, id) });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const patchGroupBody = z
+  .object({
+    name: plainTitle(200),
+  })
+  .strict();
+
+adminRouter.patch("/groups/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = patchGroupBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const data = await renameGroup(db, id, parsed.name);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Group renamed: ${data.referenceId}`;
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/groups/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const actor = await getCurrentUser(db);
+    await deleteGroup(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Group deleted: id ${id}`;
+    res.status(204).send();
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const groupMemberBody = z
+  .object({
+    userId: z.number().int().positive(),
+  })
+  .strict();
+
+adminRouter.post("/groups/:id/members", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = groupMemberBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const data = await addGroupMember(db, id, parsed.userId);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Group member added: group ${id} user ${parsed.userId}`;
+    res.status(201).json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/groups/:id/members/:userId", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const userId = parseRouteId(req, "userId");
+    const actor = await getCurrentUser(db);
+    const data = await removeGroupMember(db, id, userId);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Group member removed: group ${id} user ${userId}`;
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.post("/groups/:id/roles", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = assignRoleBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const roles = await assignGroupRole(db, id, parsed.roleId);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Group role assigned: group ${id} role ${parsed.roleId}`;
+    res.json({ data: roles });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.delete("/groups/:id/roles/:roleId", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const roleId = parseRouteId(req, "roleId");
+    const actor = await getCurrentUser(db);
+    const roles = await removeGroupRole(db, id, roleId);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `Group role removed: group ${id} role ${roleId}`;
     res.json({ data: roles });
   } catch (err) {
     if (serviceError(res, err)) return;

@@ -4,6 +4,7 @@ import { shellIcons } from "./shellIcons";
 import { AdminApisPanel } from "../admin/AdminApisPanel";
 import { AdminDatabasePanel } from "../admin/AdminDatabasePanel";
 import { AdminDeletedTasksPanel } from "../admin/AdminDeletedTasksPanel";
+import { AdminGroupsPanel } from "../admin/AdminGroupsPanel";
 import { AdminKeysPanel } from "../admin/AdminKeysPanel";
 import { AdminLoggingPanel } from "../admin/AdminLoggingPanel";
 import { AdminSystemPropertiesPanel } from "../admin/AdminSystemPropertiesPanel";
@@ -24,6 +25,7 @@ import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 
 const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
   users: shellIcons.profile,
+  groups: shellIcons.profile,
   keys: shellIcons.keys,
   apis: shellIcons.chart,
   database: shellIcons.database,
@@ -117,6 +119,7 @@ export function AdministrationModal() {
           <div className="settings-modal__content" ref={contentRef}>
             <h3 className="settings-modal__section-title">{ADMIN_SECTION_LABELS[section]}</h3>
             {section === "users" ? <AdminUsersPanel /> : null}
+            {section === "groups" ? <AdminGroupsPanel /> : null}
             {section === "keys" ? <AdminKeysPanel /> : null}
             {section === "apis" ? <AdminApisPanel /> : null}
             {section === "database" ? <AdminDatabasePanel /> : null}

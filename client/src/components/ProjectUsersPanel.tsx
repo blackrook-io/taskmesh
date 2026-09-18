@@ -12,7 +12,19 @@ type UserRef = {
   email: string | null;
 };
 
+type GroupRef = {
+  id: number;
+  referenceId: string;
+  name: string;
+  memberCount: number;
+};
+
 type ProjectUserEntry = UserRef & {
+  role: ProjectUserRole;
+  createdAt: string;
+};
+
+type ProjectGroupEntry = GroupRef & {
   role: ProjectUserRole;
   createdAt: string;
 };
@@ -21,7 +33,15 @@ type ProjectUsersLists = {
   managers: ProjectUserEntry[];
   members: ProjectUserEntry[];
   viewers: ProjectUserEntry[];
+  managerGroups: ProjectGroupEntry[];
+  memberGroups: ProjectGroupEntry[];
+  viewerGroups: ProjectGroupEntry[];
   owner: UserRef;
+};
+
+type DirectoryPayload = {
+  users: UserRef[];
+  groups: GroupRef[];
 };
 
 type AssignmentSummary = {
@@ -35,24 +55,31 @@ const ROLE_META: {
   title: string;
   blurb: string;
   listKey: keyof Pick<ProjectUsersLists, "managers" | "members" | "viewers">;
+  groupListKey: keyof Pick<
+    ProjectUsersLists,
+    "managerGroups" | "memberGroups" | "viewerGroups"
+  >;
 }[] = [
   {
     role: "manager",
     title: "Managers",
     blurb: "Read/write + Project Settings. Owner is always an implicit Manager.",
     listKey: "managers",
+    groupListKey: "managerGroups",
   },
   {
     role: "member",
     title: "Members",
     blurb: "Read/write on project records. No Settings access.",
     listKey: "members",
+    groupListKey: "memberGroups",
   },
   {
     role: "viewer",
     title: "Viewers",
     blurb: "Read-only access to project records.",
     listKey: "viewers",
+    groupListKey: "viewerGroups",
   },
 ];
 
@@ -62,6 +89,7 @@ type Props = {
 
 type RemoveFlow =
   | { kind: "confirm"; user: ProjectUserEntry }
+  | { kind: "confirm-group"; group: ProjectGroupEntry }
   | {
       kind: "disposition";
       user: ProjectUserEntry;
@@ -69,6 +97,10 @@ type RemoveFlow =
       mode: "reassign" | "blank";
       reassignToUserId: number | null;
     };
+
+type DirectoryCandidate =
+  | { kind: "user"; user: UserRef }
+  | { kind: "group"; group: GroupRef };
 
 export function ProjectUsersPanel({ projectId }: Props) {
   const qc = useQueryClient();
@@ -91,7 +123,7 @@ export function ProjectUsersPanel({ projectId }: Props) {
     queryKey: ["project-directory-users", projectId],
     enabled: addRole != null,
     queryFn: async () => {
-      const res = await apiJson<{ data: UserRef[] }>(
+      const res = await apiJson<{ data: DirectoryPayload }>(
         `/api/v1/projects/${projectId}/users/directory`,
       );
       return res.data;
@@ -116,14 +148,28 @@ export function ProjectUsersPanel({ projectId }: Props) {
     void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
   };
 
-  const candidates = useMemo(() => {
-    const users = directoryQuery.data ?? [];
+  const candidates = useMemo((): DirectoryCandidate[] => {
+    const users = directoryQuery.data?.users ?? [];
+    const groups = directoryQuery.data?.groups ?? [];
     const q = search.trim().toLowerCase();
-    return users.filter((u) => {
-      if (!q) return true;
+    const out: DirectoryCandidate[] = [];
+    for (const u of users) {
+      if (!q) {
+        out.push({ kind: "user", user: u });
+        continue;
+      }
       const hay = `${u.displayName} ${u.referenceId} ${u.email ?? ""}`.toLowerCase();
-      return hay.includes(q);
-    });
+      if (hay.includes(q)) out.push({ kind: "user", user: u });
+    }
+    for (const g of groups) {
+      if (!q) {
+        out.push({ kind: "group", group: g });
+        continue;
+      }
+      const hay = `${g.name} ${g.referenceId}`.toLowerCase();
+      if (hay.includes(q)) out.push({ kind: "group", group: g });
+    }
+    return out;
   }, [directoryQuery.data, search]);
 
   const reassignCandidates = useMemo(() => {
@@ -132,11 +178,15 @@ export function ProjectUsersPanel({ projectId }: Props) {
     return (assignableQuery.data ?? []).filter((u) => u.id !== removedId);
   }, [assignableQuery.data, removeFlow]);
 
-  const addUser = useMutation({
-    mutationFn: async ({ userId, role }: { userId: number; role: ProjectUserRole }) => {
+  const addEntry = useMutation({
+    mutationFn: async (
+      args:
+        | { userId: number; role: ProjectUserRole }
+        | { groupId: number; role: ProjectUserRole },
+    ) => {
       await apiJson(`/api/v1/projects/${projectId}/users`, {
         method: "POST",
-        body: JSON.stringify({ userId, role }),
+        body: JSON.stringify(args),
       });
     },
     onSuccess: () => {
@@ -166,6 +216,20 @@ export function ProjectUsersPanel({ projectId }: Props) {
       await apiJson(`/api/v1/projects/${projectId}/users/${args.userId}`, {
         method: "DELETE",
         ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    },
+    onSuccess: () => {
+      setError(null);
+      setRemoveFlow(null);
+      invalidate();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const removeGroup = useMutation({
+    mutationFn: async (groupId: number) => {
+      await apiJson(`/api/v1/projects/${projectId}/users/groups/${groupId}`, {
+        method: "DELETE",
       });
     },
     onSuccess: () => {
@@ -208,9 +272,9 @@ export function ProjectUsersPanel({ projectId }: Props) {
     <div className="card" style={{ marginTop: "1rem" }}>
       <h2 style={{ marginTop: 0 }}>Users</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        Assign active users to Managers, Members, or Viewers. Role lists grant project access.
-        Administrators are not listed (they already have full access). The owner is an implicit
-        Manager.
+        Assign active users or Groups to Managers, Members, or Viewers. Role lists grant
+        project access. Administrators and Administrator Groups are not listed (they already
+        have full access). The owner is an implicit Manager.
       </p>
 
       {listsQuery.isLoading ? <p className="muted">Loading users…</p> : null}
@@ -246,6 +310,8 @@ export function ProjectUsersPanel({ projectId }: Props) {
           >
             {ROLE_META.map((meta) => {
               const rows = data[meta.listKey];
+              const groupRows = data[meta.groupListKey] ?? [];
+              const empty = rows.length === 0 && groupRows.length === 0;
               return (
                 <section key={meta.role} className="project-users__role">
                   <div
@@ -273,7 +339,7 @@ export function ProjectUsersPanel({ projectId }: Props) {
                   <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
                     {meta.blurb}
                   </p>
-                  {rows.length === 0 ? (
+                  {empty ? (
                     <p className="muted" style={{ margin: 0 }}>
                       None yet
                     </p>
@@ -281,7 +347,7 @@ export function ProjectUsersPanel({ projectId }: Props) {
                     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                       {rows.map((u) => (
                         <li
-                          key={u.id}
+                          key={`user-${u.id}`}
                           style={{
                             display: "flex",
                             alignItems: "center",
@@ -300,6 +366,39 @@ export function ProjectUsersPanel({ projectId }: Props) {
                             className="btn small ghost"
                             aria-label={`Remove ${u.displayName} from ${meta.title}`}
                             onClick={() => void beginRemove(u)}
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                      {groupRows.map((g) => (
+                        <li
+                          key={`group-${g.id}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
+                            padding: "0.35rem 0",
+                            borderTop: "1px solid var(--border, #333)",
+                          }}
+                        >
+                          <span>
+                            <span className="admin-badge admin-badge--ok">Group</span>{" "}
+                            {g.name}{" "}
+                            <span className="muted">
+                              {g.referenceId} · {g.memberCount} member
+                              {g.memberCount === 1 ? "" : "s"}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            className="btn small ghost"
+                            aria-label={`Remove group ${g.name} from ${meta.title}`}
+                            onClick={() => {
+                              setError(null);
+                              setRemoveFlow({ kind: "confirm-group", group: g });
+                            }}
                           >
                             Remove
                           </button>
@@ -334,13 +433,13 @@ export function ProjectUsersPanel({ projectId }: Props) {
               Add to {ROLE_META.find((r) => r.role === addRole)?.title}
             </h2>
             <div className="field">
-              <label htmlFor="project-users-search">Search users</label>
+              <label htmlFor="project-users-search">Search users and groups</label>
               <input
                 id="project-users-search"
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name, U####, or email"
+                placeholder="Name, U####, G####, or email"
                 autoFocus
               />
             </div>
@@ -349,35 +448,71 @@ export function ProjectUsersPanel({ projectId }: Props) {
               <p role="alert">{(directoryQuery.error as Error).message}</p>
             ) : null}
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {candidates.slice(0, 40).map((u) => (
-                <li
-                  key={u.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "0.5rem",
-                    padding: "0.4rem 0",
-                    borderTop: "1px solid var(--border, #333)",
-                  }}
-                >
-                  <span>
-                    {u.displayName}{" "}
-                    <span className="muted">{u.referenceId}</span>
-                    {u.email ? <span className="muted"> · {u.email}</span> : null}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn small primary"
-                    disabled={addUser.isPending}
-                    onClick={() => addUser.mutate({ userId: u.id, role: addRole })}
+              {candidates.slice(0, 40).map((c) =>
+                c.kind === "user" ? (
+                  <li
+                    key={`user-${c.user.id}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "0.5rem",
+                      padding: "0.4rem 0",
+                      borderTop: "1px solid var(--border, #333)",
+                    }}
                   >
-                    Add
-                  </button>
-                </li>
-              ))}
+                    <span>
+                      {c.user.displayName}{" "}
+                      <span className="muted">{c.user.referenceId}</span>
+                      {c.user.email ? (
+                        <span className="muted"> · {c.user.email}</span>
+                      ) : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn small primary"
+                      disabled={addEntry.isPending}
+                      onClick={() =>
+                        addEntry.mutate({ userId: c.user.id, role: addRole })
+                      }
+                    >
+                      Add
+                    </button>
+                  </li>
+                ) : (
+                  <li
+                    key={`group-${c.group.id}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "0.5rem",
+                      padding: "0.4rem 0",
+                      borderTop: "1px solid var(--border, #333)",
+                    }}
+                  >
+                    <span>
+                      <span className="admin-badge admin-badge--ok">Group</span>{" "}
+                      {c.group.name}{" "}
+                      <span className="muted">
+                        {c.group.referenceId} · {c.group.memberCount} member
+                        {c.group.memberCount === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn small primary"
+                      disabled={addEntry.isPending}
+                      onClick={() =>
+                        addEntry.mutate({ groupId: c.group.id, role: addRole })
+                      }
+                    >
+                      Add
+                    </button>
+                  </li>
+                ),
+              )}
             </ul>
             {!directoryQuery.isLoading && candidates.length === 0 ? (
-              <p className="muted">No matching active users available.</p>
+              <p className="muted">No matching users or groups available.</p>
             ) : null}
             <div className="modal-actions" style={{ marginTop: "1rem" }}>
               <button
@@ -514,6 +649,25 @@ export function ProjectUsersPanel({ projectId }: Props) {
         onConfirm={() => {
           if (removeFlow?.kind === "confirm") {
             removeUser.mutate({ userId: removeFlow.user.id });
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={removeFlow?.kind === "confirm-group"}
+        title="Remove group from project?"
+        message={
+          removeFlow?.kind === "confirm-group"
+            ? `Remove group ${removeFlow.group.name} (${removeFlow.group.referenceId}) from ${removeFlow.group.role}s? Members keep any direct project role they already have.`
+            : ""
+        }
+        confirmLabel="Remove"
+        confirmTone="danger"
+        confirmDisabled={removeGroup.isPending}
+        onCancel={() => setRemoveFlow(null)}
+        onConfirm={() => {
+          if (removeFlow?.kind === "confirm-group") {
+            removeGroup.mutate(removeFlow.group.id);
           }
         }}
       />

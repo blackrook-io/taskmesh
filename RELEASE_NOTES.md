@@ -4,6 +4,13 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.39.0 — 2026-09-18
+
+### New Functionality
+- Administrators can create User Groups (G####), manage members, and assign platform Roles from a new Administration → Groups tab (directly under Users).
+- Groups can be added to Project Managers, Members, and Viewers alongside individual users; Group rows are labeled distinctly, and membership expands live when group membership changes.
+- Platform Roles on a Group (including Administrator) grant those rights to all current members; project access uses the highest of direct and Group-derived roles (Manager > Member > Viewer).
+
 ## 0.38.1 — 2026-09-17
 
 ### Fixes

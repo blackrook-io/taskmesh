@@ -267,6 +267,13 @@
       "when": 1789666000150,
       "tag": "0037_chubby_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789728214991,
+      "tag": "0038_plain_maginty",
+      "breakpoints": true
     }
   ]
 }

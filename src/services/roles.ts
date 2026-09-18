@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import {
@@ -23,6 +23,7 @@ export async function listRoles(db: Db): Promise<RoleRef[]> {
   return rows.map(toRoleRef);
 }
 
+/** Direct `user_roles` only (admin Users UI). */
 export async function listRolesByUserIds(
   db: Db,
   userIds: number[],
@@ -54,11 +55,29 @@ export async function listRolesByUserIds(
   return map;
 }
 
+/** Direct `user_roles` only. */
 export async function listRolesForUser(db: Db, userId: number): Promise<RoleRef[]> {
   const map = await listRolesByUserIds(db, [userId]);
   return map.get(userId) ?? [];
 }
 
+async function userHasAdministratorViaGroup(db: Db, userId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ userId: schema.groupMembers.userId })
+    .from(schema.groupMembers)
+    .innerJoin(schema.groupRoles, eq(schema.groupMembers.groupId, schema.groupRoles.groupId))
+    .innerJoin(schema.roles, eq(schema.groupRoles.roleId, schema.roles.id))
+    .where(
+      and(
+        eq(schema.groupMembers.userId, userId),
+        eq(schema.roles.slug, ADMINISTRATOR_SLUG),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+/** True when the user has Administrator directly or via any Group. */
 export async function userHasAdministrator(db: Db, userId: number): Promise<boolean> {
   const [row] = await db
     .select({ userId: schema.userRoles.userId })
@@ -68,16 +87,27 @@ export async function userHasAdministrator(db: Db, userId: number): Promise<bool
       and(eq(schema.userRoles.userId, userId), eq(schema.roles.slug, ADMINISTRATOR_SLUG)),
     )
     .limit(1);
-  return Boolean(row);
+  if (row) return true;
+  return userHasAdministratorViaGroup(db, userId);
 }
 
+/** Distinct users with Administrator via `user_roles` or Group membership. */
 export async function countAdministratorUsers(db: Db): Promise<number> {
-  const [row] = await db
-    .select({ value: count() })
+  const direct = await db
+    .select({ userId: schema.userRoles.userId })
     .from(schema.userRoles)
     .innerJoin(schema.roles, eq(schema.userRoles.roleId, schema.roles.id))
     .where(eq(schema.roles.slug, ADMINISTRATOR_SLUG));
-  return Number(row?.value ?? 0);
+  const viaGroup = await db
+    .select({ userId: schema.groupMembers.userId })
+    .from(schema.groupMembers)
+    .innerJoin(schema.groupRoles, eq(schema.groupMembers.groupId, schema.groupRoles.groupId))
+    .innerJoin(schema.roles, eq(schema.groupRoles.roleId, schema.roles.id))
+    .where(eq(schema.roles.slug, ADMINISTRATOR_SLUG));
+  const set = new Set<number>();
+  for (const r of direct) set.add(r.userId);
+  for (const r of viaGroup) set.add(r.userId);
+  return set.size;
 }
 
 async function assertNotLastAdministrator(
@@ -107,7 +137,22 @@ export async function attachRolesToProfile(
   profile: UserProfile,
   userId: number,
 ): Promise<UserProfile> {
-  const roles = await listRolesForUser(db, userId);
+  const direct = await listRolesForUser(db, userId);
+  const viaGroupRows = await db
+    .select({
+      id: schema.roles.id,
+      name: schema.roles.name,
+      slug: schema.roles.slug,
+      isSystem: schema.roles.isSystem,
+    })
+    .from(schema.groupMembers)
+    .innerJoin(schema.groupRoles, eq(schema.groupMembers.groupId, schema.groupRoles.groupId))
+    .innerJoin(schema.roles, eq(schema.groupRoles.roleId, schema.roles.id))
+    .where(eq(schema.groupMembers.userId, userId));
+  const byId = new Map<number, RoleRef>();
+  for (const r of direct) byId.set(r.id, r);
+  for (const row of viaGroupRows) byId.set(row.id, toRoleRef(row));
+  const roles = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   return {
     ...profile,
     roles,
@@ -174,12 +219,19 @@ export async function deleteRole(db: Db, roleId: number): Promise<void> {
   await db.delete(schema.roles).where(eq(schema.roles.id, roleId));
 }
 
-async function requireRole(db: Db, roleId: number): Promise<typeof schema.roles.$inferSelect> {
+export async function requireRoleExists(
+  db: Db,
+  roleId: number,
+): Promise<typeof schema.roles.$inferSelect> {
   const [row] = await db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).limit(1);
   if (!row) {
     throw serviceErr("Role not found", 404, "not_found");
   }
   return row;
+}
+
+async function requireRole(db: Db, roleId: number): Promise<typeof schema.roles.$inferSelect> {
+  return requireRoleExists(db, roleId);
 }
 
 export async function assignRole(
@@ -214,7 +266,10 @@ export async function removeRole(
   await requireUserExists(db, userId);
   const role = await requireRole(db, roleId);
   if (isAdministratorSlug(role.slug)) {
-    await assertNotLastAdministrator(db, userId, "remove");
+    // Removing direct Admin is fine if they still have Admin via a Group.
+    if (!(await userHasAdministratorViaGroup(db, userId))) {
+      await assertNotLastAdministrator(db, userId, "remove");
+    }
   }
   await db
     .delete(schema.userRoles)
