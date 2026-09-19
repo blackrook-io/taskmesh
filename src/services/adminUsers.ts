@@ -5,7 +5,7 @@ import type { RoleRef } from "../lib/roles.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
 import { deleteUserDeniedReason } from "../lib/userAuth.js";
-import { clearMfaForUser } from "./mfa.js";
+import { clearMfaForUser, recoveryCodesRemainingByUserIds } from "./mfa.js";
 import { revokeAllTrustedDevices } from "./mfaTrustedDevices.js";
 import { allocateUserNumber } from "./users.js";
 import { archiveCurrentPasswordHash } from "./passwordHistory.js";
@@ -24,12 +24,14 @@ export type AdminUserRow = UserRef & {
   failedLoginCount: number;
   mfaEnabled: boolean;
   mfaGraceStartedAt: string | null;
+  mfaRecoveryCodesRemaining: number;
   roles: RoleRef[];
 };
 
 function toAdminUser(
   row: typeof schema.users.$inferSelect,
   roles: RoleRef[] = [],
+  recoveryCodesRemaining = 0,
 ): AdminUserRow {
   return {
     ...toUserRef(row),
@@ -43,6 +45,7 @@ function toAdminUser(
     failedLoginCount: row.failedLoginCount,
     mfaEnabled: row.mfaEnabledAt != null && Boolean(row.mfaTotpSecretEnc),
     mfaGraceStartedAt: row.mfaGraceStartedAt?.toISOString() ?? null,
+    mfaRecoveryCodesRemaining: recoveryCodesRemaining,
     roles,
   };
 }
@@ -56,7 +59,13 @@ export async function listAdminUsers(db: Db): Promise<AdminUserRow[]> {
     db,
     rows.map((r) => r.id),
   );
-  return rows.map((row) => toAdminUser(row, rolesByUser.get(row.id) ?? []));
+  const recoveryByUser = await recoveryCodesRemainingByUserIds(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((row) =>
+    toAdminUser(row, rolesByUser.get(row.id) ?? [], recoveryByUser.get(row.id) ?? 0),
+  );
 }
 
 function serviceErr(message: string, status: number, code: string): Error {

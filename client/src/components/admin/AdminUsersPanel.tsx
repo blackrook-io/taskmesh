@@ -14,6 +14,7 @@ type AdminUser = {
   lockedAt: string | null;
   lockReason?: string | null;
   mfaEnabled?: boolean;
+  mfaRecoveryCodesRemaining?: number;
   mfaGraceStartedAt?: string | null;
   lastLoginAt: string | null;
   lastApiAt: string | null;
@@ -543,6 +544,9 @@ export function AdminUsersPanel() {
                     {u.mfaEnabled ? (
                       <span className="admin-badge admin-badge--ok" style={{ marginLeft: 4 }}>
                         MFA
+                        {typeof u.mfaRecoveryCodesRemaining === "number"
+                          ? ` · ${u.mfaRecoveryCodesRemaining} codes`
+                          : ""}
                       </span>
                     ) : null}
                   </td>

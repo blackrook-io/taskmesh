@@ -1,8 +1,14 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { encryptMfaSecret, decryptMfaSecret, hasMfaTotpKey } from "../lib/mfaCrypto.js";
+import {
+  generateRecoveryCodeSet,
+  hashRecoveryCode,
+  looksLikeRecoveryCode,
+  RECOVERY_CODE_COUNT,
+} from "../lib/mfaRecoveryCodes.js";
 import { generateTotpSecret, totpUri, verifyTotpCode } from "../lib/totp.js";
 import { userIsAdministrator } from "./roles.js";
 import { getSystemProperties, type MfaEnforcement } from "./systemProperties.js";
@@ -187,19 +193,34 @@ export async function verifyMfaChallenge(
     throw serviceErr("Your account is locked. Contact an administrator.", 403, "account_locked");
   }
 
-  let secret: string;
-  try {
-    secret = decryptMfaSecret(user.mfaTotpSecretEnc);
-  } catch {
-    throw serviceErr("MFA is misconfigured on the server.", 500, "mfa_misconfigured");
+  const preferRecovery = looksLikeRecoveryCode(code);
+  let ok = false;
+
+  if (preferRecovery) {
+    ok = await consumeRecoveryCode(db, user.id, code);
+  } else {
+    let secret: string;
+    try {
+      secret = decryptMfaSecret(user.mfaTotpSecretEnc);
+    } catch {
+      throw serviceErr("MFA is misconfigured on the server.", 500, "mfa_misconfigured");
+    }
+    ok = verifyTotpCode(secret, code);
+    if (!ok && looksLikeRecoveryCode(code)) {
+      ok = await consumeRecoveryCode(db, user.id, code);
+    }
   }
 
-  if (!verifyTotpCode(secret, code)) {
+  if (!ok) {
     await db
       .update(schema.mfaLoginChallenges)
       .set({ failedAttempts: challenge.failedAttempts + 1 })
       .where(eq(schema.mfaLoginChallenges.id, challengeId));
-    throw serviceErr("Invalid authenticator code.", 401, "mfa_invalid_code");
+    throw serviceErr(
+      preferRecovery ? "Invalid recovery code." : "Invalid authenticator code.",
+      401,
+      "mfa_invalid_code",
+    );
   }
 
   const now = new Date();
@@ -220,7 +241,90 @@ export type MfaStatus = {
   enrollmentRequired: boolean;
   canDisable: boolean;
   serverKeyConfigured: boolean;
+  hasRecoveryCodes: boolean;
+  recoveryCodesRemaining: number;
 };
+
+async function countUnusedRecoveryCodes(db: Db, userId: number): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(schema.mfaRecoveryCodes)
+    .where(
+      and(
+        eq(schema.mfaRecoveryCodes.userId, userId),
+        isNull(schema.mfaRecoveryCodes.usedAt),
+      ),
+    );
+  return Number(row?.n ?? 0);
+}
+
+/** Replace all recovery codes for a user; returns plaintext codes once. */
+export async function replaceRecoveryCodes(db: Db, userId: number): Promise<string[]> {
+  const codes = generateRecoveryCodeSet(RECOVERY_CODE_COUNT);
+  await db
+    .delete(schema.mfaRecoveryCodes)
+    .where(eq(schema.mfaRecoveryCodes.userId, userId));
+  await db.insert(schema.mfaRecoveryCodes).values(
+    codes.map((code) => ({
+      userId,
+      codeHash: hashRecoveryCode(code),
+    })),
+  );
+  return codes;
+}
+
+async function consumeRecoveryCode(db: Db, userId: number, code: string): Promise<boolean> {
+  const codeHash = hashRecoveryCode(code);
+  const [row] = await db
+    .select()
+    .from(schema.mfaRecoveryCodes)
+    .where(
+      and(
+        eq(schema.mfaRecoveryCodes.userId, userId),
+        eq(schema.mfaRecoveryCodes.codeHash, codeHash),
+        isNull(schema.mfaRecoveryCodes.usedAt),
+      ),
+    )
+    .limit(1);
+  if (!row) return false;
+  await db
+    .update(schema.mfaRecoveryCodes)
+    .set({ usedAt: new Date() })
+    .where(eq(schema.mfaRecoveryCodes.id, row.id));
+  return true;
+}
+
+export async function deleteRecoveryCodesForUser(db: Db, userId: number): Promise<void> {
+  await db
+    .delete(schema.mfaRecoveryCodes)
+    .where(eq(schema.mfaRecoveryCodes.userId, userId));
+}
+
+/** Batch remaining unused recovery-code counts keyed by user id. */
+export async function recoveryCodesRemainingByUserIds(
+  db: Db,
+  userIds: number[],
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (userIds.length === 0) return map;
+  const counted = await db
+    .select({
+      userId: schema.mfaRecoveryCodes.userId,
+      n: count(),
+    })
+    .from(schema.mfaRecoveryCodes)
+    .where(
+      and(
+        inArray(schema.mfaRecoveryCodes.userId, userIds),
+        isNull(schema.mfaRecoveryCodes.usedAt),
+      ),
+    )
+    .groupBy(schema.mfaRecoveryCodes.userId);
+  for (const r of counted) {
+    map.set(r.userId, Number(r.n));
+  }
+  return map;
+}
 
 export async function getMfaStatus(
   db: Db,
@@ -241,6 +345,7 @@ export async function getMfaStatus(
   } else if (enforcementApplies && !enrolled) {
     enrollmentRequired = true;
   }
+  const recoveryCodesRemaining = enrolled ? await countUnusedRecoveryCodes(db, user.id) : 0;
   return {
     enrolled,
     enabledAt: user.mfaEnabledAt?.toISOString() ?? null,
@@ -250,6 +355,8 @@ export async function getMfaStatus(
     enrollmentRequired,
     canDisable: enrolled && !enforcementApplies,
     serverKeyConfigured: hasMfaTotpKey(),
+    hasRecoveryCodes: recoveryCodesRemaining > 0,
+    recoveryCodesRemaining,
   };
 }
 
@@ -286,7 +393,7 @@ export async function confirmMfaEnrollment(
   db: Db,
   userId: number,
   code: string,
-): Promise<void> {
+): Promise<{ recoveryCodes: string[] }> {
   const [user] = await db
     .select()
     .from(schema.users)
@@ -313,6 +420,35 @@ export async function confirmMfaEnrollment(
       updatedAt: now,
     })
     .where(eq(schema.users.id, userId));
+  const recoveryCodes = await replaceRecoveryCodes(db, userId);
+  return { recoveryCodes };
+}
+
+/** Regenerate recovery codes; requires current TOTP. Returns plaintext once. */
+export async function regenerateRecoveryCodes(
+  db: Db,
+  userId: number,
+  totpCode: string,
+): Promise<{ recoveryCodes: string[] }> {
+  const [user] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  if (!user || !isMfaEnrolled(user) || !user.mfaTotpSecretEnc) {
+    throw serviceErr("MFA is not enrolled.", 400, "mfa_not_enrolled");
+  }
+  let secret: string;
+  try {
+    secret = decryptMfaSecret(user.mfaTotpSecretEnc);
+  } catch {
+    throw serviceErr("MFA is misconfigured on the server.", 500, "mfa_misconfigured");
+  }
+  if (!verifyTotpCode(secret, totpCode)) {
+    throw serviceErr("Invalid authenticator code.", 400, "mfa_invalid_code");
+  }
+  const recoveryCodes = await replaceRecoveryCodes(db, userId);
+  return { recoveryCodes };
 }
 
 export async function disableMfa(
@@ -360,6 +496,7 @@ export async function clearMfaForUser(db: Db, userId: number): Promise<void> {
   await db
     .delete(schema.mfaLoginChallenges)
     .where(eq(schema.mfaLoginChallenges.userId, userId));
+  await deleteRecoveryCodesForUser(db, userId);
   await revokeAllTrustedDevices(db, userId);
 }
 

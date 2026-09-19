@@ -1,0 +1,82 @@
+# T0140 — MFA backup / recovery codes
+
+**Task:** T0140 (id 153) · Parent: T0111 · Project: TaskMesh (4)  
+**Branch (on approval):** `T0140-mfa-backup-codes`  
+**State at plan:** Ready  
+
+## Goal
+
+Users with MFA enrolled can generate one-time backup/recovery codes to regain access if they lose their authenticator, without needing an Admin MFA clear in every case. Codes are single-use, stored hashed, shown plaintext once, and accepted on the MFA challenge step in place of TOTP.
+
+## Interview decisions (locked)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | When codes are issued | After successful enroll confirm: **required** one-time reveal (cannot finish enroll without acknowledging). Profile can **regenerate** later with confirm. |
+| 2 | Set size / format | **10** codes, `XXXX-XXXX` (uppercase alphanumeric, no ambiguous `0/O/1/I`), hashed at rest (SHA-256). |
+| 3 | Login UX | Same challenge step: **“Use a backup code”** toggles input; shares existing attempt limit (5). |
+| 4 | Regenerate | Requires current **TOTP** (not a recovery code). Invalidates entire previous set. Confirm dialog first. |
+| 5 | Exhausted codes | Status shows **0 remaining**; login rejects; regenerate from Profile with TOTP (or Admin Clear MFA). |
+| 6 | Admin | Show **has recovery codes** + remaining count (never plaintext). Clear MFA wipes recovery codes. |
+| 7 | Enforced users | May regenerate while enrolled; still cannot self-disable MFA. |
+
+## Out of scope
+
+- Trusted device changes (T0141 already shipped)
+- SMS / email / WebAuthn recovery
+- Changing `dueDate` via worktask bookkeeping
+
+## Technical approach
+
+### Schema (new Drizzle migration → MINOR bump on finish-up)
+
+- New table `mfa_recovery_codes`:
+  - `id` serial PK
+  - `user_id` FK → users (cascade)
+  - `code_hash` text not null (SHA-256 hex of normalized code)
+  - `used_at` timestamptz nullable
+  - `created_at` timestamptz not null default now()
+  - Unique on `(user_id, code_hash)` optional; index on `user_id`
+- On disable / Admin clear MFA: delete all rows for that user
+
+Update `docs/database/platform.md`; `docs:sync-schema` on finish-up.
+
+### Server
+
+- Generate 10 codes (`XXXX-XXXX` from alphabet without 0/O/1/I); normalize (strip dashes/spaces, uppercase) before hash/compare
+- `confirmMfaEnrollment`: after TOTP OK, generate set, return plaintext codes once with status
+- `POST /me/mfa/recovery-codes/regenerate` — body `{ code: TOTP }` → wipe old, mint new, return plaintext once
+- `GET /me/mfa` status: add `recoveryCodesRemaining`, `hasRecoveryCodes`
+- `verifyMfaChallenge`: if code looks like recovery (not 6-digit TOTP) or client sends `method: "recovery"`, verify hash match unused code → mark `used_at`, consume challenge; else existing TOTP path
+- Rate limit: same challenge `failedAttempts` / max 5
+- Admin user payload: `mfaRecoveryCodesRemaining` (or boolean + count)
+
+### Client
+
+- Enroll confirm success → mandatory backup-codes reveal card (copy all / acknowledge Done)
+- Profile: remaining count + Regenerate (confirm + TOTP)
+- Login MFA step: toggle “Use a backup code”
+- Admin users: show recovery-code status when MFA enrolled
+
+### Docs
+
+- `SECURITY.md` — remove deferral; document hashed single-use codes
+- `FEATURES.md` — marketing bullet on finish-up
+- `.env.example` unchanged (no new env key)
+
+## Acceptance
+
+- Recovery code works when authenticator unavailable
+- Codes single-use and stored hashed
+- Regenerating invalidates previous set
+- Enroll flow alerts / requires viewing backup codes
+- Docs/SECURITY updated
+
+## QA checklist (draft)
+
+1. Enroll MFA → must see 10 codes once → acknowledge
+2. Login with backup code (authenticator unused) → session; code no longer works
+3. Regenerate with TOTP → old codes fail; new codes work
+4. Exhausted / 0 remaining shown in Profile
+5. Admin Clear MFA removes codes; Admin shows remaining count
+6. Failed recovery codes count toward challenge attempt limit

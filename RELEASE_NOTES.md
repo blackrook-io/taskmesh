@@ -4,6 +4,18 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.45.0 — 2026-09-19
+
+### New Functionality
+- MFA backup/recovery codes: ten single-use `XXXX-XXXX` codes issued at enroll (required one-time reveal) and on Profile regenerate; accepted on the login MFA challenge in place of TOTP.
+- Administrators see remaining recovery-code count on user rows (never plaintext values).
+
+### Enhancements
+- SECURITY and schema docs cover hashed recovery codes; Clear MFA / disable / user delete wipe the set.
+
+### Breaking Changes
+- New table `mfa_recovery_codes` (migration `0044`).
+
 ## 0.44.0 — 2026-09-19
 
 ### New Functionality

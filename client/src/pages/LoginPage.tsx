@@ -74,6 +74,7 @@ export function LoginPage() {
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [passwordTrustDays, setPasswordTrustDays] = useState<number | null>(null);
   const [trustDevice, setTrustDevice] = useState(false);
+  const [useBackupCode, setUseBackupCode] = useState(false);
   const [error, setError] = useState<string | null>(() =>
     oauthError
       ? (OAUTH_ERROR_MESSAGES[oauthError] ?? OAUTH_ERROR_MESSAGES.oauth_failed)
@@ -174,6 +175,7 @@ export function LoginPage() {
         setChallengeId(result.challengeId);
         setPasswordTrustDays(result.trustedDeviceDays);
         setTrustDevice(false);
+        setUseBackupCode(false);
         setMfaCode("");
         setError(null);
         return;
@@ -212,7 +214,7 @@ export function LoginPage() {
       finishLogin(profile);
     },
     onError: (err: Error) => {
-      setError(err.message || "Invalid authenticator code.");
+      setError(err.message || (useBackupCode ? "Invalid recovery code." : "Invalid authenticator code."));
     },
   });
 
@@ -224,7 +226,13 @@ export function LoginPage() {
     e.preventDefault();
     setError(null);
     if (activeChallengeId) {
-      if (mfaCode.trim().length < 6) {
+      const trimmed = mfaCode.trim();
+      if (useBackupCode) {
+        if (trimmed.replace(/[^a-zA-Z0-9]/g, "").length < 8) {
+          setError("Enter a backup recovery code.");
+          return;
+        }
+      } else if (trimmed.length < 6) {
         setError("Enter the 6-digit code from your authenticator app.");
         return;
       }
@@ -252,22 +260,38 @@ export function LoginPage() {
         {activeChallengeId ? (
           <form className="login-form" onSubmit={onSubmit} noValidate>
             <p className="muted" style={{ marginTop: 0 }}>
-              Enter the 6-digit code from your authenticator app.
+              {useBackupCode
+                ? "Enter one of your single-use backup codes."
+                : "Enter the 6-digit code from your authenticator app."}
             </p>
             <label className="field">
-              <span>Authenticator code</span>
+              <span>{useBackupCode ? "Backup code" : "Authenticator code"}</span>
               <input
                 type="text"
                 name="mfa"
-                inputMode="numeric"
+                inputMode={useBackupCode ? "text" : "numeric"}
                 autoComplete="one-time-code"
                 value={mfaCode}
                 onChange={(e) => setMfaCode(e.target.value)}
                 disabled={pending}
                 required
                 autoFocus
+                placeholder={useBackupCode ? "XXXX-XXXX" : undefined}
               />
             </label>
+            <button
+              type="button"
+              className="btn ghost"
+              style={{ alignSelf: "flex-start", padding: 0, marginBottom: "0.5rem" }}
+              disabled={pending}
+              onClick={() => {
+                setUseBackupCode((v) => !v);
+                setMfaCode("");
+                setError(null);
+              }}
+            >
+              {useBackupCode ? "Use authenticator code" : "Use a backup code"}
+            </button>
             {trustedDeviceDays > 0 ? (
               <label
                 className="field"
@@ -300,6 +324,7 @@ export function LoginPage() {
                 setPasswordTrustDays(null);
                 setMfaCode("");
                 setTrustDevice(false);
+                setUseBackupCode(false);
                 setError(null);
                 const next = new URLSearchParams(params);
                 next.delete("mfaChallenge");
