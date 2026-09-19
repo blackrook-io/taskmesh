@@ -89,18 +89,31 @@ describe("sniffImageMime", () => {
 });
 
 describe("privateNet", () => {
-  it("blocks loopback, RFC1918, link-local, and metadata", () => {
+  it("blocks loopback, RFC1918, link-local, CGNAT, and metadata", () => {
     assert.equal(isBlockedIp("127.0.0.1"), true);
     assert.equal(isBlockedIp("10.1.2.3"), true);
     assert.equal(isBlockedIp("192.168.0.1"), true);
     assert.equal(isBlockedIp("172.16.0.1"), true);
     assert.equal(isBlockedIp("169.254.169.254"), true);
+    assert.equal(isBlockedIp("100.64.0.1"), true);
+    assert.equal(isBlockedIp("100.127.255.255"), true);
+    assert.equal(isBlockedIp("100.128.0.1"), false);
+    assert.equal(isBlockedIp("0.0.0.1"), true);
     assert.equal(isBlockedIp("8.8.8.8"), false);
     assert.equal(isBlockedIp("::1"), true);
     assert.equal(isBlockedIp("::ffff:127.0.0.1"), true);
     assert.equal(isBlockedHostname("localhost"), true);
     assert.equal(isBlockedHostname("foo.local"), true);
     assert.equal(isBlockedHostname("example.com"), false);
+  });
+
+  it("normalizes decimal/octal/hex IPv4 literals before blocking", () => {
+    assert.equal(isBlockedIp("2130706433"), true); // 127.0.0.1
+    assert.equal(isBlockedIp("0x7f000001"), true);
+    assert.equal(isBlockedIp("0177.0.0.1"), true);
+    assert.equal(isBlockedHostname("2130706433"), true);
+    assert.equal(isBlockedHostname("0177.0.0.1"), true);
+    assert.equal(isBlockedIp("0x08080808"), false); // 8.8.8.8
   });
 });
 

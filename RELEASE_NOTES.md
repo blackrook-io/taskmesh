@@ -4,6 +4,21 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.46.0 — 2026-09-19
+
+### Fixes
+- Unauthenticated API traffic is rate-limited before auth (IP key), closing a bypass that previously burned CPU and filled `api_request_logs` with only 401s.
+- API request audit rows record Express `req.ip` (trust proxy) instead of a client-supplied `X-Forwarded-For`.
+- Assistant URL fetch pins the DNS address validated before connect, blocking rebinding to private addresses after lookup.
+- Private-network blocklist covers CGNAT (`100.64.0.0/10`) and decimal/octal/hex IPv4 literals used as SSRF bypasses.
+- `RATE_LIMIT_DISABLE=1` is ignored in production (loud startup warning); documented as a dev/test-only escape hatch.
+
+### Enhancements
+- `api_request_logs` retains **90** days by default (`API_REQUEST_LOG_RETENTION_DAYS`) with an in-process prune job and `created_at` index.
+
+### Breaking Changes
+- New index `api_request_logs_created_at_idx` (migration `0045`).
+
 ## 0.45.2 — 2026-09-19
 
 ### Fixes

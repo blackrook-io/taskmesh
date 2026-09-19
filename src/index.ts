@@ -12,7 +12,13 @@ import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
 import { startBackupScheduler, stopBackupScheduler } from "./services/backups.js";
 import { startDbStatsSampler, stopDbStatsSampler } from "./services/dbStats.js";
+import {
+  startApiRequestLogPruner,
+  stopApiRequestLogPruner,
+} from "./services/apiRequestLogPrune.js";
+import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
 
+warnIfRateLimitDisableIgnored();
 ensureUploadDir();
 ensureBackupDir();
 
@@ -109,12 +115,14 @@ const server = app.listen(port, host, () => {
   console.log(`TaskMesh API listening on http://${host}:${port}`);
   startBackupScheduler();
   startDbStatsSampler(db);
+  startApiRequestLogPruner(db);
 });
 
 async function shutdown(signal: string) {
   console.log(`Received ${signal}, closing…`);
   stopBackupScheduler();
   stopDbStatsSampler();
+  stopApiRequestLogPruner();
   server.close();
   await pool.end();
   process.exit(0);

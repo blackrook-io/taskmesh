@@ -48,7 +48,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | Markdown (ideas, projects, docs, wiki, task descriptions, comments, templates) | `sanitizeMarkdown` on **write** and in the Markdown editor | HTML tags stripped; links limited to `http`/`https`/`mailto`/same-origin `/…`; autolinks `<https://…>` kept |
 | Canvas / image-board `document` JSON | Max 2 000 000 UTF-8 bytes | `express.json` remains 10 MB for the request envelope |
 | Uploads | UUID filenames; GET uses `path.basename`; **magic-byte** sniff (jpeg/png/gif/webp) | Stored MIME is sniffed, not client-claimed |
-| Assistant `fetchUrl` | http(s) only; DNS resolve; block private IPs; **manual** redirects (max 2) re-checked | No intranet/localhost fetch |
+| Assistant `fetchUrl` | http(s) only; DNS resolve + **pin** validated address on connect; block private/CGNAT/literal bypass IPs; **manual** redirects (max 2) re-checked | No intranet/localhost fetch; no DNS rebinding |
 | Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore/run rate-limited (T0085) |
 | Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production (override with `COOKIE_SECURE`) | CSRF: SPA client header + Origin/Referer on mutating routes (T0087). Compose desktop sets `COOKIE_SECURE=false` for HTTP. |
 | TLS | nginx terminates HTTPS :443; Express on loopback only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); certbot path for public hosts |
