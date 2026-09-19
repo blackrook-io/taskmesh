@@ -731,31 +731,35 @@ export const userProjectOverviewPrefs = pgTable(
 );
 
 /** Append-only API request / auth audit log for Admin APIs + Logging. */
-export const apiRequestLogs = pgTable("api_request_logs", {
-  id: serial("id").primaryKey(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  /** success | api_failure | auth_failure | access_violation */
-  outcome: text("outcome").notNull(),
-  method: text("method").notNull(),
-  path: text("path").notNull(),
-  statusCode: integer("status_code").notNull(),
-  ip: text("ip"),
-  userId: integer("user_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  apiKeyId: integer("api_key_id").references(() => apiKeys.id, {
-    onDelete: "set null",
-  }),
-  message: text("message"),
-  /** True when request used an admin-owned key (audit flag). */
-  adminKey: boolean("admin_key").notNull().default(false),
-  /** Request Content-Length (ingress estimate), bytes. */
-  requestBytes: integer("request_bytes").notNull().default(0),
-  /** Response body bytes sent to the client (egress estimate). */
-  responseBytes: integer("response_bytes").notNull().default(0),
-});
+export const apiRequestLogs = pgTable(
+  "api_request_logs",
+  {
+    id: serial("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** success | api_failure | auth_failure | access_violation */
+    outcome: text("outcome").notNull(),
+    method: text("method").notNull(),
+    path: text("path").notNull(),
+    statusCode: integer("status_code").notNull(),
+    ip: text("ip"),
+    userId: integer("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    apiKeyId: integer("api_key_id").references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
+    message: text("message"),
+    /** True when request used an admin-owned key (audit flag). */
+    adminKey: boolean("admin_key").notNull().default(false),
+    /** Request Content-Length (ingress estimate), bytes. */
+    requestBytes: integer("request_bytes").notNull().default(0),
+    /** Response body bytes sent to the client (egress estimate). */
+    responseBytes: integer("response_bytes").notNull().default(0),
+  },
+  (t) => [index("api_request_logs_created_at_idx").on(t.createdAt)],
+);
 
 /** Periodic Postgres gauges for Administration → Database charts. */
 export const dbStatsSnapshots = pgTable(

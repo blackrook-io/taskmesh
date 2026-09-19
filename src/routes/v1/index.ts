@@ -39,9 +39,10 @@ v1Router.use(apiRequestLogger);
 v1Router.use(apiKeyAuth);
 v1Router.use(sessionLoader);
 v1Router.use(csrfProtection);
+// Budget anonymous + authenticated traffic before 401 short-circuit (IP key fallback).
+v1Router.use(globalApiRateLimit);
 v1Router.use(requireAuth);
 v1Router.use(apiKeyRateLimit);
-v1Router.use(globalApiRateLimit);
 
 v1Router.use("/auth", authRouter);
 v1Router.use("/admin", adminRouter);

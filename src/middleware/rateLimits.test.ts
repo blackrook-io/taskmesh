@@ -5,6 +5,7 @@ import {
   clientRateLimitKey,
   createRateLimiter,
   loginRateLimitKey,
+  rateLimitsDisabled,
 } from "./rateLimits.js";
 
 function mockReq(overrides: Partial<Request> & { ip?: string } = {}): Request {
@@ -131,5 +132,26 @@ describe("createRateLimiter", () => {
 
     const other = await hit(limiter, mockReq({ sessionUserId: 2 }));
     assert.equal(other.next, true);
+  });
+});
+
+describe("rateLimitsDisabled", () => {
+  it("honors RATE_LIMIT_DISABLE outside production only", () => {
+    const prevDisable = process.env.RATE_LIMIT_DISABLE;
+    const prevEnv = process.env.NODE_ENV;
+    try {
+      process.env.RATE_LIMIT_DISABLE = "1";
+      process.env.NODE_ENV = "development";
+      assert.equal(rateLimitsDisabled(), true);
+      process.env.NODE_ENV = "production";
+      assert.equal(rateLimitsDisabled(), false);
+      delete process.env.RATE_LIMIT_DISABLE;
+      assert.equal(rateLimitsDisabled(), false);
+    } finally {
+      if (prevDisable === undefined) delete process.env.RATE_LIMIT_DISABLE;
+      else process.env.RATE_LIMIT_DISABLE = prevDisable;
+      if (prevEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prevEnv;
+    }
   });
 });

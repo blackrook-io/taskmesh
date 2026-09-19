@@ -16,11 +16,10 @@ function shouldSkip(path: string): boolean {
   return false;
 }
 
+/** Prefer Express `req.ip` (honors `trust proxy`); never trust raw client XFF. */
 function clientIp(req: Request): string | null {
-  const xf = req.headers["x-forwarded-for"];
-  if (typeof xf === "string" && xf.length > 0) {
-    return xf.split(",")[0]!.trim();
-  }
+  const ip = req.ip?.trim();
+  if (ip) return ip;
   return req.socket.remoteAddress ?? null;
 }
 

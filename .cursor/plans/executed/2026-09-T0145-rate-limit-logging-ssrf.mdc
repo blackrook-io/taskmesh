@@ -1,0 +1,98 @@
+# T0145 — Security Phase 4: Rate limiting, logging integrity, SSRF
+
+**Task:** T0145 (id 158) · project TaskMesh · priority urgent · due 2026-09-19  
+**Branch (after approval):** `T0145-rate-limit-logging-ssrf`  
+**Parent plan:** `.cursor/plans/2026-09-security-audit-remediation.mdc` § Phase 4  
+**Version on finish-up:** MINOR bump (`0.46.0`) if a Drizzle migration ships (expected for `api_request_logs` prune index); else PATCH.
+
+## Goal
+
+Close unauthenticated rate-limit bypass, spoofable audit IPs, unbounded `api_request_logs` growth, and assistant URL-fetch SSRF (DNS rebinding + blocklist gaps). Defensive fixes only — no exploit PoCs.
+
+## Scope (all six work items)
+
+### 1. Mount `globalApiRateLimit` above `requireAuth`
+
+**File:** `src/routes/v1/index.ts`
+
+Today: `requireAuth` → `apiKeyRateLimit` → `globalApiRateLimit`. Unauthenticated requests 401 before any budget.
+
+**Change:** After `apiKeyAuth` + `sessionLoader` (+ CSRF as today), mount `globalApiRateLimit` **before** `requireAuth`. Keep `apiKeyRateLimit` after auth (needs `apiKeyId`; already skips non-key requests).
+
+`clientRateLimitKey` already falls back to `ip:…` when no session/key — unauthenticated flood is then 429’d.
+
+### 2. `api_request_logs` retention + prune job
+
+**No new columns** — prune by existing `created_at`.
+
+- Add index on `api_request_logs.created_at` (Drizzle migration) so deletes stay cheap.
+- Constant or env default retention: **90 days** (`API_REQUEST_LOG_RETENTION_DAYS`).
+- In-process prune scheduler every **6h** (first tick ~30s after boot).
+- Wire start/stop from `src/index.ts`.
+- Update `docs/database/platform.md` (+ `npm run docs:sync-schema` on finish-up).
+
+Optional (defer unless approved): Admin system property for retention days — default stay code/env for this Task.
+
+### 3. Fix spoofable audit IP
+
+**File:** `src/middleware/apiRequestLogger.ts`
+
+Replace `clientIp()` X-Forwarded-For parsing with `req.ip` (Express `trust proxy`), matching `rateLimits.ts` / `ipKeyGenerator(req.ip)`. Do not trust raw client `X-Forwarded-For`.
+
+### 4. Pin validated DNS in `fetchUrl.ts`
+
+**File:** `src/services/assistant/fetchUrl.ts`
+
+After `dns.lookup` validates addresses, connect via Node `http`/`https.request` with a custom `lookup` that returns the already-validated address (no second resolve / DNS rebinding). Preserve `Host` for the original hostname. Keep per-hop redirect re-check via `assertUrlAllowed`. (undici is not a direct dependency here.)
+
+### 5. Expand `privateNet` blocklist
+
+**File:** `src/lib/privateNet.ts` (+ `secureInputs.test.ts`)
+
+- Add `100.64.0.0/10` (CGNAT).
+- Confirm `0.0.0.0/8` already present as CIDR — keep; no change needed beyond tests if missing coverage.
+- Normalize decimal / octal IPv4 literals before `net.isIP` (e.g. `2130706433`, `0177.0.0.1`) so hostname-looking literals hit the same blocklist.
+
+### 6. `RATE_LIMIT_DISABLE` in production
+
+**Recommended default (interview):** In `NODE_ENV=production`, **ignore** `RATE_LIMIT_DISABLE=1` (limiters stay on) and log a **loud startup warning** if the env var is set. Document in `.env.example` as a **dev/test-only** escape hatch.
+
+## Out of scope (other phases / defer)
+
+- Phase 5 auth/crypto, Phase 6 Docker/nginx, Phase 7 CSV/xlsx/upload quota.
+- Moving `apiRequestLogger` before/after rate limit for “don’t log 429 floods” — not required by the Task; rate limit still writes a log row today via finish handler (acceptable).
+- Admin UI to configure log retention (unless interview asks for it → new follow-up Task).
+
+## Implementation order
+
+1. privateNet + tests  
+2. apiRequestLogger `req.ip`  
+3. rate-limit middleware order + `RATE_LIMIT_DISABLE` production harden  
+4. fetchUrl DNS pin  
+5. retention prune + migration + docs  
+6. Lint / focused tests  
+
+## Acceptance
+
+- Unauthenticated burst (>300/min from one IP) yields **429**, not only 401.
+- Spoofed `X-Forwarded-For` does **not** appear as `api_request_logs.ip` when `trust proxy` is set correctly (recorded IP = Express `req.ip`).
+- Prune deletes rows older than retention; index exists.
+- Assistant fetch to a host that rebinds after lookup cannot hit private IPs (pinned lookup).
+- `100.64.x.x` and decimal/octal loopback literals blocked; tests green.
+- Production ignores `RATE_LIMIT_DISABLE`; `.env.example` documents it.
+
+## Decisions (approved 2026-09-18)
+
+1. Log retention: **90 days** (override via `API_REQUEST_LOG_RETENTION_DAYS` env).
+2. No Admin system property for retention in this Task.
+3. `RATE_LIMIT_DISABLE`: **ignore in production + loud startup warning**; document as dev/test-only in `.env.example`.
+
+## QA checklist (draft)
+
+- [ ] Unauth flood against `/api/v1/...` → 429 after budget
+- [ ] Auth’d user still gets user-keyed limit (not only IP)
+- [ ] Admin Logging shows IPs matching real client / proxy, not spoofed XFF
+- [ ] After seeding old log rows (or waiting), prune removes them; recent rows remain
+- [ ] Assistant fetch of public URL still works; blocked/private hosts still rejected
+- [ ] With `NODE_ENV=production` and `RATE_LIMIT_DISABLE=1`, limiters still enforce; startup warning visible
+- [ ] `npm run lint` clean

@@ -8,6 +8,25 @@ const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 
+/**
+ * Dev/test escape hatch. Ignored when `NODE_ENV=production` so login and API
+ * budgets cannot be silently disabled on a live host.
+ */
+export function rateLimitsDisabled(): boolean {
+  if (process.env.RATE_LIMIT_DISABLE !== "1") return false;
+  if (process.env.NODE_ENV === "production") return false;
+  return true;
+}
+
+/** Loud warning when production would have honored a disable flag. */
+export function warnIfRateLimitDisableIgnored(): void {
+  if (process.env.RATE_LIMIT_DISABLE === "1" && process.env.NODE_ENV === "production") {
+    console.warn(
+      "[security] RATE_LIMIT_DISABLE=1 is set but ignored in production — rate limits remain enforced",
+    );
+  }
+}
+
 /** Identity for authenticated buckets; IP for pre-auth / anonymous. */
 export function clientRateLimitKey(req: Request): string {
   if (req.apiKeyId != null) return `apikey:${req.apiKeyId}`;
@@ -50,7 +69,7 @@ export function createRateLimiter(opts: CreateRateLimiterOptions) {
     handler: (req, res) => {
       sendRateLimited(req, res);
     },
-    skip: () => process.env.RATE_LIMIT_DISABLE === "1",
+    skip: () => rateLimitsDisabled(),
     validate: opts.skipValidation ? false : { keyGeneratorIpFallback: false },
   });
 }
@@ -108,7 +127,6 @@ export const apiKeyRateLimit = rateLimit({
   handler: (req, res) => {
     sendRateLimited(req, res);
   },
-  skip: (req) =>
-    req.apiKeyId == null || process.env.RATE_LIMIT_DISABLE === "1",
+  skip: (req) => req.apiKeyId == null || rateLimitsDisabled(),
   validate: { keyGeneratorIpFallback: false },
 });
