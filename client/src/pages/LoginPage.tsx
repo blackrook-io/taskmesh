@@ -63,20 +63,19 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
-  const [challengeId, setChallengeId] = useState<string | null>(oauthChallenge);
+  const [challengeId, setChallengeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(() =>
     oauthError
       ? (OAUTH_ERROR_MESSAGES[oauthError] ?? OAUTH_ERROR_MESSAGES.oauth_failed)
       : null,
   );
 
+  /** OAuth redirect challenge lives in the URL; password login sets local state. */
+  const activeChallengeId = challengeId ?? oauthChallenge;
+
   useEffect(() => {
     resetSessionExpiredGuard();
   }, []);
-
-  useEffect(() => {
-    if (oauthChallenge) setChallengeId(oauthChallenge);
-  }, [oauthChallenge]);
 
   const configQuery = useQuery({
     queryKey: ["config", "public"],
@@ -158,10 +157,10 @@ export function LoginPage() {
 
   const mfaMutation = useMutation({
     mutationFn: async () => {
-      if (!challengeId) throw new Error("Missing MFA challenge.");
+      if (!activeChallengeId) throw new Error("Missing MFA challenge.");
       const res = await apiJson<{ data: UserProfile }>("/api/v1/auth/mfa/verify", {
         method: "POST",
-        body: JSON.stringify({ challengeId, code: mfaCode }),
+        body: JSON.stringify({ challengeId: activeChallengeId, code: mfaCode }),
       });
       const sessionRes = await fetch("/api/v1/auth/session", {
         credentials: "include",
@@ -188,7 +187,7 @@ export function LoginPage() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (challengeId) {
+    if (activeChallengeId) {
       if (mfaCode.trim().length < 6) {
         setError("Enter the 6-digit code from your authenticator app.");
         return;
@@ -214,7 +213,7 @@ export function LoginPage() {
           <h1 className="login-card__title">TaskMesh</h1>
         </header>
 
-        {challengeId ? (
+        {activeChallengeId ? (
           <form className="login-form" onSubmit={onSubmit} noValidate>
             <p className="muted" style={{ marginTop: 0 }}>
               Enter the 6-digit code from your authenticator app.

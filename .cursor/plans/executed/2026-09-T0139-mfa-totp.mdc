@@ -123,3 +123,7 @@ Update `docs/database/`, `.env.example`, SECURITY.md; run `docs:sync-schema` on 
 7. Tests + SECURITY/schema docs
 
 Open items before implement: none — interview locked. **Approved** 2026-09-18; branch `T0139-mfa-totp`; In Progress.
+
+## QA follow-ups
+
+- CI ESLint: removed `setState` in effects for Login MFA challenge sync and Profile MFA QR clear (`set-state-in-effect`).

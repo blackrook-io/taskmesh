@@ -34,12 +34,10 @@ export function ProfileMfaSection() {
   });
 
   useEffect(() => {
-    if (!enroll?.otpauthUri) {
-      setQrDataUrl(null);
-      return;
-    }
+    const uri = enroll?.otpauthUri;
+    if (!uri) return;
     let cancelled = false;
-    void QRCode.toDataURL(enroll.otpauthUri, { width: 200, margin: 1 }).then((url) => {
+    void QRCode.toDataURL(uri, { width: 200, margin: 1 }).then((url) => {
       if (!cancelled) setQrDataUrl(url);
     });
     return () => {
@@ -57,6 +55,7 @@ export function ProfileMfaSection() {
     },
     onSuccess: (data) => {
       setError(null);
+      setQrDataUrl(null);
       setEnroll(data);
       setCode("");
     },
@@ -73,6 +72,7 @@ export function ProfileMfaSection() {
     },
     onSuccess: async () => {
       setEnroll(null);
+      setQrDataUrl(null);
       setCode("");
       setFlash("Authenticator enrolled.");
       window.setTimeout(() => setFlash(null), 2000);
@@ -87,6 +87,7 @@ export function ProfileMfaSection() {
     },
     onSuccess: () => {
       setEnroll(null);
+      setQrDataUrl(null);
       setCode("");
       setError(null);
     },
