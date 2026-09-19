@@ -4,6 +4,18 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.44.0 — 2026-09-19
+
+### New Functionality
+- After a successful MFA challenge, users can trust the browser for a configurable number of days so subsequent password or OAuth sign-ins skip TOTP.
+- Profile can revoke all trusted devices; Admin Clear MFA and user delete also clear trusts (delete also removes API keys and MFA configuration).
+
+### Enhancements
+- Administrators configure trusted-device duration (default 15 days; 0 disables) and max devices per user (default 5) under System properties.
+
+### Breaking Changes
+- New table `mfa_trusted_devices` and system properties `mfa_trusted_device_days` / `mfa_trusted_device_max` (migration `0043`).
+
 ## 0.43.1 — 2026-09-19
 
 ### Enhancements

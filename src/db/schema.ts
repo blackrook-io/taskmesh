@@ -253,6 +253,32 @@ export const mfaLoginChallenges = pgTable(
   (t) => [index("mfa_login_challenges_user_id_idx").on(t.userId)],
 );
 
+/**
+ * Trusted browser devices that may skip MFA (T0141).
+ * Cookie holds the opaque token; only `token_hash` is stored.
+ */
+export const mfaTrustedDevices = pgTable(
+  "mfa_trusted_devices",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** SHA-256 hex of the cookie token. */
+    tokenHash: text("token_hash").notNull().unique(),
+    userAgent: text("user_agent"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("mfa_trusted_devices_user_id_idx").on(t.userId),
+    index("mfa_trusted_devices_expires_at_idx").on(t.expiresAt),
+  ],
+);
+
 /** Browser login sessions (opaque id in httpOnly cookie). */
 export const sessions = pgTable(
   "sessions",
@@ -1427,11 +1453,27 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     relationName: "task_description_templates_owner",
   }),
   apiKeys: many(apiKeys),
+  mfaLoginChallenges: many(mfaLoginChallenges),
+  mfaTrustedDevices: many(mfaTrustedDevices),
   userRoles: many(userRoles),
   passwordHistory: many(passwordHistory),
   identities: many(userIdentities),
   listViewPrefs: many(userListViewPrefs),
   overviewPrefs: many(userProjectOverviewPrefs),
+}));
+
+export const mfaLoginChallengesRelations = relations(mfaLoginChallenges, ({ one }) => ({
+  user: one(users, {
+    fields: [mfaLoginChallenges.userId],
+    references: [users.id],
+  }),
+}));
+
+export const mfaTrustedDevicesRelations = relations(mfaTrustedDevices, ({ one }) => ({
+  user: one(users, {
+    fields: [mfaTrustedDevices.userId],
+    references: [users.id],
+  }),
 }));
 
 export const oauthProvidersRelations = relations(oauthProviders, ({ one, many }) => ({

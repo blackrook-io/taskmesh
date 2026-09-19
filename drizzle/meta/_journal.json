@@ -302,6 +302,13 @@
       "when": 1789769301141,
       "tag": "0042_zippy_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789779281805,
+      "tag": "0043_chilly_katie_power",
+      "breakpoints": true
     }
   ]
 }

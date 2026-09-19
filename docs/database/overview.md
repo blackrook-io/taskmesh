@@ -22,7 +22,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Non-main** (inventory + minimal on diagrams):
 
-`users`, `sessions`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `api_request_logs`, `db_stats_snapshots`
+`users`, `sessions`, `mfa_login_challenges`, `mfa_trusted_devices`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `api_request_logs`, `db_stats_snapshots`
 
 ## Conceptual model
 
