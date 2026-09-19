@@ -3,6 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { formatTaskNumber } from "../lib/taskFields.js";
 import { ilikeEscaped } from "../lib/ilike.js";
+import { dualScopeListFilter } from "./ownership.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -285,10 +286,15 @@ export function formatBlockersMessage(
   return `Cannot delete: required by open task(s): ${list}`;
 }
 
-/** Search tasks by title OR number (T#### / digits). Excludes ids when provided. */
+/**
+ * Search tasks by title OR number (T#### / digits). Excludes ids when provided.
+ * Scoped to tasks the actor may access — `actor` is required so a new caller
+ * cannot silently inherit an unscoped query (T0143).
+ */
 export async function searchTasksForDependency(
   db: Db,
   q: string,
+  actor: { userId: number; isAdministrator: boolean },
   opts?: { excludeIds?: number[]; limit?: number },
 ): Promise<TaskDepSummary[]> {
   const trimmed = q.trim();
@@ -303,6 +309,13 @@ export async function searchTasksForDependency(
 
   const filters = [
     ne(schema.tasks.state, "deleted"),
+    dualScopeListFilter(
+      db,
+      schema.tasks.projectId,
+      schema.tasks.ownerId,
+      actor.userId,
+      actor.isAdministrator,
+    ) ?? sql`true`,
     or(
       ilikeEscaped(schema.tasks.title, trimmed),
       ilikeEscaped(sql`CAST(${schema.tasks.number} AS TEXT)`, trimmed),

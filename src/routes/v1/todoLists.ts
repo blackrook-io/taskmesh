@@ -416,18 +416,24 @@ todoListsRouter.post("/:id/items", async (req, res) => {
       return;
     }
     const parsed = itemBody.parse(req.body);
+    // Existence-only checks let any user attach another user's task/todo, and
+    // the list GET then hydrates its title/state/dueDate/priority — making the
+    // attach a read primitive (T0143).
+    const itemActorId = await getCurrentUserId(db);
     if (parsed.entityType === "todo") {
       const [todo] = await db.select().from(schema.todos).where(eq(schema.todos.id, parsed.entityId));
       if (!todo || todo.state === "deleted") {
         sendError(res, 404, "not_found", "ToDo not found");
         return;
       }
+      await assertCanAccessDualScoped(db, itemActorId, todo);
     } else {
       const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parsed.entityId));
       if (!task || task.state === "deleted") {
         sendError(res, 404, "not_found", "Task not found");
         return;
       }
+      await assertCanAccessDualScoped(db, itemActorId, task);
     }
     const existing = await db
       .select({ m: schema.todoListItems.sortOrder })

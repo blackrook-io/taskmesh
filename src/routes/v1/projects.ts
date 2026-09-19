@@ -10,6 +10,7 @@ import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import {
   assertCanAccessProject,
   projectAccessListFilter,
+  projectWriteListFilter,
   resolveProjectActorRole,
 } from "../../services/ownership.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
@@ -148,8 +149,24 @@ projectsRouter.patch("/reorder", async (req, res) => {
       );
       return;
     }
+    // `sortOrder` is a global column, so a Viewer must not be able to move a
+    // project for everyone. Validation still spans every accessible project
+    // (the nav sends them all), but only write-accessible rows are updated
+    // (T0143).
+    const writeScope = projectWriteListFilter(db, actorId, isAdmin);
+    const writable = writeScope
+      ? new Set(
+          (
+            await db
+              .select({ id: schema.projects.id })
+              .from(schema.projects)
+              .where(writeScope)
+          ).map((r) => r.id),
+        )
+      : allowed;
     for (let i = 0; i < orderedProjectIds.length; i++) {
       const id = orderedProjectIds[i]!;
+      if (!writable.has(id)) continue;
       await db
         .update(schema.projects)
         .set({ sortOrder: i, updatedAt: new Date() })

@@ -97,6 +97,50 @@ export function ownerScope(
   return eq(ownerColumn, actorUserId);
 }
 
+/**
+ * Project ids the actor may **write** (owner / manager / member, direct or via
+ * Group) — viewers excluded. Used where a "can see it" filter would otherwise
+ * let a Viewer mutate, e.g. reorder (T0143).
+ */
+export function projectWriteListFilter(
+  db: Db,
+  actorUserId: number,
+  isAdministrator: boolean,
+): SQL | undefined {
+  if (isAdministrator) return undefined;
+  const owned = db
+    .select({ id: schema.projects.id })
+    .from(schema.projects)
+    .where(eq(schema.projects.ownerId, actorUserId));
+  const asManager = db
+    .select({ id: schema.projectManagers.projectId })
+    .from(schema.projectManagers)
+    .where(eq(schema.projectManagers.userId, actorUserId));
+  const asMember = db
+    .select({ id: schema.projectMembers.projectId })
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.userId, actorUserId));
+  const actorGroups = db
+    .select({ groupId: schema.groupMembers.groupId })
+    .from(schema.groupMembers)
+    .where(eq(schema.groupMembers.userId, actorUserId));
+  const asManagerGroup = db
+    .select({ id: schema.projectManagerGroups.projectId })
+    .from(schema.projectManagerGroups)
+    .where(inArray(schema.projectManagerGroups.groupId, actorGroups));
+  const asMemberGroup = db
+    .select({ id: schema.projectMemberGroups.projectId })
+    .from(schema.projectMemberGroups)
+    .where(inArray(schema.projectMemberGroups.groupId, actorGroups));
+  return or(
+    inArray(schema.projects.id, owned),
+    inArray(schema.projects.id, asManager),
+    inArray(schema.projects.id, asMember),
+    inArray(schema.projects.id, asManagerGroup),
+    inArray(schema.projects.id, asMemberGroup),
+  );
+}
+
 /** Subqueries for project ids the actor owns or is listed on (any role, including via Group). */
 function accessibleProjectIdClauses(db: Db, actorUserId: number): SQL[] {
   const owned = db
@@ -309,6 +353,39 @@ export function dualScopeListFilter(
     inArray(projectIdColumn, managerProjectIds),
     inArray(projectIdColumn, memberProjectIds),
     inArray(projectIdColumn, viewerProjectIds),
+  );
+}
+
+/**
+ * Write-level counterpart to `dualScopeListFilter`: rows the actor may mutate —
+ * standalone rows they own, or rows in a project they can write. Viewers are
+ * excluded, so a read filter cannot be reused to authorize a mutation (T0143).
+ */
+export function dualScopeWriteFilter(
+  db: Db,
+  projectIdColumn: AnyPgColumn,
+  ownerIdColumn: AnyPgColumn,
+  actorUserId: number,
+  isAdministrator: boolean,
+): SQL | undefined {
+  if (isAdministrator) return undefined;
+  const ownedProjectIds = db
+    .select({ id: schema.projects.id })
+    .from(schema.projects)
+    .where(eq(schema.projects.ownerId, actorUserId));
+  const managerProjectIds = db
+    .select({ id: schema.projectManagers.projectId })
+    .from(schema.projectManagers)
+    .where(eq(schema.projectManagers.userId, actorUserId));
+  const memberProjectIds = db
+    .select({ id: schema.projectMembers.projectId })
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.userId, actorUserId));
+  return or(
+    and(isNull(projectIdColumn), eq(ownerIdColumn, actorUserId)),
+    inArray(projectIdColumn, ownedProjectIds),
+    inArray(projectIdColumn, managerProjectIds),
+    inArray(projectIdColumn, memberProjectIds),
   );
 }
 

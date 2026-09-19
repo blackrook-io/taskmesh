@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.45.1 — 2026-09-19
+
+### Fixes
+- Reference search and task dependency search are scoped to records the caller can access, closing a cross-user enumeration gap left after the multi-user ownership migration.
+- Board cards, to-do list items, document uploads, and profile avatars no longer attach another user's entity by id alone.
+- Project and image-board reorder no longer let Viewers move rows for everyone; write-capable roles still reorder as before.
+- Project user lists and the add-member directory no longer expose email addresses to Managers (display name and `U####` remain).
+- Bare type-prefix reference queries (for example `q=T`) return 400 instead of listing every matching row of that type.
+
 ## 0.45.0 — 2026-09-19
 
 ### New Functionality

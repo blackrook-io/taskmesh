@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ideas, todos } from "../db/schema.js";
+import {
+  ideas,
+  projectMembers,
+  projectViewers,
+  projectViewerGroups,
+  todos,
+} from "../db/schema.js";
 import { NotFoundError } from "../lib/notFound.js";
 import {
   ACCESS_DENIED_CODE,
   OwnershipAccessError,
   dualScopeListFilter,
+  dualScopeWriteFilter,
   isAdminOrOwner,
   ownerScope,
+  projectAccessListFilter,
+  projectWriteListFilter,
   roleSatisfiesAccess,
 } from "./ownership.js";
 
@@ -83,6 +92,97 @@ describe("dualScopeListFilter", () => {
       false,
     );
     assert.ok(clause);
+  });
+});
+
+/**
+ * Records which tables a filter consults, so a write-level filter can be
+ * proven never to read from the viewer role lists (T0143).
+ */
+function recordingDb() {
+  const tables: unknown[] = [];
+  const db = {
+    select() {
+      return {
+        from(table: unknown) {
+          tables.push(table);
+          return {
+            where() {
+              return "subquery";
+            },
+          };
+        },
+      };
+    },
+  } as never;
+  return { db, tables };
+}
+
+describe("projectWriteListFilter (T0143)", () => {
+  it("returns undefined for administrators", () => {
+    const { db } = recordingDb();
+    assert.equal(projectWriteListFilter(db, 3, true), undefined);
+  });
+
+  it("never consults the viewer role lists", () => {
+    const { db, tables } = recordingDb();
+    const clause = projectWriteListFilter(db, 3, false);
+    assert.ok(clause);
+    assert.ok(
+      !tables.includes(projectViewers),
+      "write filter must not grant access via project_viewers",
+    );
+    assert.ok(
+      !tables.includes(projectViewerGroups),
+      "write filter must not grant access via project_viewer_groups",
+    );
+  });
+
+  it("still grants access through member lists", () => {
+    const { db, tables } = recordingDb();
+    projectWriteListFilter(db, 3, false);
+    assert.ok(tables.includes(projectMembers));
+  });
+
+  it("is strictly narrower than the read filter", () => {
+    const read = recordingDb();
+    projectAccessListFilter(read.db, 3, false);
+    const write = recordingDb();
+    projectWriteListFilter(write.db, 3, false);
+    assert.ok(
+      write.tables.length < read.tables.length,
+      "write filter should consult fewer sources than the read filter",
+    );
+    assert.ok(read.tables.includes(projectViewers));
+  });
+});
+
+describe("dualScopeWriteFilter (T0143)", () => {
+  it("returns undefined for administrators", () => {
+    const { db } = recordingDb();
+    assert.equal(
+      dualScopeWriteFilter(db, todos.projectId, todos.ownerId, 3, true),
+      undefined,
+    );
+  });
+
+  it("never consults the viewer role list", () => {
+    const { db, tables } = recordingDb();
+    const clause = dualScopeWriteFilter(db, todos.projectId, todos.ownerId, 3, false);
+    assert.ok(clause);
+    assert.ok(
+      !tables.includes(projectViewers),
+      "dual-scope write filter must not grant access via project_viewers",
+    );
+  });
+
+  it("is narrower than the dual-scope read filter", () => {
+    const read = recordingDb();
+    dualScopeListFilter(read.db, todos.projectId, todos.ownerId, 3, false);
+    const write = recordingDb();
+    dualScopeWriteFilter(write.db, todos.projectId, todos.ownerId, 3, false);
+    assert.ok(write.tables.length < read.tables.length);
+    assert.ok(read.tables.includes(projectViewers));
   });
 });
 

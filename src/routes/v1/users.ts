@@ -234,11 +234,17 @@ usersRouter.patch("/me", async (req, res) => {
     if (parsed.avatarUploadId !== undefined) {
       if (parsed.avatarUploadId !== null) {
         const [upload] = await db
-          .select({ id: schema.uploads.id })
+          .select({ id: schema.uploads.id, ownerId: schema.uploads.ownerId })
           .from(schema.uploads)
           .where(eq(schema.uploads.id, parsed.avatarUploadId))
           .limit(1);
         if (!upload) {
+          sendError(res, 400, "invalid_avatar", "Upload not found for avatarUploadId");
+          return;
+        }
+        // Existence alone let a user point their avatar at someone else's
+        // upload (T0143).
+        if (upload.ownerId !== current.id) {
           sendError(res, 400, "invalid_avatar", "Upload not found for avatarUploadId");
           return;
         }

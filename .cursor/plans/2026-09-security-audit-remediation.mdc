@@ -1,0 +1,237 @@
+# Security audit remediation (2026-09)
+
+Full-codebase defensive security scan of TaskMesh v0.45.0 on `main`. The existing
+`npm run security:scan` suite passes **27/0/3** — every finding below sits in a gap that
+suite does not cover. Findings were verified against source; the scan suite itself needs
+new checks so these classes cannot regress.
+
+**Scope note:** this plan covers remediation only. No exploit code, no offensive tooling.
+
+---
+
+## Phase 1 — Host hardening (no code; do first)
+
+Secrets and full database dumps are world-readable on the app host. This is the fastest
+path from "local account" to "total compromise", and it silently defeats the AES-GCM
+at-rest encryption, because the key-encryption keys sit in the readable `.env`.
+
+| Item | Current | Target |
+|------|---------|--------|
+| `.env` (holds `DATABASE_URL`, `OPENAI_API_KEY`, `OAUTH_CREDENTIALS_KEY`, `MFA_TOTP_KEY`) | `0664` | `0600` |
+| `data/backups/**` SQL dumps + uploads tarballs | `0644` / `0664` | `0600`, dirs `0700` |
+| `data/uploads/**` | `0644` | `0640` or tighter |
+| Service `umask` | `0002` | `0077` in the systemd unit |
+
+1. `chmod 600 .env`; `chmod -R go-rwx data/backups`; `chmod 700 data/backups`.
+2. Add `UMask=0077` to the `taskmesh` systemd unit so new dumps are not group/world readable.
+3. Verify `SECURITY.md` § "Secrets and host hardening" now matches reality — it already
+   documents `600`, so this is drift, not a policy change.
+4. Add a `repo_static` (or new `host_perms`) scan check asserting `.env` and `data/backups`
+   modes, so the drift is caught next run.
+
+## Phase 2 — Broken access control (critical)
+
+Two search endpoints have **no ownership scoping whatsoever** — confirmed by grep: zero
+references to any ownership helper in `src/services/references.ts` or
+`src/routes/v1/references.ts`, versus 10 in the correctly-scoped `src/routes/v1/search.ts`.
+
+1. **`GET /api/v1/references/search`** (`src/services/references.ts:103-357`) — any
+   authenticated user enumerates titles, numbers and IDs of every task, todo, idea,
+   project, document, board, canvas, wiki node and todo list in the instance.
+   Apply `ownerScope` / `projectAccessListFilter` / `dualScopeListFilter` per entity type,
+   mirroring `search.ts`.
+2. **`GET /api/v1/tasks/dependency-search`** (`src/services/taskDependencies.ts:289-327`) —
+   same class, all non-deleted tasks. Thread `actorUserId` + `isAdministrator` through and
+   apply `dualScopeListFilter`.
+3. **Cross-entity attach IDOR** — these check that the referenced row *exists* but never
+   that the actor may access it:
+   - `POST /projects/:projectId/boards/:boardId/cards` with `entityType=idea` →
+     `assertCanAccessOwned` (`src/routes/v1/boards.ts:674-679`).
+   - Same route with `entityType=todo_list` → any standalone list from any owner is
+     attachable (`boards.ts:680-688`); use `assertCanAccessDualScoped`.
+   - `POST /todo-lists/:id/items` (`src/routes/v1/todoLists.ts:419-431`) → attaches any
+     user's task/todo, and `GET /todo-lists/:id` then hydrates and returns its title,
+     state, dueDate and priority (`todoLists.ts:210-231`).
+   - `POST /projects/:projectId/documents` `uploadId` (`documents.ts:110-124`) and
+     `PATCH /users/me` `avatarUploadId` (`users.ts:234-246`) → verify `upload.ownerId`.
+4. **Viewer can mutate** — `PATCH /projects/reorder` (`projects.ts:126-167`) and
+   `PATCH /image-boards/reorder` (`imageBoards.ts:163-207`) scope by a list filter that
+   includes viewers but never assert `"write"`. `roleSatisfiesAccess("viewer", "write")`
+   already returns `false`; call it.
+5. **Empty-remainder queries must return nothing** (decided 2026-09-18). The leak is not a
+   literal empty `q` — Zod already enforces `q.min(1)`. It is the *type-prefix* path in
+   `src/routes/v1/references.ts:55-56`, where a bare prefix like `?q=T` strips the letter,
+   leaves an empty remainder, and deliberately matches everything of that type:
+
+   > `// Empty remainder after prefix (e.g. q=T) → match all of that type via "%" title`
+
+   So `?q=T` dumps all tasks, `?q=I` all ideas, `?q=P` all projects. Same for
+   `type=user` with a whitespace-only `q`, which trims to empty and falls back to the raw
+   value.
+
+   **Verified the client does not rely on this.** `client/src/lib/mdReferenceTrigger.ts`
+   returns `null` when the remainder is empty — line 41 for the `@user` trigger and line 59
+   for the `#entity` trigger — so `MarkdownReferenceSuggest` never fires a request until at
+   least one character follows the prefix (`#T0`, not `#T`). Closing this is a zero-UX-change
+   fix. Reject empty-after-prefix with a 400 rather than returning all rows, and add a test.
+6. **Strip email addresses from the project user directory** (decided 2026-09-18; revised
+   from an Administrator gate to preserve Manager self-service). Managers have no use case
+   for member email addresses, but they do need to add people to their own projects, so
+   keep the endpoint accessible and remove the PII from the payload instead.
+
+   - `src/services/projectUsers.ts:507-528` — change the return type from
+     `Array<UserRef & { email: string | null }>` to plain `UserRef` and drop
+     `email: user.email` from the pushed row. No other caller needs it.
+   - `client/src/components/ProjectUsersPanel.tsx` — remove `email` from the candidate
+     type (:12), from the search haystack (:161), and from the ` · email` rendering
+     (:466-467); update the picker placeholder (:442) from
+     `"Name, U####, G####, or email"` to drop the email affordance.
+   - **Disambiguation is preserved**: `UserRef` already carries `referenceId` (`U####`),
+     which the picker renders and searches, so two users sharing a display name remain
+     distinguishable without exposing PII.
+   - Also drop the project owner's email at `ProjectUsersPanel.tsx:297-298` — same leak
+     class, shown to any Manager viewing project settings.
+   - Residual accepted: Managers can still enumerate display names of non-admin users.
+     That is inherent to an add-user picker and is the reason emails, not the listing
+     itself, were the concern.
+
+Add regression tests: a second non-admin user must not see the first user's records
+through any of these routes. User approved creating whatever accounts the security testing
+needs, including temporary Administrator accounts — remove them once the pass is verified,
+and never commit their credentials.
+
+## Phase 3 — Client dependency vulnerabilities (high, reachable)
+
+CI's `repo_npm_audit` module runs with `cwd=repo` only, so `client/package.json` has
+**never** been audited. Root reports 0 vulnerabilities while the client ships 51 production
+findings (6 high). These are reachable, not theoretical — `PdfReader.tsx` and
+`EpubReader.tsx` render user-uploaded files, and now that the app is multi-user, one user's
+crafted upload opened by an administrator means code execution in the app origin.
+
+| Package | Advisory | Reachability |
+|---------|----------|--------------|
+| `pdfjs-dist` | Arbitrary JS execution from malicious PDF | `client/src/components/PdfReader.tsx`, `lib/pdfMeta.ts` |
+| `@tiptap/core` | `__proto__` key → executable DOM attribute | every Markdown surface |
+| `@xmldom/xmldom` | XML injection via CDATA | via `epubjs` in `EpubReader.tsx` |
+| `react-router` | Open redirect via backslash (CVE-2025-68470 bypass) | OAuth `returnTo` paths |
+| `lodash-es`, `nanoid` | Code injection / predictable IDs | transitive, lower reachability |
+
+1. Upgrade `@tiptap/*` to `>=3.30.5`, `pdfjs-dist` to `>=6.2.108`, `react-router(-dom)`,
+   and refresh `epubjs`/`@xmldom/xmldom`. Re-test the PDF reader, EPUB reader, Excalidraw
+   canvas and all Markdown editing after the bump.
+2. **Extend the CI gate to the client** — add a `client` audit to
+   `security/scan/modules/repo_npm_audit.py` (run in `client/` as well as the repo root)
+   and wire it into `.github/workflows/security-ci.yml`. Without this the tree silently
+   re-rots.
+
+## Phase 4 — Rate limiting, logging integrity, SSRF
+
+1. **Unauthenticated requests bypass rate limiting entirely.** In `src/routes/v1/index.ts`
+   the limiters are mounted *after* `requireAuth`, so a 401 short-circuits before any
+   budget is counted. Verified empirically: 350 unauthenticated requests, all 401, zero
+   429s. Each still walks the 10 MB JSON sanitizer and writes an `api_request_logs` row.
+   Move `globalApiRateLimit` above `requireAuth` (it already falls back to an IP key).
+2. **`api_request_logs` has no retention** — no delete/prune anywhere in `src/`. Combined
+   with (1) this is unauthenticated disk exhaustion. Add a retention window and a prune job.
+3. **Audit log accepts a spoofed source IP** — `apiRequestLogger.clientIp()`
+   (`src/middleware/apiRequestLogger.ts:19-25`) reads `X-Forwarded-For` directly instead of
+   `req.ip`, ignoring `trust proxy`. Any client sets their own recorded IP, destroying
+   forensic attribution. `rateLimits.ts` already does this correctly — match it.
+4. **SSRF DNS rebinding** in `src/services/assistant/fetchUrl.ts` — `dns.lookup` at :36
+   validates the address, then `fetch()` at :74 re-resolves by hostname with no pinning.
+   A low-TTL attacker-controlled record passes validation then connects to `127.0.0.1` or
+   `169.254.169.254`. Pin the validated IP via an `undici` dispatcher with a custom
+   `lookup`, preserving the `Host` header, and keep the per-hop redirect re-check.
+5. **SSRF blocklist gaps** in `src/lib/privateNet.ts:36-44` — add `100.64.0.0/10` (CGNAT)
+   and `0.0.0.0/8` as a range (only the exact string `0.0.0.0` is caught today), and
+   normalize decimal/octal IP literals before the `net.isIP` gate.
+6. **`RATE_LIMIT_DISABLE=1`** silently disables every limiter including login brute-force
+   protection, and is undocumented. Either ignore it when `NODE_ENV=production` or log a
+   loud startup warning; document it in `.env.example` either way.
+
+## Phase 5 — Auth lifecycle and crypto hardening
+
+1. **scrypt below current guidance** — `src/lib/password.ts:3-5` uses `N=16384` (2^14);
+   OWASP targets 2^17. Raising it also requires lifting `MAXMEM` from 64 MB (2^17 needs
+   ~134 MB). Verification reads parameters from the stored hash, so old hashes keep
+   working — add rehash-on-successful-login so they actually upgrade.
+2. **Session invalidation gaps** — old sessions survive a new login; password change has no
+   "invalidate all sessions" hook; `clearMfaForUser` (`src/services/mfa.ts:486-500`) wipes
+   MFA and trusted devices but leaves active sessions. Add `destroyAllSessionsForUser` and
+   call it on password change, MFA disable, and admin lock/deactivate.
+3. **TOTP replay** — `src/lib/totp.ts:27-34` accepts any code in the ±30s window with no
+   used-step tracking, so one intercepted code works twice. Persist the last accepted step
+   per user and reject replays.
+4. **KEK strength unvalidated** — `MFA_TOTP_KEY` / `OAUTH_CREDENTIALS_KEY` accept any
+   non-empty string, hashed once with SHA-256 (`mfaCrypto.ts:15-22`, `oauthCrypto.ts:15-22`).
+   Enforce a minimum length/entropy and fail fast at startup rather than at first use.
+5. **MFA challenge ID in the OAuth redirect query string** (`src/routes/v1/auth.ts:282-288`)
+   leaks into browser history, `Referer` and proxy logs. Move it to a short-lived cookie.
+6. Restore writes the **entire database dump** to `os.tmpdir()` under the default umask
+   (`src/services/backups.ts:33`) — use `fs.mkdtemp` with `0700` and write the file `0600`.
+
+## Phase 6 — Deployment and supply chain
+
+1. **Docker profile is materially weaker than bare metal** — `compose.yaml:35-42` publishes
+   `:3000` on `0.0.0.0` over plain HTTP with `COOKIE_SECURE=false`, while
+   `src/index.ts:20-21` sets `trust proxy 1` under `NODE_ENV=production`. Reachable
+   directly, that combination means session cookies travel in clear *and* a client can
+   spoof `X-Forwarded-For` to bypass the IP-keyed login limiter. Bind the published port to
+   `127.0.0.1`, add a TLS terminator, and set `COOKIE_SECURE=true` behind it. Make
+   `trust proxy` explicit configuration rather than implied by `NODE_ENV`.
+2. **Container runs as root** — no `USER` directive in `Dockerfile`. Add a non-root user.
+3. **Missing HSTS** in `deploy/nginx-taskmesh.conf` (TLS versions and loopback proxying are
+   already correct). Consider a `Permissions-Policy` header too.
+4. **CI supply chain** — pin `actions/checkout` and `actions/setup-node` to commit SHAs and
+   add a least-privilege `permissions:` block to
+   `.github/workflows/security-ci.yml`. No `pull_request_target` or script-injection vector
+   was found; triggers are already safe.
+5. Digest-pin `node:22-bookworm` / `postgres:16-alpine`.
+
+## Phase 7 — Lower severity
+
+- **CSV formula injection on export** (`src/lib/spreadsheet.ts:91-105`) — values beginning
+  `= + - @` are exported unneutralized; a task title becomes a formula when an admin opens
+  the file in Excel. The *import* side already strips formula cells.
+- **XLSX decompression bomb** — `workbook.xlsx.load()` has only a 20 MB upload cap, no
+  row/sheet/uncompressed-size limit.
+- **Upload storage quota** — 60 × 100 MB per 15 min per user with no per-user cap.
+- **`data:`-free markdown sanitizers are regex-based**, not parser-based
+  (`sanitizeMarkdown.ts`): `<script>x</script>` becomes the text `x`, HTML comments survive,
+  and the link regex has GFM edge-case gaps. Safe under the current CSP and TipTap
+  re-sanitization; consider a parser if HTML is ever allowed through.
+- **Group-based project access is inconsistent** — `accessibleProjectIdClauses` honors
+  `projectManagerGroups` / `MemberGroups` / `ViewerGroups`, but `dualScopeListFilter` and
+  `projectOwnedListFilter` (`src/services/ownership.ts:282-349`) do not. A user with access
+  *via a group* sees the project but none of its tasks, documents, boards or wiki. This
+  fails closed, so it is a correctness bug rather than a vulnerability — but it should
+  converge on one definition.
+- **Backup manifest `sqlFile` is not path-normalized** (`backups.ts:337-338`); admin-only.
+- `verifyPassword` has no try/catch around `scryptAsync`, so a malformed stored hash
+  returns 500 instead of `false`.
+- EPUB sniffing accepts any ZIP; PDFs are served `inline`. Both are low risk under
+  `nosniff` + CSP, but `attachment` for PDF is safer given the `pdfjs` advisory above.
+
+---
+
+## Confirmed correct (no action)
+
+Worth recording so re-audits do not relitigate these: no SQL injection anywhere (zero
+`sql.raw`, all user text bound, `ilikeEscaped` escapes LIKE metacharacters, no dynamic
+ORDER BY); upload path handling (UUID names, `path.basename` guard, magic-byte sniffing,
+ownership check on serve, `nosniff`); CSRF construction (custom header + no CORS + same-origin
+checks); OAuth (PKCE S256, single-use state, nonce, `email_verified`, same-origin `returnTo`);
+API keys (hashed at rest, query-string rejected, RO/RW method gate with no override
+middleware present); no secrets in git history or the index; no
+`dangerouslySetInnerHTML`/`eval`; no tokens in `localStorage`; no production source maps;
+`execFile` is argv-only with no shell; and generic login errors with no user enumeration.
+
+## Sequencing
+
+Phase 1 is minutes and needs no branch. Phases 2 and 3 are the ones that matter most —
+Phase 2 is a live cross-user data leak, Phase 3 is reachable code execution. Recommend a
+separate branch per phase so the critical fixes merge without waiting on the long tail.
+
+Per `versioning.mdc`, each finish-up bumps PATCH (or MINOR if a phase adds a Drizzle
+migration — Phase 4's log retention and Phase 5's TOTP replay tracking likely will), and
+updates `RELEASE_NOTES.md` in the same commit.

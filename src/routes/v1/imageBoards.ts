@@ -12,6 +12,7 @@ import {
   assertCanAccessDualScoped,
   assertCanAccessProject,
   dualScopeListFilter,
+  dualScopeWriteFilter,
   ownerScope,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
@@ -188,8 +189,28 @@ imageBoardsRouter.patch("/reorder", async (req, res) => {
       );
       return;
     }
+    // Validation spans everything the actor can see, but only write-accessible
+    // boards move — a project Viewer must not reorder for everyone (T0143).
+    const writeScope = dualScopeWriteFilter(
+      db,
+      schema.imageBoards.projectId,
+      schema.imageBoards.ownerId,
+      actorId,
+      isAdmin,
+    );
+    const writable = writeScope
+      ? new Set(
+          (
+            await db
+              .select({ id: schema.imageBoards.id })
+              .from(schema.imageBoards)
+              .where(writeScope)
+          ).map((r) => r.id),
+        )
+      : allowed;
     for (let i = 0; i < orderedIds.length; i++) {
       const id = orderedIds[i]!;
+      if (!writable.has(id)) continue;
       await db
         .update(schema.imageBoards)
         .set({ sortOrder: i, updatedAt: new Date() })

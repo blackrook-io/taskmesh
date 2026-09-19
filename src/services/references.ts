@@ -10,8 +10,23 @@ import {
 import { ilikeEscaped } from "../lib/ilike.js";
 import type { EntityType } from "../lib/entityType.js";
 import { formatUserNumber } from "../lib/userFields.js";
+import {
+  dualScopeListFilter,
+  ownerScope,
+  projectAccessListFilter,
+  projectOwnedListFilter,
+} from "./ownership.js";
 
 type Db = NodePgDatabase<typeof schema>;
+
+/**
+ * Who is asking. Required (not optional) so a new caller cannot silently
+ * inherit an unscoped query — T0143.
+ */
+export type ReferenceActor = {
+  userId: number;
+  isAdministrator: boolean;
+};
 
 export type ReferenceHit = {
   entityType: EntityType | "user";
@@ -104,6 +119,7 @@ export async function searchEntityReferences(
   db: Db,
   entityType: EntityType,
   q: string,
+  actor: ReferenceActor,
   opts?: { limit?: number },
 ): Promise<ReferenceHit[]> {
   const trimmed = q.trim();
@@ -112,6 +128,13 @@ export async function searchEntityReferences(
   const searchQ = parsed.query;
   const exactNumber = parsed.number;
   const prefix = ENTITY_REF_PREFIXES[entityType];
+  const { userId, isAdministrator } = actor;
+
+  /** Rows the actor may see, per entity type. Mirrors `routes/v1/search.ts`. */
+  const dualScope = (projectIdCol: AnyPgColumn, ownerIdCol: AnyPgColumn) =>
+    dualScopeListFilter(db, projectIdCol, ownerIdCol, userId, isAdministrator) ?? sql`true`;
+  const projectNestedScope = (projectIdCol: AnyPgColumn) =>
+    projectOwnedListFilter(db, projectIdCol, userId, isAdministrator) ?? sql`true`;
 
   if (entityType === "task") {
     const rows = await db
@@ -125,6 +148,7 @@ export async function searchEntityReferences(
       .where(
         and(
           ne(schema.tasks.state, "deleted"),
+          dualScope(schema.tasks.projectId, schema.tasks.ownerId),
           matchNumberOrTitle({
             numberCol: schema.tasks.number,
             titleCol: schema.tasks.title,
@@ -151,6 +175,7 @@ export async function searchEntityReferences(
       .where(
         and(
           ne(schema.todos.state, "deleted"),
+          dualScope(schema.todos.projectId, schema.todos.ownerId),
           matchNumberOrTitle({
             numberCol: schema.todos.number,
             titleCol: schema.todos.title,
@@ -174,13 +199,16 @@ export async function searchEntityReferences(
       })
       .from(schema.ideas)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.ideas.number,
-          titleCol: schema.ideas.title,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          ownerScope(schema.ideas.ownerId, userId, isAdministrator) ?? sql`true`,
+          matchNumberOrTitle({
+            numberCol: schema.ideas.number,
+            titleCol: schema.ideas.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.ideas.number))
       .limit(limit);
@@ -199,13 +227,16 @@ export async function searchEntityReferences(
       })
       .from(schema.projects)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.projects.number,
-          titleCol: schema.projects.name,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          projectAccessListFilter(db, userId, isAdministrator) ?? sql`true`,
+          matchNumberOrTitle({
+            numberCol: schema.projects.number,
+            titleCol: schema.projects.name,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.projects.number))
       .limit(limit);
@@ -225,13 +256,16 @@ export async function searchEntityReferences(
       })
       .from(schema.projectDocuments)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.projectDocuments.number,
-          titleCol: schema.projectDocuments.title,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          projectNestedScope(schema.projectDocuments.projectId),
+          matchNumberOrTitle({
+            numberCol: schema.projectDocuments.number,
+            titleCol: schema.projectDocuments.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.projectDocuments.number))
       .limit(limit);
@@ -248,13 +282,16 @@ export async function searchEntityReferences(
       })
       .from(schema.boards)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.boards.number,
-          titleCol: schema.boards.name,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          projectNestedScope(schema.boards.projectId),
+          matchNumberOrTitle({
+            numberCol: schema.boards.number,
+            titleCol: schema.boards.name,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.boards.number))
       .limit(limit);
@@ -271,13 +308,16 @@ export async function searchEntityReferences(
       })
       .from(schema.canvases)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.canvases.number,
-          titleCol: schema.canvases.title,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          projectNestedScope(schema.canvases.projectId),
+          matchNumberOrTitle({
+            numberCol: schema.canvases.number,
+            titleCol: schema.canvases.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.canvases.number))
       .limit(limit);
@@ -294,13 +334,16 @@ export async function searchEntityReferences(
       })
       .from(schema.wikiNodes)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.wikiNodes.number,
-          titleCol: schema.wikiNodes.title,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          projectNestedScope(schema.wikiNodes.projectId),
+          matchNumberOrTitle({
+            numberCol: schema.wikiNodes.number,
+            titleCol: schema.wikiNodes.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.wikiNodes.number))
       .limit(limit);
@@ -317,13 +360,16 @@ export async function searchEntityReferences(
       })
       .from(schema.todoLists)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.todoLists.number,
-          titleCol: schema.todoLists.title,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          dualScope(schema.todoLists.projectId, schema.todoLists.ownerId),
+          matchNumberOrTitle({
+            numberCol: schema.todoLists.number,
+            titleCol: schema.todoLists.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.todoLists.number))
       .limit(limit);
@@ -340,13 +386,16 @@ export async function searchEntityReferences(
       })
       .from(schema.imageBoards)
       .where(
-        matchNumberOrTitle({
-          numberCol: schema.imageBoards.number,
-          titleCol: schema.imageBoards.title,
-          prefix,
-          q: searchQ,
-          exactNumber,
-        }),
+        and(
+          dualScope(schema.imageBoards.projectId, schema.imageBoards.ownerId),
+          matchNumberOrTitle({
+            numberCol: schema.imageBoards.number,
+            titleCol: schema.imageBoards.title,
+            prefix,
+            q: searchQ,
+            exactNumber,
+          }),
+        ),
       )
       .orderBy(asc(schema.imageBoards.number))
       .limit(limit);
@@ -363,27 +412,9 @@ export async function searchUserReferences(
 ): Promise<ReferenceHit[]> {
   const trimmed = q.trim();
   const limit = opts?.limit ?? 20;
-  if (!trimmed) {
-    const rows = await db
-      .select({
-        id: schema.users.id,
-        number: schema.users.number,
-        title: schema.users.displayName,
-      })
-      .from(schema.users)
-      .where(sql`${schema.users.deactivatedAt} IS NULL`)
-      .orderBy(asc(schema.users.number))
-      .limit(limit);
-    return rows.map((r) => ({
-      entityType: "user" as const,
-      id: r.id,
-      number: r.number,
-      title: r.title,
-      referenceId: formatUserNumber(r.number),
-      href: "/settings/profile",
-      projectId: null,
-    }));
-  }
+  // An empty query must not enumerate the user table (T0143). The route rejects
+  // this earlier; returning [] keeps the service safe for any future caller.
+  if (!trimmed) return [];
   const rows = await db
     .select({
       id: schema.users.id,

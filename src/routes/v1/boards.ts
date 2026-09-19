@@ -9,6 +9,10 @@ import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
 import { allocateBoardNumber, allocateIdeaNumber } from "../../services/entityNumbers.js";
+import {
+  assertCanAccessDualScoped,
+  assertCanAccessOwned,
+} from "../../services/ownership.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { getCurrentUserId } from "../../services/users.js";
 
@@ -677,6 +681,8 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
         sendError(res, 404, "not_found", "Idea not found");
         return;
       }
+      // Existence alone let a writer attach another user's idea (T0143).
+      await assertCanAccessOwned(db, await getCurrentUserId(db), idea.ownerId);
     } else if (entityType === "todo_list") {
       const [list] = await db
         .select()
@@ -686,6 +692,9 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
         sendError(res, 404, "not_found", "To-do list not found for this project");
         return;
       }
+      // A standalone list (projectId null) passed the check above regardless of
+      // owner; dual-scope covers both the standalone and project-backed cases.
+      await assertCanAccessDualScoped(db, await getCurrentUserId(db), list);
     }
 
     if (col.wipLimit != null) {

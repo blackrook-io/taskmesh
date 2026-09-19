@@ -14,8 +14,12 @@ type Db = NodePgDatabase<typeof schema>;
 export const PROJECT_USER_ROLES = ["manager", "member", "viewer"] as const;
 export type ProjectUserRole = (typeof PROJECT_USER_ROLES)[number];
 
+/**
+ * No `email`: project Managers have no use case for member addresses, and
+ * `UserRef.referenceId` (U####) already disambiguates duplicate display
+ * names (T0143).
+ */
 export type ProjectUserEntry = UserRef & {
-  email: string | null;
   role: ProjectUserRole;
   createdAt: string;
 };
@@ -34,7 +38,7 @@ export type ProjectUsersLists = {
   memberGroups: ProjectGroupEntry[];
   viewerGroups: ProjectGroupEntry[];
   /** Project owner — always an implicit Manager (not stored in project_managers). */
-  owner: UserRef & { email: string | null };
+  owner: UserRef;
 };
 
 export type AssigneeDisposition =
@@ -256,7 +260,6 @@ async function listRoleEntries(
 
   return rows.map((r) => ({
     ...toUserRef(r.user),
-    email: r.user.email,
     role,
     createdAt: r.createdAt.toISOString(),
   }));
@@ -324,7 +327,7 @@ export async function listProjectUsers(db: Db, projectId: number): Promise<Proje
     managerGroups,
     memberGroups,
     viewerGroups,
-    owner: { ...toUserRef(owner), email: owner.email },
+    owner: toUserRef(owner),
   };
 }
 
@@ -389,7 +392,6 @@ export async function addProjectUser(
 
   return {
     ...toUserRef(user),
-    email: user.email,
     role,
     createdAt: row.createdAt.toISOString(),
   };
@@ -507,7 +509,7 @@ export async function countUserProjectAssignments(
 export async function listProjectDirectoryUsers(
   db: Db,
   projectId: number,
-): Promise<Array<UserRef & { email: string | null }>> {
+): Promise<UserRef[]> {
   const proj = await loadProjectOrThrow(db, projectId);
   const lists = await listProjectUsers(db, projectId);
   const excluded = new Set<number>([
@@ -518,12 +520,14 @@ export async function listProjectDirectoryUsers(
   ]);
 
   const rows = await db.select().from(schema.users).orderBy(asc(schema.users.number));
-  const out: Array<UserRef & { email: string | null }> = [];
+  const out: UserRef[] = [];
   for (const user of rows) {
     if (excluded.has(user.id)) continue;
     if (!userCanAuthenticate(user)) continue;
     if (await userHasAdministrator(db, user.id)) continue;
-    out.push({ ...toUserRef(user), email: user.email });
+    // No email: Managers have no use case for member addresses, and `UserRef`
+    // already carries `referenceId` (U####) for disambiguation (T0143).
+    out.push(toUserRef(user));
   }
   return out;
 }
