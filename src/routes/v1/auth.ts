@@ -5,7 +5,16 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { AUTH_REQUIRED_MESSAGE } from "../../lib/authErrors.js";
-import { clearSessionCookie, readSessionCookie, setSessionCookie } from "../../lib/sessionCookie.js";
+import {
+  clearSessionCookie,
+  readSessionCookie,
+  setSessionCookie,
+} from "../../lib/sessionCookie.js";
+import {
+  clearMfaChallengeCookie,
+  readMfaChallengeCookie,
+  setMfaChallengeCookie,
+} from "../../lib/mfaChallengeCookie.js";
 import { readMfaTrustCookie, setMfaTrustCookie } from "../../lib/mfaTrustCookie.js";
 import { toUserProfile } from "../../lib/userFields.js";
 import { attachRolesToProfile } from "../../services/roles.js";
@@ -38,7 +47,6 @@ const loginBody = z
 
 const mfaVerifyBody = z
   .object({
-    challengeId: z.string().trim().min(1).max(128),
     code: z.string().trim().min(6).max(20),
     trustDevice: z.boolean().optional(),
   })
@@ -99,10 +107,10 @@ authRouter.post("/login", loginRateLimit, async (req, res) => {
       return;
     }
     if (post.kind === "mfa_challenge") {
+      setMfaChallengeCookie(res, post.challengeId);
       res.json({
         data: {
           mfaRequired: true,
-          challengeId: post.challengeId,
           trustedDeviceDays: post.trustedDeviceDays,
         },
       });
@@ -129,8 +137,14 @@ authRouter.post("/login", loginRateLimit, async (req, res) => {
 
 authRouter.post("/mfa/verify", loginRateLimit, async (req, res) => {
   try {
-    const { challengeId, code, trustDevice } = mfaVerifyBody.parse(req.body);
+    const { code, trustDevice } = mfaVerifyBody.parse(req.body);
+    const challengeId = readMfaChallengeCookie(req);
+    if (!challengeId) {
+      sendError(res, 401, "mfa_challenge_invalid", "Invalid or expired MFA challenge.");
+      return;
+    }
     const { userId } = await verifyMfaChallenge(db, challengeId, code);
+    clearMfaChallengeCookie(res);
     const user = await getUserById(db, userId);
     if (!user || !userCanAuthenticate(user)) {
       sendError(res, 403, "account_locked", "Your account is locked. Contact an administrator.");
@@ -162,6 +176,7 @@ authRouter.post("/logout", async (req, res) => {
       await destroySession(db, sessionId);
     }
     clearSessionCookie(res);
+    clearMfaChallengeCookie(res);
     // Intentionally leave MFA trust cookie (T0141).
     res.status(204).send();
   } catch (err) {
@@ -279,9 +294,8 @@ async function handleOauthCallback(
   if (result.mode === "login") {
     if ("mfaChallengeId" in result && result.mfaChallengeId) {
       res.locals.logMessage = `OAuth login MFA challenge (${slug})`;
-      const extra: Record<string, string> = {
-        mfaChallenge: result.mfaChallengeId,
-      };
+      setMfaChallengeCookie(res, result.mfaChallengeId);
+      const extra: Record<string, string> = { mfa: "1" };
       if ("trustedDeviceDays" in result && result.trustedDeviceDays > 0) {
         extra.mfaTrustDays = String(result.trustedDeviceDays);
       }

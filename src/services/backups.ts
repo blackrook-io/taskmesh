@@ -30,8 +30,11 @@ function writeFilteredRestoreSql(sqlPath: string, dbUser: string): string {
       return role === dbUser;
     })
     .join("\n");
-  const tmp = path.join(os.tmpdir(), `taskmesh-restore-${process.pid}-${Date.now()}.sql`);
-  fs.writeFileSync(tmp, filtered, "utf8");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "taskmesh-restore-"));
+  fs.chmodSync(tmpDir, 0o700);
+  const tmp = path.join(tmpDir, "restore.sql");
+  fs.writeFileSync(tmp, filtered, { encoding: "utf8", mode: 0o600 });
+  fs.chmodSync(tmp, 0o600);
   return tmp;
 }
 
@@ -400,7 +403,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${cfg.user}";
         );
         databaseRestored = true;
       } finally {
-        fs.rmSync(filteredSql, { force: true });
+        // Remove dump file and its 0700 parent temp dir.
+        fs.rmSync(path.dirname(filteredSql), { recursive: true, force: true });
       }
     } catch (err) {
       error = err instanceof Error ? err.message : "Database restore failed";

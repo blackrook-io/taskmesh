@@ -24,12 +24,22 @@ describe("totp", () => {
     assert.match(uri, /TaskMesh/);
   });
 
-  it("verifies a current TOTP code", () => {
+  it("verifies a current TOTP code and returns the step", () => {
     const secret = generateTotpSecret();
     const code = buildTotp(secret, "u").generate();
-    assert.equal(verifyTotpCode(secret, code), true);
-    assert.equal(verifyTotpCode(secret, "000000"), false);
-    assert.equal(verifyTotpCode(secret, "abc"), false);
+    const step = verifyTotpCode(secret, code);
+    assert.equal(typeof step, "number");
+    assert.ok(step! > 0);
+    assert.equal(verifyTotpCode(secret, "000000"), null);
+    assert.equal(verifyTotpCode(secret, "abc"), null);
+  });
+
+  it("returns the same step for a replayed code in-window", () => {
+    const secret = generateTotpSecret();
+    const code = buildTotp(secret, "u").generate();
+    const a = verifyTotpCode(secret, code);
+    const b = verifyTotpCode(secret, code);
+    assert.equal(a, b);
   });
 });
 

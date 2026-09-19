@@ -24,12 +24,18 @@ export function totpUri(secretBase32: string, accountLabel: string): string {
   return buildTotp(secretBase32, accountLabel).toString();
 }
 
-export function verifyTotpCode(secretBase32: string, code: string): boolean {
+/**
+ * Verify a TOTP code. Returns the absolute time-step counter on success, or null.
+ * Callers should persist the step and reject replays when `step <= lastAcceptedStep`.
+ */
+export function verifyTotpCode(secretBase32: string, code: string): number | null {
   const cleaned = code.replace(/\s+/g, "");
-  if (!/^\d{6}$/.test(cleaned)) return false;
+  if (!/^\d{6}$/.test(cleaned)) return null;
   const delta = buildTotp(secretBase32, "verify").validate({
     token: cleaned,
     window: WINDOW,
   });
-  return delta !== null;
+  if (delta === null) return null;
+  const currentStep = Math.floor(Date.now() / 1000 / PERIOD);
+  return currentStep + delta;
 }

@@ -41,14 +41,13 @@ type LoginResponse =
   | {
       data: {
         mfaRequired: true;
-        challengeId: string;
         trustedDeviceDays?: number;
       };
     };
 
 function isMfaChallenge(
   data: LoginResponse["data"],
-): data is { mfaRequired: true; challengeId: string; trustedDeviceDays?: number } {
+): data is { mfaRequired: true; trustedDeviceDays?: number } {
   return (
     typeof data === "object" &&
     data !== null &&
@@ -64,14 +63,15 @@ export function LoginPage() {
   const returnTo = safeReturnTo(params.get("returnTo"));
   const sessionEnded = params.get("reason") === "session";
   const oauthError = params.get("error");
-  const oauthChallenge = params.get("mfaChallenge");
+  const oauthMfa = params.get("mfa") === "1";
   const oauthTrustDaysRaw = params.get("mfaTrustDays");
   const oauthTrustDays = oauthTrustDaysRaw != null ? Number(oauthTrustDaysRaw) : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
-  const [challengeId, setChallengeId] = useState<string | null>(null);
+  /** Password-login MFA pending (challenge id lives in HttpOnly cookie). */
+  const [mfaPending, setMfaPending] = useState(false);
   const [passwordTrustDays, setPasswordTrustDays] = useState<number | null>(null);
   const [trustDevice, setTrustDevice] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
@@ -81,8 +81,7 @@ export function LoginPage() {
       : null,
   );
 
-  /** OAuth redirect challenge lives in the URL; password login sets local state. */
-  const activeChallengeId = challengeId ?? oauthChallenge;
+  const showMfa = mfaPending || oauthMfa;
 
   useEffect(() => {
     resetSessionExpiredGuard();
@@ -112,8 +111,8 @@ export function LoginPage() {
   });
 
   const trustedDeviceDays = (() => {
-    if (challengeId != null && passwordTrustDays != null) return passwordTrustDays;
-    if (oauthChallenge) {
+    if (mfaPending && passwordTrustDays != null) return passwordTrustDays;
+    if (oauthMfa) {
       if (oauthTrustDays != null && Number.isFinite(oauthTrustDays)) {
         return Math.max(0, Math.floor(oauthTrustDays));
       }
@@ -152,7 +151,6 @@ export function LoginPage() {
       if (isMfaChallenge(res.data)) {
         return {
           kind: "mfa" as const,
-          challengeId: res.data.challengeId,
           trustedDeviceDays: res.data.trustedDeviceDays ?? 0,
         };
       }
@@ -172,7 +170,7 @@ export function LoginPage() {
     },
     onSuccess: (result) => {
       if (result.kind === "mfa") {
-        setChallengeId(result.challengeId);
+        setMfaPending(true);
         setPasswordTrustDays(result.trustedDeviceDays);
         setTrustDevice(false);
         setUseBackupCode(false);
@@ -189,11 +187,10 @@ export function LoginPage() {
 
   const mfaMutation = useMutation({
     mutationFn: async () => {
-      if (!activeChallengeId) throw new Error("Missing MFA challenge.");
+      if (!showMfa) throw new Error("Missing MFA challenge.");
       const res = await apiJson<{ data: UserProfile }>("/api/v1/auth/mfa/verify", {
         method: "POST",
         body: JSON.stringify({
-          challengeId: activeChallengeId,
           code: mfaCode,
           trustDevice: trustedDeviceDays > 0 ? trustDevice : false,
         }),
@@ -208,7 +205,7 @@ export function LoginPage() {
       return res.data;
     },
     onSuccess: (profile) => {
-      setChallengeId(null);
+      setMfaPending(false);
       setPasswordTrustDays(null);
       setTrustDevice(false);
       finishLogin(profile);
@@ -225,7 +222,7 @@ export function LoginPage() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (activeChallengeId) {
+    if (showMfa) {
       const trimmed = mfaCode.trim();
       if (useBackupCode) {
         if (trimmed.replace(/[^a-zA-Z0-9]/g, "").length < 8) {
@@ -257,7 +254,7 @@ export function LoginPage() {
           <h1 className="login-card__title">TaskMesh</h1>
         </header>
 
-        {activeChallengeId ? (
+        {showMfa ? (
           <form className="login-form" onSubmit={onSubmit} noValidate>
             <p className="muted" style={{ marginTop: 0 }}>
               {useBackupCode
@@ -320,15 +317,16 @@ export function LoginPage() {
               style={{ marginTop: "0.5rem", width: "100%" }}
               disabled={pending}
               onClick={() => {
-                setChallengeId(null);
+                setMfaPending(false);
                 setPasswordTrustDays(null);
                 setMfaCode("");
                 setTrustDevice(false);
                 setUseBackupCode(false);
                 setError(null);
                 const next = new URLSearchParams(params);
-                next.delete("mfaChallenge");
+                next.delete("mfa");
                 next.delete("mfaTrustDays");
+                next.delete("mfaChallenge");
                 navigate({ pathname: "/login", search: next.toString() }, { replace: true });
               }}
             >

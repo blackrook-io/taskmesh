@@ -4,6 +4,19 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.47.0 — 2026-09-19
+
+### Enhancements
+- Password hashing uses OWASP-aligned scrypt cost (N=2¹⁷) with rehash-on-successful-login for older hashes; malformed stored hashes fail closed instead of 500.
+- Security-sensitive account events (password change, MFA clear/disable, admin lock/deactivate/reset) invalidate all sessions; a new login replaces any other concurrent browser sessions.
+- TOTP codes cannot be replayed within the ±30s window (`users.mfa_totp_last_step`).
+- `MFA_TOTP_KEY` and `OAUTH_CREDENTIALS_KEY` must be at least 32 characters when set; the API refuses to start otherwise.
+- OAuth (and password) MFA challenges move to a short-lived HttpOnly cookie instead of the redirect query string or login JSON.
+- Backup restore writes filtered SQL under a `0700` temp directory with `0600` file mode.
+
+### Breaking Changes
+- New column `users.mfa_totp_last_step` (migration `0046`).
+
 ## 0.46.0 — 2026-09-19
 
 ### Fixes

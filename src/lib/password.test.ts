@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   hashPassword,
+  needsPasswordRehash,
   normalizeForPasswordCheck,
   validatePassword,
   verifyPassword,
@@ -34,10 +35,26 @@ describe("password", () => {
     assert.ok(normalizeForPasswordCheck("P@ssw0rd").includes("password"));
   });
 
-  it("hashes and verifies", async () => {
+  it("hashes and verifies with current scrypt N", async () => {
     const hash = await hashPassword(STRONG);
-    assert.ok(hash.startsWith("scrypt$"));
+    assert.match(hash, /^scrypt\$131072\$/);
     assert.equal(await verifyPassword(STRONG, hash), true);
     assert.equal(await verifyPassword("Wrong-Cedar9!xk", hash), false);
+    assert.equal(needsPasswordRehash(hash), false);
+  });
+
+  it("verifies legacy N=16384 hashes and flags rehash", async () => {
+    const { randomBytes, scrypt: scryptCb } = await import("node:crypto");
+    const salt = randomBytes(16);
+    const derived = await new Promise<Buffer>((resolve, reject) => {
+      scryptCb(STRONG, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (err, key) => {
+        if (err) reject(err);
+        else resolve(key as Buffer);
+      });
+    });
+    const legacy = `scrypt$16384$8$1$${salt.toString("base64")}$${derived.toString("base64")}`;
+    assert.equal(await verifyPassword(STRONG, legacy), true);
+    assert.equal(needsPasswordRehash(legacy), true);
+    assert.equal(await verifyPassword(STRONG, "not-a-hash"), false);
   });
 });

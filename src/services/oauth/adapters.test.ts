@@ -9,7 +9,7 @@ import type { OauthProviderRow } from "./providers.js";
 describe("buildAppleClientSecret", () => {
   it("signs an ES256 client-secret JWT", async () => {
     const prev = process.env.OAUTH_CREDENTIALS_KEY;
-    process.env.OAUTH_CREDENTIALS_KEY = "apple-jwt-unit-test-key";
+    process.env.OAUTH_CREDENTIALS_KEY = "apple-jwt-unit-test-key-32chars!!";
     try {
       const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
       const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();

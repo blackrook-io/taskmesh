@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import QRCode from "qrcode";
 import { apiJson } from "../api/client";
+import { useAuth } from "../lib/auth";
 
 type MfaStatus = {
   enrolled: boolean;
@@ -22,6 +24,8 @@ type MfaWithCodes = MfaStatus & { recoveryCodes: string[] };
 
 export function ProfileMfaSection() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [code, setCode] = useState("");
   const [disableCode, setDisableCode] = useState("");
   const [regenCode, setRegenCode] = useState("");
@@ -111,9 +115,8 @@ export function ProfileMfaSection() {
     },
     onSuccess: async () => {
       setDisableCode("");
-      setFlash("MFA disabled.");
-      window.setTimeout(() => setFlash(null), 2000);
-      await qc.invalidateQueries({ queryKey: ["users", "me", "mfa"] });
+      await logout();
+      navigate("/login?reason=session", { replace: true });
     },
     onError: (err: Error) => setError(err.message),
   });
