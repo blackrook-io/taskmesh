@@ -17,6 +17,10 @@ import {
   loginWithEmailPassword,
 } from "../../services/auth.js";
 import {
+  resolvePostPrimaryAuth,
+  verifyMfaChallenge,
+} from "../../services/mfa.js";
+import {
   completeOauthCallback,
   safeOauthReturnTo,
   startOauthFlow,
@@ -27,6 +31,13 @@ const loginBody = z
   .object({
     email: z.string().trim().min(1).max(320),
     password: z.string().min(1).max(200),
+  })
+  .strict();
+
+const mfaVerifyBody = z
+  .object({
+    challengeId: z.string().trim().min(1).max(128),
+    code: z.string().trim().min(6).max(12),
   })
   .strict();
 
@@ -58,11 +69,14 @@ function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boole
   return false;
 }
 
-function loginRedirect(errorCode?: string, returnTo?: string): string {
+function loginRedirect(errorCode?: string, returnTo?: string, extra?: Record<string, string>): string {
   const params = new URLSearchParams();
   if (errorCode) params.set("error", errorCode);
   const rt = safeOauthReturnTo(returnTo ?? null);
   if (rt !== "/") params.set("returnTo", rt);
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) params.set(k, v);
+  }
   const q = params.toString();
   return q ? `/login?${q}` : "/login";
 }
@@ -73,10 +87,53 @@ authRouter.post("/login", loginRateLimit, async (req, res) => {
   try {
     const { email, password } = loginBody.parse(req.body);
     const user = await loginWithEmailPassword(db, email, password);
+    const post = await resolvePostPrimaryAuth(db, user);
+
+    if (post.kind === "mfa_locked") {
+      sendError(res, 403, "mfa_locked", post.message);
+      return;
+    }
+    if (post.kind === "mfa_challenge") {
+      res.json({
+        data: {
+          mfaRequired: true,
+          challengeId: post.challengeId,
+        },
+      });
+      return;
+    }
+
     const session = await createSession(db, user.id);
     setSessionCookie(res, session.id, session.maxAgeSeconds);
     res.locals.logUserId = user.id;
     res.locals.logMessage = `User login: ${user.displayName}`;
+    const profile = await profileForUser(user);
+    res.json({
+      data: {
+        ...profile,
+        mfaEnrollmentRequired: post.mfaEnrollmentRequired,
+        mfaGraceEndsAt: post.graceEndsAt,
+      },
+    });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+authRouter.post("/mfa/verify", loginRateLimit, async (req, res) => {
+  try {
+    const { challengeId, code } = mfaVerifyBody.parse(req.body);
+    const { userId } = await verifyMfaChallenge(db, challengeId, code);
+    const user = await getUserById(db, userId);
+    if (!user || !userCanAuthenticate(user)) {
+      sendError(res, 403, "account_locked", "Your account is locked. Contact an administrator.");
+      return;
+    }
+    const session = await createSession(db, user.id);
+    setSessionCookie(res, session.id, session.maxAgeSeconds);
+    res.locals.logUserId = user.id;
+    res.locals.logMessage = `User MFA login: ${user.displayName}`;
     res.json({ data: await profileForUser(user) });
   } catch (err) {
     if (serviceError(res, err)) return;
@@ -205,10 +262,26 @@ async function handleOauthCallback(
   }
 
   if (result.mode === "login") {
-    setSessionCookie(res, result.sessionId, result.maxAgeSeconds);
-    res.locals.logMessage = `OAuth login (${slug})`;
-    res.redirect(302, result.returnTo);
-    return;
+    if ("mfaChallengeId" in result && result.mfaChallengeId) {
+      res.locals.logMessage = `OAuth login MFA challenge (${slug})`;
+      res.redirect(
+        302,
+        loginRedirect(undefined, result.returnTo, {
+          mfaChallenge: result.mfaChallengeId,
+        }),
+      );
+      return;
+    }
+    if ("sessionId" in result && result.sessionId) {
+      setSessionCookie(res, result.sessionId, result.maxAgeSeconds);
+      res.locals.logMessage = `OAuth login (${slug})`;
+      const dest =
+        result.mfaEnrollmentRequired && result.returnTo === "/"
+          ? "/settings/profile?mfa=enroll"
+          : result.returnTo;
+      res.redirect(302, dest);
+      return;
+    }
   }
 
   res.redirect(302, result.returnTo);

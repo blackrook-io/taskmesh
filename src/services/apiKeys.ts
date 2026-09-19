@@ -8,6 +8,7 @@ import {
 } from "../lib/apiKeyCrypto.js";
 import { userCanAuthenticate } from "../lib/userAuth.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
+import { assertApiKeyOwnerMfaOk, assertMayCreateApiKey } from "./mfa.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -180,6 +181,8 @@ export async function createApiKeyForUser(
       code: "user_deactivated",
     });
   }
+
+  await assertMayCreateApiKey(db, owner);
 
   await assertUnderActiveCap(db, input.userId);
 
@@ -418,6 +421,8 @@ export async function resolveApiKeyForAuth(
       code: "invalid_api_key",
     });
   }
+
+  await assertApiKeyOwnerMfaOk(db, row.owner);
 
   return {
     keyId: key.id,

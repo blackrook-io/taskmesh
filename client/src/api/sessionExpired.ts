@@ -27,7 +27,12 @@ export function resetSessionExpiredGuard(): void {
  */
 export function isLoginCredentialRequest(path: string): boolean {
   const bare = path.split("?")[0] ?? path;
-  return bare === "/api/v1/auth/login" || bare.endsWith("/auth/login");
+  return (
+    bare === "/api/v1/auth/login" ||
+    bare.endsWith("/auth/login") ||
+    bare === "/api/v1/auth/mfa/verify" ||
+    bare.endsWith("/auth/mfa/verify")
+  );
 }
 
 export function notifySessionExpired(): void {

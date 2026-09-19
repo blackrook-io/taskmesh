@@ -4,6 +4,19 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.43.0 — 2026-09-19
+
+### New Functionality
+- Optional TOTP multi-factor authentication (Authenticator apps) with Profile enroll/disable and a second login step after password or OAuth.
+- Administrators can require MFA for Administrators only, configure an enrollment grace period (days from first login), and unlock or clear MFA from Administration → Users.
+- Accounts that miss the MFA enrollment deadline are locked with a clear login message until an administrator unlocks them.
+
+### Enhancements
+- When MFA is required for Administrators, creating API keys requires MFA enrollment; key auth is denied after MFA-deadline lock (interactive MFA still protects browser sessions).
+
+### Breaking Changes
+- New table `mfa_login_challenges` and MFA columns on `users` (migration `0042`); enrollment requires env `MFA_TOTP_KEY`. System properties `mfa_enforcement` and `mfa_grace_days` are seeded.
+
 ## 0.42.0 — 2026-09-18
 
 ### New Functionality

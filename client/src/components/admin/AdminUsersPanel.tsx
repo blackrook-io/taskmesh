@@ -12,6 +12,9 @@ type AdminUser = {
   email: string | null;
   deactivatedAt: string | null;
   lockedAt: string | null;
+  lockReason?: string | null;
+  mfaEnabled?: boolean;
+  mfaGraceStartedAt?: string | null;
   lastLoginAt: string | null;
   lastApiAt: string | null;
   hasPassword: boolean;
@@ -133,6 +136,17 @@ export function AdminUsersPanel() {
   const unlockMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiJson(`/api/v1/admin/users/${id}/unlock`, { method: "POST" });
+    },
+    onSuccess: async () => {
+      setActionError(null);
+      await qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+    onError: (err: Error) => setActionError(err.message),
+  });
+
+  const clearMfaMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiJson(`/api/v1/admin/users/${id}/clear-mfa`, { method: "POST" });
     },
     onSuccess: async () => {
       setActionError(null);
@@ -519,10 +533,18 @@ export function AdminUsersPanel() {
                     {u.deactivatedAt ? (
                       <span className="admin-badge admin-badge--danger">Deactivated</span>
                     ) : u.lockedAt ? (
-                      <span className="admin-badge admin-badge--warn">Locked</span>
+                      <span className="admin-badge admin-badge--warn">
+                        Locked
+                        {u.lockReason === "mfa_deadline" ? " (MFA)" : ""}
+                      </span>
                     ) : (
                       <span className="admin-badge admin-badge--ok">Active</span>
                     )}
+                    {u.mfaEnabled ? (
+                      <span className="admin-badge admin-badge--ok" style={{ marginLeft: 4 }}>
+                        MFA
+                      </span>
+                    ) : null}
                   </td>
                   <td>{u.hasPassword ? "Set" : <span className="muted">None</span>}</td>
                   <td className="admin-table__actions">
@@ -539,6 +561,24 @@ export function AdminUsersPanel() {
                     >
                       Reset password
                     </button>
+                    {u.mfaEnabled ? (
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        disabled={clearMfaMutation.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Clear MFA for ${u.referenceId}? They will need to enroll again.`,
+                            )
+                          ) {
+                            clearMfaMutation.mutate(u.id);
+                          }
+                        }}
+                      >
+                        Clear MFA
+                      </button>
+                    ) : null}
                     {!u.deactivatedAt ? (
                       u.lockedAt ? (
                         <button

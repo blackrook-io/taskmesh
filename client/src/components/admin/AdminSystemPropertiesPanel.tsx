@@ -4,11 +4,15 @@ import { apiJson } from "../../api/client";
 import { ThemeSwitcher } from "../shell/ThemeSwitcher";
 import { isThemeId, type ThemeId } from "../../lib/theme";
 
+type MfaEnforcement = "none" | "administrators";
+
 type SystemProperties = {
   apiRateLimitPerMinute: number;
   loginFailureThreshold: number;
   sessionTimeoutMinutes?: number;
   defaultTheme: ThemeId;
+  mfaEnforcement?: MfaEnforcement;
+  mfaGraceDays?: number;
   updatedAt: string | null;
 };
 
@@ -24,6 +28,8 @@ export function AdminSystemPropertiesPanel() {
   const [threshold, setThreshold] = useState("3");
   const [sessionTimeout, setSessionTimeout] = useState("60");
   const [defaultTheme, setDefaultTheme] = useState<ThemeId>("green");
+  const [mfaEnforcement, setMfaEnforcement] = useState<MfaEnforcement>("none");
+  const [mfaGraceDays, setMfaGraceDays] = useState("7");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -49,6 +55,15 @@ export function AdminSystemPropertiesPanel() {
       if (isThemeId(propsQuery.data.defaultTheme)) {
         setDefaultTheme(propsQuery.data.defaultTheme);
       }
+      if (
+        propsQuery.data.mfaEnforcement === "none" ||
+        propsQuery.data.mfaEnforcement === "administrators"
+      ) {
+        setMfaEnforcement(propsQuery.data.mfaEnforcement);
+      }
+      if (typeof propsQuery.data.mfaGraceDays === "number") {
+        setMfaGraceDays(String(propsQuery.data.mfaGraceDays));
+      }
     }
   }
 
@@ -58,6 +73,7 @@ export function AdminSystemPropertiesPanel() {
       const loginFailureThreshold = Number(threshold);
       const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
       const sessionTimeoutMinutes = Number(sessionTimeout);
+      const graceDays = Number(mfaGraceDays);
       if (!Number.isInteger(apiRateLimitPerMinute) || apiRateLimitPerMinute < 1) {
         throw new Error("API rate limit must be a positive integer");
       }
@@ -73,15 +89,22 @@ export function AdminSystemPropertiesPanel() {
       if (!isThemeId(defaultTheme)) {
         throw new Error("Default theme is invalid");
       }
+      if (!Number.isInteger(graceDays) || graceDays < 0 || graceDays > 365) {
+        throw new Error("MFA grace days must be an integer from 0 to 365");
+      }
       const body: {
         apiRateLimitPerMinute: number;
         loginFailureThreshold: number;
         defaultTheme: ThemeId;
         sessionTimeoutMinutes?: number;
+        mfaEnforcement: MfaEnforcement;
+        mfaGraceDays: number;
       } = {
         apiRateLimitPerMinute,
         loginFailureThreshold,
         defaultTheme,
+        mfaEnforcement,
+        mfaGraceDays: graceDays,
       };
       if (supportsSessionTimeout) {
         body.sessionTimeoutMinutes = sessionTimeoutMinutes;
@@ -112,7 +135,7 @@ export function AdminSystemPropertiesPanel() {
         System-level defaults and thresholds. The default theme applies until a user sets a
         personal preference on their device. Login failure threshold is enforced at sign-in
         {supportsSessionTimeout
-          ? ". Session timeout is stored for future middleware; changing it does not affect existing sessions until enforcement ships."
+          ? ". Session timeout controls browser cookie lifetime."
           : "."}
       </p>
 
@@ -160,12 +183,38 @@ export function AdminSystemPropertiesPanel() {
               onChange={(e) => setSessionTimeout(e.target.value)}
             />
           </label>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Stored for browser session cookie lifetime and future server enforcement. Idle timeout
-            middleware is not active yet.
-          </p>
         </>
       ) : null}
+
+      <h3 className="profile-settings__heading" style={{ marginTop: "1.25rem" }}>
+        Multi-factor authentication
+      </h3>
+      <label className="field">
+        <span>Require MFA for</span>
+        <select
+          value={mfaEnforcement}
+          onChange={(e) => setMfaEnforcement(e.target.value as MfaEnforcement)}
+        >
+          <option value="none">No one</option>
+          <option value="administrators">Administrators</option>
+        </select>
+      </label>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        When set to Administrators, each admin must enroll an authenticator within the grace
+        period (starting on their first login after enforcement). Missing the deadline locks the
+        account until an administrator unlocks it. Set <code>MFA_TOTP_KEY</code> in the server
+        environment before users enroll.
+      </p>
+      <label className="field">
+        <span>MFA enrollment grace (days)</span>
+        <input
+          type="number"
+          min={0}
+          max={365}
+          value={mfaGraceDays}
+          onChange={(e) => setMfaGraceDays(e.target.value)}
+        />
+      </label>
 
       {propsQuery.data?.updatedAt ? (
         <p className="muted small">

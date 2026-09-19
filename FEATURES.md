@@ -94,6 +94,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 - Email/password sign-in with secure session cookies and CSRF protection on mutations
 - Optional Google, Apple, and GitHub sign-in (OIDC / OAuth) with Admin-managed providers and Profile linked accounts
+- Optional authenticator-app MFA (TOTP) with Admin enforcement for Administrators, enrollment grace period, and Profile setup
 - Personal API keys with read/write scopes and expiry
 - Admin hub for users, groups, keys, OAuth providers, API usage, database stats, system logs, properties, and templates
 - Project Settings restricted to Administrators until project Roles expand access to Managers

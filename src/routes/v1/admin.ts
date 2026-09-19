@@ -23,6 +23,7 @@ import {
   updateApiKeyExpiry,
 } from "../../services/adminApiKeys.js";
 import {
+  clearUserMfa,
   createAdminUser,
   deactivateUser,
   deleteAdminUser,
@@ -172,6 +173,20 @@ adminRouter.post("/users/:id/unlock", async (req, res) => {
     const data = await unlockUser(db, id);
     res.locals.logUserId = actor.id;
     res.locals.logMessage = `User unlocked: ${data.referenceId}`;
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.post("/users/:id/clear-mfa", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const actor = await getCurrentUser(db);
+    const data = await clearUserMfa(db, id);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `User MFA cleared: ${data.referenceId}`;
     res.json({ data });
   } catch (err) {
     if (serviceError(res, err)) return;
@@ -614,6 +629,8 @@ const patchPropsBody = z
     loginFailureThreshold: z.number().int().min(1).max(1000).optional(),
     sessionTimeoutMinutes: z.number().int().min(1).max(10_080).optional(),
     defaultTheme: z.enum(THEME_IDS).optional(),
+    mfaEnforcement: z.enum(["none", "administrators"]).optional(),
+    mfaGraceDays: z.number().int().min(0).max(365).optional(),
   })
   .strict();
 
@@ -624,7 +641,9 @@ adminRouter.patch("/system-properties", async (req, res) => {
       parsed.apiRateLimitPerMinute === undefined &&
       parsed.loginFailureThreshold === undefined &&
       parsed.sessionTimeoutMinutes === undefined &&
-      parsed.defaultTheme === undefined
+      parsed.defaultTheme === undefined &&
+      parsed.mfaEnforcement === undefined &&
+      parsed.mfaGraceDays === undefined
     ) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
@@ -662,6 +681,18 @@ adminRouter.patch("/system-properties", async (req, res) => {
       before.defaultTheme !== after.defaultTheme
     ) {
       parts.push(`default_theme ${before.defaultTheme}→${after.defaultTheme}`);
+    }
+    if (
+      parsed.mfaEnforcement !== undefined &&
+      before.mfaEnforcement !== after.mfaEnforcement
+    ) {
+      parts.push(`mfa_enforcement ${before.mfaEnforcement}→${after.mfaEnforcement}`);
+    }
+    if (
+      parsed.mfaGraceDays !== undefined &&
+      before.mfaGraceDays !== after.mfaGraceDays
+    ) {
+      parts.push(`mfa_grace_days ${before.mfaGraceDays}→${after.mfaGraceDays}`);
     }
     res.locals.logUserId = actor.id;
     res.locals.logMessage =

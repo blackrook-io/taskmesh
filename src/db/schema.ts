@@ -205,6 +205,21 @@ export const users = pgTable("users", {
   failedLoginCount: integer("failed_login_count").notNull().default(0),
   /** Set when login-failure threshold is hit, or when an admin locks the account. */
   lockedAt: timestamp("locked_at", { withTimezone: true }),
+  /**
+   * Why the account is locked (T0139): `login_failures` | `mfa_deadline` | `admin`.
+   * Cleared on unlock.
+   */
+  lockReason: text("lock_reason"),
+  /**
+   * AES-GCM ciphertext of TOTP shared secret (env `MFA_TOTP_KEY`); null when not enrolled.
+   */
+  mfaTotpSecretEnc: text("mfa_totp_secret_enc"),
+  /** Set when TOTP MFA is successfully enrolled. */
+  mfaEnabledAt: timestamp("mfa_enabled_at", { withTimezone: true }),
+  /**
+   * First successful primary auth under MFA enforcement while not yet enrolled (grace clock).
+   */
+  mfaGraceStartedAt: timestamp("mfa_grace_started_at", { withTimezone: true }),
   /** Last UI auth/access — written when auth exists. */
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   /** Last API-key usage — written when API keys exist. */
@@ -216,6 +231,27 @@ export const users = pgTable("users", {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Short-lived MFA challenge after password/OAuth primary auth (T0139).
+ * Client posts TOTP against `id` before a session cookie is minted.
+ */
+export const mfaLoginChallenges = pgTable(
+  "mfa_login_challenges",
+  {
+    id: text("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("mfa_login_challenges_user_id_idx").on(t.userId)],
+);
 
 /** Browser login sessions (opaque id in httpOnly cookie). */
 export const sessions = pgTable(

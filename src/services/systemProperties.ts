@@ -6,11 +6,23 @@ import { DEFAULT_THEME, isThemeId, type ThemeId } from "../lib/theme.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
+export const MFA_ENFORCEMENT_VALUES = ["none", "administrators"] as const;
+export type MfaEnforcement = (typeof MFA_ENFORCEMENT_VALUES)[number];
+
+export function isMfaEnforcement(value: unknown): value is MfaEnforcement {
+  return (
+    typeof value === "string" &&
+    (MFA_ENFORCEMENT_VALUES as readonly string[]).includes(value)
+  );
+}
+
 export const SYSTEM_PROPERTY_KEYS = [
   "api_rate_limit_per_minute",
   "login_failure_threshold",
   "session_timeout_minutes",
   "default_theme",
+  "mfa_enforcement",
+  "mfa_grace_days",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -20,6 +32,8 @@ export type SystemProperties = {
   loginFailureThreshold: number;
   sessionTimeoutMinutes: number;
   defaultTheme: ThemeId;
+  mfaEnforcement: MfaEnforcement;
+  mfaGraceDays: number;
   updatedAt: string | null;
 };
 
@@ -37,11 +51,15 @@ const DEFAULTS: {
   login_failure_threshold: number;
   session_timeout_minutes: number;
   default_theme: ThemeId;
+  mfa_enforcement: MfaEnforcement;
+  mfa_grace_days: number;
 } = {
   api_rate_limit_per_minute: 60,
   login_failure_threshold: 3,
   session_timeout_minutes: 60,
   default_theme: DEFAULT_THEME,
+  mfa_enforcement: "none",
+  mfa_grace_days: 7,
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -54,6 +72,11 @@ function asNumber(value: unknown, fallback: number): number {
 
 function asThemeId(value: unknown, fallback: ThemeId): ThemeId {
   if (isThemeId(value)) return value;
+  return fallback;
+}
+
+function asMfaEnforcement(value: unknown, fallback: MfaEnforcement): MfaEnforcement {
+  if (isMfaEnforcement(value)) return value;
   return fallback;
 }
 
@@ -101,6 +124,11 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
       DEFAULTS.session_timeout_minutes,
     ),
     defaultTheme: asThemeId(map.get("default_theme")?.value, DEFAULTS.default_theme),
+    mfaEnforcement: asMfaEnforcement(
+      map.get("mfa_enforcement")?.value,
+      DEFAULTS.mfa_enforcement,
+    ),
+    mfaGraceDays: asNumber(map.get("mfa_grace_days")?.value, DEFAULTS.mfa_grace_days),
     updatedAt: latest?.toISOString() ?? null,
   };
 }
@@ -122,6 +150,8 @@ export async function patchSystemProperties(
     loginFailureThreshold?: number;
     sessionTimeoutMinutes?: number;
     defaultTheme?: ThemeId;
+    mfaEnforcement?: MfaEnforcement;
+    mfaGraceDays?: number;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -175,6 +205,32 @@ export async function patchSystemProperties(
       .onConflictDoUpdate({
         target: schema.systemProperties.key,
         set: { value: patch.defaultTheme, updatedAt: now },
+      });
+  }
+  if (patch.mfaEnforcement !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "mfa_enforcement",
+        value: patch.mfaEnforcement,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.mfaEnforcement, updatedAt: now },
+      });
+  }
+  if (patch.mfaGraceDays !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "mfa_grace_days",
+        value: patch.mfaGraceDays,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.mfaGraceDays, updatedAt: now },
       });
   }
   return getSystemProperties(db);

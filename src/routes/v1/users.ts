@@ -15,6 +15,13 @@ import {
   revokeApiKey,
   updateApiKeyExpiry,
 } from "../../services/apiKeys.js";
+import {
+  cancelMfaEnrollment,
+  confirmMfaEnrollment,
+  disableMfa,
+  getMfaStatus,
+  startMfaEnrollment,
+} from "../../services/mfa.js";
 import { attachRolesToProfile } from "../../services/roles.js";
 import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
 import {
@@ -81,6 +88,77 @@ usersRouter.get("/me", async (_req, res) => {
     const user = await getCurrentUser(db);
     res.json({ data: await profilePayload(user) });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.get("/me/mfa", async (_req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    res.json({ data: await getMfaStatus(db, user) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.post("/me/mfa/enroll/start", async (_req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    const data = await startMfaEnrollment(db, user);
+    res.locals.logUserId = user.id;
+    res.locals.logMessage = "MFA enrollment started";
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const mfaCodeBody = z
+  .object({
+    code: z.string().trim().min(6).max(12),
+  })
+  .strict();
+
+usersRouter.post("/me/mfa/enroll/confirm", async (req, res) => {
+  try {
+    const { code } = mfaCodeBody.parse(req.body);
+    const user = await getCurrentUser(db);
+    await confirmMfaEnrollment(db, user.id, code);
+    const refreshed = await getCurrentUser(db);
+    res.locals.logUserId = user.id;
+    res.locals.logMessage = "MFA enrolled";
+    res.json({ data: await getMfaStatus(db, refreshed) });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.post("/me/mfa/enroll/cancel", async (_req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    await cancelMfaEnrollment(db, user.id);
+    res.locals.logUserId = user.id;
+    res.locals.logMessage = "MFA enrollment cancelled";
+    res.status(204).send();
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.post("/me/mfa/disable", async (req, res) => {
+  try {
+    const { code } = mfaCodeBody.parse(req.body);
+    const user = await getCurrentUser(db);
+    await disableMfa(db, user.id, code);
+    const refreshed = await getCurrentUser(db);
+    res.locals.logUserId = user.id;
+    res.locals.logMessage = "MFA disabled";
+    res.json({ data: await getMfaStatus(db, refreshed) });
+  } catch (err) {
+    if (serviceError(res, err)) return;
     handleRouteError(res, err);
   }
 });
