@@ -6,6 +6,7 @@ import { encryptMfaSecret, decryptMfaSecret, hasMfaTotpKey } from "../lib/mfaCry
 import { generateTotpSecret, totpUri, verifyTotpCode } from "../lib/totp.js";
 import { userIsAdministrator } from "./roles.js";
 import { getSystemProperties, type MfaEnforcement } from "./systemProperties.js";
+import { revokeAllTrustedDevices, validateTrustedDevice } from "./mfaTrustedDevices.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -63,16 +64,18 @@ export function isPastMfaGrace(
 
 export type PostPrimaryAuthResult =
   | { kind: "session"; mfaEnrollmentRequired: boolean; graceEndsAt: string | null }
-  | { kind: "mfa_challenge"; challengeId: string }
+  | { kind: "mfa_challenge"; challengeId: string; trustedDeviceDays: number }
   | { kind: "mfa_locked"; message: string };
 
 /**
  * After password/OAuth primary success: MFA challenge, grace session, lock, or session.
  * Caller must not mint a session when kind !== "session".
+ * When `trustToken` validates for an enrolled user, skips the MFA challenge.
  */
 export async function resolvePostPrimaryAuth(
   db: Db,
   user: typeof schema.users.$inferSelect,
+  opts?: { trustToken?: string | null },
 ): Promise<PostPrimaryAuthResult> {
   if (user.lockedAt != null) {
     if (user.lockReason === "mfa_deadline") {
@@ -85,8 +88,16 @@ export async function resolvePostPrimaryAuth(
   }
 
   if (isMfaEnrolled(user)) {
+    if (await validateTrustedDevice(db, user.id, opts?.trustToken)) {
+      return { kind: "session", mfaEnrollmentRequired: false, graceEndsAt: null };
+    }
+    const props = await getSystemProperties(db);
     const challengeId = await createMfaChallenge(db, user.id);
-    return { kind: "mfa_challenge", challengeId };
+    return {
+      kind: "mfa_challenge",
+      challengeId,
+      trustedDeviceDays: props.mfaTrustedDeviceDays,
+    };
   }
 
   const props = await getSystemProperties(db);
@@ -349,6 +360,7 @@ export async function clearMfaForUser(db: Db, userId: number): Promise<void> {
   await db
     .delete(schema.mfaLoginChallenges)
     .where(eq(schema.mfaLoginChallenges.userId, userId));
+  await revokeAllTrustedDevices(db, userId);
 }
 
 /** Cancel in-progress enrollment (pending secret, not yet confirmed). */

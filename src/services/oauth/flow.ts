@@ -4,6 +4,7 @@ import type { Request } from "express";
 import * as client from "openid-client";
 import * as schema from "../../db/schema.js";
 import { userCanAuthenticate } from "../../lib/userAuth.js";
+import { readMfaTrustCookie } from "../../lib/mfaTrustCookie.js";
 import { createSession } from "../auth.js";
 import { resolvePostPrimaryAuth } from "../mfa.js";
 import { assignRole, createRole, listRoles } from "../roles.js";
@@ -121,7 +122,7 @@ export type OauthCallbackResult =
       mode: "login";
       mfaEnrollmentRequired?: boolean;
     }
-  | { ok: true; returnTo: string; mode: "login"; mfaChallengeId: string }
+  | { ok: true; returnTo: string; mode: "login"; mfaChallengeId: string; trustedDeviceDays: number }
   | { ok: true; returnTo: string; mode: "link" }
   | { ok: false; errorCode: string };
 
@@ -221,7 +222,9 @@ export async function completeOauthCallback(
     .returning();
   const fresh = updated ?? user;
 
-  const post = await resolvePostPrimaryAuth(db, fresh);
+  const post = await resolvePostPrimaryAuth(db, fresh, {
+    trustToken: readMfaTrustCookie(opts.req),
+  });
   if (post.kind === "mfa_locked") {
     return {
       ok: false,
@@ -234,6 +237,7 @@ export async function completeOauthCallback(
       returnTo,
       mode: "login",
       mfaChallengeId: post.challengeId,
+      trustedDeviceDays: post.trustedDeviceDays,
     };
   }
 

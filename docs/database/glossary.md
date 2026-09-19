@@ -126,6 +126,8 @@ Exact FK lists are on the domain pages.
   - `default_theme` — accent theme string: `green` \| `blue` \| `orange` \| `yellow` \| `purple` \| `red` (default `green`). Personal UI preference in the browser overrides this until cleared.
   - `mfa_enforcement` — `none` \| `administrators` (default `none`; T0139)
   - `mfa_grace_days` — number of days (default **7**) before MFA-deadline lock when enforcement applies
+  - `mfa_trusted_device_days` — trust duration in days (default **15**; `0` disables; T0141)
+  - `mfa_trusted_device_max` — max trusted devices per user (default **5**; T0141)
 
 ## Uploads vs database
 

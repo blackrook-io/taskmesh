@@ -111,6 +111,25 @@ export function ProfileMfaSection() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const revokeTrustMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiJson<{ data: { revoked: number } }>(
+        "/api/v1/users/me/mfa/trusted-devices/revoke-all",
+        { method: "POST", body: "{}" },
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setFlash(
+        data.revoked === 0
+          ? "No trusted devices to revoke."
+          : `Revoked ${data.revoked} trusted device${data.revoked === 1 ? "" : "s"}.`,
+      );
+      window.setTimeout(() => setFlash(null), 2500);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const status = statusQuery.data;
 
   return (
@@ -196,6 +215,32 @@ export function ProfileMfaSection() {
               MFA is required for your account and cannot be disabled here. An administrator can
               clear MFA if you lose access to your authenticator.
             </p>
+          ) : null}
+          {status.enrolled ? (
+            <div style={{ marginTop: "0.75rem" }}>
+              <p className="muted small" style={{ marginTop: 0 }}>
+                Trusted devices can skip MFA for a limited time after you check “Trust this device”
+                at sign-in. Logout does not clear them.
+              </p>
+              <button
+                type="button"
+                className="btn small"
+                disabled={revokeTrustMutation.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Revoke all trusted devices? You will need an authenticator code on the next sign-in from every browser.",
+                    )
+                  ) {
+                    return;
+                  }
+                  setError(null);
+                  revokeTrustMutation.mutate();
+                }}
+              >
+                Revoke all trusted devices
+              </button>
+            </div>
           ) : null}
         </>
       ) : null}

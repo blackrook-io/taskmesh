@@ -23,6 +23,8 @@ export const SYSTEM_PROPERTY_KEYS = [
   "default_theme",
   "mfa_enforcement",
   "mfa_grace_days",
+  "mfa_trusted_device_days",
+  "mfa_trusted_device_max",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -34,6 +36,8 @@ export type SystemProperties = {
   defaultTheme: ThemeId;
   mfaEnforcement: MfaEnforcement;
   mfaGraceDays: number;
+  mfaTrustedDeviceDays: number;
+  mfaTrustedDeviceMax: number;
   updatedAt: string | null;
 };
 
@@ -44,6 +48,8 @@ export type PublicSystemConfig = {
   instance: "dev" | "prod";
   /** Overlay default for DEV (yellow). Null on PROD — use `defaultTheme`. */
   instanceTheme: ThemeId | null;
+  /** MFA trust duration in days (0 = trust-this-device disabled). */
+  mfaTrustedDeviceDays: number;
 };
 
 const DEFAULTS: {
@@ -53,6 +59,8 @@ const DEFAULTS: {
   default_theme: ThemeId;
   mfa_enforcement: MfaEnforcement;
   mfa_grace_days: number;
+  mfa_trusted_device_days: number;
+  mfa_trusted_device_max: number;
 } = {
   api_rate_limit_per_minute: 60,
   login_failure_threshold: 3,
@@ -60,6 +68,8 @@ const DEFAULTS: {
   default_theme: DEFAULT_THEME,
   mfa_enforcement: "none",
   mfa_grace_days: 7,
+  mfa_trusted_device_days: 15,
+  mfa_trusted_device_max: 5,
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -129,6 +139,14 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
       DEFAULTS.mfa_enforcement,
     ),
     mfaGraceDays: asNumber(map.get("mfa_grace_days")?.value, DEFAULTS.mfa_grace_days),
+    mfaTrustedDeviceDays: asNumber(
+      map.get("mfa_trusted_device_days")?.value,
+      DEFAULTS.mfa_trusted_device_days,
+    ),
+    mfaTrustedDeviceMax: asNumber(
+      map.get("mfa_trusted_device_max")?.value,
+      DEFAULTS.mfa_trusted_device_max,
+    ),
     updatedAt: latest?.toISOString() ?? null,
   };
 }
@@ -140,6 +158,7 @@ export async function getPublicSystemConfig(db: Db): Promise<PublicSystemConfig>
     defaultTheme: props.defaultTheme,
     instance: brand.instance,
     instanceTheme: brand.instanceTheme,
+    mfaTrustedDeviceDays: props.mfaTrustedDeviceDays,
   };
 }
 
@@ -152,6 +171,8 @@ export async function patchSystemProperties(
     defaultTheme?: ThemeId;
     mfaEnforcement?: MfaEnforcement;
     mfaGraceDays?: number;
+    mfaTrustedDeviceDays?: number;
+    mfaTrustedDeviceMax?: number;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -231,6 +252,32 @@ export async function patchSystemProperties(
       .onConflictDoUpdate({
         target: schema.systemProperties.key,
         set: { value: patch.mfaGraceDays, updatedAt: now },
+      });
+  }
+  if (patch.mfaTrustedDeviceDays !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "mfa_trusted_device_days",
+        value: patch.mfaTrustedDeviceDays,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.mfaTrustedDeviceDays, updatedAt: now },
+      });
+  }
+  if (patch.mfaTrustedDeviceMax !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "mfa_trusted_device_max",
+        value: patch.mfaTrustedDeviceMax,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.mfaTrustedDeviceMax, updatedAt: now },
       });
   }
   return getSystemProperties(db);

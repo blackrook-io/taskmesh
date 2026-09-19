@@ -631,6 +631,8 @@ const patchPropsBody = z
     defaultTheme: z.enum(THEME_IDS).optional(),
     mfaEnforcement: z.enum(["none", "administrators"]).optional(),
     mfaGraceDays: z.number().int().min(0).max(365).optional(),
+    mfaTrustedDeviceDays: z.number().int().min(0).max(365).optional(),
+    mfaTrustedDeviceMax: z.number().int().min(1).max(50).optional(),
   })
   .strict();
 
@@ -643,7 +645,9 @@ adminRouter.patch("/system-properties", async (req, res) => {
       parsed.sessionTimeoutMinutes === undefined &&
       parsed.defaultTheme === undefined &&
       parsed.mfaEnforcement === undefined &&
-      parsed.mfaGraceDays === undefined
+      parsed.mfaGraceDays === undefined &&
+      parsed.mfaTrustedDeviceDays === undefined &&
+      parsed.mfaTrustedDeviceMax === undefined
     ) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
@@ -693,6 +697,22 @@ adminRouter.patch("/system-properties", async (req, res) => {
       before.mfaGraceDays !== after.mfaGraceDays
     ) {
       parts.push(`mfa_grace_days ${before.mfaGraceDays}→${after.mfaGraceDays}`);
+    }
+    if (
+      parsed.mfaTrustedDeviceDays !== undefined &&
+      before.mfaTrustedDeviceDays !== after.mfaTrustedDeviceDays
+    ) {
+      parts.push(
+        `mfa_trusted_device_days ${before.mfaTrustedDeviceDays}→${after.mfaTrustedDeviceDays}`,
+      );
+    }
+    if (
+      parsed.mfaTrustedDeviceMax !== undefined &&
+      before.mfaTrustedDeviceMax !== after.mfaTrustedDeviceMax
+    ) {
+      parts.push(
+        `mfa_trusted_device_max ${before.mfaTrustedDeviceMax}→${after.mfaTrustedDeviceMax}`,
+      );
     }
     res.locals.logUserId = actor.id;
     res.locals.logMessage =

@@ -1,0 +1,103 @@
+# T0141 — MFA trusted device / remember me
+
+**Task:** T0141 (id 154) · Parent: T0111 · Project: TaskMesh (4)  
+**Branch (on approval):** `T0141-mfa-trusted-device`  
+**State at plan:** Ready  
+**Depends on:** T0139 Implement MFA ability — complete  
+
+## Goal
+
+After a successful MFA TOTP challenge, the user may optionally **trust this device** so subsequent password/OAuth logins skip MFA for a configurable number of days. Admins control duration and max devices; users (and Admin clear-MFA / user-delete) can revoke trust.
+
+## Interview decisions (locked)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Trust duration default | System Property `mfa_trusted_device_days` default **15**, range **0–365** (`0` = feature disabled: no checkbox, no skip) |
+| 2 | Logout vs trust | Logout **does not** clear trust. Revoke-all / MFA disable / Admin clear MFA / user delete do. Document in SECURITY.md. |
+| 3 | Revoke UI | **Revoke all trusted devices** only (no per-device list). Profile MFA section + clear trusts when Admin **Clear MFA**. |
+| 4 | Token design | Opaque random token in HttpOnly cookie; store **hash only** in DB (`userId`, `expiresAt`, optional `userAgent` / `createdAt` / `lastUsedAt`). No IP binding. |
+| 5 | Device cap | Soft max default **5**, Admin System Property `mfa_trusted_device_max` (e.g. 1–50). Minting beyond cap drops oldest. |
+| 6 | Admin user delete | On Admin delete user: ensure **API keys**, **MFA config** (TOTP + challenges), **sessions**, and **trusted devices** are removed. Prefer FK `ON DELETE CASCADE` + verify/explicit cleanup in `deleteAdminUser` so delete cannot leave orphan secrets. |
+
+## Out of scope
+
+- Backup / recovery codes → T0140
+- Per-device list / rename / selective revoke
+- SMS / email OTP, WebAuthn / passkeys
+- Weakening API-key MFA policy from T0139 (trust is interactive-login only)
+- Changing `dueDate` via worktask bookkeeping
+
+## Technical approach
+
+### Schema (new Drizzle migration → MINOR bump on finish-up)
+
+- Table `mfa_trusted_devices`:
+  - `id` serial PK
+  - `user_id` → users CASCADE
+  - `token_hash` text unique not null (SHA-256 of cookie token)
+  - `user_agent` text nullable
+  - `expires_at` timestamptz not null
+  - `created_at` / `last_used_at` timestamptz
+- System properties (seeded):
+  - `mfa_trusted_device_days` — int 0–365, default **15**
+  - `mfa_trusted_device_max` — int ≥1 (cap e.g. 1–50), default **5**
+- Update `docs/database/`, SECURITY.md, `.env.example` only if new env vars (none expected — reuse session cookie Secure/HttpOnly patterns)
+
+### Cookie
+
+- Name: `taskmesh_mfa_trust` / `taskmesh_mfa_trust_dev` (mirror session cookie PROD/DEV split)
+- HttpOnly, SameSite=Lax, Secure when `useSecureCookies()`, Path=/
+- Max-Age / Expires aligned with device `expires_at`
+- Distinct from session cookie; surviving logout is intentional
+
+### Auth flow
+
+1. **Skip gate** — early in `resolvePostPrimaryAuth` (or immediately before `createMfaChallenge`): if trust duration > 0 and request presents a valid (unexpired, matching hash) trust cookie for this user → mint session, update `last_used_at`, no challenge.
+2. Password login + OAuth callback both pass the request cookies into the resolver (same as session cookie helper).
+3. **`POST /auth/mfa/verify`** body adds optional `trustDevice: boolean`. After successful TOTP: if `trustDevice` and days > 0 → insert device (enforce max: delete oldest), set trust cookie; then `createSession` + session cookie as today.
+4. Invalid/expired trust cookie → ignore and proceed to normal MFA challenge (clear bad cookie optionally).
+
+### Revoke / cleanup
+
+- `POST /api/v1/users/me/mfa/trusted-devices/revoke-all` (auth required) — delete all rows for user; clear trust cookie on response
+- `clearMfaForUser` / disable MFA — also revoke all trusted devices
+- Admin Clear MFA — same via `clearMfaForUser`
+- `deleteAdminUser` — confirm cascades delete `api_keys`, MFA challenge rows, sessions, trusted devices; user-row MFA columns go with the user. Add explicit pre-delete cleanup if any FK is not CASCADE today. Document behavior.
+
+### UI
+
+- **Login MFA step** (`LoginPage`): “Trust this device for N days” checkbox (shown only when `mfa_trusted_device_days` > 0 — expose days via public/auth metadata or embed in challenge response / existing public theme/settings endpoint if one fits; prefer challenge verify response isn’t needed — load days from a small public MFA policy snippet or include `trustedDeviceDays` on the MFA challenge create payload returned to client)
+- **Profile MFA** (`ProfileMfaSection`): “Revoke all trusted devices” with confirm
+- **Admin System Properties**: fields for trust days + max devices under MFA section
+
+### Tests / docs
+
+- Unit/service tests: mint, skip, expiry, cap eviction, revoke-all, days=0 disables
+- SECURITY.md: trusted-device model, logout behavior, revoke paths, interactive-only (not API keys)
+- Schema docs + `docs:sync-schema` on finish-up path
+
+## Acceptance
+
+- [ ] With days > 0, checking Trust after TOTP skips MFA on later logins until expiry
+- [ ] days = 0 hides checkbox and never skips
+- [ ] Logout keeps trust; revoke-all / disable MFA / Admin clear MFA clears trust
+- [ ] Max devices enforced; oldest dropped
+- [ ] Admin delete user removes API keys, MFA enrollment data, challenges, sessions, trusted devices
+- [ ] API key auth policy unchanged from T0139
+- [ ] SECURITY.md + database docs updated
+
+## Implementation order
+
+1. Migration + schema + system properties
+2. Trust cookie helper + service (mint / validate / revoke / cap)
+3. Wire `resolvePostPrimaryAuth` + `mfa/verify` + OAuth/password cookie plumbing
+4. Admin props + Profile revoke + Login checkbox
+5. Admin delete cleanup verification
+6. Tests + SECURITY / schema docs
+
+## Finish-up notes
+
+- SemVer: **MINOR** bump (new migration)
+- RELEASE_NOTES + FEATURES (Accounts & admin / security)
+- Archive this plan on the feature branch before PR merge

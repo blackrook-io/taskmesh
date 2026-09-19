@@ -13,6 +13,8 @@ type SystemProperties = {
   defaultTheme: ThemeId;
   mfaEnforcement?: MfaEnforcement;
   mfaGraceDays?: number;
+  mfaTrustedDeviceDays?: number;
+  mfaTrustedDeviceMax?: number;
   updatedAt: string | null;
 };
 
@@ -30,6 +32,8 @@ export function AdminSystemPropertiesPanel() {
   const [defaultTheme, setDefaultTheme] = useState<ThemeId>("green");
   const [mfaEnforcement, setMfaEnforcement] = useState<MfaEnforcement>("none");
   const [mfaGraceDays, setMfaGraceDays] = useState("7");
+  const [mfaTrustedDeviceDays, setMfaTrustedDeviceDays] = useState("15");
+  const [mfaTrustedDeviceMax, setMfaTrustedDeviceMax] = useState("5");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -64,6 +68,12 @@ export function AdminSystemPropertiesPanel() {
       if (typeof propsQuery.data.mfaGraceDays === "number") {
         setMfaGraceDays(String(propsQuery.data.mfaGraceDays));
       }
+      if (typeof propsQuery.data.mfaTrustedDeviceDays === "number") {
+        setMfaTrustedDeviceDays(String(propsQuery.data.mfaTrustedDeviceDays));
+      }
+      if (typeof propsQuery.data.mfaTrustedDeviceMax === "number") {
+        setMfaTrustedDeviceMax(String(propsQuery.data.mfaTrustedDeviceMax));
+      }
     }
   }
 
@@ -74,6 +84,8 @@ export function AdminSystemPropertiesPanel() {
       const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
       const sessionTimeoutMinutes = Number(sessionTimeout);
       const graceDays = Number(mfaGraceDays);
+      const trustDays = Number(mfaTrustedDeviceDays);
+      const trustMax = Number(mfaTrustedDeviceMax);
       if (!Number.isInteger(apiRateLimitPerMinute) || apiRateLimitPerMinute < 1) {
         throw new Error("API rate limit must be a positive integer");
       }
@@ -92,6 +104,12 @@ export function AdminSystemPropertiesPanel() {
       if (!Number.isInteger(graceDays) || graceDays < 0 || graceDays > 365) {
         throw new Error("MFA grace days must be an integer from 0 to 365");
       }
+      if (!Number.isInteger(trustDays) || trustDays < 0 || trustDays > 365) {
+        throw new Error("Trusted device days must be an integer from 0 to 365");
+      }
+      if (!Number.isInteger(trustMax) || trustMax < 1 || trustMax > 50) {
+        throw new Error("Trusted device max must be an integer from 1 to 50");
+      }
       const body: {
         apiRateLimitPerMinute: number;
         loginFailureThreshold: number;
@@ -99,12 +117,16 @@ export function AdminSystemPropertiesPanel() {
         sessionTimeoutMinutes?: number;
         mfaEnforcement: MfaEnforcement;
         mfaGraceDays: number;
+        mfaTrustedDeviceDays: number;
+        mfaTrustedDeviceMax: number;
       } = {
         apiRateLimitPerMinute,
         loginFailureThreshold,
         defaultTheme,
         mfaEnforcement,
         mfaGraceDays: graceDays,
+        mfaTrustedDeviceDays: trustDays,
+        mfaTrustedDeviceMax: trustMax,
       };
       if (supportsSessionTimeout) {
         body.sessionTimeoutMinutes = sessionTimeoutMinutes;
@@ -213,6 +235,31 @@ export function AdminSystemPropertiesPanel() {
           max={365}
           value={mfaGraceDays}
           onChange={(e) => setMfaGraceDays(e.target.value)}
+        />
+      </label>
+      <label className="field">
+        <span>Trusted device duration (days)</span>
+        <input
+          type="number"
+          min={0}
+          max={365}
+          value={mfaTrustedDeviceDays}
+          onChange={(e) => setMfaTrustedDeviceDays(e.target.value)}
+        />
+      </label>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        After a successful MFA challenge, users may trust the browser for this many days (skip
+        TOTP). Set to <strong>0</strong> to disable. Logout does not clear trust; Profile revoke
+        or Clear MFA does.
+      </p>
+      <label className="field">
+        <span>Max trusted devices per user</span>
+        <input
+          type="number"
+          min={1}
+          max={50}
+          value={mfaTrustedDeviceMax}
+          onChange={(e) => setMfaTrustedDeviceMax(e.target.value)}
         />
       </label>
 

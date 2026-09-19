@@ -22,6 +22,8 @@ import {
   getMfaStatus,
   startMfaEnrollment,
 } from "../../services/mfa.js";
+import { revokeAllTrustedDevices } from "../../services/mfaTrustedDevices.js";
+import { clearMfaTrustCookie } from "../../lib/mfaTrustCookie.js";
 import { attachRolesToProfile } from "../../services/roles.js";
 import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
 import {
@@ -153,12 +155,26 @@ usersRouter.post("/me/mfa/disable", async (req, res) => {
     const { code } = mfaCodeBody.parse(req.body);
     const user = await getCurrentUser(db);
     await disableMfa(db, user.id, code);
+    clearMfaTrustCookie(res);
     const refreshed = await getCurrentUser(db);
     res.locals.logUserId = user.id;
     res.locals.logMessage = "MFA disabled";
     res.json({ data: await getMfaStatus(db, refreshed) });
   } catch (err) {
     if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.post("/me/mfa/trusted-devices/revoke-all", async (_req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    const removed = await revokeAllTrustedDevices(db, user.id);
+    clearMfaTrustCookie(res);
+    res.locals.logUserId = user.id;
+    res.locals.logMessage = `Revoked ${removed} MFA trusted device(s)`;
+    res.json({ data: { revoked: removed } });
+  } catch (err) {
     handleRouteError(res, err);
   }
 });

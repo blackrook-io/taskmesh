@@ -6,6 +6,7 @@ import { toUserRef, type UserRef } from "../lib/userFields.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
 import { deleteUserDeniedReason } from "../lib/userAuth.js";
 import { clearMfaForUser } from "./mfa.js";
+import { revokeAllTrustedDevices } from "./mfaTrustedDevices.js";
 import { allocateUserNumber } from "./users.js";
 import { archiveCurrentPasswordHash } from "./passwordHistory.js";
 import { guardLastAdministrator, listRolesByUserIds } from "./roles.js";
@@ -177,6 +178,11 @@ export async function deleteAdminUser(
     throw serviceErr(denied.message, denied.status, denied.code);
   }
   try {
+    // Explicit cleanup before user row delete (FKs also CASCADE for these).
+    await db.delete(schema.apiKeys).where(eq(schema.apiKeys.userId, userId));
+    await clearMfaForUser(db, userId);
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+    await revokeAllTrustedDevices(db, userId);
     await db.delete(schema.users).where(eq(schema.users.id, userId));
   } catch (err) {
     if (

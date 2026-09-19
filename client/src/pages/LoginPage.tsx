@@ -38,11 +38,17 @@ type PublicProvider = { slug: string; name: string };
 
 type LoginResponse =
   | { data: UserProfile & { mfaEnrollmentRequired?: boolean } }
-  | { data: { mfaRequired: true; challengeId: string } };
+  | {
+      data: {
+        mfaRequired: true;
+        challengeId: string;
+        trustedDeviceDays?: number;
+      };
+    };
 
 function isMfaChallenge(
   data: LoginResponse["data"],
-): data is { mfaRequired: true; challengeId: string } {
+): data is { mfaRequired: true; challengeId: string; trustedDeviceDays?: number } {
   return (
     typeof data === "object" &&
     data !== null &&
@@ -59,11 +65,15 @@ export function LoginPage() {
   const sessionEnded = params.get("reason") === "session";
   const oauthError = params.get("error");
   const oauthChallenge = params.get("mfaChallenge");
+  const oauthTrustDaysRaw = params.get("mfaTrustDays");
+  const oauthTrustDays = oauthTrustDaysRaw != null ? Number(oauthTrustDaysRaw) : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [passwordTrustDays, setPasswordTrustDays] = useState<number | null>(null);
+  const [trustDevice, setTrustDevice] = useState(false);
   const [error, setError] = useState<string | null>(() =>
     oauthError
       ? (OAUTH_ERROR_MESSAGES[oauthError] ?? OAUTH_ERROR_MESSAGES.oauth_failed)
@@ -85,6 +95,7 @@ export function LoginPage() {
           defaultTheme?: string;
           instance?: "dev" | "prod";
           instanceTheme?: string | null;
+          mfaTrustedDeviceDays?: number;
         };
       }>("/api/v1/config");
       return res.data;
@@ -98,6 +109,19 @@ export function LoginPage() {
       return res.data;
     },
   });
+
+  const trustedDeviceDays = (() => {
+    if (challengeId != null && passwordTrustDays != null) return passwordTrustDays;
+    if (oauthChallenge) {
+      if (oauthTrustDays != null && Number.isFinite(oauthTrustDays)) {
+        return Math.max(0, Math.floor(oauthTrustDays));
+      }
+      return typeof configQuery.data?.mfaTrustedDeviceDays === "number"
+        ? configQuery.data.mfaTrustedDeviceDays
+        : 0;
+    }
+    return 0;
+  })();
 
   useEffect(() => {
     if (!configQuery.data) return;
@@ -125,7 +149,11 @@ export function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       if (isMfaChallenge(res.data)) {
-        return { kind: "mfa" as const, challengeId: res.data.challengeId };
+        return {
+          kind: "mfa" as const,
+          challengeId: res.data.challengeId,
+          trustedDeviceDays: res.data.trustedDeviceDays ?? 0,
+        };
       }
       const sessionRes = await fetch("/api/v1/auth/session", {
         credentials: "include",
@@ -144,6 +172,8 @@ export function LoginPage() {
     onSuccess: (result) => {
       if (result.kind === "mfa") {
         setChallengeId(result.challengeId);
+        setPasswordTrustDays(result.trustedDeviceDays);
+        setTrustDevice(false);
         setMfaCode("");
         setError(null);
         return;
@@ -160,7 +190,11 @@ export function LoginPage() {
       if (!activeChallengeId) throw new Error("Missing MFA challenge.");
       const res = await apiJson<{ data: UserProfile }>("/api/v1/auth/mfa/verify", {
         method: "POST",
-        body: JSON.stringify({ challengeId: activeChallengeId, code: mfaCode }),
+        body: JSON.stringify({
+          challengeId: activeChallengeId,
+          code: mfaCode,
+          trustDevice: trustedDeviceDays > 0 ? trustDevice : false,
+        }),
       });
       const sessionRes = await fetch("/api/v1/auth/session", {
         credentials: "include",
@@ -173,6 +207,8 @@ export function LoginPage() {
     },
     onSuccess: (profile) => {
       setChallengeId(null);
+      setPasswordTrustDays(null);
+      setTrustDevice(false);
       finishLogin(profile);
     },
     onError: (err: Error) => {
@@ -232,6 +268,20 @@ export function LoginPage() {
                 autoFocus
               />
             </label>
+            {trustedDeviceDays > 0 ? (
+              <label
+                className="field"
+                style={{ flexDirection: "row", alignItems: "center", gap: "0.5rem" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={trustDevice}
+                  onChange={(e) => setTrustDevice(e.target.checked)}
+                  disabled={pending}
+                />
+                <span>Trust this device for {trustedDeviceDays} days</span>
+              </label>
+            ) : null}
             {error ? (
               <p className="error-text login-form__error" role="alert">
                 {error}
@@ -247,10 +297,13 @@ export function LoginPage() {
               disabled={pending}
               onClick={() => {
                 setChallengeId(null);
+                setPasswordTrustDays(null);
                 setMfaCode("");
+                setTrustDevice(false);
                 setError(null);
                 const next = new URLSearchParams(params);
                 next.delete("mfaChallenge");
+                next.delete("mfaTrustDays");
                 navigate({ pathname: "/login", search: next.toString() }, { replace: true });
               }}
             >
