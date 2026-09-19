@@ -12,16 +12,23 @@ type MfaStatus = {
   enrollmentRequired: boolean;
   canDisable: boolean;
   serverKeyConfigured: boolean;
+  hasRecoveryCodes: boolean;
+  recoveryCodesRemaining: number;
 };
 
 type EnrollStart = { secret: string; otpauthUri: string };
+
+type MfaWithCodes = MfaStatus & { recoveryCodes: string[] };
 
 export function ProfileMfaSection() {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [disableCode, setDisableCode] = useState("");
+  const [regenCode, setRegenCode] = useState("");
+  const [regenOpen, setRegenOpen] = useState(false);
   const [enroll, setEnroll] = useState<EnrollStart | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [recoveryOnce, setRecoveryOnce] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -64,18 +71,18 @@ export function ProfileMfaSection() {
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiJson<{ data: MfaStatus }>("/api/v1/users/me/mfa/enroll/confirm", {
+      const res = await apiJson<{ data: MfaWithCodes }>("/api/v1/users/me/mfa/enroll/confirm", {
         method: "POST",
         body: JSON.stringify({ code }),
       });
       return res.data;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       setEnroll(null);
       setQrDataUrl(null);
       setCode("");
-      setFlash("Authenticator enrolled.");
-      window.setTimeout(() => setFlash(null), 2000);
+      setRecoveryOnce(data.recoveryCodes);
+      setFlash(null);
       await qc.invalidateQueries({ queryKey: ["users", "me", "mfa"] });
     },
     onError: (err: Error) => setError(err.message),
@@ -111,6 +118,26 @@ export function ProfileMfaSection() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const regenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiJson<{ data: MfaWithCodes }>(
+        "/api/v1/users/me/mfa/recovery-codes/regenerate",
+        {
+          method: "POST",
+          body: JSON.stringify({ code: regenCode }),
+        },
+      );
+      return res.data;
+    },
+    onSuccess: async (data) => {
+      setRegenCode("");
+      setRegenOpen(false);
+      setRecoveryOnce(data.recoveryCodes);
+      await qc.invalidateQueries({ queryKey: ["users", "me", "mfa"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const revokeTrustMutation = useMutation({
     mutationFn: async () => {
       const res = await apiJson<{ data: { revoked: number } }>(
@@ -132,11 +159,60 @@ export function ProfileMfaSection() {
 
   const status = statusQuery.data;
 
+  if (recoveryOnce) {
+    const copyAll = recoveryOnce.join("\n");
+    return (
+      <section className="profile-settings__section">
+        <h3 className="profile-settings__heading">Multi-factor authentication</h3>
+        <div className="admin-form-card admin-form-card--warn">
+          <h4 className="admin-form-card__title">Save your backup codes</h4>
+          <p className="muted small">
+            Store these codes somewhere safe. Each code works once if you lose your authenticator.
+            They will not be shown again.
+          </p>
+          <ul style={{ listStyle: "none", padding: 0, margin: "0.75rem 0", fontFamily: "monospace" }}>
+            {recoveryOnce.map((c) => (
+              <li key={c}>
+                <code>{c}</code>
+              </li>
+            ))}
+          </ul>
+          <div className="profile-settings__actions">
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => {
+                void navigator.clipboard.writeText(copyAll);
+                setFlash("Codes copied.");
+                window.setTimeout(() => setFlash(null), 1500);
+              }}
+            >
+              Copy all
+            </button>
+            <button
+              type="button"
+              className="btn primary small"
+              onClick={() => {
+                setRecoveryOnce(null);
+                setFlash("Authenticator enrolled. Backup codes saved.");
+                window.setTimeout(() => setFlash(null), 2500);
+              }}
+            >
+              I saved my codes
+            </button>
+          </div>
+          {flash ? <p className="ok-text">{flash}</p> : null}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="profile-settings__section">
       <h3 className="profile-settings__heading">Multi-factor authentication</h3>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Use Google Authenticator, Microsoft Authenticator, or any TOTP app.
+        Use Google Authenticator, Microsoft Authenticator, or any TOTP app. After setup you will
+        receive backup codes to keep somewhere safe.
       </p>
       {statusQuery.isLoading ? <p className="muted">Loading…</p> : null}
       {statusQuery.isError ? (
@@ -156,6 +232,15 @@ export function ProfileMfaSection() {
               </span>
             ) : null}
           </p>
+          {status.enrolled ? (
+            <p className="muted small">
+              Backup codes remaining:{" "}
+              <strong>{status.recoveryCodesRemaining}</strong>
+              {!status.hasRecoveryCodes
+                ? " — regenerate a new set so you can recover without an administrator."
+                : null}
+            </p>
+          ) : null}
           {status.enrollmentRequired && !status.enrolled ? (
             <p className="error-text" role="status">
               MFA is required for your account
@@ -183,6 +268,70 @@ export function ProfileMfaSection() {
             >
               Set up authenticator
             </button>
+          ) : null}
+          {status.enrolled ? (
+            <div style={{ marginTop: "0.75rem" }}>
+              {!regenOpen ? (
+                <button
+                  type="button"
+                  className="btn small"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "Generate a new set of backup codes? The previous codes will stop working immediately.",
+                      )
+                    ) {
+                      return;
+                    }
+                    setError(null);
+                    setRegenOpen(true);
+                    setRegenCode("");
+                  }}
+                >
+                  Regenerate backup codes
+                </button>
+              ) : (
+                <div>
+                  <div className="field">
+                    <label htmlFor="mfa-regen-code">
+                      Enter current authenticator code to regenerate backup codes
+                    </label>
+                    <input
+                      id="mfa-regen-code"
+                      value={regenCode}
+                      onChange={(e) => setRegenCode(e.target.value)}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="6-digit code"
+                    />
+                  </div>
+                  <div className="profile-settings__actions">
+                    <button
+                      type="button"
+                      className="btn primary small"
+                      disabled={regenMutation.isPending || regenCode.trim().length < 6}
+                      onClick={() => {
+                        setError(null);
+                        regenMutation.mutate();
+                      }}
+                    >
+                      Generate new codes
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      disabled={regenMutation.isPending}
+                      onClick={() => {
+                        setRegenOpen(false);
+                        setRegenCode("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : null}
           {status.canDisable ? (
             <div style={{ marginTop: "0.75rem" }}>
@@ -212,8 +361,8 @@ export function ProfileMfaSection() {
           ) : null}
           {status.enrolled && !status.canDisable ? (
             <p className="muted small">
-              MFA is required for your account and cannot be disabled here. An administrator can
-              clear MFA if you lose access to your authenticator.
+              MFA is required for your account and cannot be disabled here. Use a backup code if you
+              lose your authenticator, or ask an administrator to clear MFA.
             </p>
           ) : null}
           {status.enrolled ? (
@@ -248,7 +397,8 @@ export function ProfileMfaSection() {
       {enroll ? (
         <>
           <p className="muted">
-            Scan this QR code with your authenticator app, or enter the secret manually:
+            Scan this QR code with your authenticator app, or enter the secret manually. After you
+            confirm, you will receive backup codes — save them securely.
           </p>
           {qrDataUrl ? (
             <img

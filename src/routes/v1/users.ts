@@ -20,6 +20,7 @@ import {
   confirmMfaEnrollment,
   disableMfa,
   getMfaStatus,
+  regenerateRecoveryCodes,
   startMfaEnrollment,
 } from "../../services/mfa.js";
 import { revokeAllTrustedDevices } from "../../services/mfaTrustedDevices.js";
@@ -126,11 +127,16 @@ usersRouter.post("/me/mfa/enroll/confirm", async (req, res) => {
   try {
     const { code } = mfaCodeBody.parse(req.body);
     const user = await getCurrentUser(db);
-    await confirmMfaEnrollment(db, user.id, code);
+    const { recoveryCodes } = await confirmMfaEnrollment(db, user.id, code);
     const refreshed = await getCurrentUser(db);
     res.locals.logUserId = user.id;
     res.locals.logMessage = "MFA enrolled";
-    res.json({ data: await getMfaStatus(db, refreshed) });
+    res.json({
+      data: {
+        ...(await getMfaStatus(db, refreshed)),
+        recoveryCodes,
+      },
+    });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
@@ -175,6 +181,26 @@ usersRouter.post("/me/mfa/trusted-devices/revoke-all", async (_req, res) => {
     res.locals.logMessage = `Revoked ${removed} MFA trusted device(s)`;
     res.json({ data: { revoked: removed } });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.post("/me/mfa/recovery-codes/regenerate", async (req, res) => {
+  try {
+    const { code } = mfaCodeBody.parse(req.body);
+    const user = await getCurrentUser(db);
+    const { recoveryCodes } = await regenerateRecoveryCodes(db, user.id, code);
+    const refreshed = await getCurrentUser(db);
+    res.locals.logUserId = user.id;
+    res.locals.logMessage = "MFA recovery codes regenerated";
+    res.json({
+      data: {
+        ...(await getMfaStatus(db, refreshed)),
+        recoveryCodes,
+      },
+    });
+  } catch (err) {
+    if (serviceError(res, err)) return;
     handleRouteError(res, err);
   }
 });

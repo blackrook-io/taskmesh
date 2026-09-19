@@ -309,6 +309,13 @@
       "when": 1789779281805,
       "tag": "0043_chilly_katie_power",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789780461978,
+      "tag": "0044_short_bullseye",
+      "breakpoints": true
     }
   ]
 }

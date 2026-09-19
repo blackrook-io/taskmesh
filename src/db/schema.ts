@@ -279,6 +279,30 @@ export const mfaTrustedDevices = pgTable(
   ],
 );
 
+/**
+ * Single-use MFA recovery / backup codes (T0140).
+ * Plaintext shown once; only SHA-256 of the normalized code is stored.
+ */
+export const mfaRecoveryCodes = pgTable(
+  "mfa_recovery_codes",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** SHA-256 hex of normalized code (uppercase alnum, no dashes). */
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("mfa_recovery_codes_user_id_idx").on(t.userId),
+    uniqueIndex("mfa_recovery_codes_user_hash_uidx").on(t.userId, t.codeHash),
+  ],
+);
+
 /** Browser login sessions (opaque id in httpOnly cookie). */
 export const sessions = pgTable(
   "sessions",
@@ -1455,6 +1479,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   apiKeys: many(apiKeys),
   mfaLoginChallenges: many(mfaLoginChallenges),
   mfaTrustedDevices: many(mfaTrustedDevices),
+  mfaRecoveryCodes: many(mfaRecoveryCodes),
   userRoles: many(userRoles),
   passwordHistory: many(passwordHistory),
   identities: many(userIdentities),
@@ -1472,6 +1497,13 @@ export const mfaLoginChallengesRelations = relations(mfaLoginChallenges, ({ one 
 export const mfaTrustedDevicesRelations = relations(mfaTrustedDevices, ({ one }) => ({
   user: one(users, {
     fields: [mfaTrustedDevices.userId],
+    references: [users.id],
+  }),
+}));
+
+export const mfaRecoveryCodesRelations = relations(mfaRecoveryCodes, ({ one }) => ({
+  user: one(users, {
+    fields: [mfaRecoveryCodes.userId],
     references: [users.id],
   }),
 }));

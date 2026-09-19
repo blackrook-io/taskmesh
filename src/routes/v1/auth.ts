@@ -39,7 +39,7 @@ const loginBody = z
 const mfaVerifyBody = z
   .object({
     challengeId: z.string().trim().min(1).max(128),
-    code: z.string().trim().min(6).max(12),
+    code: z.string().trim().min(6).max(20),
     trustDevice: z.boolean().optional(),
   })
   .strict();

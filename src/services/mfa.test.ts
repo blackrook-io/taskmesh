@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
+import {
+  generateRecoveryCodeSet,
+  hashRecoveryCode,
+  looksLikeRecoveryCode,
+  normalizeRecoveryCode,
+  RECOVERY_CODE_COUNT,
+} from "../lib/mfaRecoveryCodes.js";
 import { generateTotpSecret, totpUri, verifyTotpCode, buildTotp } from "../lib/totp.js";
 import {
   graceDeadline,
@@ -55,5 +62,20 @@ describe("mfa trust token hashing", () => {
     assert.equal(hash.length, 64);
     assert.match(hash, /^[0-9a-f]+$/);
     assert.notEqual(hash, token);
+  });
+});
+
+describe("mfa recovery codes", () => {
+  it("generates unique formatted codes and hashes consistently", () => {
+    const codes = generateRecoveryCodeSet();
+    assert.equal(codes.length, RECOVERY_CODE_COUNT);
+    const norms = new Set(codes.map((c) => normalizeRecoveryCode(c)));
+    assert.equal(norms.size, RECOVERY_CODE_COUNT);
+    for (const c of codes) {
+      assert.match(c, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+      assert.equal(looksLikeRecoveryCode(c), true);
+      assert.equal(hashRecoveryCode(c), hashRecoveryCode(c.replace("-", "").toLowerCase()));
+    }
+    assert.equal(looksLikeRecoveryCode("123456"), false);
   });
 });
