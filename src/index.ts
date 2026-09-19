@@ -17,7 +17,9 @@ import {
   stopApiRequestLogPruner,
 } from "./services/apiRequestLogPrune.js";
 import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
+import { assertConfiguredEnvKeys } from "./lib/envKeys.js";
 
+assertConfiguredEnvKeys();
 warnIfRateLimitDisableIgnored();
 ensureUploadDir();
 ensureBackupDir();

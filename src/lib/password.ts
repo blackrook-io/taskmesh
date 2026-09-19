@@ -1,11 +1,13 @@
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 
-const SCRYPT_N = 16384;
+/** OWASP-aligned cost (2^17). Stored hashes carry N/r/p so older values still verify. */
+const SCRYPT_N = 131072;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const KEY_LEN = 64;
 const SALT_LEN = 16;
-const MAXMEM = 64 * 1024 * 1024;
+/** ~128 * N * r ≈ 134 MB; headroom for Node scrypt maxmem checks. */
+const MAXMEM = 256 * 1024 * 1024;
 
 /** Cheap denylist — common words / patterns (normalized), not a full dictionary. */
 const COMMON_WORDS = [
@@ -162,24 +164,50 @@ export async function hashPassword(password: string): Promise<string> {
   return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("base64")}$${derived.toString("base64")}`;
 }
 
+function parseScryptParts(
+  stored: string,
+): { N: number; r: number; p: number; salt: Buffer; expected: Buffer } | null {
+  const parts = stored.split("$");
+  if (parts.length !== 6 || parts[0] !== "scrypt") return null;
+  const N = Number(parts[1]);
+  const r = Number(parts[2]);
+  const p = Number(parts[3]);
+  if (![N, r, p].every((n) => Number.isFinite(n) && n > 0)) return null;
+  try {
+    const salt = Buffer.from(parts[4]!, "base64");
+    const expected = Buffer.from(parts[5]!, "base64");
+    if (salt.length === 0 || expected.length === 0) return null;
+    return { N, r, p, salt, expected };
+  } catch {
+    return null;
+  }
+}
+
+/** True when the stored hash uses older/weaker parameters than the current targets. */
+export function needsPasswordRehash(stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  const parsed = parseScryptParts(stored);
+  if (!parsed) return false;
+  return parsed.N !== SCRYPT_N || parsed.r !== SCRYPT_R || parsed.p !== SCRYPT_P;
+}
+
 export async function verifyPassword(
   password: string,
   stored: string | null | undefined,
 ): Promise<boolean> {
   if (!stored) return false;
-  const parts = stored.split("$");
-  if (parts.length !== 6 || parts[0] !== "scrypt") return false;
-  const N = Number(parts[1]);
-  const r = Number(parts[2]);
-  const p = Number(parts[3]);
-  const salt = Buffer.from(parts[4]!, "base64");
-  const expected = Buffer.from(parts[5]!, "base64");
-  const derived = await scryptAsync(password, salt, expected.length, {
-    N,
-    r,
-    p,
-    maxmem: MAXMEM,
-  });
-  if (derived.length !== expected.length) return false;
-  return timingSafeEqual(derived, expected);
+  const parsed = parseScryptParts(stored);
+  if (!parsed) return false;
+  try {
+    const derived = await scryptAsync(password, parsed.salt, parsed.expected.length, {
+      N: parsed.N,
+      r: parsed.r,
+      p: parsed.p,
+      maxmem: MAXMEM,
+    });
+    if (derived.length !== parsed.expected.length) return false;
+    return timingSafeEqual(derived, parsed.expected);
+  } catch {
+    return false;
+  }
 }

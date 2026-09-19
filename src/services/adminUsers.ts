@@ -10,6 +10,7 @@ import { revokeAllTrustedDevices } from "./mfaTrustedDevices.js";
 import { allocateUserNumber } from "./users.js";
 import { archiveCurrentPasswordHash } from "./passwordHistory.js";
 import { guardLastAdministrator, listRolesByUserIds } from "./roles.js";
+import { destroyAllSessionsForUser } from "./auth.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -146,6 +147,7 @@ export async function lockUser(db: Db, userId: number): Promise<AdminUserRow> {
     .set({ lockedAt: now, lockReason: "admin", updatedAt: now })
     .where(eq(schema.users.id, userId))
     .returning();
+  await destroyAllSessionsForUser(db, userId);
   return toAdminUser(row!);
 }
 
@@ -235,6 +237,7 @@ export async function resetUserPassword(
     .set({ passwordHash, updatedAt: new Date() })
     .where(eq(schema.users.id, userId))
     .returning();
+  await destroyAllSessionsForUser(db, userId);
   return toAdminUser(row!);
 }
 
@@ -261,6 +264,7 @@ export async function deactivateUser(db: Db, userId: number): Promise<AdminUserR
     .set({ status: "revoked", revokedAt: now, updatedAt: now })
     .where(eq(schema.apiKeys.userId, userId));
 
+  await destroyAllSessionsForUser(db, userId);
   return toAdminUser(row!);
 }
 

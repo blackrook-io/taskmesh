@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { readStrongEnvKey } from "./envKeys.js";
 
 const ALGO = "aes-256-gcm";
 const IV_LEN = 12;
@@ -11,9 +12,14 @@ export class OauthCredentialsKeyError extends Error {
   }
 }
 
-/** Derive a 32-byte AES key from OAUTH_CREDENTIALS_KEY (any length string). */
+/** Derive a 32-byte AES key from OAUTH_CREDENTIALS_KEY (min 32 chars when set). */
 export function getOauthCredentialsKey(): Buffer {
-  const raw = process.env.OAUTH_CREDENTIALS_KEY?.trim();
+  let raw: string | null;
+  try {
+    raw = readStrongEnvKey("OAUTH_CREDENTIALS_KEY");
+  } catch (err) {
+    throw new OauthCredentialsKeyError(err instanceof Error ? err.message : String(err));
+  }
   if (!raw) {
     throw new OauthCredentialsKeyError(
       "OAUTH_CREDENTIALS_KEY is not set. Set it in the environment before enabling OAuth providers.",
@@ -23,7 +29,11 @@ export function getOauthCredentialsKey(): Buffer {
 }
 
 export function hasOauthCredentialsKey(): boolean {
-  return Boolean(process.env.OAUTH_CREDENTIALS_KEY?.trim());
+  try {
+    return readStrongEnvKey("OAUTH_CREDENTIALS_KEY") != null;
+  } catch {
+    return false;
+  }
 }
 
 /** Encrypt plaintext → base64url(iv || tag || ciphertext). */

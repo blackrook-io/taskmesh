@@ -13,6 +13,7 @@ import {
   INVALID_CURRENT_PASSWORD_MESSAGE,
   listPriorPasswordHashes,
 } from "./passwordHistory.js";
+import { destroyAllSessionsForUser } from "./auth.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -108,6 +109,7 @@ export async function setCurrentUserPassword(
       code: "update_failed",
     });
   }
+  await destroyAllSessionsForUser(db, current.id);
   return row;
 }
 

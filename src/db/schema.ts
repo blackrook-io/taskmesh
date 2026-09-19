@@ -217,6 +217,11 @@ export const users = pgTable("users", {
   /** Set when TOTP MFA is successfully enrolled. */
   mfaEnabledAt: timestamp("mfa_enabled_at", { withTimezone: true }),
   /**
+   * Last accepted TOTP time-step counter (replay protection within the ±30s window).
+   * Cleared when MFA is cleared.
+   */
+  mfaTotpLastStep: integer("mfa_totp_last_step"),
+  /**
    * First successful primary auth under MFA enforcement while not yet enrolled (grace clock).
    */
   mfaGraceStartedAt: timestamp("mfa_grace_started_at", { withTimezone: true }),

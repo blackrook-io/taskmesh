@@ -1,0 +1,92 @@
+# T0146 — Security Phase 5: Auth lifecycle and crypto hardening
+
+**Task:** T0146 (id 159) · **Branch (on approval):** `T0146-auth-crypto-hardening`  
+**Source:** `.cursor/plans/2026-09-security-audit-remediation.mdc` Phase 5  
+**Version on finish-up:** MINOR bump (new Drizzle migration for TOTP replay column)
+
+## Decisions (interview 2026-09-18)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Password change sessions | Destroy **all** sessions (including the current one) → force re-login |
+| 2 | New login / other events | **Safest practice:** destroy **all other** sessions when minting a new session (single concurrent browser session). Also destroy **all** on password change, MFA clear/disable, admin lock, admin deactivate, admin password reset |
+| 3 | KEK minimum | Fail-fast when set if length **&lt; 32**; document in `.env.example` |
+| 4 | OAuth MFA challenge | **HttpOnly** short-lived cookie + server-side verify; challenge id never in URL / Referer / SPA JS. Password MFA path aligned (no `challengeId` in JSON) |
+| 5 | scrypt | Raise `N` to **2¹⁷**, `MAXMEM` ≥ ~134 MB; rehash on successful password login |
+| 6 | Scope | All six Phase 5 items; **no deferrals** |
+
+## Work items
+
+### 1. scrypt hardening (`src/lib/password.ts`)
+
+- Set `SCRYPT_N = 131072` (2¹⁷), raise `MAXMEM` to at least `134 * 1024 * 1024` (Node scrypt needs ~128×N×r bytes).
+- Keep verifying with parameters parsed from the stored hash (already done).
+- Add `needsPasswordRehash(stored)` (true when stored `N`/`r`/`p` differ from current targets).
+- On successful email/password primary auth (`loginWithEmailPassword` or immediately after in the login route), if rehash needed: `hashPassword` + update `users.password_hash` (do not touch password history for this silent upgrade).
+- Wrap `verifyPassword`’s `scryptAsync` in try/catch → return `false` on malformed hash (cheap correctness win called out in the audit Phase 7; in-scope as part of password module touch).
+- Unit tests: new hashes use N=131072; old N=16384 still verifies; rehash helper detects drift.
+
+### 2. Session invalidation (`src/services/auth.ts` + call sites)
+
+- Add `destroyAllSessionsForUser(db, userId)` and `destroyOtherSessionsForUser(db, userId, keepSessionId)`.
+- Call **destroy all** from:
+  - Profile password change (`src/services/users.ts`)
+  - Admin password reset (`src/services/adminUsers.ts`)
+  - MFA clear / disable (`clearMfaForUser` and any self-service disable path)
+  - Admin lock + deactivate
+- Call **destroy other** immediately after every successful `createSession` (password login, MFA verify, OAuth session mint) so only the new session remains.
+- Profile password change response: clear session cookie (client already 401s / redirects to login).
+- Tests covering wipe behavior.
+
+### 3. TOTP replay protection (migration)
+
+- Add nullable `users.mfa_totp_last_step` (integer) — last accepted TOTP time-step counter.
+- Change `verifyTotpCode` to return the accepted step (or null), and reject when step ≤ stored last step for that user.
+- Persist new step only after successful verify (login challenge + enrollment confirm paths).
+- Clear `mfa_totp_last_step` when MFA is cleared.
+- Update `docs/database/platform.md` (+ overview inventory if needed); run `npm run docs:sync-schema` after migrate.
+- Tests: same code accepted twice in window → second fails.
+
+### 4. KEK strength at startup
+
+- Shared validator (min trimmed length **32**) used by `mfaCrypto` / `oauthCrypto` getters **and** a startup check in `src/index.ts` (or small `src/lib/envKeys.ts`): if env var is set and too short → throw and refuse to listen.
+- Update `.env.example` comments. Unit tests with short keys.
+
+### 5. MFA challenge cookie (OAuth + password)
+
+- New helper mirroring trust cookie (`src/lib/mfaChallengeCookie.ts`): HttpOnly, SameSite=Lax, Secure when `useSecureCookies()`, Max-Age ≈ challenge TTL, PROD/DEV name split.
+- Password `POST /login` MFA branch: set cookie; JSON returns `{ mfaRequired, trustedDeviceDays }` **without** `challengeId`.
+- OAuth callback MFA branch: set cookie; redirect to `/login` with `returnTo` (+ optional non-secret `mfa=1` / `mfaTrustDays` only — **no** `mfaChallenge` query param).
+- `POST /mfa/verify`: read challenge id from cookie (body `challengeId` removed or ignored); clear cookie on success/consume.
+- Optional thin `GET /auth/mfa/pending` if LoginPage needs trust-days without query (prefer query for trust days only, or bake into pending).
+- Update `LoginPage.tsx` (+ any types) to drop URL/body challenge id handling.
+- Clear cookie on failed/expired challenge paths where practical.
+
+### 6. Backup restore temp files (`src/services/backups.ts`)
+
+- Replace `os.tmpdir()` + default-umask write with `fs.mkdtemp(…, { recursive: true })` under mode `0o700` (or `fs.mkdtempSync` + `chmod 0o700`), write dump with `mode: 0o600`, always `unlink` in `finally`.
+
+## Out of scope
+
+- Phases 1–4 / 6–7 of the security audit plan.
+- Changing password *policy* (length/complexity) beyond hash parameters.
+- Multi-session UX / “active sessions” UI (single concurrent session is intentional for this Task).
+
+## QA checklist (draft)
+
+1. Login with an account that still has an old scrypt hash → succeeds; DB hash now shows `N=131072`.
+2. Change password in Profile → all sessions gone; must re-login everywhere (including this browser).
+3. Admin reset password / lock / deactivate → target user’s sessions wiped.
+4. Clear MFA (self or admin) → sessions wiped.
+5. Log in on browser A, then browser B → A’s session no longer works.
+6. MFA: capture a valid TOTP; use once → success; reuse same code in window → rejected.
+7. OAuth login with MFA enrolled → redirect URL has **no** `mfaChallenge`; MFA UI still works; cookie is HttpOnly.
+8. Password login MFA → response has no `challengeId`; verify still works.
+9. Short `MFA_TOTP_KEY` / `OAUTH_CREDENTIALS_KEY` → process refuses to start.
+10. Admin restore backup → temp dir `0700`, dump file `0600`, cleaned up after.
+11. `npm run lint` clean; migration applies on DEV/PROD path.
+
+## Finish-up notes
+
+- MINOR version bump + `RELEASE_NOTES.md` (Enhancements / security); skip `FEATURES.md` (hardening, not a new user-facing module).
+- Archive this plan to `.cursor/plans/executed/` on the feature branch.

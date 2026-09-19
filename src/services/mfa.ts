@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, count, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { encryptMfaSecret, decryptMfaSecret, hasMfaTotpKey } from "../lib/mfaCrypto.js";
@@ -13,6 +13,7 @@ import { generateTotpSecret, totpUri, verifyTotpCode } from "../lib/totp.js";
 import { userIsAdministrator } from "./roles.js";
 import { getSystemProperties, type MfaEnforcement } from "./systemProperties.js";
 import { revokeAllTrustedDevices, validateTrustedDevice } from "./mfaTrustedDevices.js";
+import { destroyAllSessionsForUser } from "./auth.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -33,6 +34,35 @@ function serviceErr(message: string, status: number, code: string): Error {
 
 function newChallengeId(): string {
   return randomBytes(24).toString("base64url");
+}
+
+/**
+ * Accept a TOTP code with replay protection. Returns true and persists the step
+ * when valid and newer than `users.mfa_totp_last_step`.
+ */
+export async function acceptTotpCode(
+  db: Db,
+  userId: number,
+  secretBase32: string,
+  code: string,
+  lastStep: number | null,
+): Promise<boolean> {
+  const step = verifyTotpCode(secretBase32, code);
+  if (step === null) return false;
+  if (lastStep != null && step <= lastStep) return false;
+  const now = new Date();
+  const [row] = await db
+    .update(schema.users)
+    .set({ mfaTotpLastStep: step, updatedAt: now })
+    .where(
+      and(
+        eq(schema.users.id, userId),
+        // Guard concurrent accepts of the same or older step.
+        sql`(${schema.users.mfaTotpLastStep} IS NULL OR ${schema.users.mfaTotpLastStep} < ${step})`,
+      ),
+    )
+    .returning({ id: schema.users.id });
+  return row != null;
 }
 
 export function isMfaEnrolled(user: {
@@ -205,7 +235,7 @@ export async function verifyMfaChallenge(
     } catch {
       throw serviceErr("MFA is misconfigured on the server.", 500, "mfa_misconfigured");
     }
-    ok = verifyTotpCode(secret, code);
+    ok = await acceptTotpCode(db, user.id, secret, code, user.mfaTotpLastStep ?? null);
     if (!ok && looksLikeRecoveryCode(code)) {
       ok = await consumeRecoveryCode(db, user.id, code);
     }
@@ -408,7 +438,8 @@ export async function confirmMfaEnrollment(
   } catch {
     throw serviceErr("MFA is misconfigured on the server.", 500, "mfa_misconfigured");
   }
-  if (!verifyTotpCode(secret, code)) {
+  const step = verifyTotpCode(secret, code);
+  if (step === null) {
     throw serviceErr("Invalid authenticator code.", 400, "mfa_invalid_code");
   }
   const now = new Date();
@@ -417,6 +448,7 @@ export async function confirmMfaEnrollment(
     .set({
       mfaEnabledAt: now,
       mfaGraceStartedAt: null,
+      mfaTotpLastStep: step,
       updatedAt: now,
     })
     .where(eq(schema.users.id, userId));
@@ -444,7 +476,7 @@ export async function regenerateRecoveryCodes(
   } catch {
     throw serviceErr("MFA is misconfigured on the server.", 500, "mfa_misconfigured");
   }
-  if (!verifyTotpCode(secret, totpCode)) {
+  if (!(await acceptTotpCode(db, userId, secret, totpCode, user.mfaTotpLastStep ?? null))) {
     throw serviceErr("Invalid authenticator code.", 400, "mfa_invalid_code");
   }
   const recoveryCodes = await replaceRecoveryCodes(db, userId);
@@ -477,7 +509,7 @@ export async function disableMfa(
   } catch {
     throw serviceErr("MFA is misconfigured on the server.", 500, "mfa_misconfigured");
   }
-  if (!verifyTotpCode(secret, code)) {
+  if (!(await acceptTotpCode(db, userId, secret, code, user.mfaTotpLastStep ?? null))) {
     throw serviceErr("Invalid authenticator code.", 400, "mfa_invalid_code");
   }
   await clearMfaForUser(db, userId);
@@ -490,6 +522,7 @@ export async function clearMfaForUser(db: Db, userId: number): Promise<void> {
     .set({
       mfaTotpSecretEnc: null,
       mfaEnabledAt: null,
+      mfaTotpLastStep: null,
       updatedAt: now,
     })
     .where(eq(schema.users.id, userId));
@@ -498,6 +531,7 @@ export async function clearMfaForUser(db: Db, userId: number): Promise<void> {
     .where(eq(schema.mfaLoginChallenges.userId, userId));
   await deleteRecoveryCodesForUser(db, userId);
   await revokeAllTrustedDevices(db, userId);
+  await destroyAllSessionsForUser(db, userId);
 }
 
 /** Cancel in-progress enrollment (pending secret, not yet confirmed). */

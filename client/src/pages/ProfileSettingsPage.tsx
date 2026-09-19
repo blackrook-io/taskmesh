@@ -90,13 +90,13 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
       });
       return res.data;
     },
-    onSuccess: (data) => {
-      qc.setQueryData(["users", "me"], data);
+    onSuccess: async () => {
       setPassword("");
       setPassword2("");
       setCurrentPassword("");
       setPasswordFocused(false);
-      flash("Password saved.");
+      await logout();
+      navigate("/login?reason=session", { replace: true });
     },
   });
 

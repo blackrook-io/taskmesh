@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
-import { verifyPassword } from "../lib/password.js";
+import { hashPassword, needsPasswordRehash, verifyPassword } from "../lib/password.js";
 import { getSystemProperties } from "./systemProperties.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -64,11 +64,29 @@ export async function createSession(
   const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000);
   const id = newSessionId();
   await db.insert(schema.sessions).values({ id, userId, expiresAt });
+  // Single concurrent browser session: drop every other session for this user.
+  await destroyOtherSessionsForUser(db, userId, id);
   return { id, expiresAt, maxAgeSeconds };
 }
 
 export async function destroySession(db: Db, sessionId: string): Promise<void> {
   await db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
+}
+
+export async function destroyAllSessionsForUser(db: Db, userId: number): Promise<void> {
+  await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+}
+
+export async function destroyOtherSessionsForUser(
+  db: Db,
+  userId: number,
+  keepSessionId: string,
+): Promise<void> {
+  await db
+    .delete(schema.sessions)
+    .where(
+      and(eq(schema.sessions.userId, userId), ne(schema.sessions.id, keepSessionId)),
+    );
 }
 
 async function recordFailedLogin(db: Db, userId: number): Promise<void> {
@@ -153,13 +171,22 @@ export async function loginWithEmailPassword(
   }
 
   const now = new Date();
+  const patch: {
+    failedLoginCount: number;
+    lastLoginAt: Date;
+    updatedAt: Date;
+    passwordHash?: string;
+  } = {
+    failedLoginCount: 0,
+    lastLoginAt: now,
+    updatedAt: now,
+  };
+  if (needsPasswordRehash(user.passwordHash)) {
+    patch.passwordHash = await hashPassword(password);
+  }
   const [updated] = await db
     .update(schema.users)
-    .set({
-      failedLoginCount: 0,
-      lastLoginAt: now,
-      updatedAt: now,
-    })
+    .set(patch)
     .where(eq(schema.users.id, user.id))
     .returning();
   if (!updated) {

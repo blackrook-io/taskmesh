@@ -25,8 +25,11 @@ import {
 } from "../../services/mfa.js";
 import { revokeAllTrustedDevices } from "../../services/mfaTrustedDevices.js";
 import { clearMfaTrustCookie } from "../../lib/mfaTrustCookie.js";
+import { clearSessionCookie } from "../../lib/sessionCookie.js";
+import { clearMfaChallengeCookie } from "../../lib/mfaChallengeCookie.js";
 import { attachRolesToProfile } from "../../services/roles.js";
 import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
+import { getUserById } from "../../services/auth.js";
 import {
   listIdentitiesForUser,
   unlinkIdentity,
@@ -162,10 +165,12 @@ usersRouter.post("/me/mfa/disable", async (req, res) => {
     const user = await getCurrentUser(db);
     await disableMfa(db, user.id, code);
     clearMfaTrustCookie(res);
-    const refreshed = await getCurrentUser(db);
+    clearSessionCookie(res);
+    clearMfaChallengeCookie(res);
+    const refreshed = await getUserById(db, user.id);
     res.locals.logUserId = user.id;
     res.locals.logMessage = "MFA disabled";
-    res.json({ data: await getMfaStatus(db, refreshed) });
+    res.json({ data: await getMfaStatus(db, refreshed!) });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
@@ -272,6 +277,8 @@ usersRouter.post("/me/password", async (req, res) => {
   try {
     const { password, currentPassword } = passwordBody.parse(req.body);
     const row = await setCurrentUserPassword(db, password, currentPassword);
+    clearSessionCookie(res);
+    clearMfaChallengeCookie(res);
     res.json({ data: await profilePayload(row) });
   } catch (err) {
     if (serviceError(res, err)) return;

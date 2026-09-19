@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "mfa_totp_last_step" integer;

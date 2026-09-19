@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { readStrongEnvKey } from "./envKeys.js";
 
 const ALGO = "aes-256-gcm";
 const IV_LEN = 12;
@@ -11,9 +12,14 @@ export class MfaTotpKeyError extends Error {
   }
 }
 
-/** Derive a 32-byte AES key from MFA_TOTP_KEY (any length string). */
+/** Derive a 32-byte AES key from MFA_TOTP_KEY (min 32 chars when set). */
 export function getMfaTotpKey(): Buffer {
-  const raw = process.env.MFA_TOTP_KEY?.trim();
+  let raw: string | null;
+  try {
+    raw = readStrongEnvKey("MFA_TOTP_KEY");
+  } catch (err) {
+    throw new MfaTotpKeyError(err instanceof Error ? err.message : String(err));
+  }
   if (!raw) {
     throw new MfaTotpKeyError(
       "MFA_TOTP_KEY is not set. Set it in the environment before enabling MFA enrollment.",
@@ -23,7 +29,11 @@ export function getMfaTotpKey(): Buffer {
 }
 
 export function hasMfaTotpKey(): boolean {
-  return Boolean(process.env.MFA_TOTP_KEY?.trim());
+  try {
+    return readStrongEnvKey("MFA_TOTP_KEY") != null;
+  } catch {
+    return false;
+  }
 }
 
 /** Encrypt plaintext → base64url(iv || tag || ciphertext). */
