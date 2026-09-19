@@ -11,6 +11,7 @@ import {
 import type { UserProfile } from "../types";
 import { ProfileApiKeysSection } from "../components/ProfileApiKeysSection";
 import { ProfileLinkedAccountsSection } from "../components/ProfileLinkedAccountsSection";
+import { ProfileMfaSection } from "../components/ProfileMfaSection";
 
 type Props = {
   embedded?: boolean;
@@ -282,6 +283,8 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
           </div>
 
           <ProfileLinkedAccountsSection />
+
+          <ProfileMfaSection />
 
           <ProfileApiKeysSection />
 

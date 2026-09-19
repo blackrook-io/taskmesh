@@ -5,6 +5,7 @@ import * as client from "openid-client";
 import * as schema from "../../db/schema.js";
 import { userCanAuthenticate } from "../../lib/userAuth.js";
 import { createSession } from "../auth.js";
+import { resolvePostPrimaryAuth } from "../mfa.js";
 import { assignRole, createRole, listRoles } from "../roles.js";
 import { allocateUserNumber } from "../users.js";
 import { buildAuthorizationUrl, exchangeCodeForIdentity } from "./adapters.js";
@@ -112,7 +113,15 @@ export async function startOauthFlow(
 }
 
 export type OauthCallbackResult =
-  | { ok: true; returnTo: string; sessionId: string; maxAgeSeconds: number; mode: "login" }
+  | {
+      ok: true;
+      returnTo: string;
+      sessionId: string;
+      maxAgeSeconds: number;
+      mode: "login";
+      mfaEnrollmentRequired?: boolean;
+    }
+  | { ok: true; returnTo: string; mode: "login"; mfaChallengeId: string }
   | { ok: true; returnTo: string; mode: "link" }
   | { ok: false; errorCode: string };
 
@@ -195,21 +204,47 @@ export async function completeOauthCallback(
 
   const user = await resolveLoginUser(db, provider, identity);
   if (!user) return { ok: false, errorCode: "oauth_no_account" };
+  if (user.deactivatedAt != null) return { ok: false, errorCode: "oauth_failed" };
+  if (user.lockedAt != null) {
+    return {
+      ok: false,
+      errorCode: user.lockReason === "mfa_deadline" ? "mfa_locked" : "account_locked",
+    };
+  }
   if (!userCanAuthenticate(user)) return { ok: false, errorCode: "oauth_failed" };
 
   const now = new Date();
-  await db
+  const [updated] = await db
     .update(schema.users)
     .set({ failedLoginCount: 0, lastLoginAt: now, updatedAt: now })
-    .where(eq(schema.users.id, user.id));
+    .where(eq(schema.users.id, user.id))
+    .returning();
+  const fresh = updated ?? user;
 
-  const session = await createSession(db, user.id);
+  const post = await resolvePostPrimaryAuth(db, fresh);
+  if (post.kind === "mfa_locked") {
+    return {
+      ok: false,
+      errorCode: "mfa_locked",
+    };
+  }
+  if (post.kind === "mfa_challenge") {
+    return {
+      ok: true,
+      returnTo,
+      mode: "login",
+      mfaChallengeId: post.challengeId,
+    };
+  }
+
+  const session = await createSession(db, fresh.id);
   return {
     ok: true,
     returnTo,
     sessionId: session.id,
     maxAgeSeconds: session.maxAgeSeconds,
     mode: "login",
+    mfaEnrollmentRequired: post.mfaEnrollmentRequired,
   };
 }
 

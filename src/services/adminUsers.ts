@@ -5,6 +5,7 @@ import type { RoleRef } from "../lib/roles.js";
 import { toUserRef, type UserRef } from "../lib/userFields.js";
 import { hashPassword, validatePassword } from "../lib/password.js";
 import { deleteUserDeniedReason } from "../lib/userAuth.js";
+import { clearMfaForUser } from "./mfa.js";
 import { allocateUserNumber } from "./users.js";
 import { archiveCurrentPasswordHash } from "./passwordHistory.js";
 import { guardLastAdministrator, listRolesByUserIds } from "./roles.js";
@@ -15,10 +16,13 @@ export type AdminUserRow = UserRef & {
   email: string | null;
   deactivatedAt: string | null;
   lockedAt: string | null;
+  lockReason: string | null;
   lastLoginAt: string | null;
   lastApiAt: string | null;
   hasPassword: boolean;
   failedLoginCount: number;
+  mfaEnabled: boolean;
+  mfaGraceStartedAt: string | null;
   roles: RoleRef[];
 };
 
@@ -31,10 +35,13 @@ function toAdminUser(
     email: row.email,
     deactivatedAt: row.deactivatedAt?.toISOString() ?? null,
     lockedAt: row.lockedAt?.toISOString() ?? null,
+    lockReason: row.lockReason ?? null,
     lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
     lastApiAt: row.lastApiAt?.toISOString() ?? null,
     hasPassword: Boolean(row.passwordHash),
     failedLoginCount: row.failedLoginCount,
+    mfaEnabled: row.mfaEnabledAt != null && Boolean(row.mfaTotpSecretEnc),
+    mfaGraceStartedAt: row.mfaGraceStartedAt?.toISOString() ?? null,
     roles,
   };
 }
@@ -124,9 +131,9 @@ export async function lockUser(db: Db, userId: number): Promise<AdminUserRow> {
   }
   await guardLastAdministrator(db, userId, "lock");
   const now = new Date();
-  const [row] = await db
+  const [row] =   await db
     .update(schema.users)
-    .set({ lockedAt: now, updatedAt: now })
+    .set({ lockedAt: now, lockReason: "admin", updatedAt: now })
     .where(eq(schema.users.id, userId))
     .returning();
   return toAdminUser(row!);
@@ -141,7 +148,10 @@ export async function unlockUser(db: Db, userId: number): Promise<AdminUserRow> 
     .update(schema.users)
     .set({
       lockedAt: null,
+      lockReason: null,
       failedLoginCount: 0,
+      // New grace window on next login after MFA-deadline unlock
+      mfaGraceStartedAt: null,
       updatedAt: new Date(),
     })
     .where(eq(schema.users.id, userId))
@@ -254,11 +264,23 @@ export async function reactivateUser(db: Db, userId: number): Promise<AdminUserR
       deactivatedAt: null,
       failedLoginCount: 0,
       lockedAt: null,
+      lockReason: null,
       updatedAt: new Date(),
     })
     .where(eq(schema.users.id, userId))
     .returning();
   return toAdminUser(row!);
+}
+
+export async function clearUserMfa(db: Db, userId: number): Promise<AdminUserRow> {
+  const existing = await requireUser(db, userId);
+  if (existing.deactivatedAt) {
+    throw serviceErr("Cannot clear MFA on a deactivated user", 409, "user_deactivated");
+  }
+  await clearMfaForUser(db, userId);
+  const refreshed = await requireUser(db, userId);
+  const rolesByUser = await listRolesByUserIds(db, [userId]);
+  return toAdminUser(refreshed, rolesByUser.get(userId) ?? []);
 }
 
 /** Used by deactivate cascade helpers if needed. */

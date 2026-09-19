@@ -124,6 +124,8 @@ Exact FK lists are on the domain pages.
   - `login_failure_threshold` — number (default **3**; locks account after failed sign-in attempts)
   - `session_timeout_minutes` — number (default **60**; cookie lifetime and future idle timeout)
   - `default_theme` — accent theme string: `green` \| `blue` \| `orange` \| `yellow` \| `purple` \| `red` (default `green`). Personal UI preference in the browser overrides this until cleared.
+  - `mfa_enforcement` — `none` \| `administrators` (default `none`; T0139)
+  - `mfa_grace_days` — number of days (default **7**) before MFA-deadline lock when enforcement applies
 
 ## Uploads vs database
 

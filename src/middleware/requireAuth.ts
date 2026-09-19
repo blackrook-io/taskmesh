@@ -6,6 +6,7 @@ import { sendError } from "../lib/httpError.js";
 export function isPublicV1Route(method: string, path: string): boolean {
   const normalized = path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
   if (method === "POST" && normalized === "/auth/login") return true;
+  if (method === "POST" && normalized === "/auth/mfa/verify") return true;
   if (method === "POST" && normalized === "/auth/logout") return true;
   if (method === "GET" && normalized === "/auth/session") return true;
   if (method === "GET" && normalized === "/auth/oauth/providers") return true;

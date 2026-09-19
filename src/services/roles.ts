@@ -132,11 +132,11 @@ export async function guardLastAdministrator(
   await assertNotLastAdministrator(db, userId, action);
 }
 
-export async function attachRolesToProfile(
+/** Effective roles: direct `user_roles` plus roles granted via Groups. */
+export async function listEffectiveRolesForUser(
   db: Db,
-  profile: UserProfile,
   userId: number,
-): Promise<UserProfile> {
+): Promise<RoleRef[]> {
   const direct = await listRolesForUser(db, userId);
   const viaGroupRows = await db
     .select({
@@ -152,7 +152,19 @@ export async function attachRolesToProfile(
   const byId = new Map<number, RoleRef>();
   for (const r of direct) byId.set(r.id, r);
   for (const row of viaGroupRows) byId.set(row.id, toRoleRef(row));
-  const roles = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function userIsAdministrator(db: Db, userId: number): Promise<boolean> {
+  return isAdministratorFromRoles(await listEffectiveRolesForUser(db, userId));
+}
+
+export async function attachRolesToProfile(
+  db: Db,
+  profile: UserProfile,
+  userId: number,
+): Promise<UserProfile> {
+  const roles = await listEffectiveRolesForUser(db, userId);
   return {
     ...profile,
     roles,

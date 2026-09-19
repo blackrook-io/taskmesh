@@ -1,0 +1,125 @@
+# T0139 — Implement MFA ability (TOTP)
+
+**Task:** T0139 (id 152) · Parent: T0111 · Project: TaskMesh (4)  
+**Branch (on approval):** `T0139-mfa-totp`  
+**State at plan:** Ready  
+
+## Goal
+
+Administrators can require TOTP MFA for **Administrators only**. Users may enroll Authenticator apps (Google / Microsoft — same RFC 6238 TOTP). Enforced users get a grace window (days) starting on **first login after policy applies**; missing the deadline **locks** the account until an Admin unlocks. Locked users see a clear message on the login screen.
+
+## Interview decisions (locked)
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Who is enforced | **Administrators only** (Admin setting: `No one` \| `Administrators`). Drop Project managers / Everyone. |
+| 2 | OAuth | After Google/Apple/GitHub success, MFA challenge still required when the user has MFA enrolled or is in an enforced cohort that must enroll. |
+| 3 | API keys | **See security recommendation below** (locked into this plan). |
+| 4 | Grace clock | Starts on **first successful primary auth** (password or OAuth) after enforcement applies to that user. |
+| 5 | Voluntary MFA | Users **may** enroll when policy is `No one`. |
+| 6 | Disable / Admin clear | User may disable own MFA when **not** enforced for them. Admin may **clear MFA** and **unlock** (including MFA-deadline locks) from Admin → Users. |
+| 7 | Backup codes | **Deferred** → **T0140** (Depends on T0139). |
+| 8 | Trusted device | **Deferred** → **T0141** (Depends on T0139). |
+
+### Security recommendation — API keys (Q3) — **adopted**
+
+Interactive MFA cannot run per API request. Adopt:
+
+1. **No TOTP prompt on Bearer API key auth** (keys stay automation-friendly).
+2. When MFA policy is `Administrators` and the user **is** an Administrator:
+   - **Reject API key auth** if the account is MFA-deadline locked, deactivated, or otherwise `!userCanAuthenticate`.
+   - **Require MFA enrolled** before **creating** new API keys (Profile).
+   - **Reject API key auth** if MFA is **not yet enrolled** and the grace deadline has **passed** (same lock semantics as interactive); during an open grace window, allow existing keys so agents keep working while the admin enrolls.
+3. Document in `docs/SECURITY.md`: MFA protects interactive sessions; API keys are a deliberate second factor surface — rotate/revoke on compromise; prefer short-lived keys where possible later.
+
+Rationale: full “keys ignore MFA entirely” would let a stolen Admin key bypass enforcement forever; requiring enrollment before minting new keys + denying keys after MFA lock closes the worst hole without breaking `/worktask`-style automation during grace.
+
+## Out of scope (this Task)
+
+- Backup / recovery codes → **T0140**
+- Trusted device / remember-me → **T0141**
+- SMS / email OTP, WebAuthn / passkeys
+- Enforcing MFA for non-Administrators
+- Changing `dueDate` via worktask bookkeeping
+
+## Technical approach
+
+### Schema (new Drizzle migration → MINOR bump on finish-up)
+
+- `users` (or dedicated table) fields, prefer columns on `users` + small side table:
+  - `mfa_totp_secret_enc` (nullable text) — AES-GCM with a KEK (reuse pattern from `OAUTH_CREDENTIALS_KEY` or new `MFA_CREDENTIALS_KEY`; prefer **new** env `MFA_TOTP_KEY` so OAuth and MFA secrets are separable)
+  - `mfa_enabled_at` (nullable timestamptz) — enrolled when set
+  - `mfa_grace_started_at` (nullable timestamptz) — first login under enforcement
+  - Optional: `mfa_locked_at` vs reuse existing `locked_at` — **reuse `locked_at`** and record reason via activity/admin note or a small `lock_reason` enum/text (`login_failures` | `mfa_deadline`) so login copy can differ
+- Ephemeral `mfa_login_challenges` (id, user_id, expires_at, consumed_at) — issued after password/OAuth primary auth succeeds, before session cookie; client posts TOTP against challenge id
+- System properties:
+  - `mfa_enforcement` — `"none"` | `"administrators"` (default `"none"`)
+  - `mfa_grace_days` — integer ≥ 0 (default e.g. `7`; `0` = enroll immediately / lock on next login without enroll)
+
+Update `docs/database/`, `.env.example`, SECURITY.md; run `docs:sync-schema` on finish-up path as usual.
+
+### Libraries
+
+- Server: `otpauth` (or equivalent maintained TOTP) + QR payload `otpauth://…`
+- Client: render QR (e.g. `qrcode` package) in Profile enroll UI
+
+### Auth flow
+
+1. Password / OAuth primary success → if user MFA enrolled → create **challenge**, return `{ mfaRequired: true, challengeId }` (no session cookie yet).
+2. If not enrolled but enforcement applies (Administrator + policy `administrators`):
+   - If `mfa_grace_started_at` null → set it now (first login).
+   - If within grace → create session + flag `mfaEnrollmentRequired: true` so UI nudges Profile enroll (or soft gate optional — prefer session + persistent banner / modal until enrolled).
+   - If past grace → set `locked_at` + `lock_reason=mfa_deadline`, no session; login UI message: account locked pending Admin unlock / MFA setup.
+3. `POST /auth/mfa/verify` with challenge + TOTP → `createSession` + cookie.
+4. Failed TOTP: rate-limit; do **not** increment password failed-login counter (separate counter or reuse carefully — prefer challenge-scoped attempts).
+5. Session loader unchanged once cookie exists; MFA is gate **before** session mint.
+
+### Profile UI
+
+- Enroll: show secret + QR → confirm with first TOTP → persist encrypted secret + `mfa_enabled_at`
+- Disable: confirm + current TOTP when voluntary / not enforced; blocked when enforced for this user
+- Status: enrolled / grace remaining / not enrolled
+
+### Admin UI
+
+- System Properties (or Admin MFA subsection): enforcement + grace days
+- Admin → Users: **Clear MFA** (wipe secret + enabled_at; does not unlock by itself unless combined), **Unlock** (existing + clears MFA-deadline lock reason), show MFA enrolled badge / grace / lock reason
+
+### Login UI
+
+- Second step for MFA challenge (6-digit code)
+- Distinct copy when locked for MFA deadline vs failed-password lockout
+
+### Tests
+
+- TOTP verify accept/reject window
+- Enforcement + grace start on first login
+- Lock after deadline; Admin unlock; clear MFA
+- OAuth path issues challenge when enrolled
+- API key create blocked without MFA when enforced Admin; key auth after MFA lock denied
+- User disable blocked when enforced
+
+### Docs
+
+- `docs/SECURITY.md` — MFA model, API key stance, env key
+- Schema docs + FEATURES.md (major user-facing) on finish-up
+- RELEASE_NOTES on finish-up
+
+## Deferred Tasks created
+
+| Task | Title | Link to T0139 |
+|------|-------|----------------|
+| **T0140** | MFA backup / recovery codes | Depends on T0139; parent T0111; Draft |
+| **T0141** | MFA trusted device / remember me | Depends on T0139; parent T0111; Draft |
+
+## Implementation order
+
+1. Migration + crypto helpers + system properties
+2. Enroll / disable / Admin clear APIs + Profile UI
+3. Challenge after password + OAuth; Login MFA step
+4. Grace + deadline lock + login messaging
+5. API key gates per recommendation
+6. Admin properties + user MFA badges/actions
+7. Tests + SECURITY/schema docs
+
+Open items before implement: none — interview locked. **Approved** 2026-09-18; branch `T0139-mfa-totp`; In Progress.

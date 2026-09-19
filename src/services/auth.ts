@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { verifyPassword } from "../lib/password.js";
-import { userCanAuthenticate } from "../lib/userAuth.js";
 import { getSystemProperties } from "./systemProperties.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -88,6 +87,7 @@ async function recordFailedLogin(db: Db, userId: number): Promise<void> {
   const patch: {
     failedLoginCount: number;
     lockedAt?: Date;
+    lockReason?: string;
     updatedAt: Date;
   } = {
     failedLoginCount: nextCount,
@@ -95,10 +95,16 @@ async function recordFailedLogin(db: Db, userId: number): Promise<void> {
   };
   if (shouldLockAfterFailedLogin(user.failedLoginCount, threshold)) {
     patch.lockedAt = new Date();
+    patch.lockReason = "login_failures";
   }
   await db.update(schema.users).set(patch).where(eq(schema.users.id, userId));
 }
 
+/**
+ * Verify email/password. Does not create a session (MFA/grace may follow).
+ * Locked/deactivated accounts: password is still checked so MFA-deadline
+ * messaging can surface after a correct password.
+ */
 export async function loginWithEmailPassword(
   db: Db,
   email: string,
@@ -112,7 +118,7 @@ export async function loginWithEmailPassword(
     .limit(1);
 
   const reject = async (): Promise<never> => {
-    if (user) {
+    if (user && user.lockedAt == null && user.deactivatedAt == null) {
       await recordFailedLogin(db, user.id);
     }
     throw authServiceError(401, "invalid_credentials");
@@ -121,13 +127,29 @@ export async function loginWithEmailPassword(
   if (!user || !user.passwordHash) {
     return reject();
   }
-  if (!userCanAuthenticate(user)) {
+  if (user.deactivatedAt != null) {
     return reject();
   }
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) {
     return reject();
+  }
+
+  // Correct password but locked — surface MFA deadline distinctly.
+  if (user.lockedAt != null) {
+    if (user.lockReason === "mfa_deadline") {
+      throw authServiceError(
+        403,
+        "mfa_locked",
+        "Your account is locked because multi-factor authentication was not set up in time. Contact an administrator to unlock your account.",
+      );
+    }
+    throw authServiceError(
+      403,
+      "account_locked",
+      "Your account is locked. Contact an administrator.",
+    );
   }
 
   const now = new Date();
