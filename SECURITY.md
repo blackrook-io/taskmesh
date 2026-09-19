@@ -75,7 +75,7 @@ npm run security:scan -- --base-url http://127.0.0.1:3001
 npm run security:ci
 ```
 
-Modules cover HTTP headers/auth/CSRF/API surface, repo static greps + `npm audit --omit=dev`, and optional Postgres role checks when `DATABASE_URL` is available. Color console + dated HTML logs under `security/scan/logs/`. Credentials optional via `~/.config/taskmesh/worktask.env`, `--env-file`, or `--prompt-creds` (auth checks **SKIP** with reason when missing). Full usage: [`security/scan/README.md`](security/scan/README.md).
+Modules cover HTTP headers/auth/CSRF/API surface, repo static greps + `npm audit --omit=dev` (repo root **and** `client/`), and optional Postgres role checks when `DATABASE_URL` is available. Color console + dated HTML logs under `security/scan/logs/`. Credentials optional via `~/.config/taskmesh/worktask.env`, `--env-file`, or `--prompt-creds` (auth checks **SKIP** with reason when missing). Full usage: [`security/scan/README.md`](security/scan/README.md).
 
 ## Automated CI (T0086)
 
@@ -88,7 +88,7 @@ GitHub Actions [`.github/workflows/security-ci.yml`](.github/workflows/security-
 | `npm run build --prefix client` | **hard** |
 | `npm run lint --prefix client` | **hard** (`eslint . --max-warnings 0`; T0126 cleared warn backlog / re-raised Compiler rules) |
 | `npm run security:scan -- --modules repo_static --fail-on-findings` | **hard** |
-| `npm run security:scan -- --modules repo_npm_audit --fail-on-findings` | **hard** (T0124) |
+| `npm run security:scan -- --modules repo_npm_audit --fail-on-findings` | **hard** (T0124; T0144 extends to `client/`) |
 
 CI does **not** start the app or inject credentials — HTTP/CSRF/DB modules stay manual. The workflow calls the T0121 script; it does not re-implement checks in YAML.
 
@@ -110,6 +110,7 @@ Run after adding a route or query:
 |------|--------|
 | **T0086** | Automated security tests in CI (workflow on `main`) — complete |
 | **T0124** | Production `npm audit` high/critical remediated; `repo_npm_audit` hard-gated in CI — complete |
+| **T0144** | Client production `npm audit` high/critical remediated; `repo_npm_audit` audits root + `client/` (moderate = notify) — this work |
 | **T0125** | Clean client ESLint baseline + hard-gate lint in CI — complete |
 | **T0126** | Zero client ESLint warnings; `set-state-in-effect` / refs / refresh at error; `--max-warnings 0` — complete with this work |
 | **T0112** | Ownership schema + helpers (`ownerId`, backfill) — complete |

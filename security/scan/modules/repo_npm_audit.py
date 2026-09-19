@@ -1,4 +1,4 @@
-"""npm audit (production dependencies) when run from repo root."""
+"""npm audit (production dependencies) for repo root and client/."""
 
 from __future__ import annotations
 
@@ -14,11 +14,13 @@ MODULE = "repo_npm_audit"
 # Shared docs / remediation shown whenever this check fails or needs operator action.
 DOCS = (
     "Check purpose: production deps must not have npm high/critical advisories (`npm audit --omit=dev`).",
-    "Full report: run `npm audit --omit=dev` from the repo root (human-readable) or add `--json`.",
+    "Audits both the repo root and `client/` (separate lockfiles).",
+    "Full report: run `npm audit --omit=dev` from the repo root and from `client/`.",
     "Safe-ish auto-fix for non-breaking patches: `npm audit fix` (review the diff; re-run tests).",
-    "Avoid `npm audit fix --force` unless you intentionally accept breaking upgrades (e.g. drizzle major).",
+    "Avoid `npm audit fix --force` unless you intentionally accept breaking upgrades.",
     "TaskMesh docs: SECURITY.md (threat model / residual T0086 CI) and security/scan/README.md.",
     "CI follow-up: hard-gated in GitHub Actions Security CI (`repo_npm_audit` + `--fail-on-findings`).",
+    "Moderate advisories are reported as PASS notify (help text) — they do not fail CI.",
 )
 
 # Package-specific operator notes when npm has no easy fix or upgrades are breaking.
@@ -101,6 +103,158 @@ def _package_help(name: str, vinfo: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _audit_tree(cwd: Path, label: str) -> list[CheckResult]:
+    """Run production npm audit in `cwd` and return check results for that tree."""
+    check_high = f"npm audit high/critical ({label})"
+    check_mod = f"npm audit moderate notify ({label})"
+
+    if not (cwd / "package.json").is_file():
+        return [
+            CheckResult(
+                MODULE,
+                check_high,
+                "skip",
+                f"No package.json under {label}",
+                help=(f"Expected package.json at {cwd}", *DOCS[:2]),
+            )
+        ]
+
+    try:
+        proc = subprocess.run(
+            ["npm", "audit", "--omit=dev", "--json"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return [
+            CheckResult(
+                MODULE,
+                check_high,
+                "skip",
+                "npm not found on PATH",
+                help=(
+                    "Install Node.js/npm (see INSTALL.md) so `npm audit --omit=dev` can run.",
+                    *DOCS[:2],
+                ),
+            )
+        ]
+
+    # npm audit exits non-zero when vulnerabilities exist; still parse JSON.
+    raw = proc.stdout.strip() or proc.stderr.strip()
+    if not raw:
+        return [
+            CheckResult(
+                MODULE,
+                check_high,
+                "fail",
+                f"npm audit produced no output for {label} (exit {proc.returncode})",
+                help=DOCS,
+            )
+        ]
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return [
+            CheckResult(
+                MODULE,
+                check_high,
+                "fail",
+                f"Could not parse npm audit JSON for {label} (exit {proc.returncode})",
+                help=(
+                    f"Re-run `npm audit --omit=dev` in {label}; if JSON is empty, check npm version ≥7.",
+                    *DOCS,
+                ),
+            )
+        ]
+
+    meta = data.get("metadata", {}).get("vulnerabilities", {})
+    critical = int(meta.get("critical", 0) or 0)
+    high = int(meta.get("high", 0) or 0)
+    moderate = int(meta.get("moderate", 0) or 0)
+    low = int(meta.get("low", 0) or 0)
+    info_n = int(meta.get("info", 0) or 0)
+    summary = (
+        f"{label}: critical={critical} high={high} moderate={moderate} low={low} info={info_n}"
+    )
+
+    vulns = data.get("vulnerabilities") or {}
+    high_offenders: list[str] = []
+    moderate_offenders: list[str] = []
+    high_help: list[str] = list(DOCS)
+    moderate_help: list[str] = [
+        f"NOTIFY only — moderate production advisories in `{label}` do not fail CI.",
+        "Review and remediate when practical; high/critical remain the hard gate.",
+        *DOCS[:3],
+    ]
+
+    if isinstance(vulns, dict):
+        for name, vinfo in sorted(vulns.items()):
+            if not isinstance(vinfo, dict):
+                continue
+            sev = str(vinfo.get("severity", "")).lower()
+            if sev in ("high", "critical"):
+                high_offenders.append(f"{name}({sev})")
+                high_help.append(f"—— {name} ——")
+                high_help.extend(_package_help(name, vinfo))
+            elif sev == "moderate":
+                moderate_offenders.append(name)
+                moderate_help.append(f"—— {name} ——")
+                moderate_help.extend(_package_help(name, vinfo))
+
+    results: list[CheckResult] = []
+
+    if critical or high:
+        detail = summary
+        if high_offenders:
+            detail = f"{summary}; packages: {', '.join(high_offenders[:12])}"
+        high_help.append(
+            "Findings are reported here; `npm run security:scan` still exits 0 by default. "
+            "For CI to fail the job on findings: add `--fail-on-findings`. "
+            "HTTP/DB-only: `--skip-repo` or omit module `repo_npm_audit`."
+        )
+        results.append(
+            CheckResult(
+                MODULE,
+                check_high,
+                "fail",
+                f"Production dependency audit found high/critical issues ({detail})",
+                help=tuple(high_help),
+            )
+        )
+    else:
+        results.append(
+            CheckResult(
+                MODULE,
+                check_high,
+                "pass",
+                f"No high/critical production vulns ({summary})",
+            )
+        )
+
+    if moderate:
+        mod_detail = summary
+        if moderate_offenders:
+            shown = ", ".join(moderate_offenders[:16])
+            more = len(moderate_offenders) - 16
+            if more > 0:
+                shown += f", … (+{more} more)"
+            mod_detail = f"{summary}; packages: {shown}"
+        results.append(
+            CheckResult(
+                MODULE,
+                check_mod,
+                "pass",
+                f"NOTIFY: moderate production advisories present ({mod_detail})",
+                help=tuple(moderate_help),
+            )
+        )
+
+    return results
+
+
 def run(ctx: ScanContext, _client=None) -> list[CheckResult]:
     if not ctx.repo_root:
         return [
@@ -117,107 +271,7 @@ def run(ctx: ScanContext, _client=None) -> list[CheckResult]:
         ]
 
     repo = Path(ctx.repo_root)
-    try:
-        proc = subprocess.run(
-            ["npm", "audit", "--omit=dev", "--json"],
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError:
-        return [
-            CheckResult(
-                MODULE,
-                "npm audit",
-                "skip",
-                "npm not found on PATH",
-                help=(
-                    "Install Node.js/npm (see INSTALL.md) so `npm audit --omit=dev` can run.",
-                    *DOCS[:2],
-                ),
-            )
-        ]
-
-    # npm audit exits non-zero when vulnerabilities exist; still parse JSON.
-    raw = proc.stdout.strip() or proc.stderr.strip()
-    if not raw:
-        return [
-            CheckResult(
-                MODULE,
-                "npm audit",
-                "fail",
-                f"npm audit produced no output (exit {proc.returncode})",
-                help=DOCS,
-            )
-        ]
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return [
-            CheckResult(
-                MODULE,
-                "npm audit",
-                "fail",
-                f"Could not parse npm audit JSON (exit {proc.returncode})",
-                help=(
-                    "Re-run `npm audit --omit=dev` manually; if JSON is empty, check npm version ≥7.",
-                    *DOCS,
-                ),
-            )
-        ]
-
-    # npm v7+ metadata.vulnerabilities counts
-    meta = data.get("metadata", {}).get("vulnerabilities", {})
-    critical = int(meta.get("critical", 0) or 0)
-    high = int(meta.get("high", 0) or 0)
-    moderate = int(meta.get("moderate", 0) or 0)
-    low = int(meta.get("low", 0) or 0)
-    info_n = int(meta.get("info", 0) or 0)
-    summary = (
-        f"critical={critical} high={high} moderate={moderate} low={low} info={info_n}"
-    )
-
-    vulns = data.get("vulnerabilities") or {}
-    offenders: list[str] = []
-    help_lines: list[str] = list(DOCS)
-    if isinstance(vulns, dict):
-        for name, vinfo in sorted(vulns.items()):
-            if not isinstance(vinfo, dict):
-                continue
-            sev = str(vinfo.get("severity", "")).lower()
-            if sev not in ("high", "critical"):
-                continue
-            offenders.append(f"{name}({sev})")
-            help_lines.append(f"—— {name} ——")
-            help_lines.extend(_package_help(name, vinfo))
-
-    detail = summary
-    if offenders:
-        detail = f"{summary}; packages: {', '.join(offenders[:12])}"
-
-    if critical or high:
-        help_lines.append(
-            "Findings are reported here; `npm run security:scan` still exits 0 by default. "
-            "For CI to fail the job on findings: add `--fail-on-findings`. "
-            "HTTP/DB-only: `--skip-repo` or omit module `repo_npm_audit`."
-        )
-        return [
-            CheckResult(
-                MODULE,
-                "npm audit high/critical",
-                "fail",
-                f"Production dependency audit found high/critical issues ({detail})",
-                help=tuple(help_lines),
-            )
-        ]
-
-    return [
-        CheckResult(
-            MODULE,
-            "npm audit high/critical",
-            "pass",
-            f"No high/critical production vulns ({summary})",
-        )
-    ]
+    results: list[CheckResult] = []
+    results.extend(_audit_tree(repo, "root"))
+    results.extend(_audit_tree(repo / "client", "client"))
+    return results

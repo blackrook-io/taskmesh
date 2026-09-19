@@ -1,0 +1,76 @@
+# T0144 — Security Phase 3: Client dependency vulnerabilities
+
+**Task:** T0144 (id 157) · **Priority:** urgent · **State at plan:** ready  
+**Branch (on approval):** `T0144-client-dep-vulns`  
+**Parent plan:** `.cursor/plans/2026-09-security-audit-remediation.mdc` Phase 3
+
+## Goal
+
+Clear reachable **high** production advisories in `client/` and extend CI so client npm audit cannot silently regress (today only root is gated).
+
+## Current baseline (PROD tree / `main`)
+
+`cd client && npm audit --omit=dev` → **51** total (**6 high**, 45 moderate, 0 critical).
+
+| High package | Path | Fix direction |
+|--------------|------|---------------|
+| `@tiptap/core` (≤3.30.4) | direct TipTap stack | bump all `@tiptap/*` → **≥3.30.5** (latest 3.31.3) |
+| `pdfjs-dist` (≥5.6.83 &lt;6.2.108) | `PdfReader`, `pdfMeta` | bump → **≥6.2.108** (latest 6.3.289; **semver major**) |
+| `react-router` (via `react-router-dom@7.17.0`) | SPA routing / OAuth `returnTo` | bump `react-router-dom` → **≥7.18.2** (latest 7.18.4) |
+| `@xmldom/xmldom` (≤0.8.14) | transitive via `epubjs@0.3.93` | **prefer npm override → ≥0.9.12**; do **not** jump to `epubjs@0.4.2` by default (that release depends on legacy `xmldom@^0.1.27`, not `@xmldom/xmldom`) |
+| `lodash-es` (≤4.17.23) | transitive (mermaid / Excalidraw) | **npm override → ≥4.18.1** so CI gate can pass |
+| `nanoid` (mixed 3.x/4.x under Excalidraw) | transitive | **npm override** to patched lines (e.g. 3.3.19+ / 5.1.16+) so CI gate can pass |
+
+Moderate findings (mostly TipTap fan-out of the same core issue, plus Excalidraw/mermaid) should collapse once TipTap + overrides land; residual moderates are acceptable if the hard gate remains **high/critical only** (matches root `repo_npm_audit` today).
+
+## Scope
+
+1. **Upgrade / pin client deps** in `client/package.json` (+ lockfile):
+   - Align all direct `@tiptap/*` to a single patched version (≥3.30.5).
+   - `pdfjs-dist` ≥6.2.108; fix any worker/import path breakage in `PdfReader.tsx` / `pdfMeta.ts`.
+   - `react-router-dom` ≥7.18.2.
+   - Add `overrides` for `@xmldom/xmldom`, `lodash-es`, and `nanoid` as needed to clear **high/critical** from `npm audit --omit=dev` in `client/`.
+   - Keep `epubjs` on **0.3.x** unless QA forces a major (document why if we must).
+2. **Manual / smoke re-test** after bump: PDF reader, EPUB reader, Excalidraw canvas, Markdown edit/preview (TipTap), login/`returnTo` navigation.
+3. **CI / scan suite:**
+   - Extend `security/scan/modules/repo_npm_audit.py` to run production audit for **repo root and `client/`** (two check results, or one combined fail if either has high/critical).
+   - Ensure `.github/workflows/security-ci.yml` still invokes `repo_npm_audit` with `--fail-on-findings` (no separate job required if the module covers both trees).
+   - Update module docs strings / `security/scan/README.md` briefly if they say “repo root only”.
+4. **No schema / no auth changes.** PATCH version bump on finish-up only.
+
+## Out of scope (defer → new Task if needed)
+
+- Phase 4+ items from the parent security plan.
+- Replacing Excalidraw / mermaid solely to eliminate transitive moderates.
+- Changing the severity gate to fail on **moderate** (would be a policy change).
+- Host hardening / Phase 2 IDOR work.
+
+## Implementation notes
+
+- Root already uses `package.json` `overrides` for `qs` / `uuid`; mirror the pattern under **`client/package.json`** (npm overrides are per lockfile tree).
+- After install: `cd client && npm audit --omit=dev` must report **0 high / 0 critical** before considering the scan extension “green.”
+- `pdfjs-dist` 6.x: verify `pdf.worker.min.mjs` import still resolves; adjust Vite `?url` import if the package layout changed.
+- TipTap: bump every direct `@tiptap/*` together to avoid mixed versions.
+- Do **not** run `npm audit fix --force` blindly; prefer explicit version pins + overrides.
+
+## Decisions (approved 2026-09-18)
+
+1. **CI gate bar:** fail only on high/critical. **Notify** (pass detail / help) when moderate findings remain — do not fail the job.
+2. **epubjs:** stay on 0.3.x + `@xmldom/xmldom` override ≥0.9.12.
+3. **Transitive highs (lodash-es, nanoid):** clear via `client/package.json` `overrides` for now.
+4. **Residual moderates:** accept if high/critical are zero.
+
+## Acceptance
+
+- [x] Client production audit: **0 high, 0 critical** (also 0 moderate after overrides).
+- [x] `repo_npm_audit` audits root + `client/`; fails CI on high/critical; moderate → PASS notify + Help.
+- [x] Client `build` + `lint` green after pdfjs `destroy` → `cleanup` API change.
+- [ ] PDF / EPUB / canvas / Markdown / routing smoke-tested (QA checklist — user).
+- [ ] No `dueDate` change on the Task; finish-up follows worktask rules (version + RELEASE_NOTES, etc.).
+
+## Implementation notes (2026-09-18)
+
+- Bumped TipTap to 3.31.3 (added direct `@tiptap/core`), `pdfjs-dist` 6.3.289, `react-router-dom` 7.18.4.
+- Kept `epubjs` 0.3.93; overrides: `@xmldom/xmldom` ^0.9.12, `lodash-es` ^4.18.1, `nanoid` ^5.1.16.
+- Regenerated `client/package-lock.json` (clean install).
+- `PdfReader` / `pdfMeta`: `PDFDocumentProxy.destroy()` → `.cleanup()` for pdfjs 6.

@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.45.2 — 2026-09-19
+
+### Fixes
+- Cleared reachable client production npm high advisories (TipTap, pdf.js, react-router, xmldom via epubjs, and transitive lodash-es/nanoid) with version bumps and package overrides.
+- PDF reader updated for pdf.js 6 (`cleanup` instead of removed `destroy`).
+
+### Enhancements
+- Security CI `repo_npm_audit` now audits both the repo root and `client/`; high/critical still fail the gate, moderate findings notify via PASS help text.
+
 ## 0.45.1 — 2026-09-19
 
 ### Fixes
