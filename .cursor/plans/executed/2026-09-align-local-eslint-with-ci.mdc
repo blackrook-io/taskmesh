@@ -1,0 +1,23 @@
+# Align local ESLint with GitHub CI
+
+**Branch:** `phase-N-align-local-eslint-ci`  
+**Approved:** 2026-09-18
+
+## Problem
+
+CI hard-gates `npm run lint --prefix client` (`client/eslint.config.js`, including `react-hooks/set-state-in-effect` as error + `--max-warnings 0`). Local CLI already matches when that script is run, but:
+
+- Cursor/IDE ESLint often runs from the repo root and misses `client/` flat config
+- Root `package.json` has no `lint` script mirroring CI
+
+## Scope
+
+1. `.vscode/settings.json` — `eslint.workingDirectories` for `client` so IDE diagnostics match CI
+2. Root `"lint": "npm run lint --prefix client"`
+3. Document in `AGENTS.md` (+ README scripts table) that `npm run lint` === CI client lint
+
+## Out of scope
+
+- Changing rule severity or plugin versions
+- Pre-commit hooks
+- Server-side ESLint (API has none today)

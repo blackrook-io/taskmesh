@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.43.0",
+  "version": "0.43.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "build": "tsc",
     "build:client": "npm run build --prefix client",
     "build:all": "npm run build && npm run build:client",
+    "lint": "npm run lint --prefix client",
     "start": "node dist/index.js",
     "deploy:prod": "bash deploy/deploy-prod.sh",
     "db:generate": "drizzle-kit generate",

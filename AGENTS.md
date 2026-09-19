@@ -26,7 +26,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Design tokens** — see `client/src/index.css` (`--canvas-bg`, `--radius-chip`, `--focus-ring`, etc.).
 - **Canvases** — Excalidraw (`@excalidraw/excalidraw`, MIT) in `CanvasEditor`; scene JSON in `canvases.document`. Fonts copied on client `postinstall` to `public/excalidraw-assets/`.
 - **Command palette** — Ctrl/Cmd+K (Phase 9a); see `client/src/components/CommandPalette.tsx`.
-- **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks). **QA follow-ups** (new work or corrections during review): update the active plan, mention them in the commit message, and for `/worktask` post a PROD Task comment (also include them in the completion comment).
+- **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks). **QA follow-ups** (new work or corrections during review): update the active plan, mention them in the commit message, and for `/worktask` post a PROD Task comment (also include them in the completion comment). Before opening a PR (or on finish-up), run **`npm run lint`** — it must match the GitHub Actions client ESLint hard gate (`client/eslint.config.js`, `--max-warnings 0`).
 - **Feature git** — on start: branch `T####-short-slug` (worktask) or `phase-N-short-slug` (ad-hoc) from updated `main` (SSH remotes only). **Finish up** (user approval to close): commit on the feature branch (including SemVer bump per [versioning.mdc](.cursor/rules/versioning.mdc), a [`RELEASE_NOTES.md`](RELEASE_NOTES.md) prepend for that version, and [`FEATURES.md`](FEATURES.md) updates when major user-facing features ship) → archive the plan under `.cursor/plans/executed/` **on the feature branch** → push the feature branch over SSH → open PR → wait for required CI → merge on GitHub → pull `main` → delete local/remote feature branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks) → for `/worktask`, mark the PROD Task `complete` and add a completion comment. Never push commits directly to `main`.
 
 ## Common commands
@@ -35,6 +35,7 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 |------|---------|
 | API + SPA dev (two processes) | `npm run dev:web` — UI **:5173**, DEV API **:3001** (PROD stays on **:3000** / nginx **:80**) |
 | Dev API only | `npm run dev` |
+| Client ESLint (same as CI hard gate) | `npm run lint` — runs `client` ESLint with `--max-warnings 0` (includes `react-hooks/set-state-in-effect`) |
 | Production bundles | `npm run build:all` then `NODE_ENV=production npm start` |
 | DB migrations | `npm run db:migrate` |
 | After editing `src/db/schema.ts` | `npm run db:generate`, review `drizzle/`, then `npm run db:migrate`; update [docs/database/](docs/database/overview.md); `npm run docs:sync-schema` |

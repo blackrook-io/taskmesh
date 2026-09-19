@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.43.1 — 2026-09-19
+
+### Enhancements
+- Local ESLint now matches the GitHub Actions client hard gate: root `npm run lint`, Cursor/VS Code ESLint working directory for `client/`, and docs noting the shared `--max-warnings 0` rules (including `react-hooks/set-state-in-effect`).
+
 ## 0.43.0 — 2026-09-19
 
 ### New Functionality
