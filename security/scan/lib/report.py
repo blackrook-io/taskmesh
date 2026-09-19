@@ -32,8 +32,8 @@ def print_result(r: CheckResult) -> None:
     label = STATUS_LABEL[r.status]
     print(f"  {color}{label}{RESET}  [{r.module}] {r.name}")
     print(f"         {DIM}{r.message}{RESET}")
-    # Show bundled help on fail always; on skip when the module provided guidance.
-    if r.help and r.status in ("fail", "skip"):
+    # Show bundled help whenever present (fail/skip guidance; pass = moderate notify).
+    if r.help:
         print(f"         {CYAN}Help:{RESET}")
         for line in r.help:
             print(f"           {CYAN}•{RESET} {line}")
@@ -57,7 +57,7 @@ def print_summary(results: list[CheckResult], html_path: Path | None) -> None:
 
 def _format_detail_html(r: CheckResult) -> str:
     parts = [f"<div>{html.escape(r.message)}</div>"]
-    if r.help and r.status in ("fail", "skip"):
+    if r.help:
         items = "".join(f"<li>{html.escape(line)}</li>" for line in r.help)
         parts.append(f'<div class="help"><strong>Help</strong><ul>{items}</ul></div>')
     return "".join(parts)

@@ -42,7 +42,7 @@ Without credentials, those checks are **SKIP** (yellow) with a reason — unauth
 | `http_csrf` | Cookie mutate without SPA header / cross-origin → 403 |
 | `http_api` | Health, bad-login shape, query-string API key rejected, admin unauth, auth samples |
 | `repo_static` | `.env` not tracked; SECURITY.md-style greps (`Number(req.params)`, `exec()`, SSRF helper, ILIKE) |
-| `repo_npm_audit` | `npm audit --omit=dev` — fail on high/critical |
+| `repo_npm_audit` | `npm audit --omit=dev` for **root and `client/`** — fail on high/critical; pass+help notify on moderate |
 | `db_postgres` | Via `psql` + `DATABASE_URL`: connect, not superuser, DB name, no CREATEDB |
 
 ```bash
@@ -53,7 +53,7 @@ python3 security/scan/run.py --skip-db --skip-repo
 ## Output
 
 - **Console:** green PASS / red FAIL / yellow SKIP (+ reason)
-- **Help:** FAIL and guided SKIP rows print a cyan **Help** block with remediation steps and doc links (bundled in each module)
+- **Help:** FAIL and guided SKIP rows print a cyan **Help** block with remediation steps and doc links (bundled in each module). PASS rows with Help (e.g. moderate npm-audit notify) print the same block.
 - **HTML log:** `security/scan/logs/scan-YYYYMMDD-HHMMSS.html` (gitignored; use `--no-html` to skip) — includes the same Help section
 
 ## Exit codes

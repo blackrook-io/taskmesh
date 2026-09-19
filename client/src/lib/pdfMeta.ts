@@ -24,7 +24,7 @@ export async function extractPdfTitle(file: File | ArrayBuffer): Promise<string 
       const raw = typeof info?.Title === "string" ? info.Title.trim() : "";
       return raw || null;
     } finally {
-      await pdf.destroy();
+      await pdf.cleanup();
     }
   } catch {
     return null;

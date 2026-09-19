@@ -135,7 +135,7 @@ function PdfReaderInner({ fileUrl, title }: Props) {
 
         const pdf = await loadingTask.promise;
         if (cancelled) {
-          await pdf.destroy();
+          await pdf.cleanup();
           return;
         }
         loadingTaskRef.current = null;
@@ -175,7 +175,7 @@ function PdfReaderInner({ fileUrl, title }: Props) {
       }
       const pdf = pdfRef.current;
       pdfRef.current = null;
-      if (pdf) void pdf.destroy();
+      if (pdf) void pdf.cleanup();
     };
   }, [fileUrl]);
 
