@@ -16,6 +16,7 @@ import {
   searchTasksForDependency,
 } from "../../services/taskDependencies.js";
 import { assertCanAccessDualScoped } from "../../services/ownership.js";
+import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -38,7 +39,13 @@ taskDependenciesRouter.get("/dependency-search", async (req, res) => {
       excludeTaskId: req.query.excludeTaskId,
     });
     const excludeIds = parsed.excludeTaskId != null ? [parsed.excludeTaskId] : [];
-    const data = await searchTasksForDependency(db, parsed.q, { excludeIds });
+    const actorId = await getCurrentUserId(db);
+    const data = await searchTasksForDependency(
+      db,
+      parsed.q,
+      { userId: actorId, isAdministrator: await userHasAdministrator(db, actorId) },
+      { excludeIds },
+    );
     res.json({ data });
   } catch (err) {
     handleRouteError(res, err);

@@ -15,6 +15,7 @@ import {
   attachDocumentActors,
   deleteUploadById,
 } from "../../services/documents.js";
+import { assertCanAccessOwned } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const documentKind = z.enum(["markdown", "epub", "pdf"]);
@@ -121,6 +122,8 @@ documentsRouter.post("/", async (req, res) => {
         );
         return;
       }
+      // MIME alone let a writer point a document at another user's upload (T0143).
+      await assertCanAccessOwned(db, await getCurrentUserId(db), upload.ownerId);
       uploadId = uid;
     }
 

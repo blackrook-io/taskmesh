@@ -9,7 +9,6 @@ type UserRef = {
   id: number;
   referenceId: string;
   displayName: string;
-  email: string | null;
 };
 
 type GroupRef = {
@@ -158,7 +157,7 @@ export function ProjectUsersPanel({ projectId }: Props) {
         out.push({ kind: "user", user: u });
         continue;
       }
-      const hay = `${u.displayName} ${u.referenceId} ${u.email ?? ""}`.toLowerCase();
+      const hay = `${u.displayName} ${u.referenceId}`.toLowerCase();
       if (hay.includes(q)) out.push({ kind: "user", user: u });
     }
     for (const g of groups) {
@@ -294,9 +293,6 @@ export function ProjectUsersPanel({ projectId }: Props) {
             <p style={{ margin: "0.25rem 0 0" }}>
               {data.owner.displayName}{" "}
               <span className="muted">{data.owner.referenceId}</span>
-              {data.owner.email ? (
-                <span className="muted"> · {data.owner.email}</span>
-              ) : null}
             </p>
           </div>
 
@@ -439,7 +435,7 @@ export function ProjectUsersPanel({ projectId }: Props) {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name, U####, G####, or email"
+                placeholder="Name, U####, or G####"
                 autoFocus
               />
             </div>
@@ -463,9 +459,6 @@ export function ProjectUsersPanel({ projectId }: Props) {
                     <span>
                       {c.user.displayName}{" "}
                       <span className="muted">{c.user.referenceId}</span>
-                      {c.user.email ? (
-                        <span className="muted"> · {c.user.email}</span>
-                      ) : null}
                     </span>
                     <button
                       type="button"

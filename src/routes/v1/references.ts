@@ -8,6 +8,8 @@ import {
   searchEntityReferences,
   searchUserReferences,
 } from "../../services/references.js";
+import { userHasAdministrator } from "../../services/roles.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 export const referencesRouter = Router();
 
@@ -46,14 +48,33 @@ referencesRouter.get("/search", async (req, res) => {
       return;
     }
 
+    // A bare type prefix (e.g. `q=T`) leaves an empty remainder. That used to
+    // match every row of that type; it must not enumerate the instance (T0143).
+    // The SPA never sends this — `mdReferenceTrigger` suppresses the request
+    // until at least one character follows the prefix.
+    if (!q.length) {
+      sendError(
+        res,
+        400,
+        "validation_error",
+        "Provide at least one character after the type prefix",
+      );
+      return;
+    }
+
+    const actorId = await getCurrentUserId(db);
+    const actor = {
+      userId: actorId,
+      isAdministrator: await userHasAdministrator(db, actorId),
+    };
+
     if (entityType === "user") {
-      const data = await searchUserReferences(db, q || parsed.q);
+      const data = await searchUserReferences(db, q);
       res.json({ data });
       return;
     }
 
-    // Empty remainder after prefix (e.g. q=T) → match all of that type via "%" title
-    const data = await searchEntityReferences(db, entityType, q.length ? q : "");
+    const data = await searchEntityReferences(db, entityType, q, actor);
     res.json({ data });
   } catch (err) {
     handleRouteError(res, err);

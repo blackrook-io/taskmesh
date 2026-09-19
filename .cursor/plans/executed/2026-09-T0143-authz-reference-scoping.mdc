@@ -1,0 +1,122 @@
+# T0143 — Security Phase 2: close cross-user access control gaps (IDOR)
+
+Branch: `T0143-authz-reference-scoping` · PROD Task: T0143 (id 156, project 4)
+
+Execution plan for **Phase 2** of the 2026-09 security audit. The umbrella findings record
+is [`2026-09-security-audit-remediation.mdc`](2026-09-security-audit-remediation.mdc) and
+stays active until Phases 3–7 ship — only this file gets archived at T0143 finish-up.
+
+## Why
+
+The T0112–T0115 ownership migration scoped the project tree, standalone entities, search,
+and import/export, but missed **cross-entity reference lookups** and several
+**body-supplied parent ids**. Verified by inspection: `src/services/references.ts` and
+`src/routes/v1/references.ts` contain zero references to any ownership helper, against 10
+in the correctly-scoped `src/routes/v1/search.ts`.
+
+## Work items
+
+### 1. Scope the two unscoped search services (critical)
+
+- `searchEntityReferences` (`src/services/references.ts:103-357`) — accept
+  `actorUserId` + `isAdministrator` and apply the right filter per entity type:
+  `ownerScope` for ideas/tags, `projectAccessListFilter` for projects,
+  `dualScopeListFilter` for tasks/todos/todo lists/image boards, and
+  `projectOwnedListFilter` for documents/boards/canvases/wiki nodes. Mirror `search.ts`.
+- `searchUserReferences` (`src/services/references.ts:359-417`) — leave the user listing
+  intact (mention pickers need it) but see item 5 for the email field.
+- `searchTasksForDependency` (`src/services/taskDependencies.ts:289-327`) — thread the
+  actor through and apply `dualScopeListFilter`.
+- Update both route handlers to resolve `getCurrentUserId` + `userHasAdministrator` first.
+
+### 2. Cross-entity attach IDOR
+
+Each of these confirms the referenced row *exists* but never that the actor may reach it:
+
+| Route | File:line | Fix |
+|-------|-----------|-----|
+| `POST /projects/:projectId/boards/:boardId/cards` (`entityType=idea`) | `boards.ts:674-679` | `assertCanAccessOwned` |
+| Same route (`entityType=todo_list`) | `boards.ts:680-688` | `assertCanAccessDualScoped` — any standalone list from any owner is attachable today |
+| `POST /todo-lists/:id/items` | `todoLists.ts:419-431` | `assertCanAccessDualScoped` on the task/todo |
+| `POST /projects/:projectId/documents` (`uploadId`) | `documents.ts:110-124` | verify `upload.ownerId` |
+| `PATCH /users/me` (`avatarUploadId`) | `users.ts:234-246` | verify `upload.ownerId` |
+
+The todo-list case is the most severe: `GET /todo-lists/:id` hydrates attached entities and
+returns title, state, dueDate and priority (`todoLists.ts:210-231`), so the attach doubles
+as a read primitive.
+
+### 3. Viewers must not mutate ordering
+
+`PATCH /projects/reorder` (`projects.ts:126-167`) and `PATCH /image-boards/reorder`
+(`imageBoards.ts:163-207`) scope by a list filter that includes viewers but never assert
+`"write"`. `roleSatisfiesAccess("viewer", "write")` already returns `false` — call it.
+
+### 4. Reject empty-remainder prefix queries
+
+Not a literal empty `q` (Zod enforces `q.min(1)`), but the **type-prefix** path at
+`references.ts:55-56`: `?q=T` strips the letter, leaves an empty remainder, and by design
+matches everything of that type — `?q=T` all tasks, `?q=I` all ideas, `?q=P` all projects.
+
+Verified safe to close: `client/src/lib/mdReferenceTrigger.ts` returns `null` on an empty
+remainder (line 41 for `@`, line 59 for `#`), so `MarkdownReferenceSuggest` never fires
+until one character follows the prefix (`#T0`, never `#T`). Zero UX change. Return 400.
+
+### 5. Strip emails from the project user directory
+
+Product decision, revised from an Administrator gate so Managers keep the ability to add
+people to their own projects.
+
+- `listProjectDirectoryUsers` (`src/services/projectUsers.ts:507-528`) — return plain
+  `UserRef`, drop `email: user.email`.
+- `client/src/components/ProjectUsersPanel.tsx` — remove `email` from the candidate type
+  (:12), the search haystack (:161) and the ` · email` rendering (:466-467); update the
+  placeholder (:442) to drop the email affordance; drop the project owner's email
+  (:297-298), which is the same leak class.
+- Disambiguation preserved via the existing `referenceId` (`U####`), already rendered and
+  searched.
+- Residual accepted: Managers can still enumerate display names. Inherent to the picker.
+
+## Testing
+
+Two-user fixture (temporary accounts approved, including Administrator; remove after
+verification, never commit credentials). Each route above gets a regression test asserting
+user A cannot read or mutate user B's records. Then `npm test`, `npm run lint`, and
+`npm run security:scan`.
+
+## Implementation notes (2026-09-18)
+
+Two deviations from the plan as written, both widening scope slightly:
+
+1. **Email stripping went further than the directory.** `GET /projects/:id/users` also
+   returned an `email` for every manager, member and viewer, plus the owner — that is the
+   most literal instance of "Managers seeing Member email addresses", so `ProjectUserEntry`
+   and `ProjectUsersLists.owner` lost the field too, along with the `addUserToProject`
+   return. `UserRef.referenceId` still disambiguates.
+2. **Reorder needed new helpers rather than a flat `"write"` assert.** `sortOrder` is a
+   global column and the nav submits every *accessible* project, so requiring write on all
+   of them would have broken reordering for anyone holding a viewer role anywhere. Added
+   `projectWriteListFilter` and `dualScopeWriteFilter` to `ownership.ts`; validation still
+   spans the readable set, but only write-accessible rows actually move. Viewer-held rows
+   keep their position.
+
+Both search services now take a **required** `actor` parameter, so a future caller that
+forgets to scope fails to typecheck rather than silently running unscoped.
+
+## Verification
+
+Unit tests (`npm test`, 168 pass): new tests assert the write filters never consult
+`project_viewers` / `project_viewer_groups` and are strictly narrower than their read
+counterparts, that `searchUserReferences` never touches the users table on an empty query,
+and that idea search renders an `owner_id` predicate for non-admins but not for admins.
+
+Live two-user check against DEV with a temporary account (created and deleted, id 8) —
+**18/18 passed**. Where the administrator saw 20 tasks / 10 ideas / 4 projects, the second
+user saw **0** across all ten entity types plus dependency search; bare prefixes `?q=T|I|P`
+returned 400 for both roles; `?q=T0` still returned 200; and neither
+`/projects/4/users` nor `/projects/4/users/directory` contained an `email` field.
+
+## Notes
+
+- No schema change → **PATCH** bump at finish-up per `versioning.mdc`.
+- Still open for a later phase: add a `repo_static` scan check asserting new search
+  services reference an ownership helper, so this class cannot silently regress.
