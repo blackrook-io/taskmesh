@@ -1,0 +1,16 @@
+# Explicit HTTP-only loopback lab override (weaker than the default TLS stack).
+# Usage:
+#   docker compose -f compose.yaml -f compose.http-lab.yaml --env-file .env.docker up -d --build
+#
+# Publishes the app on 127.0.0.1 only (not 0.0.0.0) and disables the TLS proxy.
+
+services:
+  proxy:
+    profiles: ["https"]
+
+  app:
+    ports:
+      - "127.0.0.1:${TASKMESH_PORT:-3000}:3000"
+    environment:
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}

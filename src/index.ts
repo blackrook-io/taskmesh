@@ -18,6 +18,7 @@ import {
 } from "./services/apiRequestLogPrune.js";
 import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
 import { assertConfiguredEnvKeys } from "./lib/envKeys.js";
+import { parseTrustProxy } from "./lib/trustProxy.js";
 
 assertConfiguredEnvKeys();
 warnIfRateLimitDisableIgnored();
@@ -25,9 +26,7 @@ ensureUploadDir();
 ensureBackupDir();
 
 const app = express();
-if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
-}
+app.set("trust proxy", parseTrustProxy());
 app.use(securityHeaders);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));

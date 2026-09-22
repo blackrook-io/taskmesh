@@ -1,0 +1,85 @@
+# T0147 — Security Phase 6: Deployment and supply chain
+
+**Task:** T0147 (id 160) — Security Phase 6 — Deployment and supply chain  
+**Priority:** urgent · **State at plan:** ready  
+**Branch (on approval):** `T0147-deployment-supply-chain`  
+**Source:** `.cursor/plans/2026-09-security-audit-remediation.mdc` § Phase 6  
+**Interview defaults (approved):** Compose TLS via optional proxy service; explicit `TRUST_PROXY`; HSTS + conservative `Permissions-Policy`; digest-pin base images + refresh notes.
+
+## Goal
+
+Align Docker/Compose posture with bare-metal HTTPS hardening, run the app container as non-root, harden nginx headers, and tighten CI/action + base-image supply chain.
+
+## Scope
+
+### 1. Compose + TLS terminator (secure-by-default path)
+
+- Stop publishing app `:3000` on `0.0.0.0`. Prefer:
+  - **No host publish of app** when a proxy service is enabled; proxy publishes `443`/`80` only; app stays on the Compose network.
+  - Or bind `"127.0.0.1:${TASKMESH_PORT:-3000}:3000"` only for a documented **HTTP-only / loopback** profile if we keep a escape hatch.
+- Add an **`proxy` (nginx)** Compose service that:
+  - Terminates TLS (self-signed or mounted certs under `deploy/ssl` / volume).
+  - Proxies to `app:3000` with standard `X-Forwarded-*` headers.
+  - Publishes host `80`/`443` (or configurable ports).
+- Defaults for the secure path: `COOKIE_SECURE=true`, `TRUST_PROXY=1`.
+- Update `.env.docker.example`, `INSTALL.md` § Container install, and `SECURITY.md` so desktop users know: secure default = HTTPS via proxy; HTTP loopback escape hatch if we keep one (document clearly; prefer not as the documented quick-start).
+
+**Decision:** Secure path is the documented quick-start. If HTTP-only remains for local throwaway labs, it must be an explicit opt-in (profile or env flag), not the default.
+
+### 2. Explicit `trust proxy` (not implied by `NODE_ENV`)
+
+- Add `TRUST_PROXY` env parsing (e.g. `false` / `0` / unset-in-dev → off; `true` / `1` / hop count → Express `trust proxy`).
+- Wire in `src/index.ts` instead of `if (NODE_ENV === "production")`.
+- Document in `.env.example` / `.env.docker.example`.
+- Unit-test the parser if extracted to a small helper (preferred).
+
+### 3. Dockerfile non-root runtime user
+
+- Create a dedicated user/group (`taskmesh`, uid/gid **10001**) in the runtime image.
+- `chown` `/app` so the image tree is owned by that user.
+- Entrypoint starts as root only long enough to `chown` the named data volume, then `runuser -u taskmesh` before migrations + `node` (satisfies non-root process; volumes remain writable).
+
+### 4. nginx HSTS (+ Permissions-Policy)
+
+- In `deploy/nginx-taskmesh.conf` (and the Compose proxy config, shared or duplicated carefully):
+  - `Strict-Transport-Security: max-age=31536000; includeSubDomains` (no `preload` unless we intentionally want it — **omit preload** for self-signed / LAN).
+  - Conservative `Permissions-Policy` disabling camera, microphone, geolocation, payment, USB, etc.
+- Note: after deploy, bare-metal needs `nginx -t` + reload (finish-up / QA).
+
+### 5. CI supply chain (`.github/workflows/security-ci.yml`)
+
+- Pin `actions/checkout` and `actions/setup-node` to **full commit SHAs** (keep version comments).
+- Add top-level least-privilege `permissions:` (e.g. `contents: read` only).
+- Resolve current SHAs from GitHub at implement time (do not invent).
+
+### 6. Digest-pin base images
+
+- Pin `node:22-bookworm`, `node:22-bookworm-slim` (Dockerfile stages), and `postgres:16-alpine` (`compose.yaml`) by digest.
+- Short note in `INSTALL.md` / `SECURITY.md` on refreshing digests (`docker buildx imagetools inspect` / Hub).
+
+## Out of scope
+
+- Phase 7 items (CSV formula injection, xlsx bombs, upload quota, markdown sanitizer rewrite, group access consistency).
+- Changing bare-metal systemd unit user (already non-root guidance in SECURITY.md) beyond nginx header updates.
+- Certbot automation / Let's Encrypt in Compose (document mounting real certs; self-signed for desktop OK).
+- Schema / Drizzle migrations → **PATCH** bump on finish-up.
+
+## Implementation order
+
+1. `TRUST_PROXY` helper + `src/index.ts` + env examples + test.
+2. Dockerfile non-root + entrypoint ownership.
+3. Compose proxy service + port binding + env defaults; update examples/docs.
+4. nginx HSTS + Permissions-Policy (bare-metal conf + Compose proxy conf).
+5. Digest pins + refresh docs.
+6. CI SHA pins + `permissions:`.
+7. Lint/tests; QA checklist.
+
+## Risks / notes
+
+- Desktop quick-start URL changes from `http://127.0.0.1:3000` to `https://…` (self-signed warning) — docs must lead with trust steps.
+- Non-root + named volumes: ensure writable mounts for `/app/data`.
+- Digest drift: pins freeze known-good images; refresh is intentional ops work.
+
+## QA (after implement)
+
+See checklist issued at end of implementation pass (Compose HTTPS login, loopback not exposed, trust proxy / COOKIE_SECURE, non-root UID in container, HSTS headers, CI YAML review).
