@@ -26,8 +26,9 @@ Full setup (choose **containers** or **bare-metal Ubuntu**): packages or Docker,
 git clone https://github.com/blackrook-io/taskmesh.git
 cd taskmesh
 cp .env.docker.example .env.docker   # set POSTGRES_PASSWORD
+bash docker/nginx/generate-certs.sh
 docker compose --env-file .env.docker up -d --build
-# UI: http://127.0.0.1:3000/
+# UI: https://127.0.0.1/  (self-signed cert warning is expected)
 ```
 
 **Bare-metal production-style start** *after* following the Ubuntu sections in INSTALL.md:

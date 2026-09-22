@@ -17,15 +17,16 @@ Both paths need disk for the database and `data/uploads/`. Container installs us
 
 # A. Container install
 
-Self-contained **app + PostgreSQL** via [`compose.yaml`](compose.yaml) and [`Dockerfile`](Dockerfile). The app image runs migrations on start, serves the built SPA, and includes `postgresql-client` for in-app `pg_dump` backups.
+Self-contained **app + PostgreSQL + TLS proxy** via [`compose.yaml`](compose.yaml) and [`Dockerfile`](Dockerfile). The app image runs migrations on start, serves the built SPA, and includes `postgresql-client` for in-app `pg_dump` backups. The Compose **nginx** service terminates HTTPS and proxies to the app on the internal network (app port is not published on `0.0.0.0`).
 
 ## A.1 What you get
 
 | Component | Role |
 |-----------|------|
-| **`db` service** | Official [`postgres:16-alpine`](https://hub.docker.com/_/postgres) image; data in volume `taskmesh_pg` |
-| **`app` service** | Multi-stage Node **22** build of Express API + Vite SPA; data in volume `taskmesh_data` (`uploads`, backups, schedule file) |
-| **Published port** | Host `TASKMESH_PORT` (default **3000**) → container `3000` (`HOST=0.0.0.0`) |
+| **`db` service** | Official [`postgres:16-alpine`](https://hub.docker.com/_/postgres) image (digest-pinned); data in volume `taskmesh_pg` |
+| **`app` service** | Multi-stage Node **22** build of Express API + Vite SPA (digest-pinned base images); data in volume `taskmesh_data` (`uploads`, backups, schedule file); process drops to non-root uid **10001** |
+| **`proxy` service** | [`nginx:alpine`](https://hub.docker.com/_/nginx) TLS terminator; host **:80** → HTTPS redirect, **:443** → `app:3000` |
+| **Published ports** | Host `TASKMESH_HTTP_PORT` / `TASKMESH_HTTPS_PORT` (defaults **80** / **443**). App listens only on the Compose network. |
 
 Official Compose reference: [Docker Compose overview](https://docs.docker.com/compose/).
 
@@ -110,9 +111,17 @@ cp .env.docker.example .env.docker
 Edit `.env.docker`:
 
 - Set **`POSTGRES_PASSWORD`** to a long random secret. Prefer **URL-safe** characters (letters, digits, `-` `_`) so the Compose `DATABASE_URL` does not need encoding.
-- Optionally set **`TASKMESH_PORT`** (default `3000`) if the host port is busy.
-- Leave **`COOKIE_SECURE=false`** for plain HTTP (default). Set `true` only when you terminate TLS in front of the app so browsers accept `Secure` session cookies.
+- Defaults already set **`COOKIE_SECURE=true`** and **`TRUST_PROXY=1`** for the TLS proxy path.
+- Optionally override **`TASKMESH_HTTP_PORT`** / **`TASKMESH_HTTPS_PORT`** if 80/443 are busy.
 - Optionally set **`OPENAI_API_KEY`** (and related assistant vars) for the Assistant panel.
+
+Generate a self-signed cert for the proxy (once; SANs default to `localhost` + `127.0.0.1`):
+
+```bash
+bash docker/nginx/generate-certs.sh
+# optional LAN IP / hostname SANs:
+# bash docker/nginx/generate-certs.sh localhost 127.0.0.1 192.168.1.50
+```
 
 Start (build + detach):
 
@@ -120,7 +129,13 @@ Start (build + detach):
 docker compose --env-file .env.docker up -d --build
 ```
 
-First build compiles the API and client inside Docker and may take several minutes. On start, the app container runs Drizzle migrations, then listens on port 3000 inside the network.
+First build compiles the API and client inside Docker and may take several minutes. On start, the app container runs Drizzle migrations, then listens on port 3000 on the Compose network; nginx serves HTTPS on the host.
+
+**HTTP-only loopback lab (opt-in, weaker):** publishes the app on `127.0.0.1` only and skips the TLS proxy:
+
+```bash
+docker compose -f compose.yaml -f compose.http-lab.yaml --env-file .env.docker up -d --build
+```
 
 Useful commands:
 
@@ -134,13 +149,13 @@ docker compose --env-file .env.docker down -v       # stop AND delete DB/uploads
 ## A.4 Verify
 
 ```bash
-curl -sS "http://127.0.0.1:${TASKMESH_PORT:-3000}/api/health"
+curl -skS "https://127.0.0.1:${TASKMESH_HTTPS_PORT:-443}/api/health"
 # expect: {"ok":true,"database":"connected", ...} / HTTP 200
 ```
 
-In a browser: `http://127.0.0.1:3000/` (or your `TASKMESH_PORT`). Create a project, paste an image into Markdown, and open a canvas.
+In a browser: `https://127.0.0.1/` (or your HTTPS port). Accept the self-signed certificate warning once (or regenerate with your LAN IP/hostname in the SAN list). Create a project, paste an image into Markdown, and open a canvas.
 
-From another device on the LAN, use `http://<host-lan-ip>:3000/` and ensure the host firewall allows that TCP port.
+From another device on the LAN, use `https://<host-lan-ip>/` (regenerate certs with that IP in the SAN list) and ensure the host firewall allows TCP **443** (and **80** for the redirect).
 
 ## A.5 Data, backups, and updates
 
@@ -172,21 +187,37 @@ Migrations run automatically on container start. Review `drizzle/` when upgradin
 
 | Symptom | Things to check |
 |---------|-----------------|
-| Cannot log in / session cookie missing | `COOKIE_SECURE` must be `false` on plain HTTP; confirm `.env.docker` and recreate app container |
+| Cannot log in / session cookie missing | Behind the TLS proxy keep `COOKIE_SECURE=true`; for `compose.http-lab.yaml` use `false` |
+| Browser TLS warning | Expected for self-signed certs; regenerate SANs with `docker/nginx/generate-certs.sh` |
+| proxy fails / missing certs | `bash docker/nginx/generate-certs.sh` then recreate `proxy` |
 | `POSTGRES_PASSWORD` error from Compose | `.env.docker` missing or not passed via `--env-file` |
 | App unhealthy / migrate errors | `docker compose --env-file .env.docker logs app`; wait for `db` healthy; password URL-safety |
-| Port already allocated | Change `TASKMESH_PORT` in `.env.docker` and recreate |
-| Cannot reach from another machine | Firewall; confirm publish mapping in `docker compose ps` |
+| Port already allocated | Change `TASKMESH_HTTP_PORT` / `TASKMESH_HTTPS_PORT` (or lab `TASKMESH_PORT`) and recreate |
+| Cannot reach from another machine | Firewall on **443**; confirm `proxy` publish mapping in `docker compose ps`; do not expect host `:3000` on the default stack |
 | Permission / volume issues on Desktop | Restart Docker Desktop; avoid exotic bind mounts for first install — named volumes are default |
 | Podman Compose quirks | Confirm Compose file version support; try `podman compose` vs Docker CLI against Podman’s socket |
+
+### Refreshing image digests
+
+`Dockerfile` and `compose.yaml` pin base images by digest. To refresh after upstream rebuilds:
+
+```bash
+docker buildx imagetools inspect node:22-bookworm
+docker buildx imagetools inspect node:22-bookworm-slim
+docker buildx imagetools inspect postgres:16-alpine
+docker buildx imagetools inspect nginx:alpine
+```
+
+Copy the multi-arch index `Digest:` into the corresponding `image:` / `FROM` lines, then rebuild.
 
 ## A.7 Quick checklist (containers)
 
 1. Install Docker Desktop (Windows/macOS) or Docker Engine + Compose (Linux) — links in [A.2](#a2-install-a-container-host-by-os)  
 2. `git clone` → `cp .env.docker.example .env.docker` → set `POSTGRES_PASSWORD`  
-3. `docker compose --env-file .env.docker up -d --build`  
-4. `curl` `/api/health` and open the UI on the published port  
-5. Configure backups in the UI; keep volume backups in your host backup plan  
+3. `bash docker/nginx/generate-certs.sh`  
+4. `docker compose --env-file .env.docker up -d --build`  
+5. `curl -skS https://127.0.0.1/api/health` and open the UI over HTTPS  
+6. Configure backups in the UI; keep volume backups in your host backup plan
 
 ---
 
@@ -416,9 +447,10 @@ Minimum production-ready `.env`:
 DATABASE_URL=postgresql://taskmesh:your-secure-password@127.0.0.1:5432/taskmesh
 HOST=127.0.0.1
 PORT=3000
+TRUST_PROXY=1
 ```
 
-Express listens on **`HOST`:`PORT`** only (default loopback). Other devices reach the app through **nginx on port 80** (§15), not by opening 3000 on the LAN.
+Express listens on **`HOST`:`PORT`** only (default loopback). Other devices reach the app through **nginx on HTTPS :443** (§15), not by opening 3000 on the LAN. `TRUST_PROXY=1` is required so Express honors `X-Forwarded-*` from nginx (rate limits, request logs, Secure cookies behind TLS). The sample systemd unit also sets `TRUST_PROXY=1`.
 
 Optional (from [`.env.example`](.env.example)):
 
@@ -570,7 +602,7 @@ sudo systemctl status taskmesh --no-pager
 curl -sS http://127.0.0.1:3000/api/health
 ```
 
-Ensure `.env` has `HOST=127.0.0.1` (the unit sets `NODE_ENV=production`). After pulling updates: rebuild, then `sudo systemctl restart taskmesh`.
+Ensure `.env` has `HOST=127.0.0.1` and `TRUST_PROXY=1` (the unit sets `NODE_ENV=production` and `TRUST_PROXY=1`). After pulling updates: rebuild, then `sudo systemctl restart taskmesh`. Re-copy the unit file when `deploy/taskmesh.service` changes.
 
 Reference: [systemd.service](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html).
 
@@ -612,7 +644,7 @@ curl -sI http://127.0.0.1/api/health   # expect 301 → https
 # https://192.168.x.x/   (accept self-signed warning once, or use mkcert)
 ```
 
-Template notes: [`deploy/nginx-taskmesh.conf`](deploy/nginx-taskmesh.conf) (`client_max_body_size 10m`, TLS 1.2+, proxy headers for Express `trust proxy`).
+Template notes: [`deploy/nginx-taskmesh.conf`](deploy/nginx-taskmesh.conf) (`client_max_body_size 10m`, TLS 1.2+, HSTS + Permissions-Policy, proxy headers for Express `TRUST_PROXY`).
 
 ### Secrets
 

@@ -50,8 +50,9 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | Uploads | UUID filenames; GET uses `path.basename`; **magic-byte** sniff (jpeg/png/gif/webp) | Stored MIME is sniffed, not client-claimed |
 | Assistant `fetchUrl` | http(s) only; DNS resolve + **pin** validated address on connect; block private/CGNAT/literal bypass IPs; **manual** redirects (max 2) re-checked | No intranet/localhost fetch; no DNS rebinding |
 | Backups | `execFile` argv from `DATABASE_URL`, not request body | Restore/run rate-limited (T0085) |
-| Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production (override with `COOKIE_SECURE`) | CSRF: SPA client header + Origin/Referer on mutating routes (T0087). Compose desktop sets `COOKIE_SECURE=false` for HTTP. |
-| TLS | nginx terminates HTTPS :443; Express on loopback only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); certbot path for public hosts |
+| Session cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production (override with `COOKIE_SECURE`) | CSRF: SPA client header + Origin/Referer on mutating routes (T0087). Compose TLS path defaults `COOKIE_SECURE=true`; HTTP lab override uses `false`. |
+| Trust proxy | Explicit `TRUST_PROXY` env (not inferred from `NODE_ENV`) | Set `1` behind nginx (systemd unit + Compose defaults); `false` when Express is exposed without a proxy |
+| TLS | nginx terminates HTTPS :443; Express on loopback / Compose network only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); Compose: `docker/nginx/generate-certs.sh` |
 | Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | Import rate-limited (T0085) |
 | Rate limits | Per-route + global + per-API-key `express-rate-limit` (memory store) | Login IP; user/key for authenticated; Admin `api_rate_limit_per_minute` |
 | API keys | Hashed secrets; Bearer / X-API-Key; RO/RW method gate | Profile + Admin lifecycle; query-string keys rejected |
@@ -61,7 +62,13 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 
 Always: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`.
 
+**nginx (bare metal + Compose proxy):** `Strict-Transport-Security` (`max-age=31536000; includeSubDomains`, no `preload`) and a conservative `Permissions-Policy` (camera/microphone/geolocation/payment/usb disabled).
+
 **Production only** (`NODE_ENV=production`): Content-Security-Policy with `script-src 'self' 'wasm-unsafe-eval'` (Excalidraw wasm), `style-src 'self' 'unsafe-inline'` (TipTap/Excalidraw), `img-src 'self' data: blob: https:` (external note images), `worker-src 'self' blob:`, `object-src 'none'`, `frame-ancestors 'none'`. DEV omits CSP so Vite HMR works.
+
+### Image digests (Compose / Dockerfile)
+
+Base images are digest-pinned (`node:22-bookworm`, `node:22-bookworm-slim`, `postgres:16-alpine`, `nginx:alpine`). Refresh with `docker buildx imagetools inspect <image>:<tag>` and update the digests in `Dockerfile` / `compose.yaml` (see [INSTALL.md](INSTALL.md) § A.6).
 
 ## Runnable scan suite (T0121)
 
@@ -124,8 +131,8 @@ Run after adding a route or query:
 
 - **`.env`:** mode `600`, owned by the service user; never commit. Contains `DATABASE_URL` and optional `OPENAI_API_KEY`.
 - **Postgres:** dedicated `taskmesh` role with least privilege on the `taskmesh` database only (not superuser).
-- **OS:** run systemd unit as a non-root user; only nginx (:443/:80) exposed on the LAN/internet, not Express `:3000`.
-- **TLS:** prefer HTTPS via nginx; see [`deploy/ssl/README.md`](deploy/ssl/README.md). For public hosts, use certbot/Let's Encrypt (manual setup documented there).
+- **OS:** run systemd unit as a non-root user; only nginx (:443/:80) exposed on the LAN/internet, not Express `:3000`. Compose app process drops to uid **10001** after entrypoint volume `chown`.
+- **TLS:** prefer HTTPS via nginx; see [`deploy/ssl/README.md`](deploy/ssl/README.md). For public hosts, use certbot/Let's Encrypt (manual setup documented there). Compose desktop uses `docker/nginx/generate-certs.sh` self-signed certs by default.
 
 Not done by design in T0073/T0087: Zod `.strict()` on every body (SPA extra keys would 400); shrinking wiki/docs 500k caps; automatic certbot in deploy scripts.
 
