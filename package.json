@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.47.1",
+  "version": "0.47.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -29,6 +29,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^8.6.2",
     "jose": "^6.2.12",
+    "jszip": "^3.10.2",
     "multer": "^2.4.0",
     "openid-client": "^6.8.8",
     "otpauth": "^9.5.2",

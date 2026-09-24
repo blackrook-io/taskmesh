@@ -4,6 +4,19 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.47.2 — 2026-09-24
+
+### Fixes
+- CSV and XLSX exports neutralize formula-like cell prefixes (`=`, `+`, `-`, `@`) so spreadsheet apps treat them as text.
+- XLSX import rejects pathological workbooks (sheet/row/uncompressed-size caps) beyond the upload byte limit.
+- EPUB uploads must present the stored `mimetype` entry (plain ZIPs are no longer accepted as EPUB).
+- Served PDFs use `Content-Disposition: attachment`; images remain inline.
+- Backup restore rejects non-basename `sqlFile` values so the dump path cannot escape the backup directory.
+- List filters for dual-scoped and project-owned rows honor manager/member/viewer **groups**, matching project access.
+
+### Enhancements
+- Per-user cumulative upload quota (default 5 GiB via `UPLOAD_QUOTA_BYTES`); exceeding it returns 413.
+
 ## 0.47.1 — 2026-09-22
 
 ### Enhancements

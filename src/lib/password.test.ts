@@ -57,4 +57,12 @@ describe("password", () => {
     assert.equal(needsPasswordRehash(legacy), true);
     assert.equal(await verifyPassword(STRONG, "not-a-hash"), false);
   });
+
+  it("returns false (not throw) when scrypt rejects malformed params", async () => {
+    // N=100 is not a power of 2 — Node's scrypt throws; verifyPassword must catch.
+    const salt = Buffer.from("saltsaltsaltsalt").toString("base64");
+    const hash = Buffer.alloc(64, 1).toString("base64");
+    const bad = `scrypt$100$8$1$${salt}$${hash}`;
+    assert.equal(await verifyPassword(STRONG, bad), false);
+  });
 });
