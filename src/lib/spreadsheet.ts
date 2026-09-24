@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { Readable } from "node:stream";
 
 export type DiscardCode = "invalid_data" | "id_collision" | "db_reject" | "immutable_field";
@@ -13,6 +14,36 @@ export type ImportResult = {
   created: number;
   discarded: DiscardRow[];
 };
+
+/** Soft caps against ZIP bombs / pathological workbooks (beyond the 20 MB upload limit). */
+export const XLSX_MAX_SHEETS = 50;
+export const XLSX_MAX_ROWS = 100_000;
+export const XLSX_MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+
+export class SpreadsheetLimitError extends Error {
+  readonly status = 400;
+  readonly code = "spreadsheet_too_large";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "SpreadsheetLimitError";
+  }
+}
+
+/**
+ * Neutralize CSV/Excel formula injection: values that Excel would treat as
+ * formulas get a leading apostrophe (stored/displayed as text).
+ */
+export function neutralizeSpreadsheetValue(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  if (s.length === 0) return s;
+  // Leading tab/CR can still trigger formula mode in some spreadsheet apps.
+  const trigger = s.replace(/^[\t\r]+/, "");
+  if (/^[=+\-@]/.test(trigger) || /^[=+\-@]/.test(s)) {
+    return `'${s}`;
+  }
+  return s;
+}
 
 function cellValueToPlain(value: ExcelJS.CellValue): unknown {
   if (value == null) return "";
@@ -55,6 +86,71 @@ function worksheetToObjects(sheet: ExcelJS.Worksheet): Record<string, unknown>[]
   return rows;
 }
 
+function maxUncompressedBytes(): number {
+  const fromEnv = Number(process.env.XLSX_MAX_UNCOMPRESSED_BYTES);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  return XLSX_MAX_UNCOMPRESSED_BYTES;
+}
+
+function maxSheets(): number {
+  const fromEnv = Number(process.env.XLSX_MAX_SHEETS);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  return XLSX_MAX_SHEETS;
+}
+
+function maxRows(): number {
+  const fromEnv = Number(process.env.XLSX_MAX_ROWS);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  return XLSX_MAX_ROWS;
+}
+
+async function assertXlsxSafe(buffer: Buffer): Promise<void> {
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(buffer, { createFolders: false });
+  } catch {
+    throw new SpreadsheetLimitError("Workbook is not a valid XLSX archive");
+  }
+  const limit = maxUncompressedBytes();
+  let uncompressed = 0;
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir) continue;
+    // `_data.uncompressedSize` is set for entries loaded from a ZIP.
+    const data = entry as JSZip.JSZipObject & {
+      _data?: { uncompressedSize?: number };
+    };
+    const size = data._data?.uncompressedSize;
+    if (typeof size === "number" && Number.isFinite(size) && size >= 0) {
+      uncompressed += size;
+    }
+    if (uncompressed > limit) {
+      throw new SpreadsheetLimitError(
+        `Workbook uncompressed size exceeds ${limit} bytes`,
+      );
+    }
+  }
+}
+
+function assertWorkbookBounds(workbook: ExcelJS.Workbook): void {
+  const sheets = workbook.worksheets;
+  const sheetLimit = maxSheets();
+  if (sheets.length > sheetLimit) {
+    throw new SpreadsheetLimitError(
+      `Workbook has too many sheets (max ${sheetLimit})`,
+    );
+  }
+  const rowLimit = maxRows();
+  let rows = 0;
+  for (const sheet of sheets) {
+    rows += sheet.rowCount;
+    if (rows > rowLimit) {
+      throw new SpreadsheetLimitError(
+        `Workbook has too many rows (max ${rowLimit})`,
+      );
+    }
+  }
+}
+
 /**
  * Parse the first sheet of a .csv or .xlsx upload into row objects.
  * Legacy `.xls` (BIFF) is not supported by ExcelJS — callers should reject it.
@@ -70,8 +166,10 @@ export async function sheetToObjects(
       map: (value) => value,
     });
   } else {
+    await assertXlsxSafe(buffer);
     // ExcelJS typings expect Node Buffer; cast avoids Buffer generic mismatch under TS 5.7+.
     await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+    assertWorkbookBounds(workbook);
   }
   const sheet = workbook.worksheets[0];
   if (!sheet) return [];
@@ -89,7 +187,7 @@ function normalizeKeys(row: Record<string, unknown>): Record<string, unknown> {
 }
 
 function csvEscape(value: unknown): string {
-  const s = value == null ? "" : String(value);
+  const s = neutralizeSpreadsheetValue(value);
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
@@ -111,12 +209,15 @@ function writeSheet(workbook: ExcelJS.Workbook, name: string, rows: Record<strin
   const keys = Object.keys(rows[0]!);
   ws.addRow(keys);
   for (const row of rows) {
-    ws.addRow(keys.map((k) => {
-      const v = row[k];
-      if (v instanceof Date) return v;
-      if (v == null) return "";
-      return v as ExcelJS.CellValue;
-    }));
+    ws.addRow(
+      keys.map((k) => {
+        const v = row[k];
+        if (v instanceof Date) return v;
+        if (v == null) return "";
+        if (typeof v === "number" || typeof v === "boolean") return v;
+        return neutralizeSpreadsheetValue(v);
+      }),
+    );
   }
 }
 

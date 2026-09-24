@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sum } from "drizzle-orm";
 import { Router } from "express";
 import multer from "multer";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
-import { EPUB_MIME, sniffEpubZip } from "../../lib/epubMagic.js";
+import { EPUB_MIME, EPUB_SNIFF_BYTES, sniffEpubZip } from "../../lib/epubMagic.js";
 import { PDF_MIME, sniffPdf } from "../../lib/pdfMagic.js";
 import { sniffImageMime } from "../../lib/imageMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
@@ -24,6 +24,10 @@ const MAX_BINARY_BYTES = Number(
   process.env.UPLOAD_MAX_BYTES_BINARY ??
     process.env.UPLOAD_MAX_BYTES_EPUB ??
     100 * 1024 * 1024,
+);
+/** Cumulative per-user storage cap (default 5 GiB). */
+const UPLOAD_QUOTA_BYTES = Number(
+  process.env.UPLOAD_QUOTA_BYTES ?? 5 * 1024 * 1024 * 1024,
 );
 const MULTER_MAX = Math.max(MAX_IMAGE_BYTES, MAX_BINARY_BYTES);
 
@@ -99,11 +103,11 @@ uploadsRouter.post(
       sendError(res, 400, "no_file", "Expected multipart field \"file\"");
       return;
     }
-    const head = Buffer.alloc(16);
+    const head = Buffer.alloc(EPUB_SNIFF_BYTES);
     const fd = fs.openSync(file.path, "r");
     let n = 0;
     try {
-      n = fs.readSync(fd, head, 0, 16, 0);
+      n = fs.readSync(fd, head, 0, EPUB_SNIFF_BYTES, 0);
     } finally {
       fs.closeSync(fd);
     }
@@ -149,6 +153,24 @@ uploadsRouter.post(
     }
 
     const ownerId = await getCurrentUserId(db);
+    if (Number.isFinite(UPLOAD_QUOTA_BYTES) && UPLOAD_QUOTA_BYTES > 0) {
+      const [usage] = await db
+        .select({ total: sum(schema.uploads.sizeBytes) })
+        .from(schema.uploads)
+        .where(eq(schema.uploads.ownerId, ownerId));
+      const usedBytes = Number(usage?.total ?? 0);
+      if (usedBytes + file.size > UPLOAD_QUOTA_BYTES) {
+        unlinkQuiet(file.path);
+        sendError(
+          res,
+          413,
+          "upload_quota_exceeded",
+          `Upload would exceed per-user storage quota of ${UPLOAD_QUOTA_BYTES} bytes`,
+        );
+        return;
+      }
+    }
+
     const [row] = await db
       .insert(schema.uploads)
       .values({
@@ -211,7 +233,11 @@ uploadsRouter.get("/files/:storedName", async (req, res) => {
     }
     res.setHeader("Content-Type", row.mimeType);
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Content-Disposition", `inline; filename="${storedName.replace(/"/g, "")}"`);
+    const safeName = storedName.replace(/"/g, "");
+    // PDFs as attachment (pdfjs still loads via fetch/blob); images stay inline.
+    const disposition =
+      row.mimeType === PDF_MIME ? "attachment" : "inline";
+    res.setHeader("Content-Disposition", `${disposition}; filename="${safeName}"`);
     res.setHeader("Cache-Control", "private, max-age=86400");
     res.sendFile(path.resolve(filePath));
   } catch (err) {

@@ -1,0 +1,108 @@
+# T0148 — Security Phase 7: Lower severity hardening
+
+Branch (on approval): `T0148-security-phase7`  
+Source: 2026-09 audit Phase 7 (`.cursor/plans/2026-09-security-audit-remediation.mdc`)  
+Deferred: **T0149** — parser-based markdown sanitization (Draft; depends on T0148)
+
+**Scope note:** remediation / hardening only. No exploit code or offensive tooling.
+
+---
+
+## Decisions (interview 2026-09-22)
+
+| Item | Decision |
+|------|----------|
+| Markdown parser sanitizer | **Defer** → T0149 (accepted residual under CSP + TipTap) |
+| Upload quota | **5 GB** per user via env (`UPLOAD_QUOTA_BYTES`, default 5 GiB); **413** when exceeded; admins subject to same cap unless we discover an existing admin bypass pattern — default: **no admin exempt** |
+| Group project access | **In scope** — converge filters on `accessibleProjectIdClauses` |
+| `verifyPassword` try/catch | **Already done** — add regression test only |
+| XLSX bomb bounds | Max **50 sheets**, **100k rows** total, **100 MB** uncompressed |
+| PDF disposition | Served PDFs → `Content-Disposition: attachment`; images stay `inline` |
+| Bag | Ship all Phase 7 items except deferred markdown in this Task |
+
+---
+
+## Work items
+
+### 1. CSV / XLSX formula injection on export (`src/lib/spreadsheet.ts`)
+
+- When serializing cell values for CSV and XLSX, neutralize leading `=`, `+`, `-`, `@` (and common TAB/CR variations) by prefixing with `'` or rewriting to a safe text form — match import-side formula stripping intent.
+- Cover both `objectsToCsv` / `csvEscape` and XLSX `writeSheet` paths.
+- Unit tests: titles like `=HYPERLINK(...)` export as non-formula text.
+
+### 2. XLSX decompression bomb on import
+
+- After / while loading workbook with ExcelJS, enforce:
+  - ≤ **50** worksheets
+  - ≤ **100_000** data rows across sheets (or per workbook — pick one and document)
+  - ≤ **100 MB** uncompressed size if measurable; otherwise derive from sheet/row/cell bounds as a hard reject
+- Reject with 400 and a clear message before materializing huge structures into memory where practical.
+- Tests with a constructed oversized workbook (or mocked workbook metadata).
+
+### 3. Upload storage quota
+
+- Env: `UPLOAD_QUOTA_BYTES` (default `5368709120` = 5 GiB); document in `.env.example`.
+- On upload create: sum existing `uploads` bytes for `ownerId` + new file size; if over → **413**.
+- Prefer a single SQL aggregate (`COALESCE(SUM(byte_size),0)`) — confirm column name in schema.
+- Rate limit (60 × 100 MB / 15 min) stays; quota is cumulative.
+- Test: mock/fixture under-quota vs over-quota.
+
+### 4. Group-based project access convergence (`src/services/ownership.ts`)
+
+- `dualScopeListFilter` and `projectOwnedListFilter` today omit manager/member/viewer **groups**.
+- Reuse `accessibleProjectIdClauses` (or equivalent shared helper) so list filters match project access.
+- Extend `ownership.test.ts` / related tests: user with access **only via group** sees project-owned children (tasks, docs, etc. via the filter), not empty lists.
+- Fails closed today → this is a **correctness** fix (opens intended access), not loosening auth beyond group grants.
+
+### 5. Backup manifest `sqlFile` path normalize (`src/services/backups.ts`)
+
+- Resolve `manifest.sqlFile` with `path.basename` (or reject `..` / absolute paths) before `path.join(dir, …)`.
+- Admin-only path; still harden. Add a focused unit/integration assertion if feasible.
+
+### 6. `verifyPassword` malformed hash
+
+- Implementation already `try/catch` → `false`.
+- Add regression test: crafted stored string that parses params but makes `scryptAsync` throw → expect `false`, not throw.
+
+### 7. PDF / EPUB serve hardening (`src/routes/v1/uploads.ts`, `src/lib/epubMagic.ts`)
+
+- PDFs: `Content-Disposition: attachment` (keep images `inline`).
+- EPUB sniffing: tighten beyond “any ZIP” — require EPUB container markers (e.g. `mimetype` entry / `application/epub+zip` in ZIP central/local headers) per existing `epubMagic` tests; expand tests for plain ZIP false positives.
+
+---
+
+## Out of scope (this Task)
+
+- Parser-based markdown sanitization → **T0149**
+- Host hardening / earlier phases (already shipped T0143–T0147)
+- New exploit PoCs / offensive scan modules beyond defensive unit tests
+
+---
+
+## Versioning (finish-up)
+
+- Expect **PATCH** bump unless a Drizzle migration is required for quota (prefer env-only; no migration if `uploads` already has size column).
+- Same finish-up commit: `RELEASE_NOTES.md` prepend. Skip `FEATURES.md` (hardening / correctness, not marketing perk).
+
+---
+
+## Implementation order
+
+1. Formula export + password regression test (quick wins)
+2. Ownership group convergence + tests
+3. XLSX bomb bounds + EPUB/PDF serve
+4. Upload quota + backup path normalize
+5. `npm run lint` / relevant unit tests before QA checklist
+
+---
+
+## QA checklist
+
+1. Export CSV/XLSX with a task titled `=1+1` — open in spreadsheet; cell is text (leading `'`), not a live formula.
+2. Import an XLSX with >50 sheets (or set `XLSX_MAX_SHEETS=2` in DEV) → 400 `spreadsheet_too_large`.
+3. Temporarily set `UPLOAD_QUOTA_BYTES` low in DEV, upload past it → 413 `upload_quota_exceeded`; restore env and confirm normal uploads work.
+4. Non-admin user with project access **only via Group** (manager/member/viewer group) → sees that project’s tasks, documents, boards in lists/search (not an empty tree).
+5. Backup restore of a normal backup still works.
+6. Open an in-app PDF document — reader still loads; direct `/api/v1/files/…pdf` response has `Content-Disposition: attachment`. Images still `inline`.
+7. Upload a plain `.zip` renamed `.epub` → rejected; a real EPUB still accepts.
+8. Unit coverage: `npm test` includes spreadsheet / epub / ownership group / backup path / password scrypt-throw cases.

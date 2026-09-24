@@ -321,7 +321,8 @@ export async function assertCanAccessTaggableEntity(
 /**
  * Dual-scope list filter (tasks, todos, lists, image boards):
  * - Admins: no filter
- * - Others: (`project_id IS NULL` AND `owner_id = actor`) OR project accessible via ownership/role
+ * - Others: (`project_id IS NULL` AND `owner_id = actor`) OR project accessible
+ *   via ownership / direct role / group role (same set as `accessibleProjectIdClauses`)
  */
 export function dualScopeListFilter(
   db: Db,
@@ -331,35 +332,16 @@ export function dualScopeListFilter(
   isAdministrator: boolean,
 ): SQL | undefined {
   if (isAdministrator) return undefined;
-  const ownedProjectIds = db
-    .select({ id: schema.projects.id })
-    .from(schema.projects)
-    .where(eq(schema.projects.ownerId, actorUserId));
-  const managerProjectIds = db
-    .select({ id: schema.projectManagers.projectId })
-    .from(schema.projectManagers)
-    .where(eq(schema.projectManagers.userId, actorUserId));
-  const memberProjectIds = db
-    .select({ id: schema.projectMembers.projectId })
-    .from(schema.projectMembers)
-    .where(eq(schema.projectMembers.userId, actorUserId));
-  const viewerProjectIds = db
-    .select({ id: schema.projectViewers.projectId })
-    .from(schema.projectViewers)
-    .where(eq(schema.projectViewers.userId, actorUserId));
   return or(
     and(isNull(projectIdColumn), eq(ownerIdColumn, actorUserId)),
-    inArray(projectIdColumn, ownedProjectIds),
-    inArray(projectIdColumn, managerProjectIds),
-    inArray(projectIdColumn, memberProjectIds),
-    inArray(projectIdColumn, viewerProjectIds),
+    ...accessibleProjectIdClausesForColumn(db, projectIdColumn, actorUserId),
   );
 }
 
 /**
  * Write-level counterpart to `dualScopeListFilter`: rows the actor may mutate —
- * standalone rows they own, or rows in a project they can write. Viewers are
- * excluded, so a read filter cannot be reused to authorize a mutation (T0143).
+ * standalone rows they own, or rows in a project they can write (owner / manager /
+ * member, direct or via Group). Viewers are excluded (T0143).
  */
 export function dualScopeWriteFilter(
   db: Db,
@@ -369,30 +351,16 @@ export function dualScopeWriteFilter(
   isAdministrator: boolean,
 ): SQL | undefined {
   if (isAdministrator) return undefined;
-  const ownedProjectIds = db
-    .select({ id: schema.projects.id })
-    .from(schema.projects)
-    .where(eq(schema.projects.ownerId, actorUserId));
-  const managerProjectIds = db
-    .select({ id: schema.projectManagers.projectId })
-    .from(schema.projectManagers)
-    .where(eq(schema.projectManagers.userId, actorUserId));
-  const memberProjectIds = db
-    .select({ id: schema.projectMembers.projectId })
-    .from(schema.projectMembers)
-    .where(eq(schema.projectMembers.userId, actorUserId));
   return or(
     and(isNull(projectIdColumn), eq(ownerIdColumn, actorUserId)),
-    inArray(projectIdColumn, ownedProjectIds),
-    inArray(projectIdColumn, managerProjectIds),
-    inArray(projectIdColumn, memberProjectIds),
+    ...writableProjectIdClausesForColumn(db, projectIdColumn, actorUserId),
   );
 }
 
 /**
  * List filter for project-nested rows (documents, boards, canvases, wiki):
  * - Admins: no filter
- * - Others: `project_id` in projects the actor can access (owner or any role list)
+ * - Others: `project_id` in projects the actor can access (owner, any role list, or group)
  */
 export function projectOwnedListFilter(
   db: Db,
@@ -401,26 +369,93 @@ export function projectOwnedListFilter(
   isAdministrator: boolean,
 ): SQL | undefined {
   if (isAdministrator) return undefined;
-  const ownedProjectIds = db
+  return or(...accessibleProjectIdClausesForColumn(db, projectIdColumn, actorUserId));
+}
+
+/** `inArray(column, subquery)` clauses matching `accessibleProjectIdClauses`. */
+function accessibleProjectIdClausesForColumn(
+  db: Db,
+  projectIdColumn: AnyPgColumn,
+  actorUserId: number,
+): SQL[] {
+  const owned = db
     .select({ id: schema.projects.id })
     .from(schema.projects)
     .where(eq(schema.projects.ownerId, actorUserId));
-  const managerProjectIds = db
+  const asManager = db
     .select({ id: schema.projectManagers.projectId })
     .from(schema.projectManagers)
     .where(eq(schema.projectManagers.userId, actorUserId));
-  const memberProjectIds = db
+  const asMember = db
     .select({ id: schema.projectMembers.projectId })
     .from(schema.projectMembers)
     .where(eq(schema.projectMembers.userId, actorUserId));
-  const viewerProjectIds = db
+  const asViewer = db
     .select({ id: schema.projectViewers.projectId })
     .from(schema.projectViewers)
     .where(eq(schema.projectViewers.userId, actorUserId));
-  return or(
-    inArray(projectIdColumn, ownedProjectIds),
-    inArray(projectIdColumn, managerProjectIds),
-    inArray(projectIdColumn, memberProjectIds),
-    inArray(projectIdColumn, viewerProjectIds),
-  );
+  const actorGroups = db
+    .select({ groupId: schema.groupMembers.groupId })
+    .from(schema.groupMembers)
+    .where(eq(schema.groupMembers.userId, actorUserId));
+  const asManagerGroup = db
+    .select({ id: schema.projectManagerGroups.projectId })
+    .from(schema.projectManagerGroups)
+    .where(inArray(schema.projectManagerGroups.groupId, actorGroups));
+  const asMemberGroup = db
+    .select({ id: schema.projectMemberGroups.projectId })
+    .from(schema.projectMemberGroups)
+    .where(inArray(schema.projectMemberGroups.groupId, actorGroups));
+  const asViewerGroup = db
+    .select({ id: schema.projectViewerGroups.projectId })
+    .from(schema.projectViewerGroups)
+    .where(inArray(schema.projectViewerGroups.groupId, actorGroups));
+  return [
+    inArray(projectIdColumn, owned),
+    inArray(projectIdColumn, asManager),
+    inArray(projectIdColumn, asMember),
+    inArray(projectIdColumn, asViewer),
+    inArray(projectIdColumn, asManagerGroup),
+    inArray(projectIdColumn, asMemberGroup),
+    inArray(projectIdColumn, asViewerGroup),
+  ];
+}
+
+/** Write subset: owner / manager / member (direct + group); no viewers. */
+function writableProjectIdClausesForColumn(
+  db: Db,
+  projectIdColumn: AnyPgColumn,
+  actorUserId: number,
+): SQL[] {
+  const owned = db
+    .select({ id: schema.projects.id })
+    .from(schema.projects)
+    .where(eq(schema.projects.ownerId, actorUserId));
+  const asManager = db
+    .select({ id: schema.projectManagers.projectId })
+    .from(schema.projectManagers)
+    .where(eq(schema.projectManagers.userId, actorUserId));
+  const asMember = db
+    .select({ id: schema.projectMembers.projectId })
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.userId, actorUserId));
+  const actorGroups = db
+    .select({ groupId: schema.groupMembers.groupId })
+    .from(schema.groupMembers)
+    .where(eq(schema.groupMembers.userId, actorUserId));
+  const asManagerGroup = db
+    .select({ id: schema.projectManagerGroups.projectId })
+    .from(schema.projectManagerGroups)
+    .where(inArray(schema.projectManagerGroups.groupId, actorGroups));
+  const asMemberGroup = db
+    .select({ id: schema.projectMemberGroups.projectId })
+    .from(schema.projectMemberGroups)
+    .where(inArray(schema.projectMemberGroups.groupId, actorGroups));
+  return [
+    inArray(projectIdColumn, owned),
+    inArray(projectIdColumn, asManager),
+    inArray(projectIdColumn, asMember),
+    inArray(projectIdColumn, asManagerGroup),
+    inArray(projectIdColumn, asMemberGroup),
+  ];
 }

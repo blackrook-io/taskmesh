@@ -16,6 +16,23 @@ import { recordSystemLog } from "./apiRequestLogs.js";
 const execFileAsync = promisify(execFile);
 
 /**
+ * Resolve manifest `sqlFile` under the backup dir. Rejects path separators and
+ * `..` so a crafted admin-only restore cannot escape the backup folder.
+ */
+export function resolveBackupSqlPath(backupDir: string, sqlFile: string): string {
+  const base = path.basename(sqlFile);
+  if (!base || base !== sqlFile || base === "." || base === "..") {
+    throw new Error("Invalid backup SQL file name");
+  }
+  const root = path.resolve(backupDir);
+  const sqlPath = path.resolve(root, base);
+  if (sqlPath !== root && !sqlPath.startsWith(root + path.sep)) {
+    throw new Error("Invalid backup SQL file path");
+  }
+  return sqlPath;
+}
+
+/**
  * pg_dump may include ALTER DEFAULT PRIVILEGES FOR ROLE postgres (from INSTALL grants).
  * The app role cannot apply those; strip them so ON_ERROR_STOP restores succeed.
  */
@@ -338,7 +355,7 @@ export async function restoreBackup(
     }
 
     const dir = path.join(getBackupDir(), id);
-    const sqlPath = path.join(dir, manifest.sqlFile);
+    const sqlPath = resolveBackupSqlPath(dir, manifest.sqlFile);
     if (!fs.existsSync(sqlPath)) {
       throw new Error("SQL dump file is missing on disk");
     }

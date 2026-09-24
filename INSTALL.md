@@ -461,6 +461,8 @@ UPLOAD_MAX_BYTES=5242880
 UPLOAD_MAX_BYTES_BINARY=104857600
 # Legacy alias still honored when BINARY is unset
 # UPLOAD_MAX_BYTES_EPUB=104857600
+# Cumulative per-user upload storage quota (default 5 GiB)
+# UPLOAD_QUOTA_BYTES=5368709120
 ```
 
 If you set `UPLOAD_DIR` outside the repo:

@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   ideas,
   projectMembers,
+  projectMemberGroups,
+  projectManagerGroups,
   projectViewers,
   projectViewerGroups,
   todos,
@@ -16,6 +18,7 @@ import {
   isAdminOrOwner,
   ownerScope,
   projectAccessListFilter,
+  projectOwnedListFilter,
   projectWriteListFilter,
   roleSatisfiesAccess,
 } from "./ownership.js";
@@ -166,7 +169,7 @@ describe("dualScopeWriteFilter (T0143)", () => {
     );
   });
 
-  it("never consults the viewer role list", () => {
+  it("never consults the viewer role lists", () => {
     const { db, tables } = recordingDb();
     const clause = dualScopeWriteFilter(db, todos.projectId, todos.ownerId, 3, false);
     assert.ok(clause);
@@ -174,6 +177,17 @@ describe("dualScopeWriteFilter (T0143)", () => {
       !tables.includes(projectViewers),
       "dual-scope write filter must not grant access via project_viewers",
     );
+    assert.ok(
+      !tables.includes(projectViewerGroups),
+      "dual-scope write filter must not grant access via project_viewer_groups",
+    );
+  });
+
+  it("includes manager and member groups (T0148)", () => {
+    const { db, tables } = recordingDb();
+    dualScopeWriteFilter(db, todos.projectId, todos.ownerId, 3, false);
+    assert.ok(tables.includes(projectManagerGroups));
+    assert.ok(tables.includes(projectMemberGroups));
   });
 
   it("is narrower than the dual-scope read filter", () => {
@@ -183,6 +197,25 @@ describe("dualScopeWriteFilter (T0143)", () => {
     dualScopeWriteFilter(write.db, todos.projectId, todos.ownerId, 3, false);
     assert.ok(write.tables.length < read.tables.length);
     assert.ok(read.tables.includes(projectViewers));
+    assert.ok(read.tables.includes(projectViewerGroups));
+  });
+});
+
+describe("group access in list filters (T0148)", () => {
+  it("dualScopeListFilter consults viewer groups", () => {
+    const { db, tables } = recordingDb();
+    dualScopeListFilter(db, todos.projectId, todos.ownerId, 3, false);
+    assert.ok(tables.includes(projectViewerGroups));
+    assert.ok(tables.includes(projectManagerGroups));
+    assert.ok(tables.includes(projectMemberGroups));
+  });
+
+  it("projectOwnedListFilter consults viewer groups", () => {
+    const { db, tables } = recordingDb();
+    projectOwnedListFilter(db, todos.projectId, 3, false);
+    assert.ok(tables.includes(projectViewerGroups));
+    assert.ok(tables.includes(projectManagerGroups));
+    assert.ok(tables.includes(projectMemberGroups));
   });
 });
 
