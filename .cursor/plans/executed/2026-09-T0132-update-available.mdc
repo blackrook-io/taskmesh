@@ -1,0 +1,28 @@
+# T0132 — App should check for Updates/Upgrades
+
+Task: **T0132** (id 145), project 4, state `ready`, priority medium. No parent, no dependencies.
+
+## Outcome
+
+Administrators see a signal when the running server version is older than the latest published GitHub Release. Clicking it opens that release’s page (the changelog). Everyone else sees the version string as they do today. The app does not download or apply an upgrade.
+
+## Decisions (confirm or adjust)
+
+1. **Where.** A small “Update” mark next to the nav version (`v0.47.x`) in both expanded and collapsed nav. Administrators only. No new Administration section.
+2. **What “latest” means.** GitHub `GET /repos/blackrook-io/taskmesh/releases/latest` — newest non-draft, non-prerelease release. The current repo only has prerelease `v0.1`, so `/releases/latest` is empty and the signal stays off until a stable release newer than the running version exists.
+3. **Compare.** Strip a leading `v` and compare SemVer to the version already returned by `/api/health` (`meta.version`). Signal only when the release is strictly newer. Same version, older release, missing release, or a failed check: no signal and no error toast.
+4. **Click.** Opens the release `html_url` in a new tab (GitHub release notes).
+5. **Who checks.** The API calls GitHub, caches the result in memory for about 1 hour, and exposes it only to Administrators (`GET /api/v1/system/update`). The client asks once per session load (and when the window regains focus if the cache is stale). Optional `GITHUB_REPO` (default `blackrook-io/taskmesh`) and optional `GITHUB_TOKEN` for a higher rate limit. Unauthenticated public API is enough for the public repo.
+6. **Out of scope.** Applying the upgrade, install-script changes, and publishing releases (the future Build-release skill). No schema change.
+
+## Implementation
+
+- Server: small update-check service + admin-only route. SemVer compare that accepts `v` prefixes. Cache + timeout so a slow GitHub does not block the UI.
+- Client: nav version row calls the endpoint only when the signed-in user is an Administrator; render the mark and link when `updateAvailable` is true.
+- Tests: SemVer compare (newer / same / older / `v` prefix / prerelease tag ignored by the latest endpoint contract) and the route’s admin gate (non-admin does not get the payload).
+
+## QA
+
+- Administrator on a build older than a stable release sees the mark and the link opens the release page.
+- Administrator when GitHub has no newer stable release sees only `v…`.
+- Non-administrator never sees the mark and cannot read the endpoint.

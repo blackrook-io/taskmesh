@@ -40,6 +40,7 @@ import { NavIcon } from "./NavIcon";
 import { ProjectSelectModal } from "./ProjectSelectModal";
 import { shellIcons } from "./shellIcons";
 import { SystemClock } from "./SystemClock";
+import { UpdateAvailableLink } from "./UpdateAvailableLink";
 
 const EMPTY_PROJECTS: Project[] = [];
 
@@ -425,6 +426,7 @@ export function AppNav({
             <span className="app-nav__version app-nav__version--less" title={versionTooltip}>
               v{versionMeta.version}
             </span>
+            <UpdateAvailableLink compact />
           </div>
         ) : (
           <>
@@ -486,6 +488,7 @@ export function AppNav({
               <span className="app-nav__version" title={versionTooltip}>
                 v{versionMeta.version}
               </span>
+              <UpdateAvailableLink />
             </div>
             <SystemClock />
           </>

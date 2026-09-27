@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.47.7 — 2026-09-27
+
+### New Functionality
+- Administrators see an Update link beside the nav version when the running server is older than the latest stable GitHub Release. The link opens that release’s changelog. The app does not install the upgrade.
+
 ## 0.47.6 — 2026-09-27
 
 ### New Functionality
