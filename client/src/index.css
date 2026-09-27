@@ -907,6 +907,25 @@ a.app-nav__item.active {
   text-overflow: ellipsis;
 }
 
+.app-nav__update {
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  line-height: 1.1;
+}
+
+.app-nav__update:hover {
+  text-decoration: underline;
+}
+
+.app-nav__update--less {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 0.62rem;
+}
+
 .coming-soon {
   max-width: 36rem;
 }
