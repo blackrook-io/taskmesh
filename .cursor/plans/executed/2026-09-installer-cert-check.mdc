@@ -1,0 +1,5 @@
+# Installer certificate check (2026-09)
+
+Certbot wrote `/etc/letsencrypt/live/<fqdn>/fullchain.pem`, then the installer exited with "Certificate files were not created." The live directory is mode 700 root, so the sudo user cannot see it.
+
+The installer now uses `sudo test -f` and `sudo openssl` for that path.
