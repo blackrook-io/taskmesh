@@ -4,6 +4,16 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.47.6 — 2026-09-27
+
+### New Functionality
+- The Ubuntu installer asks for the administrator email and password after the database is migrated. Pressing Enter generates a password and shows it on the terminal only, so the install log does not contain it. That account is the sign-in for `https://<fqdn>/`.
+- Every installer prompt is colored, and each yes/no question explains what Yes and No will do, with a recommendation, before it waits.
+
+### Enhancements
+- A re-run that finds a valid Let's Encrypt certificate for the chosen name skips the certificate request and configures nginx to use that certificate.
+- A re-run that finds the `taskmesh` database role and database keeps both. The password is replaced only when you answer Yes. No leaves the password unchanged and continues, reading it from `.env` when that file is already present.
+
 ## 0.47.5 — 2026-09-27
 
 ### Fixes

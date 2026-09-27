@@ -1,0 +1,13 @@
+# Installer administrator sign-in and prompt help
+
+The public installer asks for the built-in administrator email and password after migrations and the production build. Enter generates a password, prints it on the terminal only, and leaves it out of stdout. An existing sign-in is kept unless the operator replaces it.
+
+Every yes/no question prints, in yellow, what Yes does, what No does, and a recommendation. The question itself is bold green so a waiting prompt is visible. `NO_COLOR` turns the colors off.
+
+If `/etc/letsencrypt` already has an unexpired certificate whose name matches the FQDN, the installer does not run Certbot's request or renew prompts. It writes the HTTPS vhost with that certificate. Deleting `/srv/taskmesh` and cloning again can reuse the existing certificate.
+
+A re-run checks for the `taskmesh` Postgres role and database. Both are kept when they exist. The password is replaced only when the operator answers Yes. No leaves the password unchanged and continues, reading it from `.env` when that file is already present.
+
+No schema change. Skip FEATURES.md.
+
+Shipped as 0.47.6.

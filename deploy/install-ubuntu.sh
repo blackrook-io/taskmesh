@@ -17,6 +17,9 @@
 #
 # The app is then served at https://<fqdn>/. Express and PostgreSQL stay on
 # loopback. nginx gets one named vhost so other sites can share this host.
+# The installer asks for the administrator email and password (or generates
+# the password and shows it on this terminal only). Yes/no questions print
+# what each answer does, in yellow, before the prompt.
 #
 #   bash deploy/install-ubuntu.sh --check      # report only; no changes
 #   bash deploy/install-ubuntu.sh --self-test  # hostname checks; no sudo
@@ -46,9 +49,18 @@ DB_PASS=""
 DB_PASS_GENERATED=0
 DB_PASS_CHANGED=0
 OPENAI_API_KEY=""
+ADMIN_EMAIL=""
+ADMIN_PASS=""
+ADMIN_PASS_GENERATED=0
+ADMIN_CRED_FILES=()
 SOURCE_ROOT=""
 SSH_PORT="22"
 HTTP_BOOTSTRAP_WRITTEN=0
+CERT_FILE=""
+KEY_FILE=""
+C_YELLOW=""
+C_PROMPT=""
+C_RESET=""
 
 APT_INSTALL=(
   apt-get install -y
@@ -73,30 +85,70 @@ step() {
   echo "==> $*"
 }
 
-confirm() {
+setup_colors() {
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    return 0
+  fi
+  # Prompts are written to /dev/tty, including when stdout is being logged.
+  if [[ -w /dev/tty ]]; then
+    C_YELLOW=$'\033[33m'
+    C_PROMPT=$'\033[1;32m'
+    C_RESET=$'\033[0m'
+  fi
+}
+
+show_on_tty() {
+  printf '%s\n' "$1" >/dev/tty
+}
+
+note() {
+  printf '%s\n' "${C_PROMPT}${1}${C_RESET}" >/dev/tty
+}
+
+read_line() {
+  local reply
+  printf '%s' "${C_PROMPT}${1}${C_RESET}" >/dev/tty
+  IFS= read -r reply </dev/tty || die "No terminal is available for prompts."
+  printf '%s' "$reply"
+}
+
+read_secret() {
+  local reply
+  printf '%s' "${C_PROMPT}${1}${C_RESET}" >/dev/tty
+  IFS= read -r -s reply </dev/tty || die "No terminal is available for prompts."
+  printf '\n' >/dev/tty
+  printf '%s' "$reply"
+}
+
+# $1 question  $2 default y|n  $3 result of yes  $4 result of no  $5 recommendation
+ask() {
   local prompt="$1"
-  local default="${2:-n}"
+  local default="$2"
+  local yes_result="$3"
+  local no_result="$4"
+  local recommendation="$5"
   local hint reply
   if [[ "$default" == "y" ]]; then
     hint="[Y/n]"
   else
     hint="[y/N]"
   fi
+  printf '%s\n' "${C_YELLOW}Yes: ${yes_result}${C_RESET}" >/dev/tty
+  printf '%s\n' "${C_YELLOW}No: ${no_result}${C_RESET}" >/dev/tty
+  printf '%s\n' "${C_YELLOW}Recommendation: ${recommendation}${C_RESET}" >/dev/tty
   while true; do
-    read -r -p "$prompt $hint " reply </dev/tty || die "No terminal is available for prompts."
+    printf '%s' "${C_PROMPT}${prompt} ${hint} ${C_RESET}" >/dev/tty
+    IFS= read -r reply </dev/tty || die "No terminal is available for prompts."
     if [[ -z "$reply" ]]; then
       reply="$default"
     fi
     case "${reply,,}" in
       y|yes) return 0 ;;
       n|no) return 1 ;;
-      *) echo "Answer yes or no." ;;
+      *) printf '%s\n' "${C_PROMPT}Answer yes or no.${C_RESET}" >/dev/tty ;;
     esac
   done
 }
-
-confirm_no() { confirm "$1" n; }
-confirm_yes() { confirm "$1" y; }
 
 is_fqdn() {
   local value="${1,,}"
@@ -209,7 +261,10 @@ require_ubuntu() {
     *)
       if [[ "$CHECK_ONLY" -eq 1 ]]; then
         echo "This script is written for Ubuntu 22.04 and 24.04."
-      elif ! confirm_yes "This script is written for Ubuntu 22.04 and 24.04 (found ${version_id}). Continue?"; then
+      elif ! ask "This script is written for Ubuntu 22.04 and 24.04 (found ${version_id}). Continue?" n \
+        "The installer keeps going on this Ubuntu release. Package names or service behavior may differ from 22.04 and 24.04." \
+        "The installer stops. Nothing else is changed." \
+        "No. Stop unless you have already confirmed this release matches those package workflows."; then
         die "Aborted."
       fi
       ;;
@@ -258,7 +313,10 @@ ensure_packages() {
     if [[ -n "$cand" && "$cand" != "(none)" && "$cand" != "$inst" ]]; then
       if [[ "$CHECK_ONLY" -eq 1 ]]; then
         echo "UPGRADE   ${pkg} ${inst} -> ${cand}"
-      elif confirm_no "${pkg} is installed (${inst}). Upgrade to ${cand}?"; then
+      elif ask "Upgrade ${pkg} from ${inst} to ${cand}?" n \
+        "${pkg} is upgraded to ${cand} before the installer continues." \
+        "${pkg} stays at ${inst}." \
+        "No. Keep the installed version unless you specifically want this upgrade."; then
         install_now+=("$pkg")
       else
           echo "Keeping ${pkg} ${inst}."
@@ -331,14 +389,14 @@ run_check() {
 prompt_fqdn() {
   local value
   while true; do
-    read -r -p "TaskMesh FQDN (example: tasks.example.com): " value </dev/tty || die "No terminal is available for prompts."
+    value="$(read_line "TaskMesh FQDN (example: tasks.example.com): ")"
     if [[ "$value" == *"://"* || "$value" == *"/"* || "$value" == *":"* ]]; then
-      echo "Enter the FQDN only. HTTPS is used automatically. Example: tasks.example.com"
+      note "Enter the FQDN only. HTTPS is used automatically. Example: tasks.example.com"
       continue
     fi
     value="${value,,}"
     if ! is_fqdn "$value"; then
-      echo "That is not an FQDN. Example: tasks.example.com"
+      note "That is not an FQDN. Example: tasks.example.com"
       continue
     fi
     FQDN="$value"
@@ -349,19 +407,18 @@ prompt_fqdn() {
 prompt_email() {
   local value
   while true; do
-    read -r -p "Let's Encrypt contact email: " value </dev/tty || die "No terminal is available for prompts."
+    value="$(read_line "Let's Encrypt contact email: ")"
     if is_email "$value"; then
       LE_EMAIL="$value"
       return 0
     fi
-    echo "Enter an email address Let's Encrypt can use for expiry notices."
+    note "Enter an email address Let's Encrypt can use for expiry notices."
   done
 }
 
 prompt_openai() {
   local value
-  read -r -s -p "OpenAI API key (optional, Enter to skip): " value </dev/tty || die "No terminal is available for prompts."
-  echo ""
+  value="$(read_secret "OpenAI API key (optional, Enter to skip): ")"
   OPENAI_API_KEY="$value"
 }
 
@@ -383,7 +440,10 @@ collect_inputs() {
   fi
   echo "Firewall:     OpenSSH, TCP 80, and TCP 443 for every site on this host"
   echo "Not opened:   TCP 3000 (Express) and TCP 5432 (PostgreSQL)"
-  if ! confirm_yes "Continue the installation?"; then
+  if ! ask "Continue the installation?" y \
+    "Packages, the database, the taskmesh user, nginx, TLS, and the firewall are configured for https://${FQDN}/." \
+    "The installer stops. Nothing has been changed yet." \
+    "Yes, if the summary above is the site you want."; then
     die "Aborted."
   fi
 }
@@ -447,7 +507,10 @@ install_node() {
       if [[ "$CHECK_ONLY" -eq 1 ]]; then
         return 0
       fi
-      if confirm_no "Upgrade Node.js to ${NODE_MAJOR_TARGET}.x from NodeSource?"; then
+      if ask "Upgrade Node.js to ${NODE_MAJOR_TARGET}.x from NodeSource?" y \
+        "Node.js is replaced with the NodeSource ${NODE_MAJOR_TARGET}.x packages. Later npm builds use that version." \
+        "The installer keeps Node.js $(node -v). The app can run, but new servers use ${NODE_MAJOR_TARGET}.x." \
+        "Yes. Install Node.js ${NODE_MAJOR_TARGET}.x so this host matches a new TaskMesh server."; then
         install_nodesource
       else
         echo "Keeping Node.js $(node -v)."
@@ -457,7 +520,10 @@ install_node() {
       if [[ "$CHECK_ONLY" -eq 1 ]]; then
         return 0
       fi
-      if confirm_yes "Upgrade Node.js to ${NODE_MAJOR_TARGET}.x from NodeSource?"; then
+      if ask "Upgrade Node.js to ${NODE_MAJOR_TARGET}.x from NodeSource?" y \
+        "Node.js is replaced with the NodeSource ${NODE_MAJOR_TARGET}.x packages, which this app requires." \
+        "The installer stops. Node.js $(node -v) is too old to build or run TaskMesh." \
+        "Yes. The install cannot finish on this Node.js version."; then
         install_nodesource
       else
         die "Cannot continue without Node.js ${NODE_MAJOR_MIN} or newer."
@@ -494,7 +560,10 @@ drop_privileged_groups() {
   for group in sudo adm wheel; do
     if grep -Eq "(^| )${group}( |$)" <<<"$groups"; then
       echo "User ${APP_USER} is in the ${group} group."
-      if confirm_yes "Remove ${APP_USER} from the ${group} group?"; then
+      if ask "Remove ${APP_USER} from the ${group} group?" y \
+        "${APP_USER} loses ${group} access and stays a service account without sudo." \
+        "The installer stops. The service account would still be in ${group}." \
+        "Yes. The account that runs TaskMesh must not have ${group} access."; then
         run_root gpasswd -d "$APP_USER" "$group"
       else
         die "The ${APP_USER} service user must not keep ${group} access."
@@ -510,7 +579,10 @@ ensure_service_user() {
     shell="$(getent passwd "$APP_USER" | cut -d: -f7)"
     echo "User ${APP_USER} already exists (shell ${shell})."
     if [[ "$shell" != "/usr/sbin/nologin" && "$shell" != "/bin/false" ]]; then
-      if ! confirm_yes "This account can log in. Use it as the unprivileged service account anyway?"; then
+      if ! ask "This account can log in. Use it as the unprivileged service account anyway?" n \
+        "The existing ${APP_USER} login account becomes the account that runs the app. It will not be given sudo." \
+        "The installer stops. Create a separate nologin system user named ${APP_USER} before running it again." \
+        "No. Stop and use a dedicated nologin account rather than a user that can sign in."; then
         die "Aborted."
       fi
     fi
@@ -543,21 +615,22 @@ sql_escape() {
 prompt_new_db_password() {
   local first second
   while true; do
-    read -r -s -p "Postgres password for ${APP_USER} (Enter to generate one): " first </dev/tty || die "No terminal is available for prompts."
-    echo ""
+    first="$(read_secret "Postgres password for ${APP_USER} (Enter to generate one): ")"
     if [[ -z "$first" ]]; then
       DB_PASS="$(openssl rand -hex 24)"
       DB_PASS_GENERATED=1
+      show_on_tty "Database password (shown only on this terminal, not in the install log):"
+      show_on_tty "$DB_PASS"
+      show_on_tty "It is also stored in ${APP_ROOT}/.env as DATABASE_URL."
       return 0
     fi
     if ! is_db_password "$first"; then
-      echo "Use at least 16 characters from letters, digits, and . _ ~ - so the password is safe in DATABASE_URL."
+      note "Use at least 16 characters from letters, digits, and . _ ~ - so the password is safe in DATABASE_URL."
       continue
     fi
-    read -r -s -p "Repeat the password: " second </dev/tty || die "No terminal is available for prompts."
-    echo ""
+    second="$(read_secret "Repeat the password: ")"
     if [[ "$first" != "$second" ]]; then
-      echo "The passwords did not match."
+      note "The passwords did not match."
       continue
     fi
     DB_PASS="$first"
@@ -569,15 +642,31 @@ prompt_new_db_password() {
 prompt_existing_db_password() {
   local value
   while true; do
-    read -r -s -p "Current Postgres password for ${APP_USER}: " value </dev/tty || die "No terminal is available for prompts."
-    echo ""
+    value="$(read_secret "Current Postgres password for ${APP_USER}: ")"
     if is_db_password "$value"; then
       DB_PASS="$value"
       DB_PASS_GENERATED=0
       return 0
     fi
-    echo "That password cannot be stored in DATABASE_URL. Use letters, digits, and . _ ~ - (at least 16)."
+    note "That password cannot be stored in DATABASE_URL. Use letters, digits, and . _ ~ - (at least 16)."
   done
+}
+
+load_db_password_from_env() {
+  local line pass
+  root_file_exists "${APP_ROOT}/.env" || return 1
+  line="$(run_root grep -E '^DATABASE_URL=' "${APP_ROOT}/.env" || true)"
+  line="${line#DATABASE_URL=}"
+  line="${line#\"}"
+  line="${line%\"}"
+  line="${line#\'}"
+  line="${line%\'}"
+  [[ "$line" == postgresql://${APP_USER}:*@* ]] || return 1
+  pass="${line#postgresql://"${APP_USER}":}"
+  pass="${pass%%@*}"
+  is_db_password "$pass" || return 1
+  DB_PASS="$pass"
+  DB_PASS_GENERATED=0
 }
 
 postgres_role_exists() {
@@ -602,15 +691,39 @@ SQL
 
 ensure_database() {
   step "TaskMesh database"
+  local role_exists db_exists
+  role_exists=0
+  db_exists=0
   if postgres_role_exists; then
+    role_exists=1
     echo "Postgres role ${APP_USER} already exists."
-    if confirm_no "Set a new password for the ${APP_USER} role?"; then
+  else
+    echo "Postgres role ${APP_USER} is not on this server."
+  fi
+  if postgres_db_exists; then
+    db_exists=1
+    echo "Database ${APP_USER} already exists. Its data will be left in place."
+  else
+    echo "Database ${APP_USER} is not on this server."
+  fi
+
+  if [[ "$role_exists" -eq 1 ]]; then
+    if ask "Replace the password for the ${APP_USER} database role?" n \
+      "The role password is changed. The installer stores the new password in .env. Existing data in the database stays." \
+      "The role password stays as it is, and the database is not recreated. If .env already has that password, the installer continues without asking for it. If .env is missing, you type the current password so the new file can connect." \
+      "No. Keep the current password when this database was already installed."; then
       prompt_new_db_password
       apply_db_password
       DB_PASS_CHANGED=1
     else
-      prompt_existing_db_password
       DB_PASS_CHANGED=0
+      if load_db_password_from_env; then
+        echo "Keeping the current database password from ${APP_ROOT}/.env."
+      else
+        echo "The database password will not be changed."
+        echo "${APP_ROOT}/.env does not already contain it. The current password is needed so the new environment file can connect."
+        prompt_existing_db_password
+      fi
     fi
   else
     prompt_new_db_password
@@ -623,8 +736,9 @@ SQL
     echo "Created Postgres role ${APP_USER}."
   fi
 
-  if postgres_db_exists; then
-    echo "Database ${APP_USER} already exists."
+  if [[ "$db_exists" -eq 1 ]]; then
+    as_postgres psql -v ON_ERROR_STOP=1 -c "ALTER DATABASE ${APP_USER} OWNER TO ${APP_USER};"
+    echo "Left database ${APP_USER} in place."
   else
     as_postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${APP_USER} OWNER ${APP_USER};"
     echo "Created database ${APP_USER}."
@@ -636,7 +750,10 @@ SQL
 
   if ! smoke_test_database; then
     echo "Password login to ${APP_USER} on 127.0.0.1 failed."
-    if ! confirm_yes "Allow scram-sha-256 from 127.0.0.1 and ::1 for the ${APP_USER} role in pg_hba.conf?"; then
+    if ! ask "Allow password login from this server to the ${APP_USER} database?" y \
+      "pg_hba.conf gains scram-sha-256 lines for ${APP_USER} on 127.0.0.1 and ::1, then PostgreSQL is reloaded. The app can connect." \
+      "The installer stops. Migrations cannot log in with the database password." \
+      "Yes. Local password login is required for TaskMesh."; then
       die "Cannot continue without a working database login."
     fi
     local hba
@@ -697,13 +814,19 @@ ensure_app_tree() {
     owner="$(stat -c '%U' "$APP_ROOT")"
     echo "Using existing checkout ${APP_ROOT} (owner ${owner})."
     if [[ "$owner" != "$APP_USER" ]]; then
-      if ! confirm_yes "Change ownership of ${APP_ROOT} from ${owner} to ${APP_USER}?"; then
+      if ! ask "Change ownership of ${APP_ROOT} from ${owner} to ${APP_USER}?" y \
+        "The application tree, including .git and .env, becomes owned by ${APP_USER}. Your account will need sudo to update git afterward." \
+        "The installer stops. The service cannot run a tree it does not own." \
+        "Yes. The service account has to own the files it runs."; then
         die "Aborted. The service user must own the application tree."
       fi
     fi
     run_root chown -R "${APP_USER}:${APP_USER}" "$APP_ROOT"
     if [[ -d "${APP_ROOT}/.git" ]]; then
-      if confirm_no "Run git pull --ff-only in ${APP_ROOT}?"; then
+      if ask "Run git pull --ff-only in ${APP_ROOT}?" n \
+        "The checkout fast-forwards to its upstream. The install then builds that updated tree. Uncommitted files are left in place and can make the pull fail." \
+        "The installer builds the files already in ${APP_ROOT}. Nothing is fetched." \
+        "No. Keep this checkout when it is already the version you intend to install."; then
         as_taskmesh git -C "$APP_ROOT" pull --ff-only
       fi
     fi
@@ -756,11 +879,18 @@ ensure_env() {
   if [[ -f "${APP_ROOT}/.env" ]]; then
     local replace_default
     replace_default="n"
+    local env_recommend
     if [[ "$DB_PASS_CHANGED" -eq 1 ]]; then
       echo "The database password was set during this run. .env must match it."
       replace_default="y"
+      env_recommend="Yes. The database password changed, so the existing .env would point at the old password."
+    else
+      env_recommend="No. Keep the existing file so the current database password and keys stay put."
     fi
-    if confirm "Replace ${APP_ROOT}/.env?" "$replace_default"; then
+    if ask "Replace ${APP_ROOT}/.env?" "$replace_default" \
+      "The current .env is overwritten. DATABASE_URL uses this run's database password, and new OAuth and MFA keys are generated." \
+      "The current .env stays. If the database password was changed in this run, the installer stops because the app could not connect." \
+      "$env_recommend"; then
       write_env_file
       echo "Wrote ${APP_ROOT}/.env (mode 600, owner ${APP_USER})."
     else
@@ -777,6 +907,224 @@ ensure_env() {
   fi
 }
 
+write_admin_helper() {
+  local dest="$1"
+  local tmp
+  tmp="$(mktemp)"
+  cat >"$tmp" <<'EOF'
+import fs from "node:fs";
+import pg from "pg";
+import "dotenv/config";
+import { hashPassword, validatePassword } from "./dist/lib/password.js";
+
+const mode = process.argv[2];
+
+function readCredentials() {
+  const text = fs.readFileSync(process.argv[3], "utf8");
+  const nl = text.indexOf("\n");
+  if (nl < 1) {
+    console.error("Credential file is incomplete.");
+    process.exit(1);
+  }
+  return {
+    email: text.slice(0, nl).trim().toLowerCase(),
+    password: text.slice(nl + 1).replace(/\n$/, ""),
+  };
+}
+
+if (mode === "check") {
+  const problem = validatePassword(readCredentials().password);
+  if (problem) {
+    console.error(problem);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await client.connect();
+
+async function finish(code) {
+  await client.end();
+  process.exit(code);
+}
+
+if (mode === "status") {
+  const found = await client.query(
+    "SELECT email, (password_hash IS NOT NULL) AS has_password FROM users WHERE number = 1",
+  );
+  if (!found.rowCount) {
+    console.error("User number 1 was not found. Database migrations did not seed the administrator.");
+    await finish(2);
+  }
+  const row = found.rows[0];
+  process.stdout.write(`${row.has_password ? "yes" : "no"}\t${row.email ?? ""}\n`);
+  await finish(0);
+}
+
+if (mode !== "apply") {
+  console.error("Unknown administrator helper mode.");
+  await finish(1);
+}
+const { email, password } = readCredentials();
+if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) {
+  console.error("Enter an email address.");
+  await finish(1);
+}
+const problem = validatePassword(password);
+if (problem) {
+  console.error(problem);
+  await finish(1);
+}
+const passwordHash = await hashPassword(password);
+const saved = await client.query(
+  "UPDATE users SET email = $1, password_hash = $2, updated_at = now() WHERE number = 1 RETURNING email, display_name",
+  [email, passwordHash],
+);
+if (saved.rowCount !== 1) {
+  console.error("User number 1 was not found.");
+  await finish(2);
+}
+console.log(`Administrator sign-in saved for ${saved.rows[0].email} (${saved.rows[0].display_name}).`);
+await finish(0);
+EOF
+  run_root install -o "$APP_USER" -g "$APP_USER" -m 600 "$tmp" "$dest"
+  rm -f "$tmp"
+}
+
+admin_node() {
+  as_taskmesh bash -lc "cd '${APP_ROOT}' && node '${APP_ROOT}/.install-admin.mjs' $(printf '%q ' "$@")"
+}
+
+cleanup_admin_files() {
+  local f
+  run_root rm -f "${APP_ROOT}/.install-admin.mjs"
+  if ((${#ADMIN_CRED_FILES[@]} > 0)); then
+    for f in "${ADMIN_CRED_FILES[@]}"; do
+      run_root rm -f "$f"
+    done
+  fi
+}
+
+write_login_file() {
+  local file="$1"
+  local email="$2"
+  local password="$3"
+  local previous_umask
+  previous_umask="$(umask)"
+  umask 077
+  printf '%s\n%s\n' "$email" "$password" >"$file"
+  umask "$previous_umask"
+  chmod 600 "$file"
+  run_root chown "${APP_USER}:${APP_USER}" "$file"
+}
+
+generate_login_password() {
+  local hex candidate creds attempt
+  attempt=0
+  creds="$(mktemp)"
+  ADMIN_CRED_FILES+=("$creds")
+  chmod 600 "$creds"
+  while (( attempt < 40 )); do
+    attempt=$((attempt + 1))
+    hex="$(od -An -tx1 -N 16 /dev/urandom | tr -d ' \n')"
+    candidate="Tm${hex}9!"
+    write_login_file "$creds" "check@example.com" "$candidate"
+    if admin_node check "$creds" >/dev/null 2>&1; then
+      printf '%s' "$candidate"
+      run_root rm -f "$creds"
+      return 0
+    fi
+  done
+  run_root rm -f "$creds"
+  return 1
+}
+
+configure_admin_login() {
+  step "Administrator sign-in"
+  local helper state has existing_email first second creds
+  helper="${APP_ROOT}/.install-admin.mjs"
+  trap cleanup_admin_files EXIT
+  write_admin_helper "$helper"
+  state="$(admin_node status | tail -n 1)" || die "Could not read the administrator account."
+  has="${state%%$'\t'*}"
+  existing_email="${state#*$'\t'}"
+  existing_email="${existing_email//$'\n'/}"
+  if [[ "$has" == "yes" && -n "$existing_email" ]]; then
+    if ! ask "Replace the administrator sign-in for ${existing_email}?" n \
+      "You choose a new email and password for the built-in administrator (user number 1). The previous password stops working." \
+      "The current email and password stay. Sign in at https://${FQDN}/ with the account that already works." \
+      "No. Keep the current sign-in unless you need to replace it."; then
+      run_root rm -f "$helper"
+      return 0
+    fi
+  elif [[ "$has" == "yes" ]]; then
+    if ! ask "Set an email on the administrator account that already has a password?" y \
+      "You set the email and replace the password for user number 1 so you can sign in at https://${FQDN}/." \
+      "The installer leaves the account unchanged. It has a password but no email, so the login page cannot use it." \
+      "Yes. An email is required to sign in."; then
+      run_root rm -f "$helper"
+      echo "No administrator email was set. The login page needs an email and password."
+      return 0
+    fi
+  else
+    echo "The built-in administrator (user number 1) has no password yet."
+    echo "This becomes the sign-in for https://${FQDN}/."
+  fi
+  while true; do
+    if [[ -n "$existing_email" ]]; then
+      ADMIN_EMAIL="$(read_line "Administrator email [${existing_email}]: ")"
+      if [[ -z "$ADMIN_EMAIL" ]]; then
+        ADMIN_EMAIL="$existing_email"
+      fi
+    else
+      ADMIN_EMAIL="$(read_line "Administrator email: ")"
+    fi
+    ADMIN_EMAIL="${ADMIN_EMAIL,,}"
+    if is_email "$ADMIN_EMAIL"; then
+      break
+    fi
+    note "Enter an email address."
+  done
+  printf '%s\n' "${C_YELLOW}Password rules: at least 12 characters, with an uppercase letter, a lowercase letter, a digit, and a symbol. No triple repeats, sequences such as abcd or 1234, keyboard runs, or common words.${C_RESET}" >/dev/tty
+  printf '%s\n' "${C_YELLOW}Press Enter to generate a password. A generated password is shown on this terminal and is not written to the install log.${C_RESET}" >/dev/tty
+  while true; do
+    first="$(read_secret "Administrator password (Enter to generate one): ")"
+    if [[ -z "$first" ]]; then
+      first="$(generate_login_password)" || die "Could not generate a password that meets the sign-in rules."
+      ADMIN_PASS="$first"
+      ADMIN_PASS_GENERATED=1
+      show_on_tty "Administrator password (shown only on this terminal, not in the install log):"
+      show_on_tty "$ADMIN_PASS"
+      break
+    fi
+    second="$(read_secret "Repeat the password: ")"
+    if [[ "$first" != "$second" ]]; then
+      note "The passwords did not match."
+      continue
+    fi
+    creds="$(mktemp)"
+    ADMIN_CRED_FILES+=("$creds")
+    chmod 600 "$creds"
+    write_login_file "$creds" "$ADMIN_EMAIL" "$first"
+    if admin_node check "$creds"; then
+      ADMIN_PASS="$first"
+      ADMIN_PASS_GENERATED=0
+      run_root rm -f "$creds"
+      break
+    fi
+    run_root rm -f "$creds"
+    note "Choose a different password."
+  done
+  creds="$(mktemp)"
+  ADMIN_CRED_FILES+=("$creds")
+  chmod 600 "$creds"
+  write_login_file "$creds" "$ADMIN_EMAIL" "$ADMIN_PASS"
+  echo "Saving the administrator sign-in..."
+  admin_node apply "$creds"
+  run_root rm -f "$creds" "$helper"
+}
+
 npm_install_and_build() {
   step "Dependencies, migrations, and production build"
   as_taskmesh bash -lc "cd '${APP_ROOT}' && npm install"
@@ -789,6 +1137,7 @@ npm_install_and_build() {
   if [[ ! -f "${APP_ROOT}/dist/index.js" || ! -f "${APP_ROOT}/client/dist/index.html" ]]; then
     die "The production build did not produce dist/index.js and client/dist/index.html."
   fi
+  configure_admin_login
 }
 
 install_systemd_unit() {
@@ -806,7 +1155,10 @@ install_systemd_unit() {
     sed -i "s|/usr/bin/npm|${npm_bin}|g" "$tmp"
   fi
   if [[ -f "$dest" ]] && ! cmp -s "$tmp" "$dest"; then
-    if ! confirm_yes "Replace ${dest}?"; then
+    if ! ask "Replace ${dest}?" y \
+      "The systemd unit is replaced with the copy from this checkout, running as ${APP_USER}." \
+      "The existing unit file stays. The installer stops when this is the app service, or skips the backup timer when this is the backup unit." \
+      "Yes. Install the unit shipped with this version of TaskMesh."; then
       rm -f "$tmp"
       return 1
     fi
@@ -882,7 +1234,10 @@ server {
 }
 EOF
   if [[ -f "$NGINX_SITE_AVAILABLE" ]] && ! grep -q "Temporary HTTP vhost so Let's Encrypt" "$NGINX_SITE_AVAILABLE"; then
-    if ! confirm_yes "Replace ${NGINX_SITE_AVAILABLE} with an HTTP site for ${FQDN}? Other nginx sites are not removed."; then
+    if ! ask "Replace ${NGINX_SITE_AVAILABLE} with an HTTP site for ${FQDN}?" y \
+      "That one site file becomes a temporary HTTP server for ${FQDN} so Let's Encrypt can validate the name. Other sites in sites-enabled stay." \
+      "The installer stops. The existing site file is left unchanged." \
+      "Yes, if this file is the TaskMesh site. No, if it is a site you still need as it is."; then
       rm -f "$tmp"
       die "Aborted."
     fi
@@ -893,21 +1248,26 @@ EOF
 }
 
 render_https_site() {
-  local tmp cert key
-  cert="/etc/letsencrypt/live/${FQDN}/fullchain.pem"
-  key="/etc/letsencrypt/live/${FQDN}/privkey.pem"
+  local tmp
+  if [[ -z "$CERT_FILE" || -z "$KEY_FILE" ]]; then
+    CERT_FILE="/etc/letsencrypt/live/${FQDN}/fullchain.pem"
+    KEY_FILE="/etc/letsencrypt/live/${FQDN}/privkey.pem"
+  fi
   tmp="$(mktemp)"
   sed \
     -e "s|__TASKMESH_FQDN__|${FQDN}|g" \
-    -e "s|__TASKMESH_SSL_CERTIFICATE__|${cert}|g" \
-    -e "s|__TASKMESH_SSL_CERTIFICATE_KEY__|${key}|g" \
+    -e "s|__TASKMESH_SSL_CERTIFICATE__|${CERT_FILE}|g" \
+    -e "s|__TASKMESH_SSL_CERTIFICATE_KEY__|${KEY_FILE}|g" \
     "${APP_ROOT}/deploy/${SITE_TEMPLATE_NAME}" >"$tmp"
   if grep -q '__TASKMESH_' "$tmp"; then
     rm -f "$tmp"
     die "The nginx site template still contains unsubstituted tokens."
   fi
   if [[ "$HTTP_BOOTSTRAP_WRITTEN" -eq 0 && -f "$NGINX_SITE_AVAILABLE" ]] && ! cmp -s "$tmp" "$NGINX_SITE_AVAILABLE"; then
-    if ! confirm_yes "Replace the nginx site ${NGINX_SITE_AVAILABLE}? Other sites are not removed."; then
+    if ! ask "Replace the nginx site ${NGINX_SITE_AVAILABLE}?" y \
+      "That site file becomes the HTTPS vhost for ${FQDN} only. It is not the default site. Other sites in sites-enabled stay." \
+      "The installer stops. The current TaskMesh nginx file stays as it is." \
+      "Yes. Publish https://${FQDN}/ from this vhost."; then
       rm -f "$tmp"
       die "Aborted."
     fi
@@ -941,7 +1301,10 @@ warn_server_name_clash() {
       name="${name%;}"
       if [[ "$name" == "$FQDN" ]]; then
         echo "Another nginx site already uses server_name ${FQDN}: ${file}"
-        if ! confirm_yes "Continue and let nginx choose between those server blocks?"; then
+        if ! ask "Continue with two nginx sites both named ${FQDN}?" n \
+          "The installer continues. Nginx will use one of the two server blocks for ${FQDN}, which can send traffic to the wrong site." \
+          "The installer stops so you can change or remove the other server_name before trying again." \
+          "No. Fix the other site file so only one server answers for ${FQDN}."; then
           die "Aborted."
         fi
       fi
@@ -963,10 +1326,12 @@ install_nginx_http() {
   run_root mkdir -p "$ACME_WEBROOT"
   run_root chmod 755 /var/www "$ACME_WEBROOT"
   echo "Leaving every other file in sites-enabled in place. This site is not default_server."
-  if ! root_file_exists "/etc/letsencrypt/live/${FQDN}/fullchain.pem"; then
-    write_http_bootstrap
-  else
+  if find_certificate_paths; then
+    echo "A valid Let's Encrypt certificate for ${FQDN} is already on this system."
+    echo "The temporary HTTP site is not written. nginx will use ${CERT_FILE}."
     render_https_site
+  else
+    write_http_bootstrap
   fi
   enable_site_link
   reload_nginx
@@ -1023,7 +1388,10 @@ configure_firewall() {
     echo "  default deny incoming"
     echo "  default allow outgoing"
     echo "Existing application rules are not deleted because the firewall is off."
-    if ! confirm_yes "Enable UFW with those rules? Let's Encrypt needs port 80 reachable from the internet."; then
+    if ! ask "Enable UFW with OpenSSH plus TCP 80 and 443?" y \
+      "UFW is enabled with incoming denied by default, and OpenSSH, port 80, and port 443 allowed. Ports 3000 and 5432 stay closed. Existing allow rules stay." \
+      "UFW stays off. The site is reachable only if another firewall already allows ports 80 and 443. Let's Encrypt cannot issue a certificate if port 80 is blocked." \
+      "Yes. Enable the firewall and open the web ports."; then
       echo "UFW was not enabled. The site is reachable only if another firewall already allows TCP 80 and 443."
       return 0
     fi
@@ -1054,7 +1422,10 @@ configure_firewall() {
     return 0
   fi
   echo "Missing allow rules: ${missing[*]}"
-  if ! confirm_yes "Add only those missing rules? The default policy is not changed."; then
+  if ! ask "Add only those missing UFW rules?" y \
+    "UFW gains the missing allows from this list: ${missing[*]}. The default policy and every existing allow rule stay." \
+    "The firewall is left exactly as it is. A missing port 80 or 443 rule can block the site or certificate renewal." \
+    "Yes. Add the missing allows and leave the rest of the firewall alone."; then
     echo "No firewall rules were added."
     return 0
   fi
@@ -1076,56 +1447,119 @@ root_file_exists() {
   run_root test -f "$1"
 }
 
-certificate_days_left() {
-  local end end_epoch now
+certificate_end_epoch() {
+  local end
   end="$(run_root openssl x509 -enddate -noout -in "$1" | cut -d= -f2-)"
-  end_epoch="$(date -d "$end" +%s)"
+  date -d "$end" +%s
+}
+
+certificate_days_left() {
+  local end_epoch now
+  end_epoch="$(certificate_end_epoch "$1")"
   now="$(date +%s)"
+  if (( end_epoch <= now )); then
+    echo 0
+    return 0
+  fi
   echo $(( (end_epoch - now) / 86400 ))
 }
 
-obtain_certificate() {
-  step "TLS certificate for ${FQDN}"
-  local cert days
-  cert="/etc/letsencrypt/live/${FQDN}/fullchain.pem"
-  if root_file_exists "$cert"; then
-    days="$(certificate_days_left "$cert")"
-    if ((days > 30)); then
-      echo "Certificate for ${FQDN} is valid for ${days} more days. Keeping it."
-    else
-      echo "Certificate for ${FQDN} expires in ${days} days."
-      if confirm_yes "Renew it now?"; then
-        run_root certbot renew --cert-name "$FQDN" --non-interactive
-      fi
-    fi
-  else
-    echo "This requests a Let's Encrypt certificate for ${FQDN} and agrees to the Let's Encrypt subscriber agreement."
-    echo "DNS for ${FQDN} must already point at this server, and TCP 80 must be reachable."
-    if ! fqdn_resolves_locally; then
-      echo "${FQDN} does not resolve to an address on this host ($(hostname -I))."
-      echo "A host behind NAT can still be correct when public DNS points at this machine."
-    fi
-    if ! confirm_yes "Request the certificate now?"; then
-      die "Cannot publish https://${FQDN}/ without a certificate."
-    fi
-    run_root certbot certonly \
-      --webroot -w "$ACME_WEBROOT" \
-      -d "$FQDN" \
-      --non-interactive \
-      --agree-tos \
-      --email "$LE_EMAIL" \
-      --keep-until-expiring
+certificate_still_valid() {
+  local end_epoch now
+  end_epoch="$(certificate_end_epoch "$1")"
+  now="$(date +%s)"
+  (( end_epoch > now ))
+}
+
+certificate_covers_fqdn() {
+  local cert="$1" text escaped
+  text="$(run_root openssl x509 -in "$cert" -noout -subject -ext subjectAltName 2>/dev/null \
+    || run_root openssl x509 -in "$cert" -noout -subject)"
+  escaped="${FQDN//./\\.}"
+  grep -Eq "(^|[[:space:],])DNS:${escaped}([[:space:],]|$)" <<<"$text" \
+    || grep -Eq "CN[[:space:]]*=[[:space:]]*${escaped}([[:space:],]|$)" <<<"$text"
+}
+
+# A pair is valid when both files exist, the certificate is unexpired, and it
+# names this FQDN. Sets CERT_FILE and KEY_FILE.
+certificate_pair_valid() {
+  local name="$1" cert key
+  cert="/etc/letsencrypt/live/${name}/fullchain.pem"
+  key="/etc/letsencrypt/live/${name}/privkey.pem"
+  root_file_exists "$cert" || return 1
+  root_file_exists "$key" || return 1
+  certificate_still_valid "$cert" || return 1
+  certificate_covers_fqdn "$cert" || return 1
+  CERT_FILE="$cert"
+  KEY_FILE="$key"
+}
+
+find_certificate_paths() {
+  local name
+  CERT_FILE=""
+  KEY_FILE=""
+  if certificate_pair_valid "$FQDN"; then
+    return 0
   fi
-  if ! root_file_exists "$cert"; then
-    die "Certificate files for ${FQDN} were not created."
-  fi
+  while read -r name; do
+    [[ -n "$name" && "$name" != "README" && "$name" != "$FQDN" ]] || continue
+    if certificate_pair_valid "$name"; then
+      return 0
+    fi
+  done < <(run_root ls -1 /etc/letsencrypt/live 2>/dev/null || true)
+  CERT_FILE=""
+  KEY_FILE=""
+  return 1
+}
+
+enable_certbot_timer() {
   if run_root systemctl list-unit-files certbot.timer --no-legend 2>/dev/null | grep -q certbot.timer; then
     run_root systemctl enable --now certbot.timer
   fi
 }
 
+obtain_certificate() {
+  step "TLS certificate for ${FQDN}"
+  local cert
+  local days
+  if find_certificate_paths; then
+    days="$(certificate_days_left "$CERT_FILE")"
+    echo "A valid Let's Encrypt certificate for ${FQDN} is already on this system (${days} days left)."
+    echo "Skipping the certificate request. nginx will use ${CERT_FILE}."
+    enable_certbot_timer
+    return 0
+  fi
+  cert="/etc/letsencrypt/live/${FQDN}/fullchain.pem"
+  echo "This requests a Let's Encrypt certificate for ${FQDN} and agrees to the Let's Encrypt subscriber agreement."
+  echo "DNS for ${FQDN} must already point at this server, and TCP 80 must be reachable."
+  if ! fqdn_resolves_locally; then
+    echo "${FQDN} does not resolve to an address on this host ($(hostname -I))."
+    echo "A host behind NAT can still be correct when public DNS points at this machine."
+  fi
+  if ! ask "Request a Let's Encrypt certificate for ${FQDN}?" y \
+    "Certbot requests a certificate for ${FQDN} using the HTTP challenge. You accept Let's Encrypt's terms of service. nginx then serves HTTPS for this name." \
+    "The installer stops. There is no TLS certificate, so the public HTTPS site is not configured." \
+    "Yes. Request the certificate so https://${FQDN}/ can be served."; then
+    die "Cannot publish https://${FQDN}/ without a certificate."
+  fi
+  run_root certbot certonly \
+    --webroot -w "$ACME_WEBROOT" \
+    -d "$FQDN" \
+    --non-interactive \
+    --agree-tos \
+    --email "$LE_EMAIL" \
+    --keep-until-expiring
+  if ! root_file_exists "$cert"; then
+    die "Certificate files for ${FQDN} were not created."
+  fi
+  CERT_FILE="$cert"
+  KEY_FILE="/etc/letsencrypt/live/${FQDN}/privkey.pem"
+  enable_certbot_timer
+}
+
 install_nginx_https() {
   step "HTTPS vhost"
+  echo "Wiring ${CERT_FILE:-/etc/letsencrypt/live/${FQDN}/fullchain.pem} into ${NGINX_SITE_AVAILABLE}."
   render_https_site
   enable_site_link
   reload_nginx
@@ -1133,7 +1567,10 @@ install_nginx_https() {
 
 maybe_backup_timer() {
   step "Backup timer"
-  if ! confirm_yes "Enable the daily 03:00 backup timer as user ${APP_USER}?"; then
+  if ! ask "Enable the daily 03:00 backup timer as user ${APP_USER}?" y \
+    "systemd runs the TaskMesh backup once a day at 03:00 as ${APP_USER}, including when the app process is down." \
+    "No backup timer is installed. Backups still run from the app's own scheduler while the process is up." \
+    "Yes. Add the timer so a backup still runs if the app is stopped."; then
     echo "Backup timer was not enabled. The app can still schedule backups while it is running."
     return 0
   fi
@@ -1181,7 +1618,15 @@ verify() {
   echo "  Logs:      journalctl -u ${APP_USER} -n 50 --no-pager"
   echo "  Env file:  ${APP_ROOT}/.env (mode 600, owner ${APP_USER})"
   if [[ "$DB_PASS_GENERATED" -eq 1 ]]; then
-    echo "  Database password (also in DATABASE_URL): ${DB_PASS}"
+    show_on_tty "Database password (also in ${APP_ROOT}/.env, shown only on this terminal):"
+    show_on_tty "$DB_PASS"
+  fi
+  if [[ "$ADMIN_PASS_GENERATED" -eq 1 ]]; then
+    show_on_tty "Administrator sign-in for https://${FQDN}/ (shown only on this terminal):"
+    show_on_tty "  Email:    ${ADMIN_EMAIL}"
+    show_on_tty "  Password: ${ADMIN_PASS}"
+  elif [[ -n "$ADMIN_EMAIL" ]]; then
+    echo "  Sign in:   ${ADMIN_EMAIL} at https://${FQDN}/"
   fi
   echo ""
   echo "Updates:"
@@ -1244,6 +1689,7 @@ main() {
       ;;
   esac
 
+  setup_colors
   export DEBIAN_FRONTEND=noninteractive
   export NEEDRESTART_MODE=a
   detect_source_root
