@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.47.3 — 2026-09-27
+
+### New Functionality
+- `deploy/install-ubuntu.sh` installs TaskMesh on a public Ubuntu host. The administrator with sudo clones into `/srv/taskmesh`; the script creates the `taskmesh` service user, asks for the site FQDN, and publishes `https://<fqdn>/` as one nginx site among others, with Let's Encrypt and a host firewall that opens SSH, port 80, and port 443.
+
 ## 0.47.2 — 2026-09-24
 
 ### Fixes
