@@ -1,0 +1,9 @@
+# Installer error output (2026-09)
+
+The public installer exited with status 141 and no message at `==> Base packages` when a package was already installed. `apt-cache policy | awk ... exit` closed the pipe; `pipefail` treated that as a fatal error.
+
+## Change
+
+- Read the full apt policy without closing the pipe early.
+- On any unexpected failure, print the line number, status, and command, then exit.
+- Avoid the same pipe close when checking privileged groups.

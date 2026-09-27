@@ -24,6 +24,7 @@
 # A checkout that is already a development tree at /srv/taskmesh will be
 # handed to the taskmesh service user if you continue.
 set -euo pipefail
+set -E
 
 APP_USER="taskmesh"
 APP_ROOT="/srv/taskmesh"
@@ -59,6 +60,13 @@ die() {
   echo "Error: $*" >&2
   exit 1
 }
+
+on_error() {
+  local status=$?
+  echo "Error: line ${1} failed with status ${status}: ${2}" >&2
+  exit "$status"
+}
+trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
 
 step() {
   echo ""
@@ -141,7 +149,9 @@ apt_installed_version() {
 }
 
 apt_candidate_version() {
-  apt-cache policy "$1" 2>/dev/null | awk '/Candidate:/ { print $2; exit }'
+  # Read the whole policy. Exiting awk early closes the pipe and apt-cache
+  # dies with SIGPIPE, which aborts the installer under pipefail.
+  apt-cache policy "$1" | awk '/Candidate:/ && !found { print $2; found=1 }'
 }
 
 node_major() {
@@ -290,7 +300,7 @@ run_check() {
   echo ""
   if id "$APP_USER" >/dev/null 2>&1; then
     echo "OK        user ${APP_USER} ($(getent passwd "$APP_USER" | cut -d: -f6,7))"
-    if id -nG "$APP_USER" | tr ' ' '\n' | grep -Eq '^(sudo|adm|wheel)$'; then
+    if user_in_privileged_group "$APP_USER"; then
       echo "WARN      user ${APP_USER} is in a privileged group"
     fi
   else
@@ -471,6 +481,12 @@ install_web_packages() {
   ensure_packages nginx ufw certbot
 }
 
+user_in_privileged_group() {
+  local groups
+  groups=" $(id -nG "$1") "
+  [[ "$groups" == *" sudo "* || "$groups" == *" adm "* || "$groups" == *" wheel "* ]]
+}
+
 drop_privileged_groups() {
   local group
   local groups
@@ -513,7 +529,7 @@ ensure_service_user() {
   run_root chown -R "${APP_USER}:${APP_USER}" "$APP_HOME"
   run_root chmod 750 "$APP_HOME" "$UPLOAD_DIR"
   run_root chmod 700 "$BACKUP_DIR"
-  if id -nG "$APP_USER" | tr ' ' '\n' | grep -Eq '^(sudo|adm|wheel)$'; then
+  if user_in_privileged_group "$APP_USER"; then
     die "User ${APP_USER} still belongs to a privileged group."
   fi
 }
@@ -1190,6 +1206,11 @@ self_test() {
   is_db_password "abcdefghijklmnop" || die "password should pass"
   expect_fail is_db_password "short"
   expect_fail is_db_password "abcdefghijklmnop/"
+  if command -v apt-cache >/dev/null 2>&1; then
+    local candidate
+    candidate="$(apt_candidate_version bash)"
+    [[ -n "$candidate" && "$candidate" != "(none)" ]] || die "could not read the apt candidate version"
+  fi
   echo "self-test ok"
 }
 
