@@ -4,7 +4,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Projects
 
 - Turn Ideas into structured projects with Markdown overviews, tags, and status
-- Project Overview dashboard with a pinned description and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including My Tasks Today)
+- Project Overview dashboard with a pinned description (Owners and Managers can edit it) and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including My Tasks Today); click a panel row to open that Task or To Do
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, and Image Boards
 - Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
@@ -22,6 +22,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Track progress with states (Draft through Complete), activity history, and a visual change timeline
 - Soft-delete with restore; move tasks between projects or keep them in a global Tasks view
 - Assign project Tasks (and ToDos) to Owners, Managers, or Members from the list context menu or edit form
+- Completed rows grey out so finished work is easier to scan past
 
 
 
@@ -93,13 +94,15 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Accounts & admin
 
 - Email/password sign-in with secure session cookies and CSRF protection on mutations
+- An expired session sends you to sign-in and returns you to the same page after you log in
 - Optional Google, Apple, and GitHub sign-in (OIDC / OAuth) with Admin-managed providers and Profile linked accounts
 - Optional authenticator-app MFA (TOTP) with Admin enforcement for Administrators, enrollment grace period, and Profile setup
 - Single-use MFA backup codes (shown once at enroll / regenerate) so you can sign in without your authenticator
 - Trusted devices that skip MFA for a configurable number of days, with Profile revoke-all and Admin duration/max settings
 - Personal API keys with read/write scopes and expiry
 - Admin hub for users, groups, keys, OAuth providers, API usage, database stats, system logs, properties, and templates
-- Project Settings restricted to Administrators until project Roles expand access to Managers
+- Project Settings (modules, phases, and users) is available to Managers and Owners; deleting a project stays Administrator-only
+- Removing a Manager or Member who still has assigned work requires reassigning those items or clearing the assignee first
 - Ownership transfer and role labels for multi-user homes
 
 
@@ -108,6 +111,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 - Scheduled and on-demand backups of PostgreSQL plus uploaded files, with admin download of complete archives, restore, and safety dumps
 - CSV export and insert-only CSV/XLSX import for projects and tasks
+- Per-user upload storage quota (default 5 GiB) so one account cannot fill the disk without bound
 - Confirm before destructive deletes so accidents stay rare
 
 
@@ -115,4 +119,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Install & hosting
 
 - Choose bare-metal Ubuntu (systemd + nginx) or Docker Compose from INSTALL.md, with OS-specific container host steps and official docs links
+- Guided public-host installer asks for the site name and administrator account, then publishes HTTPS with Let's Encrypt alongside your other nginx sites
+- Administrators see an Update link beside the version when a newer stable GitHub Release exists; it opens that changelog and does not install the upgrade
+- Upgrade an existing install from UPGRADES.md: back up first, then read that release for breaking changes
 

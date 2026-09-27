@@ -20,6 +20,8 @@ Full setup (choose **containers** or **bare-metal Ubuntu**): packages or Docker,
 
 → **[INSTALL.md](INSTALL.md)** — start at **Choose your install**
 
+Already running TaskMesh? **[UPGRADES.md](UPGRADES.md)** — back up first, and read the GitHub Release for breaking changes. The 0.5 line is a **beta for testers**, published as a GitHub pre-release.
+
 **Containers (summary)** after installing [Docker](https://docs.docker.com/get-started/get-docker/) / Compose:
 
 ```bash
@@ -160,6 +162,12 @@ Website-ready single-line list of major shipped capabilities (updated on finish-
 
 → **[FEATURES.md](FEATURES.md)**
 
+## Upgrades
+
+Steps for an administrator moving an existing install to a tagged release (bare metal or Compose). Read the GitHub Release for that version before you start, especially breaking changes.
+
+→ **[UPGRADES.md](UPGRADES.md)**
+
 ## Project layout
 
 ```
@@ -174,8 +182,9 @@ src/
     migrate.ts       # Migration runner
 drizzle/             # Generated SQL migrations + meta
 docs/                # Admin/developer docs (database schema, …)
-RELEASE_NOTES.md     # Per-version finish-up notes (GitHub release source later)
+RELEASE_NOTES.md     # Per-version finish-up notes (cleared after a GitHub Release publish)
 FEATURES.md          # Major shipped features (website-ready one-liners)
+UPGRADES.md          # Administrator steps to move an existing install to a release
 data/uploads/        # Image uploads (runtime; tracked with .gitkeep)
 INSTALL.md           # Ubuntu bare-metal install guide
 SECURITY.md          # Input-path audit log and re-audit checklist
