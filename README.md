@@ -31,7 +31,7 @@ docker compose --env-file .env.docker up -d --build
 # UI: https://127.0.0.1/  (self-signed cert warning is expected)
 ```
 
-**Public Ubuntu host:** the sudo user clones into `/srv/taskmesh`, then runs `bash deploy/install-ubuntu.sh`. The installer asks for the site FQDN and serves `https://<fqdn>/` as one nginx site among others. See [INSTALL.md](INSTALL.md).
+**Public Ubuntu host:** the sudo user clones into `/srv/taskmesh`, then runs `bash deploy/install-ubuntu.sh`. The installer asks for the site FQDN and the administrator email and password, then serves `https://<fqdn>/` as one nginx site among others. See [INSTALL.md](INSTALL.md).
 
 **Bare-metal production-style start** *after* following the Ubuntu sections in INSTALL.md:
 

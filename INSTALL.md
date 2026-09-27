@@ -240,9 +240,15 @@ cd taskmesh
 bash deploy/install-ubuntu.sh
 ```
 
-The script asks for the site FQDN. HTTPS is implied, so the public URL is `https://` plus that name. It installs each missing package, and asks before upgrading a package that is already present. After it finishes, the app runs as the system user `taskmesh` (`nologin`, no sudo). Express stays on `127.0.0.1:3000`. PostgreSQL stays on localhost.
+The script asks for the site FQDN. HTTPS is implied, so the public URL is `https://` plus that name. It installs each missing package, and asks before upgrading a package that is already present. Each yes/no question states what Yes and No will do before you answer. Prompts are colored so a waiting question is easy to see.
 
-nginx receives one vhost in `sites-enabled`: `server_name` is that FQDN, and the site is not `default_server`. Other websites on the same nginx are left in place. UFW, when you enable it or add missing rules, allows SSH plus TCP **80** and **443** for every site on the host. It does not open port 3000 or 5432.
+On a re-run, an existing `taskmesh` database role and database are kept. The script asks whether to replace the role password. No leaves that password and the data in place. When `.env` already contains the password, the installer continues without asking for it again.
+
+After the database migrations, the script asks for the email and password of the built-in administrator (user number 1). Press Enter at the password prompt to generate one. A generated password is printed on the terminal only and is left out of the install log. That account is how you sign in at `https://<fqdn>/`.
+
+After it finishes, the app runs as the system user `taskmesh` (`nologin`, no sudo). Express stays on `127.0.0.1:3000`. PostgreSQL stays on localhost.
+
+nginx receives one vhost in `sites-enabled`: `server_name` is that FQDN, and the site is not `default_server`. Other websites on the same nginx are left in place. If a valid Let's Encrypt certificate for that FQDN is already on the server, the installer skips the certificate request and configures nginx to use that certificate. UFW, when you enable it or add missing rules, allows SSH plus TCP **80** and **443** for every site on the host. It does not open port 3000 or 5432.
 
 `bash deploy/install-ubuntu.sh --check` reports what is already installed and does not change the system.
 
