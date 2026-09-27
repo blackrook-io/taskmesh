@@ -175,6 +175,8 @@ docker compose --env-file .env.docker exec -T db \
 
 **Updates**
 
+For a tagged release (including 0.5 Beta), follow [UPGRADES.md](UPGRADES.md): back up, read that GitHub Release for breaking changes, and check out the tag. If you track `main` instead:
+
 ```bash
 cd taskmesh
 git pull
@@ -811,6 +813,8 @@ In a browser on the LAN: open `http://<server-ip>/`, create a project, attach an
 ---
 
 ## 20. Updating TaskMesh
+
+For a tagged release (including 0.5 Beta), follow [UPGRADES.md](UPGRADES.md) first. It tells you to back up and to read the GitHub Release for breaking changes. The commands below are the same-host promote and the manual fallback after you have checked out the version you want.
 
 ### Same-host promote to production (:80)
 
