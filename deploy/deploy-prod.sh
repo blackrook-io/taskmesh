@@ -43,6 +43,25 @@ fail() {
   exit 1
 }
 
+nginx_https_health() {
+  if curl -fsSk https://127.0.0.1/api/health >/dev/null 2>&1; then
+    echo "    https://127.0.0.1/api/health"
+    return 0
+  fi
+  local conf name
+  for conf in /etc/nginx/sites-enabled/taskmesh /etc/nginx/sites-available/taskmesh; do
+    [[ -f "$conf" ]] || continue
+    name="$(awk '$1 == "server_name" { gsub(/;/, "", $2); print $2; exit }' "$conf")"
+    if [[ -n "$name" && "$name" != "_" ]]; then
+      if curl -fsS --resolve "${name}:443:127.0.0.1" "https://${name}/api/health" >/dev/null 2>&1; then
+        echo "    https://${name}/api/health"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
 restart_taskmesh() {
   if sudo -n systemctl restart taskmesh 2>/dev/null; then
     echo "    restarted via sudo systemctl"
@@ -132,8 +151,10 @@ fi
 echo "==> health check :3000"
 curl -fsS http://127.0.0.1:3000/api/health >/dev/null || fail "health check failed on :3000"
 
-echo "==> health check HTTPS :443 (via nginx; -k for self-signed)"
-curl -fsSk https://127.0.0.1/api/health >/dev/null || fail "health check failed on https://127.0.0.1/ (nginx)"
+echo "==> health check HTTPS (nginx)"
+# 127.0.0.1 hits the default site (single-site LAN). A public multi-site
+# install uses the taskmesh server_name instead.
+nginx_https_health || fail "nginx HTTPS health check failed (default site and the taskmesh server_name)"
 
 echo "==> stamp production release time"
 node --input-type=module -e '
