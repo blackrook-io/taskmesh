@@ -963,7 +963,7 @@ install_nginx_http() {
   run_root mkdir -p "$ACME_WEBROOT"
   run_root chmod 755 /var/www "$ACME_WEBROOT"
   echo "Leaving every other file in sites-enabled in place. This site is not default_server."
-  if [[ ! -f "/etc/letsencrypt/live/${FQDN}/fullchain.pem" ]]; then
+  if ! root_file_exists "/etc/letsencrypt/live/${FQDN}/fullchain.pem"; then
     write_http_bootstrap
   else
     render_https_site
@@ -1070,9 +1070,15 @@ configure_firewall() {
   run_root ufw status verbose
 }
 
+# /etc/letsencrypt/live is mode 700 and owned by root. The administrator
+# running this script cannot see those files without sudo.
+root_file_exists() {
+  run_root test -f "$1"
+}
+
 certificate_days_left() {
   local end end_epoch now
-  end="$(openssl x509 -enddate -noout -in "$1" | cut -d= -f2-)"
+  end="$(run_root openssl x509 -enddate -noout -in "$1" | cut -d= -f2-)"
   end_epoch="$(date -d "$end" +%s)"
   now="$(date +%s)"
   echo $(( (end_epoch - now) / 86400 ))
@@ -1082,7 +1088,7 @@ obtain_certificate() {
   step "TLS certificate for ${FQDN}"
   local cert days
   cert="/etc/letsencrypt/live/${FQDN}/fullchain.pem"
-  if [[ -f "$cert" ]]; then
+  if root_file_exists "$cert"; then
     days="$(certificate_days_left "$cert")"
     if ((days > 30)); then
       echo "Certificate for ${FQDN} is valid for ${days} more days. Keeping it."
@@ -1110,7 +1116,7 @@ obtain_certificate() {
       --email "$LE_EMAIL" \
       --keep-until-expiring
   fi
-  if [[ ! -f "$cert" ]]; then
+  if ! root_file_exists "$cert"; then
     die "Certificate files for ${FQDN} were not created."
   fi
   if run_root systemctl list-unit-files certbot.timer --no-legend 2>/dev/null | grep -q certbot.timer; then
