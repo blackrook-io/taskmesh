@@ -1,0 +1,27 @@
+# Ubuntu public install script (2026-09)
+
+Interactive bare-metal installer for a hosted Ubuntu server. The app is reached at `https://<fqdn>/`. Express and PostgreSQL stay on loopback. nginx and UFW are set up so this host can serve other websites on the same ports.
+
+## Deliverables
+
+- `deploy/install-ubuntu.sh` — interactive installer, plus `--check` (read-only) and `--self-test`
+- `deploy/nginx-taskmesh-site.conf` — one named vhost (not `default_server`)
+- Pointers in `INSTALL.md`, `README.md`, and `deploy/ssl/README.md`
+- `deploy/deploy-prod.sh` HTTPS health check accepts that named vhost
+
+## Behavior
+
+1. Require an administrator with sudo. Refuse to run as the `taskmesh` account.
+2. For each package: install if missing; if an upgrade is available, ask; if it already meets the requirement, skip it.
+3. Ask for the site FQDN. HTTPS is implied. Reject schemes, paths, and ports.
+4. Create system user `taskmesh` (`nologin`, no sudo). The app tree, `.env` (mode 600), uploads, and backups are owned by that user. systemd uses `User=taskmesh`.
+5. nginx: `sites-available/taskmesh` for that FQDN only. Do not remove other sites and do not claim `default_server`.
+6. Let's Encrypt for that FQDN (webroot). Certbot renewal timer stays enabled.
+7. UFW is host-wide: OpenSSH (or the current SSH port), TCP 80, and TCP 443. Do not open 3000 or 5432. Do not delete existing allow rules. Ask before enabling a firewall that is off, and do not change the default policy of a firewall that is already on.
+8. Finish only after loopback `/api/health`, the named HTTPS vhost, and `https://<fqdn>/api/health` succeed.
+
+Do not execute the installer against the development host. Verify with `--self-test`, `bash -n`, and shellcheck. `--check` needs sudo; this session had no passwordless sudo, so it was not run here.
+
+## QA follow-ups
+
+Install instructions now start with the clone: the sudo administrator clones `https://github.com/blackrook-io/taskmesh.git` into `/srv/taskmesh` (after installing git). The `taskmesh` account is created by the installer and then owns that tree. Documented in the script header (`--help`), `INSTALL.md`, and `README.md`.

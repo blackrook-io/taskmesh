@@ -36,7 +36,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## Option C — Public internet (Let's Encrypt)
 
-For a hostname on the public internet, use **certbot** with nginx (not automated in TaskMesh yet):
+`deploy/install-ubuntu.sh` requests a certificate for one FQDN and adds that name as its own nginx site. Other sites on the same nginx stay in place. To do it by hand:
 
 1. Point DNS `A`/`AAAA` at this host.
 2. Open **443** (and **80** for HTTP-01) in the firewall.

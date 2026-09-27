@@ -7,7 +7,7 @@ import { getProdReleasePath } from "./paths.js";
  * UTC instant this version string is recorded as landing on `main`.
  * Update together with `package.json` `version` on finish-up (merge to main).
  */
-export const APP_VERSION_CREATED_AT: string | null = "2026-09-24T18:40:34.000Z";
+export const APP_VERSION_CREATED_AT: string | null = "2026-09-27T18:00:16.000Z";
 
 export type AppVersionMeta = {
   version: string;

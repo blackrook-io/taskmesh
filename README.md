@@ -31,6 +31,8 @@ docker compose --env-file .env.docker up -d --build
 # UI: https://127.0.0.1/  (self-signed cert warning is expected)
 ```
 
+**Public Ubuntu host:** the sudo user clones into `/srv/taskmesh`, then runs `bash deploy/install-ubuntu.sh`. The installer asks for the site FQDN and serves `https://<fqdn>/` as one nginx site among others. See [INSTALL.md](INSTALL.md).
+
 **Bare-metal production-style start** *after* following the Ubuntu sections in INSTALL.md:
 
 ```bash
@@ -39,7 +41,7 @@ npm run build:all
 NODE_ENV=production npm start
 ```
 
-**PROD (bare metal):** Express on `127.0.0.1:3000`; nginx proxies **:80** → that API (LAN: **http://\<server-ip\>/**).  
+**PROD (bare metal):** Express on `127.0.0.1:3000`. The public installer publishes `https://<fqdn>/` and leaves other nginx sites in place. A manual LAN install can still use the default site on port 80, described in INSTALL.md.  
 **Containers:** UI + API on published host port (default **3000**).  
 **DEV:** open only **http://127.0.0.1:5173/** — Vite proxies `/api` to a separate API on **:3001** so PROD can stay up.
 

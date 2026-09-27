@@ -225,6 +225,29 @@ Copy the multi-arch index `Digest:` into the corresponding `image:` / `FROM` lin
 
 Start-to-finish guide for installing TaskMesh on a **fresh Ubuntu Linux server** (same host for PostgreSQL, Node.js API, and the React SPA). Validated against Ubuntu **22.04 / 24.04** style `apt` workflows; adjust package names only if your release differs.
 
+## Scripted install (public host)
+
+Clone the repository before the installer, as the administrator who has sudo. Do this from that account. The `taskmesh` service user does not exist yet and cannot log in, so it is not the account that clones. The checkout belongs at `/srv/taskmesh`. The installer creates `taskmesh` and then gives that user ownership of the tree.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git
+sudo mkdir -p /srv
+sudo chown "$USER":"$USER" /srv
+cd /srv
+git clone https://github.com/blackrook-io/taskmesh.git
+cd taskmesh
+bash deploy/install-ubuntu.sh
+```
+
+The script asks for the site FQDN. HTTPS is implied, so the public URL is `https://` plus that name. It installs each missing package, and asks before upgrading a package that is already present. After it finishes, the app runs as the system user `taskmesh` (`nologin`, no sudo). Express stays on `127.0.0.1:3000`. PostgreSQL stays on localhost.
+
+nginx receives one vhost in `sites-enabled`: `server_name` is that FQDN, and the site is not `default_server`. Other websites on the same nginx are left in place. UFW, when you enable it or add missing rules, allows SSH plus TCP **80** and **443** for every site on the host. It does not open port 3000 or 5432.
+
+`bash deploy/install-ubuntu.sh --check` reports what is already installed and does not change the system.
+
+The sections below are the manual reference, including a private LAN layout that uses the default site.
+
 ## Table of contents (bare metal)
 
 1. [What you will install](#1-what-you-will-install)
