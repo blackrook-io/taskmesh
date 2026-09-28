@@ -19,13 +19,13 @@ In the **same change set** as any of the following, update the matching Markdown
 ## Process flow (required order)
 
 1. **Update `/docs`** — keep main vs non-main classification, Mermaid diagrams, physical tables, and glossary aligned with `schema.ts`.
-2. **Copy-replace into TaskMesh Project Documents** — after the `/docs` files are written, sync the mirror into the **TaskMesh** project (PROD Documents) so in-app reading stays current:
+2. **Copy-replace into TaskMesh Project Documents** — after the `/docs` files are written, sync the mirror into the **TaskMesh** project Documents on this host’s DEV API so in-app reading stays current:
 
    ```bash
    npm run docs:sync-schema
    ```
 
-   Defaults: `TASKMESH_API_BASE=http://127.0.0.1:3000` (PROD), `TASKMESH_PROJECT_ID=4` (TaskMesh). Upserts by **exact Document title** (see `SCHEMA_DOC_SYNC_MAP` in [`src/scripts/syncSchemaDocsToProject.ts`](../../src/scripts/syncSchemaDocsToProject.ts)). Do **not** edit the mirrored Documents by hand as the source of truth — change `/docs` then re-run the sync.
+   Defaults: `TASKMESH_API_BASE=http://127.0.0.1:3001` (DEV; start `npm run dev` if it is down), `TASKMESH_PROJECT_ID=4` (TaskMesh). A bare `TASKMESH_COOKIE` value is sent as `taskmesh_session_dev`. Upserts by **exact Document title** (see `SCHEMA_DOC_SYNC_MAP` in [`src/scripts/syncSchemaDocsToProject.ts`](../../src/scripts/syncSchemaDocsToProject.ts)). Do **not** edit the mirrored Documents by hand as the source of truth — change `/docs` then re-run the sync.
 
 3. Commit `/docs` (and script/rule changes) with the schema work; the Document bodies live in the DB and are refreshed by the script (not git).
 

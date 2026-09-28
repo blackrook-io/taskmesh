@@ -15,7 +15,7 @@ function devInstanceFavicon(): Plugin {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  /** Dev API port — keep separate from PROD Express on :3000 (nginx → :80). */
+  /** DEV API port. This development host runs this server only (default 3001). */
   const apiPort = env.DEV_API_PORT || process.env.DEV_API_PORT || "3001";
 
   return {

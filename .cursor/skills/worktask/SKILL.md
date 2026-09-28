@@ -2,10 +2,11 @@
 name: worktask
 description: >-
   Orchestrates TaskMesh development from a Task Number (e.g. /worktask T0036):
-  loads the PROD task (title, description, comments), plans and interviews,
-  creates a T#### git branch, marks the task In Progress with a plan comment,
-  implements, records QA follow-ups in plan + Task comments + commits, then on
-  finish-up marks Complete with a completion comment.
+  loads the task from this host's DEV API (title, description, comments),
+  plans and interviews, creates a T#### git branch, marks the task In Progress
+  with a plan comment, implements, records QA follow-ups in plan + Task
+  comments + commits, then on finish-up marks Complete with a completion
+  comment. Finish-up does not deploy.
   Use only when the user explicitly invokes /worktask or names this skill.
 disable-model-invocation: true
 ---
@@ -21,16 +22,17 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 
 ## Hard rules
 
-1. **PROD only for task I/O** — base URL `http://127.0.0.1:3000` (systemd PROD). Never use DEV `:3001` or Vite `:5173` for task reads/writes.
-1b. **Authenticate before task I/O** — PROD `/api/v1/*` requires a session (or API key). Run step **0. Auth** first every `/worktask` session (see [reference.md](reference.md) § Auth). Never invent credentials; never commit secrets; never put passwords in plans or comments.
-2. Prefer the **HTTP API** (see [reference.md](reference.md)). Do not use raw SQL for task updates (auth session mint fallback in reference is the only DB exception).
+1. **DEV only for task I/O** — base URL `http://127.0.0.1:3001` (`npm run dev`). Never use Vite `:5173`, port `:3000`, systemd, or a production install for task reads/writes. If `/api/health` on `:3001` fails, start `npm run dev` from the repo root and wait until it succeeds. Do not start `npm start`, `npm run deploy:prod`, or the `taskmesh` service.
+1b. **Authenticate before task I/O** — the DEV API `/api/v1/*` requires a session (or API key). Run step **0. Auth** first every `/worktask` session (see [reference.md](reference.md) § Auth). Never invent credentials; never commit secrets; never put passwords in plans or comments.
+2. Prefer the **HTTP API** on the DEV server (see [reference.md](reference.md)). Do not use raw SQL for task updates (auth session mint fallback in reference is the only DB exception).
 3. Do **not** change `dueDate` (including on Complete).
 4. State values: `new` (UI: Draft) | `ready` (UI: Ready) | `in_progress` | `pending` (UI: Pending — own work done, waiting on children) | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`.
 5. Follow repo plan + git + finish-up rules; this skill **adds** task bookkeeping and **replaces** `phase-N-*` branch naming with `T####-*` for this workstream.
 6. **Never** update git config (`user.name` / `user.email`). If commit fails for missing identity, set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for that command only (see [reference.md](reference.md)).
 7. **App version + release notes + features list** — on finish-up, bump SemVer per [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) in the merge commit (MINOR if this Task added a Drizzle migration, otherwise PATCH). In the **same commit**, update repo-root [`RELEASE_NOTES.md`](../../../RELEASE_NOTES.md) (recreate the stub header if the file is missing/empty after a GitHub release clear; prepend newest `## x.y.z — YYYY-MM-DD` with only non-empty Fixes / Enhancements / New Functionality / Breaking Changes / Deprecated Functionality). When this Task adds **major user-facing functionality**, also update [`FEATURES.md`](../../../FEATURES.md) with website-ready single-line bullets (skip for bugfixes-only or internal/agent-workflow work). Mention the new version in the completion comment. Do not skip the bump or the release-notes update.
-8. **Child Task → Parent** — if the Agent needs more context or information on a Child Task, it should refer to the Parent. Load the Parent from PROD (`parentId` → `GET /api/v1/tasks/{parentId}` plus description/comments as needed). Do not invent missing background.
-9. **Deferred scope → new Task** — if interview/sizing defers work out of the current Task, create a PROD Task with full context and relate it via dependencies to the working Task (see §4 and [reference.md](reference.md)). Never leave deferrals only in the plan.
+8. **Child Task → Parent** — if the Agent needs more context or information on a Child Task, it should refer to the Parent. Load the Parent from the DEV API (`parentId` → `GET /api/v1/tasks/{parentId}` plus description/comments as needed). Do not invent missing background.
+9. **Deferred scope → new Task** — if interview/sizing defers work out of the current Task, create a Task on the DEV API with full context and relate it via dependencies to the working Task (see §4 and [reference.md](reference.md)). Never leave deferrals only in the plan.
+10. **Do not deploy** — finish-up merges to `main` and closes the Task. Production updates are the Administrator’s Upgrade from a GitHub Release ([UPGRADES.md](../../../UPGRADES.md)). Never run `npm run deploy:prod` as part of `/worktask` or finish-up.
 
 ## Workflow checklist
 
@@ -38,8 +40,8 @@ Copy and track:
 
 ```
 Worktask:
-- [ ] 0. Auth (PROD session or API key)
-- [ ] 1. Load PROD task + activity
+- [ ] 0. Auth (DEV session or API key; start `npm run dev` if :3001 is down)
+- [ ] 1. Load task + activity from the DEV API
 - [ ] 2. Scope / size check (split recommendation if needed)
 - [ ] 2b. Depends-on gate (stop if open blockers)
 - [ ] 3. State gate (`ready` to start; Draft/`new` or other → alert & wait)
@@ -47,22 +49,22 @@ Worktask:
 - [ ] 5. User approves plan → branch + In Progress + start comment
 - [ ] 6. Implement + QA checklist
 - [ ] 6b. QA follow-ups → update plan + Task comment + commit message
-- [ ] 7. User “finish up” → version bump + PR merge/deploy + Complete + finish comment
+- [ ] 7. User “finish up” → version bump + PR merge + Complete + finish comment (no deploy)
 ```
 
-### 0. Auth (PROD)
+### 0. Auth (DEV)
 
 Do this before any `GET`/`PATCH`/`POST` to `/api/v1/tasks` (or other app data).
 
-1. Prefer the helper: `.cursor/skills/worktask/scripts/prod-login.sh` (writes cookie jar `/tmp/tm-prod-cookies.txt`).
+1. Prefer the helper: `.cursor/skills/worktask/scripts/dev-login.sh` (starts `npm run dev` when `:3001` is down; writes cookie jar `/tmp/tm-dev-cookies.txt`, cookie name `taskmesh_session_dev`).
 2. Or follow [reference.md](reference.md) § Auth manually:
    - Credentials from `~/.config/taskmesh/worktask.env` (`TASKMESH_EMAIL` / `TASKMESH_PASSWORD`). If missing, ask the user once and write that file (`chmod 600`). **Never** hardcode or commit secrets.
    - Optional: `TASKMESH_API_KEY` → use `Authorization: Bearer …` on every call (skips CSRF; no cookie jar).
    - Session path: login → cookie jar → verify `GET /api/v1/auth/session`; re-login when stale.
-   - Mutating session calls need `X-TaskMesh-Client: ui` + `Origin: http://127.0.0.1:3000`.
+   - Mutating session calls need `X-TaskMesh-Client: ui` + `Origin: http://127.0.0.1:3001`.
 3. If password login fails on this host, use the **session mint fallback** in reference (still not for task row updates).
 
-### 1. Load context (PROD)
+### 1. Load context (DEV API)
 
 Requires step 0 (authenticated curls).
 
@@ -76,9 +78,9 @@ Requires step 0 (authenticated curls).
    - **Depends on** (blocking tasks)
    - **Parent** when `parentId` is set (this is a Child Task)
 5. Note `id`, `state`, `priority`, `projectId`, `parentId`, formatted number `T####`.
-6. If `parentId` is set: fetch the Parent from PROD. If the Child’s title, description, or comments are thin, ambiguous, or incomplete — or you otherwise need more context or information on the Child Task — **refer to the Parent** (title, description, comments, activity). Use that as the missing brief; do not ask the user to restate what the Parent already records.
+6. If `parentId` is set: fetch the Parent from the DEV API. If the Child’s title, description, or comments are thin, ambiguous, or incomplete — or you otherwise need more context or information on the Child Task — **refer to the Parent** (title, description, comments, activity). Use that as the missing brief; do not ask the user to restate what the Parent already records.
 
-If not found, auth fails, or PROD unhealthy → stop and report.
+If not found, auth fails, or the DEV API is unhealthy after starting `npm run dev` → stop and report.
 
 ### 2. Size / split check
 
@@ -111,7 +113,7 @@ Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still bein
 ### 4. Interview + plan
 
 1. Interview for clarifications (even if the description looks complete).
-2. **Deferral → new Task (required):** Whenever interview answers (or sizing) **defer** scope out of the current worktask — a feature slice, field, modal, schema piece, or follow-up — **always** create a **new PROD Task** before treating the deferral as settled:
+2. **Deferral → new Task (required):** Whenever interview answers (or sizing) **defer** scope out of the current worktask — a feature slice, field, modal, schema piece, or follow-up — **always** create a **new Task on the DEV API** before treating the deferral as settled:
    - Copy **all related information and context** into the new Task (title, description with acceptance notes, why it was deferred from `T####`, relevant parent/sibling context, API/UI gaps already known).
    - Prefer the same `projectId` (and `parentId` only when it is truly a child of the same epic; otherwise leave standalone).
    - Default state `new` (Draft) unless the user asks for Ready.
@@ -126,8 +128,8 @@ Only after the user approves the plan:
 
 1. `git switch main && git pull` (**SSH only** — see [reference.md](reference.md) § Git ops), then `git switch -c T####-<slug>`.
 2. SetActiveBranch to that branch.
-3. PROD: `PATCH /api/v1/tasks/{id}` → `{ "state": "in_progress" }`.
-4. PROD: post a comment summarizing branch + plan (path + short summary). Template in [reference.md](reference.md).
+3. DEV API: `PATCH /api/v1/tasks/{id}` → `{ "state": "in_progress" }`.
+4. DEV API: post a comment summarizing branch + plan (path + short summary). Template in [reference.md](reference.md).
 5. Implement as usual. End the implementation pass with a **QA checklist**. Do not finish-up until asked.
 
 ### 5b. QA follow-ups (during review)
@@ -135,7 +137,7 @@ Only after the user approves the plan:
 When the user requests **new functionality or corrections** during QA:
 
 1. **Update the plan** — append a “QA follow-ups” section (what changed / why). Keep the plan file current before the next checklist or finish-up.
-2. **PROD Task comment** — post a progress comment summarizing the QA changes (template in [reference.md](reference.md)). Do this when the follow-up pass lands, not only at Complete.
+2. **Task comment** — post a progress comment on the DEV API summarizing the QA changes (template in [reference.md](reference.md)). Do this when the follow-up pass lands, not only at Complete.
 3. **Commit message** — when committing that work (or on finish-up), name the QA additions/fixes explicitly alongside any original scope.
 4. Re-issue an updated **QA checklist** for the new/changed behavior.
 
@@ -151,8 +153,7 @@ Do **all** of the following in order (same as development-rules, with Task bookk
    3. Wait until required checks succeed (e.g. “Tests, build, lint, repo scan”).
    4. Merge the PR on GitHub (`gh pr merge` or API). Prefer merge commit unless the user asks otherwise.
    5. `git switch main && git pull` (SSH), then delete local and remote `T####-*` branch.
-4. **Deploy** — `npm run deploy:prod`; confirm `:3000` and nginx HTTPS health checks succeed (script also stamps `data/prod-release.json`).
-5. **PROD Task** — completion comment (include original scope, **shipped version**, PR number if useful, and QA follow-ups), then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
+4. **Task** — completion comment on the DEV API (include original scope, **shipped version**, PR number if useful, and QA follow-ups). State that the version is on `main` and that the public Production site is upgraded by the Administrator from a GitHub Release — this step does not deploy. Then `PATCH` `{ "state": "complete" }`. Leave `dueDate` unchanged.
    - If this task still has unfinished **direct children** (state not `complete` / `canceled` / `deleted`), the API **coerces Complete → Pending**. Prefer sending `complete` anyway and trust the coerce, or send `pending` explicitly.
    - When finishing a **child**, do not PATCH the parent yourself: if the parent is Pending and this was the last unfinished child, the API sets the parent to `complete`.
 

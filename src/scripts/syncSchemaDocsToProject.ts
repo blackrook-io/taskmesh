@@ -1,11 +1,14 @@
 /**
  * Copy-replace git-tracked schema docs (`docs/`) into the TaskMesh project's
- * Documents module (PROD by default). `/docs` remains authoritative.
+ * Documents module on this host's DEV API. `/docs` remains authoritative.
  *
  * Usage:
  *   npm run docs:sync-schema
- *   TASKMESH_COOKIE='<session id or Cookie header>' npm run docs:sync-schema
- *   TASKMESH_API_BASE=http://127.0.0.1:3000 TASKMESH_PROJECT_ID=4 npm run docs:sync-schema
+ *   TASKMESH_COOKIE='<DEV session id or Cookie header>' npm run docs:sync-schema
+ *   TASKMESH_API_BASE=http://127.0.0.1:3001 TASKMESH_PROJECT_ID=4 npm run docs:sync-schema
+ *
+ * A bare session id is sent as `taskmesh_session_dev`. A value that already
+ * contains `=` is sent as the Cookie header unchanged.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -14,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 
-const API_BASE = (process.env.TASKMESH_API_BASE ?? "http://127.0.0.1:3000").replace(
+const API_BASE = (process.env.TASKMESH_API_BASE ?? "http://127.0.0.1:3001").replace(
   /\/$/,
   "",
 );
@@ -22,9 +25,9 @@ const PROJECT_ID = Number(process.env.TASKMESH_PROJECT_ID ?? "4");
 
 const rawCookie = process.env.TASKMESH_COOKIE?.trim();
 const cookieHeader = rawCookie
-  ? rawCookie.toLowerCase().startsWith("taskmesh_session=")
+  ? rawCookie.includes("=")
     ? rawCookie
-    : `taskmesh_session=${rawCookie}`
+    : `taskmesh_session_dev=${rawCookie}`
   : undefined;
 
 /** Stable Document titles used for upsert (match exactly on sync). */

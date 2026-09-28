@@ -1,24 +1,24 @@
-# /worktask API reference (PROD)
+# /worktask API reference (DEV)
 
-Base URL: `http://127.0.0.1:3000`
+This development host runs one server: the DEV API. Base URL: `http://127.0.0.1:3001`
 
-Confirm health first:
+If health fails, start it from the repo root (`npm run dev`) and wait. Do not start a production process on `:3000`.
 
 ```bash
-curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS http://127.0.0.1:3001/api/health
 ```
 
 ## Auth (required)
 
-PROD `/api/v1/*` (except health / login / logout / session bootstrap / public theme) needs auth. Establish it **before** any task I/O.
+The DEV API `/api/v1/*` (except health / login / logout / session bootstrap / public theme) needs auth. Establish it **before** any task I/O.
 
 ### Prefer the helper
 
 ```bash
-# From repo root
-.cursor/skills/worktask/scripts/prod-login.sh
+# From repo root. Starts `npm run dev` when :3001 is down.
+.cursor/skills/worktask/scripts/dev-login.sh
 # → prints: api_key | session | mint
-# → session/mint write cookie jar: /tmp/tm-prod-cookies.txt
+# → session/mint write cookie jar: /tmp/tm-dev-cookies.txt
 ```
 
 Reuse that jar for the rest of the session. Re-run the helper (or re-check session) if a call returns 401.
@@ -46,25 +46,24 @@ If `TASKMESH_API_KEY` is set (env or creds file), use it on every call and skip 
 
 ```bash
 curl -fsS -H "Authorization: Bearer ${TASKMESH_API_KEY}" \
-  'http://127.0.0.1:3000/api/v1/tasks'
+  'http://127.0.0.1:3001/api/v1/tasks'
 ```
 
 Read-write keys only for mutating worktask calls. Create a key in the app (Profile / Admin) if needed.
 
 ### Session cookie path (default)
 
-Cookie jar: `/tmp/tm-prod-cookies.txt`  
-Cookie name for PROD: **`taskmesh_session`** (not `taskmesh_session_dev`).
+Cookie jar: `/tmp/tm-dev-cookies.txt`  
+Cookie name: **`taskmesh_session_dev`** (DEV is not `NODE_ENV=production`).
 
 ```bash
-COOKIE=/tmp/tm-prod-cookies.txt
-BASE=http://127.0.0.1:3000
+COOKIE=/tmp/tm-dev-cookies.txt
+BASE=http://127.0.0.1:3001
 
-# Login (Secure Set-Cookie may not land in curl’s jar over http:// — helper parses it)
-curl -sS -D /tmp/tm-login.hdrs -o /tmp/tm-login.json -X POST "$BASE/api/v1/auth/login" \
+curl -sS -D /tmp/tm-login.hdrs -o /tmp/tm-login.json -c "$COOKIE" -X POST "$BASE/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   -H 'X-TaskMesh-Client: ui' \
-  -H 'Origin: http://127.0.0.1:3000' \
+  -H 'Origin: http://127.0.0.1:3001' \
   -d "$(jq -n --arg e "$TASKMESH_EMAIL" --arg p "$TASKMESH_PASSWORD" '{email:$e,password:$p}')"
 
 # Verify
@@ -75,13 +74,13 @@ curl -fsS -b "$COOKIE" "$BASE/api/v1/auth/session" | jq '.data.email'
 
 - `-b "$COOKIE"` (and `-c "$COOKIE"` if refreshing)
 - `-H 'X-TaskMesh-Client: ui'`
-- `-H 'Origin: http://127.0.0.1:3000'`
+- `-H 'Origin: http://127.0.0.1:3001'`
 
 GETs only need the cookie (or Bearer key).
 
 ### Session mint fallback (app host only)
 
-If password login fails and no API key is set, mint a DB session for the creds-file user (or user id `1`) and write a Netscape jar with cookie name `taskmesh_session`. Prefer `.cursor/skills/worktask/scripts/prod-login.sh`. Manual shape:
+If password login fails and no API key is set, mint a DB session for the creds-file user (or user id `1`) and write a Netscape jar with cookie name `taskmesh_session_dev`. Prefer `.cursor/skills/worktask/scripts/dev-login.sh`. The DEV API must already be up. Manual shape:
 
 ```bash
 cd /srv/taskmesh && node --import tsx <<'EOF'
@@ -92,8 +91,8 @@ import { createSession } from "./src/services/auth.ts";
 const session = await createSession(db, 1);
 const expires = Math.floor(new Date(session.expiresAt).getTime() / 1000);
 fs.writeFileSync(
-  "/tmp/tm-prod-cookies.txt",
-  `# Netscape HTTP Cookie File\n127.0.0.1\tFALSE\t/\tFALSE\t${expires}\ttaskmesh_session\t${session.id}\n`,
+  "/tmp/tm-dev-cookies.txt",
+  `# Netscape HTTP Cookie File\n127.0.0.1\tFALSE\t/\tFALSE\t${expires}\ttaskmesh_session_dev\t${session.id}\n`,
 );
 await pool.end();
 EOF
@@ -104,11 +103,11 @@ Use this **only** for auth bootstrap on the app host — not for reading/updatin
 ### Curl aliases used below
 
 ```bash
-COOKIE=/tmp/tm-prod-cookies.txt
-BASE=http://127.0.0.1:3000
+COOKIE=/tmp/tm-dev-cookies.txt
+BASE=http://127.0.0.1:3001
 # Session auth:
 AUTH=(-b "$COOKIE")
-MUTATE=(-b "$COOKIE" -H 'Content-Type: application/json' -H 'X-TaskMesh-Client: ui' -H 'Origin: http://127.0.0.1:3000')
+MUTATE=(-b "$COOKIE" -H 'Content-Type: application/json' -H 'X-TaskMesh-Client: ui' -H 'Origin: http://127.0.0.1:3001')
 # Or API key instead:
 # AUTH=(-H "Authorization: Bearer ${TASKMESH_API_KEY}")
 # MUTATE=(-H "Authorization: Bearer ${TASKMESH_API_KEY}" -H 'Content-Type: application/json')
@@ -223,9 +222,9 @@ Post when implementing new functionality or corrections during QA (not only at C
 
 - Merged PR #N (`T0036-example-slug` → `main`)
 - Plan archived: `.cursor/plans/executed/2026-08-T0036-example-slug.mdc`
-- Deployed to PROD (health checks OK)
-- App version: `0.22.1` (example)
+- App version: `0.22.1` (example) is on `main`
 - Release notes: `RELEASE_NOTES.md` updated for `0.22.1`
+- Public Production is not deployed by finish-up. The Administrator upgrades that site from the GitHub Release (`UPGRADES.md`).
 
 <summary of what shipped>
 

@@ -45,7 +45,7 @@ NODE_ENV=production npm start
 
 **PROD (bare metal):** Express on `127.0.0.1:3000`. The public installer publishes `https://<fqdn>/` and leaves other nginx sites in place. A manual LAN install can still use the default site on port 80, described in INSTALL.md.  
 **Containers:** UI + API on published host port (default **3000**).  
-**DEV:** open only **http://127.0.0.1:5173/** — Vite proxies `/api` to a separate API on **:3001** so PROD can stay up.
+**DEV (this development host):** open **http://127.0.0.1:5173/** — Vite proxies `/api` to the DEV API on **:3001**. This checkout runs that server only. Do not also run a production API on `:3000` against the same database. Public Production is a separate install, upgraded from a GitHub Release ([UPGRADES.md](UPGRADES.md)).
 
 ## Development
 
@@ -61,8 +61,7 @@ npm run dev:web
 | URL | Purpose |
 |-----|---------|
 | http://127.0.0.1:5173/ | Dev UI (use this; proxies `/api` → DEV API) |
-| http://127.0.0.1:3001/api/health | DEV API health (optional direct check) |
-| http://127.0.0.1:3000/api/health | PROD API (systemd; leave alone while developing) |
+| http://127.0.0.1:3001/api/health | DEV API health |
 
 ## Scripts
 
@@ -76,11 +75,11 @@ npm run dev:web
 | `npm run build:all` | API + client production builds |
 | `npm run lint` | Client ESLint hard gate (same as CI: `--max-warnings 0`) |
 | `npm start` | Run compiled API (`node dist/index.js`) |
-| `npm run deploy:prod` | Build current tree + restart systemd prod behind nginx `:80` |
+| `npm run deploy:prod` | Production host only: build the current tree and restart systemd behind nginx. Not used on this development host |
 | `npm run db:generate` | SQL migrations from `src/db/schema.ts` |
 | `npm run db:migrate` | Apply `./drizzle` migrations |
 | `npm run db:studio` | Drizzle Studio |
-| `npm run docs:sync-schema` | Copy-replace `docs/` schema Markdown into TaskMesh project Documents (PROD) |
+| `npm run docs:sync-schema` | Copy-replace `docs/` schema Markdown into TaskMesh project Documents (DEV API `:3001`) |
 | `npm run security:scan` | Defensive security scan suite (HTTP / repo / optional DB) — see [`security/scan/README.md`](security/scan/README.md) |
 | `npm run security:ci` | CI-parity hard gate: `repo_static` with `--fail-on-findings` (see [`.github/workflows/security-ci.yml`](.github/workflows/security-ci.yml)) |
 
@@ -90,18 +89,18 @@ After editing `src/db/schema.ts`: `npm run db:generate`, review `drizzle/`, then
 
 Defensive audit CLI (HTTP headers/auth/CSRF/API, repo static checks + `npm audit`, optional Postgres role checks). **No exploit payloads.** Full module list and flags: [`security/scan/README.md`](security/scan/README.md). Threat model / hardening notes: [`SECURITY.md`](SECURITY.md).
 
-From the repo root (default target: PROD `http://127.0.0.1:3000`):
+From the repo root. The scanner’s default target is a production API on `http://127.0.0.1:3000`. On this development host, point it at the DEV API:
+
+```bash
+npm run security:scan -- --base-url http://127.0.0.1:3001
+```
+
+Production API (default):
 
 ```bash
 npm run security:scan
 # equivalent:
 python3 security/scan/run.py
-```
-
-DEV API:
-
-```bash
-npm run security:scan -- --base-url http://127.0.0.1:3001
 ```
 
 Credentials (optional — auth/CSRF checks **SKIP** with a reason if missing):
@@ -133,10 +132,10 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 |----------|---------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `HOST` | API bind address (default `127.0.0.1`; use nginx for LAN) |
-| `PORT` | PROD API listen port (default `3000`; used by systemd / `npm start`) |
+| `PORT` | Listen port for a production install (`npm start` / systemd; default `3000`). This development host uses `DEV_API_PORT` instead |
 | `DEV_API_PORT` | DEV API port for `npm run dev` / `dev:web` (default `3001`) |
 | `BACKUP_SCHEDULE_PATH` | Backup schedule JSON path (default `./data/backup-schedule.json`) |
-| `PROD_RELEASE_PATH` | Sidecar JSON with last PROD deploy stamp (default `./data/prod-release.json`; written by `deploy:prod`) |
+| `PROD_RELEASE_PATH` | Sidecar JSON with the last production-host deploy stamp (default `./data/prod-release.json`; written by `deploy:prod` on that host) |
 | `OPENAI_API_KEY` | Enables embedded assistant (optional) |
 | `ASSISTANT_DEFAULT_MODEL` | OpenAI model id (default `gpt-4.1-mini`) |
 

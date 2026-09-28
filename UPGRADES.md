@@ -38,7 +38,7 @@ curl -fsS http://127.0.0.1:3000/api/health
 
 Expect JSON with `"ok": true`. Then open the site in a browser and sign in.
 
-If this machine is the one you develop on, and Dev and Prod share the same checkout, you can use `npm run deploy:prod` after `git checkout` instead of the install, migrate, build, and restart lines. See [INSTALL.md §20](INSTALL.md#20-updating-taskmesh).
+On a production host where this checkout is the running install, you can use `npm run deploy:prod` after `git checkout` instead of the install, migrate, build, and restart lines. See [INSTALL.md §20](INSTALL.md#20-updating-taskmesh). The development host does not run that production process.
 
 ## Docker Compose
 

@@ -29,4 +29,4 @@ Whenever development changes the database (new tables/columns, constraint or rel
 npm run docs:sync-schema
 ```
 
-Authenticated PROD (`TASKMESH_COOKIE` session cookie or id) is required after login/session binding. `/docs` is authoritative. The script upserts PROD Documents by stable titles (see `src/scripts/syncSchemaDocsToProject.ts`). Agents must follow [`.cursor/rules/schema-docs.mdc`](../.cursor/rules/schema-docs.mdc).
+Authenticated DEV (`TASKMESH_COOKIE` session id or Cookie header; default API `http://127.0.0.1:3001`) is required after login/session binding. `/docs` is authoritative. The script upserts Documents by stable titles (see `src/scripts/syncSchemaDocsToProject.ts`). Agents must follow [`.cursor/rules/schema-docs.mdc`](../.cursor/rules/schema-docs.mdc).
