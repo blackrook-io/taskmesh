@@ -3378,6 +3378,18 @@ textarea.raw-md {
   margin-bottom: 0.85rem;
 }
 
+.admin-user-name {
+  cursor: text;
+}
+
+.admin-user-name__input {
+  font: inherit;
+  font-weight: 600;
+  width: 100%;
+  max-width: 16rem;
+  padding: 0.15rem 0.35rem;
+}
+
 .admin-table-wrap {
   overflow: auto;
   border: 1px solid var(--border);

@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.51.0 — 2026-09-28
+
+### Enhancements
+- Administrators rename a user by double-clicking the display name in Administration → Users. Enter or leaving the field saves; Escape cancels.
+- Display names are unique regardless of letter case, including when creating a user or saving Profile. A name already in use is rejected.
+
 ## 0.50.1 — 2026-09-28
 
 ### Enhancements

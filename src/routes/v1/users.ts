@@ -28,7 +28,11 @@ import { clearMfaTrustCookie } from "../../lib/mfaTrustCookie.js";
 import { clearSessionCookie } from "../../lib/sessionCookie.js";
 import { clearMfaChallengeCookie } from "../../lib/mfaChallengeCookie.js";
 import { attachRolesToProfile } from "../../services/roles.js";
-import { getCurrentUser, setCurrentUserPassword } from "../../services/users.js";
+import {
+  assertDisplayNameAvailable,
+  getCurrentUser,
+  setCurrentUserPassword,
+} from "../../services/users.js";
 import { getUserById } from "../../services/auth.js";
 import {
   listIdentitiesForUser,
@@ -231,6 +235,7 @@ usersRouter.patch("/me", async (req, res) => {
     } = { updatedAt: new Date() };
 
     if (parsed.displayName !== undefined) {
+      await assertDisplayNameAvailable(db, parsed.displayName, current.id);
       patch.displayName = parsed.displayName;
     }
     if (parsed.email !== undefined) {

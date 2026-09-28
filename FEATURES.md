@@ -101,6 +101,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Trusted devices that skip MFA for a configurable number of days, with Profile revoke-all and Admin duration/max settings
 - Personal API keys with read/write scopes and expiry
 - Admin hub for users, groups, keys, OAuth providers, API usage, database stats, system logs, properties, and templates
+- Administrators rename a user by double-clicking the display name; display names stay unique
 - Project Settings (modules, phases, and users) is available to Managers and Owners; deleting a project stays Administrator-only
 - Removing a Manager or Member who still has assigned work requires reassigning those items or clearing the assignee first
 - Ownership transfer and role labels for multi-user homes

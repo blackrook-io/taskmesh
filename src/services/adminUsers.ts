@@ -7,7 +7,7 @@ import { hashPassword, validatePassword } from "../lib/password.js";
 import { deleteUserDeniedReason } from "../lib/userAuth.js";
 import { clearMfaForUser, recoveryCodesRemainingByUserIds } from "./mfa.js";
 import { revokeAllTrustedDevices } from "./mfaTrustedDevices.js";
-import { allocateUserNumber } from "./users.js";
+import { allocateUserNumber, assertDisplayNameAvailable } from "./users.js";
 import { archiveCurrentPasswordHash } from "./passwordHistory.js";
 import { guardLastAdministrator, listRolesByUserIds } from "./roles.js";
 import { destroyAllSessionsForUser } from "./auth.js";
@@ -118,6 +118,7 @@ export async function createAdminUser(
   if (dup) {
     throw serviceErr("Email is already in use", 409, "email_taken");
   }
+  await assertDisplayNameAvailable(db, input.displayName);
   const number = await allocateUserNumber(db);
   const passwordHash = await hashPassword(input.password);
   const [row] = await db
@@ -133,6 +134,26 @@ export async function createAdminUser(
     throw serviceErr("Could not create user", 500, "create_failed");
   }
   return toAdminUser(row);
+}
+
+export async function renameAdminUser(
+  db: Db,
+  userId: number,
+  displayName: string,
+): Promise<AdminUserRow> {
+  await requireUser(db, userId);
+  await assertDisplayNameAvailable(db, displayName, userId);
+  const [row] = await db
+    .update(schema.users)
+    .set({ displayName: displayName.trim(), updatedAt: new Date() })
+    .where(eq(schema.users.id, userId))
+    .returning();
+  if (!row) {
+    throw serviceErr("User not found", 404, "not_found");
+  }
+  const rolesByUser = await listRolesByUserIds(db, [row.id]);
+  const recoveryByUser = await recoveryCodesRemainingByUserIds(db, [row.id]);
+  return toAdminUser(row, rolesByUser.get(row.id) ?? [], recoveryByUser.get(row.id) ?? 0);
 }
 
 export async function lockUser(db: Db, userId: number): Promise<AdminUserRow> {
