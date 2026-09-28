@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.52.0 — 2026-09-28
+
+### Enhancements
+- To Do lists use a shared column header. Drag reorder stays the default manual order. Clicking a column sorts that list and turns drag off until you return to the saved order.
+- Right-click the To Do list header to show, hide, or reorder columns. The layout is saved for your account and applies to every To Do list.
+
 ## 0.51.0 — 2026-09-28
 
 ### Enhancements

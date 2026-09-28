@@ -6,12 +6,13 @@ import { NotFoundError } from "../lib/notFound.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
-export const LIST_VIEW_KEYS = ["tasks", "ideas"] as const;
+export const LIST_VIEW_KEYS = ["tasks", "ideas", "todo_lists"] as const;
 export type ListViewKey = (typeof LIST_VIEW_KEYS)[number];
 
 const LIST_VIEW_ENTITY: Record<ListViewKey, string> = {
   tasks: "task",
   ideas: "idea",
+  todo_lists: "todo_list",
 };
 
 export function isListViewKey(value: string): value is ListViewKey {

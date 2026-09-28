@@ -660,7 +660,7 @@ export const userListViewPrefs = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** `tasks` | `ideas` — not scoped by project. */
+    /** `tasks` | `ideas` | `todo_lists` — not scoped by project. `todo_lists` uses entity_fields rows with entity_type `todo_list` (membership columns, not the todo_lists table). */
     listViewKey: text("list_view_key").notNull(),
     columns: jsonb("columns").$type<ListViewColumnPref[]>().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })

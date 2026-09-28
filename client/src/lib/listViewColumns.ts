@@ -1,6 +1,6 @@
 /** List View column personalization (T0056) — shared types + grid helpers. */
 
-export type ListViewKey = "tasks" | "ideas";
+export type ListViewKey = "tasks" | "ideas" | "todo_lists";
 
 export type ListViewField = {
   fieldKey: string;
@@ -24,7 +24,7 @@ export type ListViewPrefsPayload = {
 export type ResolvedListColumn = ListViewField & { visible: boolean };
 
 /** Surface filter for scope-restricted columns (e.g. Project on global only). */
-export type ListViewSurface = "project" | "global" | "ideas";
+export type ListViewSurface = "project" | "global" | "ideas" | "todos";
 
 const TASK_TRACK: Record<string, string> = {
   number: "6.75rem",
@@ -41,6 +41,19 @@ const TASK_TRACK: Record<string, string> = {
   owner: "6.5rem",
   createdBy: "6.5rem",
 };
+
+const TODO_TRACK: Record<string, string> = {
+  type: "3.25rem",
+  title: "minmax(8rem, 1.4fr)",
+  tags: "minmax(6rem, 10rem)",
+  state: "7rem",
+  priority: "6.5rem",
+  dueDate: "8.5rem",
+  checked: "5.5rem",
+};
+
+const TODO_CHROME = "1.5rem 1.75rem";
+const TODO_CHROME_END = "1.75rem";
 
 const IDEA_TRACK: Record<string, string> = {
   title: "minmax(8rem, 1.5fr)",
@@ -107,6 +120,11 @@ export function buildTaskListGridTemplate(visible: ResolvedListColumn[], surface
     return TASK_TRACK[c.fieldKey] ?? "minmax(5rem, 8rem)";
   });
   return `${TASK_CHROME} ${tracks.join(" ")}`;
+}
+
+export function buildTodoListGridTemplate(visible: ResolvedListColumn[]): string {
+  const tracks = visible.map((c) => TODO_TRACK[c.fieldKey] ?? "minmax(5rem, 8rem)");
+  return `${TODO_CHROME} ${tracks.join(" ")} ${TODO_CHROME_END}`;
 }
 
 export function buildIdeasListGridTemplate(visible: ResolvedListColumn[]): string {
