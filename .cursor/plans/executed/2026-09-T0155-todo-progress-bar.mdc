@@ -1,0 +1,48 @@
+# T0155 — To Do progress bar on the list view
+
+**Task:** T0155 (id 168) · child of T0093 (id 105, Pending)  
+**Branch (on approval):** `T0155-todo-progress-bar`  
+**State at plan:** `ready` · Depends on: none
+
+## Goal
+
+Each ToDo row on a To Do list shows a progress bar driven by a stored percent on the ToDo. Color follows the bands in the task brief. At 100% the row is shown as completed.
+
+## Proposed decisions (confirm before implement)
+
+| # | Proposal |
+|---|----------|
+| 1 | New integer column `todos.progress`, range **0–100**, default **0**. This is a value the user sets. It is not computed from children. Hierarchy rollup stays on **T0097**. |
+| 2 | The bar is a fixed control on each **ToDo** list row (after the checkbox), always visible. It is not a hideable personalize column. Task and legacy Idea rows in the same list keep an empty slot so the grid stays aligned. |
+| 3 | Bands (inclusive): **0–25 red**, **26–50 orange**, **51–75 yellow**, **76–99 green**. The fill width matches the percent. A short `%` label sits with the bar. |
+| 4 | **100%** sets the ToDo `state` to `complete` and checks the list membership (`checked`), so the row uses the existing completed look. Setting state to Complete, or checking the row, sets `progress` to **100**. Dropping progress below 100 while the ToDo is Complete sets state back to `in_progress` and unchecks the membership. |
+| 5 | Edit the percent with a range slider on the list row and the same field in the ToDo editor. API rejects values outside 0–100. |
+| 6 | Unset is not a separate state: existing ToDos backfill to **0** (red, empty-looking bar at the left). |
+
+## Out of scope
+
+- Parent/child completion rollup and “x of y” (T0097).
+- Progress on Tasks, Ideas, or boards.
+- Due-date tinting (T0102), recurrence, or extra action fields.
+
+## Schema
+
+Add `todos.progress` integer, not null, default `0`, check constraint `progress >= 0 AND progress <= 100`.
+
+Update `docs/database/content-and-modules.md` (and overview only if the column belongs on the conceptual note), then `npm run docs:sync-schema`.
+
+This migration is a MINOR version bump on finish-up.
+
+## API
+
+- Include `progress` on ToDo read/create/update.
+- When a patch sets `progress` to 100, also set `state` to `complete`.
+- When a patch sets `state` to `complete`, also set `progress` to 100.
+- When a patch sets `progress` below 100 and the stored state is `complete`, set `state` to `in_progress`.
+- List check/uncheck of a ToDo membership updates `progress` the same way (check → 100 + complete; uncheck from a 100% row → progress stays unless the client sends a new percent — **uncheck sets progress to the previous value only if we store none; simplest rule: uncheck sets progress to 0 and state to `in_progress` only when progress was 100**). Confirm the uncheck rule in QA if it feels wrong; default in this plan: unchecking a completed ToDo sets `progress` to **0** and `state` to `in_progress`.
+
+## UI
+
+- List row: colored bar + percent, `aria` label including the percent.
+- ToDo editor: number or range 0–100 labeled Progress, saved with the other fields.
+- Mobile: the bar stays on the row; it must remain usable without horizontal overflow hiding the control.

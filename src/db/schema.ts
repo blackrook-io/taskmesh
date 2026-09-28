@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -1072,13 +1073,17 @@ export const todos = pgTable("todos", {
   assigneeId: integer("assignee_id").references(() => users.id, {
     onDelete: "set null",
   }),
+  /** User-set percent complete, 0–100 (T0155). */
+  progress: integer("progress").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => ({
+  progressRange: check("todos_progress_range", sql`${t.progress} >= 0 AND ${t.progress} <= 100`),
+}));
 
 /** Standalone or project-scoped checklist containers. */
 export const todoLists = pgTable("todo_lists", {

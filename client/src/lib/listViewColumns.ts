@@ -52,7 +52,7 @@ const TODO_TRACK: Record<string, string> = {
   checked: "5.5rem",
 };
 
-const TODO_CHROME = "1.5rem 1.75rem";
+const TODO_CHROME = "1.5rem 1.75rem minmax(6.75rem, 8.75rem)";
 const TODO_CHROME_END = "1.75rem";
 
 const IDEA_TRACK: Record<string, string> = {

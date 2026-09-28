@@ -50,6 +50,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 - Build standalone checklists that can mix To Dos, Tasks, and Ideas
 - Filter by state, priority, and tags; drag to reorder, or sort by column and return to that saved order; personalize columns from the header; color-code list accents
+- See To Do progress on the list as a color bar (red, orange, yellow, green); 100% marks the ToDo complete
 
 
 
