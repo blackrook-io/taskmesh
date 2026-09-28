@@ -201,6 +201,8 @@ Per-user tag catalog (T0112) plus polymorphic attachments.
 
 First-class **ToDo** records (UI label “ToDo”). Display number → **D####**. Lighter than Task: due date, priority, Task-parity state, `action_by` datetime, and a stored `progress` percent (0–100). Optional `project_id` and `source_idea_id` (when converted from an Idea). Soft-delete via `state = 'deleted'`.
 
+Hierarchy is `parent_id` on the ToDo (same idea as tasks). A parent with any non-deleted sub-item stores a **derived** progress: **x of y** direct children complete, where canceled and deleted children are left out of both counts, and the percent is `round(100 * x / y)`. Marking that parent complete while a child is still open stores **Pending** and keeps the rollup percent. When every direct child is finished, a Pending parent becomes **Complete** at 100%. Completing children does not auto-complete a parent left in Draft, Ready, or In Progress. A list indents a child only when the parent is also on that list.
+
 ### Columns
 
 | Column | Type | Nullable | Default | Notes |
@@ -221,11 +223,12 @@ First-class **ToDo** records (UI label “ToDo”). Display number → **D####**
 | `updated_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `assignee_id` | integer | yes | — | FK → `users.id` — assigned user (T0117); same pool rules as tasks when `project_id` is set |
-| `progress` | integer | no | `0` | User-set percent complete, 0–100 (T0155). 100% is Complete and checks To Do list memberships |
+| `progress` | integer | no | `0` | Percent complete, 0–100. User-set on a ToDo with no sub-items (T0155). On a parent, the derived rollup (T0097) |
+| `parent_id` | integer | yes | — | Self-FK → `todos.id`. Sub-item parent. Null = top-level |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `number`; CHECK `todos_progress_range` (`progress` between 0 and 100); FKs as above (`assignee_id` · **ON DELETE SET NULL**).
+**Constraints:** PK `id`; UNIQUE `number`; CHECK `todos_progress_range` (`progress` between 0 and 100); FKs as above (`assignee_id` · **ON DELETE SET NULL**); `parent_id` → `todos.id` · **ON DELETE SET NULL**; index `todos_parent_id_idx`.
 
 ---
 

@@ -257,8 +257,12 @@ export function ProjectDetailPage() {
       queryKey: ["todo-list", l.id],
       queryFn: async () => {
         const res = await apiJson<{ data: TodoListDetail }>(`/api/v1/todo-lists/${l.id}`);
-        return res.data.items.length;
+        return res.data;
       },
+      // Same cache as TodoListView. Must store the list, not a count — a count
+      // overwrite is what blanked the list on window focus.
+      select: (data: TodoListDetail) =>
+        data && typeof data === "object" && Array.isArray(data.items) ? data.items.length : 0,
       staleTime: 30_000,
     })),
   });

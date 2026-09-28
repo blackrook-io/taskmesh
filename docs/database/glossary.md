@@ -34,6 +34,8 @@ Internal joins still use surrogate `id` primary keys. Display numbers are for hu
 
 **Note (T0104):** ToDo items use **D####**. Project documents moved from D to **N####**.
 
+**Note (T0097):** A ToDo may have a `parent_id`. Parents show a derived **x of y** completion rollup instead of a typed percent. Pending means the parent was marked complete while a sub-item was still open.
+
 **Note (T0091 / T0119):** `project_documents.kind` is `markdown` (default), `epub`, or `pdf` (binary file via `upload_id` → `uploads` on disk).
 ## Polymorphic entity links
 

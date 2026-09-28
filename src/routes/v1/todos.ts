@@ -27,7 +27,19 @@ import { copyTaggings } from "../../services/copyTaggings.js";
 import { getCurrentUserId, attachAssignees, attachAssignee, attachTaskActor } from "../../services/users.js";
 import { resolveAssigneeId } from "../../services/assignees.js";
 import { resolveTodoProgressUpdate } from "../../lib/todoProgress.js";
+import {
+  isRejectedDerivedProgress,
+  resolveDerivedParent,
+} from "../../lib/todoHierarchy.js";
 import { syncTodoMembershipChecked } from "../../services/todoProgress.js";
+import {
+  assertTodoParent,
+  hierarchyByTodoId,
+  listChildSummaries,
+  loadRollup,
+  recomputeAncestorChain,
+  type TodoHierarchyFields,
+} from "../../services/todoHierarchy.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -47,6 +59,7 @@ const createBody = z.object({
   sourceIdeaId: z.number().int().positive().optional().nullable(),
   assigneeId: z.number().int().positive().nullable().optional(),
   progress: z.number().int().min(0).max(100).optional(),
+  parentId: z.number().int().positive().optional().nullable(),
 });
 
 const patchBody = z.object({
@@ -60,6 +73,7 @@ const patchBody = z.object({
   projectId: z.number().int().positive().nullable().optional(),
   assigneeId: z.number().int().positive().nullable().optional(),
   progress: z.number().int().min(0).max(100).optional(),
+  parentId: z.number().int().positive().nullable().optional(),
 });
 
 const listQuery = z.object({
@@ -81,6 +95,26 @@ function parseActionBy(value: string | null | undefined): Date | null | undefine
   if (value === undefined) return undefined;
   if (value === null) return null;
   return new Date(value);
+}
+
+async function withHierarchy<T extends { id: number }>(
+  rows: T[],
+): Promise<(T & TodoHierarchyFields)[]> {
+  const fields = await hierarchyByTodoId(
+    db,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => ({
+    ...row,
+    ...(fields.get(row.id) ?? { progressDerived: false, completeCount: 0, childCount: 0 }),
+  }));
+}
+
+async function presentTodo<T extends { id: number }>(row: T, withChildren: boolean) {
+  const [decorated] = await withHierarchy([row]);
+  if (!withChildren) return decorated;
+  const children = await listChildSummaries(db, row.id);
+  return { ...decorated, children };
 }
 
 export const todosRouter = Router();
@@ -126,7 +160,7 @@ todosRouter.get("/", async (req, res) => {
       .from(schema.todos)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(schema.todos.updatedAt), desc(schema.todos.id));
-    res.json({ data: await attachAssignees(db, rows) });
+    res.json({ data: await withHierarchy(await attachAssignees(db, rows)) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -152,6 +186,16 @@ todosRouter.post("/", async (req, res) => {
     }
     const number = await allocateTodoNumber(db);
     const projectId = parsed.projectId ?? null;
+    const parentId = parsed.parentId ?? null;
+    const parentOk = await assertTodoParent(db, null, projectId, parentId);
+    if (!parentOk.ok) {
+      sendError(res, 400, "invalid_parent", parentOk.message);
+      return;
+    }
+    if (parentId != null) {
+      const [parent] = await db.select().from(schema.todos).where(eq(schema.todos.id, parentId));
+      if (parent) await assertCanAccessDualScoped(db, actorId, parent, "write");
+    }
     const assigneeId = await resolveAssigneeId(db, {
       projectId,
       requested: parsed.assigneeId,
@@ -178,6 +222,7 @@ todosRouter.post("/", async (req, res) => {
         priority: parsed.priority ?? "none",
         projectId,
         sourceIdeaId: parsed.sourceIdeaId ?? null,
+        parentId,
         sortOrder: 0,
         createdById: actorId,
         updatedById: actorId,
@@ -192,7 +237,10 @@ todosRouter.post("/", async (req, res) => {
     if (initial.membershipChecked != null) {
       await syncTodoMembershipChecked(db, row.id, initial.membershipChecked);
     }
-    res.status(201).json({ data: await attachAssignee(db, row) });
+    if (parentId != null) {
+      await recomputeAncestorChain(db, parentId, actorId);
+    }
+    res.status(201).json({ data: await presentTodo(await attachAssignee(db, row), false) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -208,7 +256,7 @@ todosRouter.get("/:id", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     await assertCanAccessDualScoped(db, actorId, row);
-    res.json({ data: await attachAssignee(db, row) });
+    res.json({ data: await presentTodo(await attachAssignee(db, row), true) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -230,6 +278,7 @@ todosRouter.patch("/:id", async (req, res) => {
         "projectId",
         "assigneeId",
         "progress",
+        "parentId",
       ])
     ) {
       sendError(res, 400, "empty_patch", "Provide at least one field to update");
@@ -253,19 +302,64 @@ todosRouter.patch("/:id", async (req, res) => {
       parsed.projectId !== undefined ? parsed.projectId : existing.projectId;
     const projectChanging =
       parsed.projectId !== undefined && parsed.projectId !== existing.projectId;
+    const nextParentId = parsed.parentId !== undefined ? parsed.parentId : existing.parentId;
+    if (projectChanging) {
+      const rollup = await loadRollup(db, id);
+      if (rollup.derived) {
+        sendError(res, 400, "has_children", "Move or remove sub-items before changing project");
+        return;
+      }
+    }
+    if (parsed.parentId !== undefined || (projectChanging && nextParentId != null)) {
+      const parentOk = await assertTodoParent(db, id, nextProjectId, nextParentId);
+      if (!parentOk.ok) {
+        sendError(res, 400, "invalid_parent", parentOk.message);
+        return;
+      }
+      if (nextParentId != null) {
+        const [parent] = await db.select().from(schema.todos).where(eq(schema.todos.id, nextParentId));
+        if (parent) await assertCanAccessDualScoped(db, actorId, parent, "write");
+      }
+    }
     const nextAssigneeId = await resolveAssigneeId(db, {
       projectId: nextProjectId,
       requested: parsed.assigneeId,
       previousAssigneeId: existing.assigneeId,
       projectChanging,
     });
-    const progressUpdate = resolveTodoProgressUpdate(
-      { progress: existing.progress, state: existing.state },
-      {
-        ...(parsed.progress !== undefined ? { progress: parsed.progress } : {}),
-        ...(parsed.state !== undefined ? { state: parsed.state } : {}),
-      },
-    );
+    const rollup = await loadRollup(db, id);
+    const touchesProgress = parsed.state !== undefined || parsed.progress !== undefined;
+    if (
+      touchesProgress &&
+      parsed.progress !== undefined &&
+      isRejectedDerivedProgress(
+        { state: existing.state, progress: existing.progress },
+        rollup,
+        parsed.progress,
+        parsed.state,
+      )
+    ) {
+      sendError(res, 400, "progress_derived", "Progress is calculated from sub-items");
+      return;
+    }
+    const progressUpdate = !touchesProgress
+      ? null
+      : rollup.derived
+        ? resolveDerivedParent(
+            { state: existing.state, progress: existing.progress },
+            rollup,
+            {
+              ...(parsed.state !== undefined ? { state: parsed.state } : {}),
+              ...(parsed.progress !== undefined ? { progress: parsed.progress } : {}),
+            },
+          )
+        : resolveTodoProgressUpdate(
+            { progress: existing.progress, state: existing.state },
+            {
+              ...(parsed.progress !== undefined ? { progress: parsed.progress } : {}),
+              ...(parsed.state !== undefined ? { state: parsed.state } : {}),
+            },
+          );
     const [row] = await db
       .update(schema.todos)
       .set({
@@ -276,11 +370,12 @@ todosRouter.patch("/:id", async (req, res) => {
           ? { actionBy: parseActionBy(parsed.actionBy) ?? null }
           : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
-        ...(parsed.state !== undefined || parsed.progress !== undefined
+        ...(progressUpdate
           ? { state: progressUpdate.state, progress: progressUpdate.progress }
           : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.projectId !== undefined ? { projectId: parsed.projectId } : {}),
+        ...(parsed.parentId !== undefined ? { parentId: nextParentId } : {}),
         ...(parsed.assigneeId !== undefined || nextAssigneeId !== existing.assigneeId
           ? { assigneeId: nextAssigneeId }
           : {}),
@@ -289,12 +384,16 @@ todosRouter.patch("/:id", async (req, res) => {
       })
       .where(eq(schema.todos.id, id))
       .returning();
-    if (parsed.state !== undefined || parsed.progress !== undefined) {
-      if (progressUpdate.membershipChecked != null) {
-        await syncTodoMembershipChecked(db, id, progressUpdate.membershipChecked);
-      }
+    if (progressUpdate?.membershipChecked != null) {
+      await syncTodoMembershipChecked(db, id, progressUpdate.membershipChecked);
     }
-    res.json({ data: row ? await attachAssignee(db, row) : row });
+    if (parsed.parentId !== undefined && nextParentId !== existing.parentId) {
+      await recomputeAncestorChain(db, nextParentId, actorId);
+      await recomputeAncestorChain(db, existing.parentId, actorId);
+    } else if (progressUpdate) {
+      await recomputeAncestorChain(db, existing.parentId, actorId);
+    }
+    res.json({ data: row ? await presentTodo(await attachAssignee(db, row), true) : row });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -323,6 +422,7 @@ todosRouter.delete("/:id", async (req, res) => {
       })
       .where(eq(schema.todos.id, id))
       .returning();
+    await recomputeAncestorChain(db, existing.parentId, actorId);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);

@@ -16,7 +16,7 @@ import {
 import { userHasAdministrator } from "../../services/roles.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
-import { applyTodoProgressResult, progressFieldsForCheck } from "../../services/todoProgress.js";
+import { applyTodoListCheck, hierarchyByTodoId, recomputeAncestorChain, assertTodoParent } from "../../services/todoHierarchy.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { copyTaggings } from "../../services/copyTaggings.js";
 
@@ -52,6 +52,7 @@ const createItemBody = z.object({
   entityType: itemEntity,
   title: plainTitle(2000),
   projectId: z.number().int().positive().optional(),
+  parentId: z.number().int().positive().optional().nullable(),
 });
 
 const convertBody = z.object({
@@ -158,6 +159,7 @@ async function hydrateUnsortedItems(
       priority: todo.priority,
       actionBy: todo.actionBy?.toISOString() ?? null,
       progress: todo.progress,
+      parentId: todo.parentId,
       checked: todo.progress === 100,
     });
   }
@@ -180,7 +182,26 @@ async function hydrateUnsortedItems(
       priority: task.priority,
     });
   }
-  return out;
+  return decorateTodoItems(out);
+}
+
+async function decorateTodoItems<
+  T extends { entityType: string; entityId: number; virtual?: boolean; state?: string; checked?: boolean },
+>(items: T[]) {
+  const todoIds = items.filter((item) => item.entityType === "todo").map((item) => item.entityId);
+  const fields = await hierarchyByTodoId(db, todoIds);
+  return items.map((item) => {
+    if (item.entityType !== "todo") return item;
+    const hierarchy = fields.get(item.entityId) ?? {
+      progressDerived: false,
+      completeCount: 0,
+      childCount: 0,
+    };
+    if (item.virtual && hierarchy.progressDerived) {
+      return { ...item, ...hierarchy, checked: item.state === "complete" };
+    }
+    return { ...item, ...hierarchy };
+  });
 }
 
 async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
@@ -204,6 +225,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
     let priority: string | undefined;
     let actionBy: string | null | undefined;
     let progress: number | undefined;
+    let parentId: number | null | undefined;
     if (row.entityType === "idea") {
       const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, row.entityId));
       if (idea) {
@@ -220,6 +242,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
         priority = todo.priority;
         actionBy = todo.actionBy?.toISOString() ?? null;
         progress = todo.progress;
+        parentId = todo.parentId;
       } else if (todo?.state === "deleted") {
         title = `${todo.title} (deleted)`;
         state = todo.state;
@@ -234,9 +257,9 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
         priority = task.priority;
       }
     }
-    out.push({ ...row, title, href, state, dueDate, priority, actionBy, progress });
+    out.push({ ...row, title, href, state, dueDate, priority, actionBy, progress, parentId });
   }
-  return out;
+  return decorateTodoItems(out);
 }
 
 todoListsRouter.get("/", async (req, res) => {
@@ -494,8 +517,18 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
 
     if (entityType === "todo") {
       const projectId = parsed.projectId ?? list.projectId ?? null;
+      const parentId = parsed.parentId ?? null;
       if (projectId != null) {
         await assertCanAccessProject(db, actorId, projectId, "write");
+      }
+      const parentOk = await assertTodoParent(db, null, projectId, parentId);
+      if (!parentOk.ok) {
+        sendError(res, 400, "invalid_parent", parentOk.message);
+        return;
+      }
+      if (parentId != null) {
+        const [parent] = await db.select().from(schema.todos).where(eq(schema.todos.id, parentId));
+        if (parent) await assertCanAccessDualScoped(db, actorId, parent, "write");
       }
       const number = await allocateTodoNumber(db);
       const [todo] = await db
@@ -504,6 +537,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
           projectId,
           number,
           title,
+          parentId,
           sortOrder: 0,
           createdById: actorId,
           updatedById: actorId,
@@ -513,6 +547,9 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
       if (!todo) {
         sendError(res, 500, "insert_failed", "Could not create ToDo");
         return;
+      }
+      if (parentId != null) {
+        await recomputeAncestorChain(db, parentId, actorId);
       }
       entityId = todo.id;
     } else {
@@ -647,22 +684,14 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
       sendError(res, 404, "not_found", "Item not found");
       return;
     }
+    let skipCheckedWrite = false;
     if (parsed.checked !== undefined && existing.entityType === "todo") {
-      const [todo] = await db
-        .select({ progress: schema.todos.progress, state: schema.todos.state })
-        .from(schema.todos)
-        .where(eq(schema.todos.id, existing.entityId));
-      if (todo && todo.state !== "deleted") {
-        const progressUpdate = progressFieldsForCheck(parsed.checked, todo);
-        if (progressUpdate) {
-          await applyTodoProgressResult(db, existing.entityId, actorId, progressUpdate);
-        }
-      }
+      skipCheckedWrite = await applyTodoListCheck(db, existing.entityId, parsed.checked, actorId);
     }
     const [row] = await db
       .update(schema.todoListItems)
       .set({
-        ...(parsed.checked !== undefined ? { checked: parsed.checked } : {}),
+        ...(parsed.checked !== undefined && !skipCheckedWrite ? { checked: parsed.checked } : {}),
         ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
         updatedAt: new Date(),
       })

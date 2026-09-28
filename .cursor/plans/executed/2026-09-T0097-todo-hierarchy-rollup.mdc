@@ -1,0 +1,55 @@
+# T0097 — To Do hierarchy and completion rollup
+
+**Task:** T0097 (id 109) · child of T0093 (id 105, Pending)  
+**Branch (on approval):** `T0097-todo-hierarchy-rollup`  
+**State at plan:** `ready` · Depends on: T0104 complete
+
+## Goal
+
+ToDos can nest (parent / child), and a parent shows a linked completion rollup: **percent** and **x of y complete**. Behavior matches Task hierarchy where that already exists, adapted to the T0155 progress field.
+
+## Proposed decisions (confirm before implement)
+
+| # | Proposal |
+|---|----------|
+| 1 | Hierarchy lives on the **ToDo record**: nullable `todos.parent_id` self-FK (`ON DELETE SET NULL`), same idea as `tasks.parent_id`. It is not stored on list membership. A ToDo can still sit on more than one list; the tree is the same everywhere. |
+| 2 | In a list, a child indents under its parent **only when that parent is also a member of the same list**. If the parent is absent, the child shows as a root of that list. |
+| 3 | Unlimited depth, with cycle checks (a ToDo cannot be its own ancestor). Siblings keep order via existing `sort_order` on the ToDo (list `todo_list_items.sort_order` stays the order among roots and, within a parent, among children that are on that list — child order uses the list item `sort_order`). |
+| 4 | **Leaf** (no children): T0155 progress is unchanged. The user still sets 0–100; 100% completes the ToDo. |
+| 5 | **Parent** (one or more non-deleted children): progress is **derived**, not typed. **y** = direct children that are not `canceled` and not `deleted`. **x** = those whose state is `complete`. **%** = `round(100 * x / y)` when y > 0, else 0. The list shows `x of y` next to the bar. Stored `todos.progress` is rewritten to that percent so the existing bar, checkbox, and state rules stay in sync. |
+| 6 | **Parent vs children complete** (same shape as Tasks): marking a parent complete while any direct child is unfinished (`state` not `complete`, `canceled`, or `deleted`) stores **`pending`** and keeps progress at the rollup (not 100). The list checkbox stays unchecked. When every direct child is finished, a **pending** parent becomes **`complete`** at **100%** and its memberships check. Completing children does **not** auto-complete a parent the user left in Draft / Ready / In Progress. Canceled and deleted children count as finished for that gate and are left out of x/y. |
+| 7 | List UI: indented rows, “Add sub-item”, sibling reorder with the existing drag handle when the list is in manual order and unfiltered. Drag onto another row sets it as the parent (reparent). If that drop target is awkward in the current flat list DnD, ship a parent picker on the row and leave drag-reparent as a follow-up Task (deferral rule). |
+| 8 | ToDo detail/editor shows parent and a child list, with the same rollup. |
+
+## Out of scope
+
+- Due-date presets (T0099), recurrence (T0100), extra action fields (T0101), row tinting (T0102).
+- List filter/tag parity (T0098) — already shipped; this work only nests the existing list.
+- A second progress model that ignores T0155.
+
+## Schema
+
+Add `todos.parent_id` integer, nullable, FK → `todos.id` ON DELETE SET NULL.
+
+Update `docs/database/` (ToDo section in `content-and-modules.md`, glossary only if a new term is needed), then `npm run docs:sync-schema`.
+
+This migration is a MINOR version bump on finish-up.
+
+## API
+
+- Accept `parentId` on ToDo create/update. Reject cycles and a parent that does not exist.
+- After any child progress, state, or parent change, recompute ancestor rollups and apply decision 6 (pending coerce + promote).
+- Include `parentId`, direct-child counts (`completeCount`, `childCount`), and whether progress is derived on ToDo reads used by the list.
+
+## UI
+
+- `TodoListView`: tree from `parentId`, indent, rollup label, add-child, reparent/reorder as in decision 7.
+- Progress control on a derived parent is display-only (no slider). Leaves keep the slider.
+
+## QA follow-ups
+
+- Alt-tabbing back to a project To Do list blanked the list. The tab badge and `TodoListView` shared the `["todo-list", id]` cache, and the badge query stored an item **count**. A window-focus refetch could replace the list with that number, so the view rendered as empty. The badge query now stores the same list record and only selects the count for the tab.
+
+## Deferred
+
+Drag-onto-row reparent is **T0158** (Draft, child of T0093, depends on T0097). This task ships a parent picker on the list row and in the editor, plus sibling drag-reorder. The flat list drag already means “reorder,” so a second drop gesture was split out.
