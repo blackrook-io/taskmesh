@@ -1073,8 +1073,12 @@ export const todos = pgTable("todos", {
   assigneeId: integer("assignee_id").references(() => users.id, {
     onDelete: "set null",
   }),
-  /** User-set percent complete, 0–100 (T0155). */
+  /** User-set percent complete, 0–100 (T0155). Parents with sub-items store the derived rollup (T0097). */
   progress: integer("progress").notNull().default(0),
+  /** Sub-item parent (T0097). Null = top-level. */
+  parentId: integer("parent_id").references((): AnyPgColumn => todos.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1083,6 +1087,7 @@ export const todos = pgTable("todos", {
     .defaultNow(),
 }, (t) => ({
   progressRange: check("todos_progress_range", sql`${t.progress} >= 0 AND ${t.progress} <= 100`),
+  parentIdx: index("todos_parent_id_idx").on(t.parentId),
 }));
 
 /** Standalone or project-scoped checklist containers. */
@@ -1368,11 +1373,17 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   overviewDefault: many(projectOverviewDefaults),
 }));
 
-export const todosRelations = relations(todos, ({ one }) => ({
+export const todosRelations = relations(todos, ({ one, many }) => ({
   project: one(projects, {
     fields: [todos.projectId],
     references: [projects.id],
   }),
+  parent: one(todos, {
+    fields: [todos.parentId],
+    references: [todos.id],
+    relationName: "todo_hierarchy",
+  }),
+  children: many(todos, { relationName: "todo_hierarchy" }),
   sourceIdea: one(ideas, {
     fields: [todos.sourceIdeaId],
     references: [ideas.id],

@@ -16,14 +16,14 @@ import { formatEntityRef } from "../lib/entityRef";
 import { buildTodoListGridTemplate, type ResolvedListColumn } from "../lib/listViewColumns";
 import { sanitizePlainText } from "../lib/plainText";
 import { cycleRecordListSort, MANUAL_RECORD_LIST_SORT, storageKeyForTodoListSort } from "../lib/recordListSort";
-import { sortTodoListItems } from "../lib/todoListSort";
+import { compareTodoListItems } from "../lib/todoListSort";
+import { blockedParentIds, flattenTodoList, reorderTodoSiblings } from "../lib/todoListTree";
 import { useListViewColumns } from "../lib/useListViewColumns";
 import { usePersistedRecordListSort } from "../lib/usePersistedRecordListSort";
 import {
   INLINE_TODO_LIST_STATES,
   evaluateTodoListFilter,
   isTodoFilterActive,
-  reorderVisibleAmongAll,
   storageKeyForTodoList,
 } from "../lib/todoListFilter";
 import { usePersistedTodoListFilter } from "../lib/usePersistedTodoListFilter";
@@ -78,6 +78,10 @@ function SortableItem({
   onOpen,
   onRemove,
   onPatchEntity,
+  depth = 0,
+  parentOptions,
+  onParent,
+  onAddChild,
 }: {
   item: TodoListItem;
   dragDisabled?: boolean;
@@ -88,6 +92,10 @@ function SortableItem({
   onOpen: () => void;
   onRemove: () => void;
   onPatchEntity: (patch: Record<string, unknown>) => void;
+  depth?: number;
+  parentOptions?: { id: number; label: string }[];
+  onParent?: (parentId: number | null) => void;
+  onAddChild?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -99,6 +107,9 @@ function SortableItem({
   };
 
   const canInline = item.entityType === "todo" || item.entityType === "task";
+  const looksComplete = item.progressDerived
+    ? item.state === "complete"
+    : item.checked || item.progress === 100;
   const stateValue = (item.state && isSelectableTaskState(item.state) ? item.state : "new") as TaskState;
   const priorityValue = (TASK_PRIORITIES.includes((item.priority ?? "none") as TaskPriority)
     ? item.priority
@@ -114,12 +125,46 @@ function SortableItem({
         );
       case "title":
         return (
-          <button key="title" type="button" className="todo-item__title" onClick={onOpen}>
-            <span className="todo-item__title-text">{item.title}</span>
-            {showTagsInTitle ? (
-              <RowTagChips entityType={item.entityType} entityId={item.entityId} />
+          <div key="title" className="todo-item__title-cell" style={{ paddingLeft: depth * 14 }}>
+            <button type="button" className="todo-item__title" onClick={onOpen}>
+              <span className="todo-item__title-text">{item.title}</span>
+              {showTagsInTitle ? (
+                <RowTagChips entityType={item.entityType} entityId={item.entityId} />
+              ) : null}
+            </button>
+            {item.entityType === "todo" && onParent ? (
+              <select
+                className="todo-item__parent"
+                aria-label={`Parent for ${item.title}`}
+                value={item.parentId != null ? String(item.parentId) : ""}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => onParent(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">No parent</option>
+                {item.parentId != null &&
+                !(parentOptions ?? []).some((option) => option.id === item.parentId) ? (
+                  <option value={item.parentId}>Current parent</option>
+                ) : null}
+                {(parentOptions ?? []).map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             ) : null}
-          </button>
+            {item.entityType === "todo" && onAddChild ? (
+              <button
+                type="button"
+                className="btn todo-item__sub"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddChild();
+                }}
+              >
+                Sub
+              </button>
+            ) : null}
+          </div>
         );
       case "tags":
         return (
@@ -200,7 +245,7 @@ function SortableItem({
     <div
       ref={setNodeRef}
       style={{ ...style, gridTemplateColumns: gridTemplate }}
-      className={`todo-item${isDragging ? " dragging" : ""}${item.checked || item.progress === 100 ? " is-checked" : ""}`}
+      className={`todo-item${isDragging ? " dragging" : ""}${looksComplete ? " is-checked" : ""}`}
       onDoubleClick={onOpen}
     >
       {!item.virtual && !dragDisabled ? (
@@ -214,14 +259,20 @@ function SortableItem({
       )}
       <input
         type="checkbox"
-        checked={item.checked || item.progress === 100}
+        checked={looksComplete}
         disabled={!!item.virtual && item.entityType !== "todo"}
-        aria-label={`Mark ${item.title} ${item.checked || item.progress === 100 ? "incomplete" : "complete"}`}
+        aria-label={`Mark ${item.title} ${looksComplete ? "incomplete" : "complete"}`}
         onChange={onToggle}
       />
       {item.entityType === "todo" ? (
         <TodoProgressControl
           progress={item.progress ?? 0}
+          readOnly={!!item.progressDerived}
+          caption={
+            item.progressDerived
+              ? `${item.completeCount ?? 0} of ${item.childCount ?? 0}`
+              : undefined
+          }
           onCommit={(next) => onPatchEntity({ progress: next })}
         />
       ) : (
@@ -261,6 +312,7 @@ export function TodoEditorFields({
   const [dueLocal, setDueLocal] = useState(todo.dueDate ?? "");
   const [actionByLocal, setActionByLocal] = useState(datetimeLocalValue(todo.actionBy));
   const [progress, setProgress] = useState(todo.progress ?? 0);
+  const [parentId, setParentId] = useState<number | null>(todo.parentId ?? null);
   const [color, setColor] = useState(todo.color);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [syncedTodo, setSyncedTodo] = useState(todo);
@@ -274,8 +326,25 @@ export function TodoEditorFields({
     setDueLocal(todo.dueDate ?? "");
     setActionByLocal(datetimeLocalValue(todo.actionBy));
     setProgress(todo.progress ?? 0);
+    setParentId(todo.parentId ?? null);
     setColor(todo.color);
   }
+
+  const parentQuery = useQuery({
+    queryKey: ["todo-parents", todo.projectId ?? "none", todo.id],
+    queryFn: async () => {
+      const query = todo.projectId == null ? "projectId=null" : `projectId=${todo.projectId}`;
+      const res = await apiJson<{ data: Todo[] }>(`/api/v1/todos?${query}`);
+      return res.data;
+    },
+  });
+  const parentChoices = (parentQuery.data ?? []).filter(
+    (candidate) =>
+      !blockedParentIds(
+        (parentQuery.data ?? []).map((row) => ({ entityId: row.id, parentId: row.parentId })),
+        todo.id,
+      ).has(candidate.id),
+  );
 
   const patch = async (body: Record<string, unknown>) => {
     try {
@@ -392,13 +461,44 @@ export function TodoEditorFields({
             Progress
           </span>
           <TodoProgressControl
-            progress={progress}
+            progress={todo.progressDerived ? (todo.progress ?? 0) : progress}
             label="Progress"
+            readOnly={!!todo.progressDerived}
+            caption={
+              todo.progressDerived
+                ? `${todo.completeCount ?? 0} of ${todo.childCount ?? 0}`
+                : undefined
+            }
             onCommit={(next) => {
               setProgress(next);
               if (next !== (todo.progress ?? 0)) void patch({ progress: next });
             }}
           />
+          {todo.progressDerived ? (
+            <p className="muted">Calculated from sub-items.</p>
+          ) : null}
+        </div>
+        <div className="field">
+          <label htmlFor={`d-parent-${todo.id}`}>Parent</label>
+          <select
+            id={`d-parent-${todo.id}`}
+            value={parentId ?? ""}
+            onChange={(e) => {
+              const next = e.target.value ? Number(e.target.value) : null;
+              setParentId(next);
+              void patch({ parentId: next });
+            }}
+          >
+            <option value="">No parent</option>
+            {parentId != null && !parentChoices.some((candidate) => candidate.id === parentId) ? (
+              <option value={parentId}>Current parent</option>
+            ) : null}
+            {parentChoices.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {formatEntityRef("todo", candidate.number)} {candidate.title}
+              </option>
+            ))}
+          </select>
         </div>
         <AssigneeSelectField
           id={`d-assignee-${todo.id}`}
@@ -427,6 +527,24 @@ export function TodoEditorFields({
           }}
         />
       </div>
+      {(todo.children?.length ?? 0) > 0 ? (
+        <div className="field">
+          <span className="field-label">
+            Sub-items ({todo.completeCount ?? 0} of {todo.childCount ?? 0})
+          </span>
+          <ul className="todo-sub-list">
+            {todo.children?.map((child) => (
+              <li key={child.id}>
+                {formatEntityRef("todo", child.number)} {child.title}
+                <span className="muted">
+                  {" "}
+                  · {TASK_STATE_LABELS[child.state as TaskState] ?? child.state}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="field field--tags-below">
         <TagInput entityType="todo" entityId={todo.id} />
       </div>
@@ -452,6 +570,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const [pendingRemove, setPendingRemove] = useState<TodoListItem | null>(null);
   const [createType, setCreateType] = useState<"todo" | "task">("todo");
   const [createTitle, setCreateTitle] = useState("");
+  const [childOf, setChildOf] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [linkType, setLinkType] = useState<"todo" | "task">("todo");
   const [pickId, setPickId] = useState("");
@@ -529,6 +648,8 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["todo-list", listId] });
+    void qc.invalidateQueries({ queryKey: ["todo-solo"] });
+    void qc.invalidateQueries({ queryKey: ["todo-parents"] });
     void qc.invalidateQueries({ queryKey: ["todos"] });
     void qc.invalidateQueries({ queryKey: ["todos-for-link"] });
     void qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -539,13 +660,14 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const createItem = useMutation({
     mutationFn: async () => {
       const projectId = defaultProjectId ?? detailQuery.data?.projectId ?? null;
-      const body: { entityType: "todo" | "task"; title: string; projectId?: number } = {
-        entityType: createType,
+      const body: { entityType: "todo" | "task"; title: string; projectId?: number; parentId?: number } = {
+        entityType: childOf != null ? "todo" : createType,
         title: createTitle.trim(),
       };
       if (projectId != null) {
         body.projectId = projectId;
       }
+      if (childOf != null) body.parentId = childOf;
       const res = await apiJson<{ data: TodoListItem }>(`/api/v1/todo-lists/${listId}/items/create`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -554,6 +676,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     },
     onSuccess: () => {
       setCreateTitle("");
+      setChildOf(null);
       setCreateError(null);
       invalidate();
     },
@@ -670,7 +793,12 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     onError: (err: Error) => setLinkError(err.message),
   });
 
-  const list = detailQuery.data;
+  const list =
+    detailQuery.data &&
+    typeof detailQuery.data === "object" &&
+    Array.isArray(detailQuery.data.items)
+      ? detailQuery.data
+      : undefined;
   const items = useMemo(() => list?.items ?? [], [list?.items]);
   const visibleItems = useMemo(
     () => evaluateTodoListFilter(items, listFilter, filterCtx),
@@ -680,10 +808,12 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     if (sortCol == null) return null;
     return visibleColumns.some((c) => c.sortable && c.fieldKey === sortCol) ? sortCol : null;
   }, [sortCol, visibleColumns]);
-  const displayItems = useMemo(
-    () => sortTodoListItems(visibleItems, effectiveSortCol, sortDir),
-    [visibleItems, effectiveSortCol, sortDir],
-  );
+  const displayItems = useMemo(() => {
+    const compare = effectiveSortCol
+      ? (a: TodoListItem, b: TodoListItem) => compareTodoListItems(a, b, effectiveSortCol) * sortDir
+      : null;
+    return flattenTodoList(visibleItems, compare);
+  }, [visibleItems, effectiveSortCol, sortDir]);
   const visibleIds = useMemo(() => displayItems.map((i) => i.id), [displayItems]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const filterActive = isTodoFilterActive(listFilter);
@@ -691,9 +821,9 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const next = reorderVisibleAmongAll(items, visibleItems, Number(active.id), Number(over.id));
+    const next = reorderTodoSiblings(items, Number(active.id), Number(over.id));
     if (!next) return;
-    await reorder.mutateAsync(next.map((i) => i.id));
+    await reorder.mutateAsync(next);
   };
 
   const openIdeaQuery = useQuery({
@@ -725,7 +855,9 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     },
   });
 
-  if (detailQuery.isLoading) return <p className="muted">Loading list…</p>;
+  if (detailQuery.isLoading || (detailQuery.isFetching && !list)) {
+    return <p className="muted">Loading list…</p>;
+  }
   if (detailQuery.error) return <p role="alert">{(detailQuery.error as Error).message}</p>;
   if (!list) return <p className="muted">List not found.</p>;
 
@@ -754,22 +886,51 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const manualOrder = effectiveSortCol == null;
   const dragEnabled = list.kind !== "inbox" && !filterActive && manualOrder;
 
-  const renderItem = (item: TodoListItem, opts?: { readOnlyMembership?: boolean }) => (
+  const renderItem = (item: TodoListItem & { depth?: number }, opts?: { readOnlyMembership?: boolean }) => {
+    const todoMembers = items.filter((row) => row.entityType === "todo" && row.state !== "deleted");
+    const blocked =
+      item.entityType === "todo"
+        ? blockedParentIds(
+            todoMembers.map((row) => ({ entityId: row.entityId, parentId: row.parentId })),
+            item.entityId,
+          )
+        : new Set<number>();
+    const parentOptions = todoMembers
+      .filter((row) => !blocked.has(row.entityId))
+      .map((row) => ({ id: row.entityId, label: row.title }));
+    const done = item.progressDerived
+      ? item.state === "complete"
+      : item.checked || (item.progress ?? 0) === 100 || item.state === "complete";
+    return (
     <SortableItem
       key={item.id}
       item={item}
+      depth={item.depth ?? 0}
       columns={visibleColumns}
       gridTemplate={gridTemplate}
       showTagsInTitle={showTagsInTitle}
       dragDisabled={list.kind === "inbox" || !!opts?.readOnlyMembership || !manualOrder || filterActive}
+      parentOptions={item.entityType === "todo" ? parentOptions : undefined}
+      onParent={
+        item.entityType === "todo"
+          ? (parentId) => patchEntity.mutate({ item, patch: { parentId } })
+          : undefined
+      }
+      onAddChild={
+        item.entityType === "todo"
+          ? () => {
+              setChildOf(item.entityId);
+              setCreateType("todo");
+            }
+          : undefined
+      }
       onToggle={() => {
         if (item.virtual && item.entityType === "todo") {
-          const done = (item.progress ?? 0) === 100 || item.state === "complete";
           patchEntity.mutate({ item, patch: { progress: done ? 0 : 100 } });
           return;
         }
         if (opts?.readOnlyMembership) return;
-        patchItem.mutate({ itemId: item.id, checked: !item.checked });
+        patchItem.mutate({ itemId: item.id, checked: !done });
       }}
       onOpen={() => setOpenItem(item)}
       onRemove={() => {
@@ -778,14 +939,15 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
       }}
       onPatchEntity={(patch) => patchEntity.mutate({ item, patch })}
     />
-  );
+    );
+  };
 
   return (
     <div className="todo-list-view">
       <div className="todo-create-row">
         <input
           type="text"
-          placeholder="New item title"
+          placeholder={childOf != null ? "Sub-item title" : "New item title"}
           value={createTitle}
           onChange={(e) => setCreateTitle(sanitizePlainText(e.target.value))}
           onKeyDown={(e) => {
@@ -795,7 +957,8 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         />
         <select
           className="todo-type-select"
-          value={createType}
+          value={childOf != null ? "todo" : createType}
+          disabled={childOf != null}
           onChange={(e) => setCreateType(e.target.value as "todo" | "task")}
           aria-label="New item type"
         >
@@ -811,6 +974,14 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           Add
         </button>
       </div>
+      {childOf != null ? (
+        <p className="todo-sub-banner">
+          Sub-item of {items.find((row) => row.entityType === "todo" && row.entityId === childOf)?.title ?? "parent"}
+          <button type="button" className="btn" onClick={() => setChildOf(null)}>
+            Cancel
+          </button>
+        </p>
+      ) : null}
       {createError ? (
         <p className="tag-input__error" role="alert">
           {createError}

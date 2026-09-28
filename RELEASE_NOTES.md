@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.55.0 — 2026-09-28
+
+### Fixes
+- Returning to a project To Do list keeps the rows on screen. The tab count and the list share one record, so a refresh when the window regains focus cannot replace the list with a number.
+
+### Enhancements
+- To Dos can nest. A child indents under its parent when both are on the same list. Add a sub-item from the row, or set the parent on the row and in the editor.
+- A parent shows how many direct sub-items are complete and a calculated percent. Marking it complete while a sub-item is still open stores Pending. When every direct sub-item is finished, a Pending parent becomes Complete at 100%.
+
 ## 0.54.0 — 2026-09-28
 
 ### Enhancements

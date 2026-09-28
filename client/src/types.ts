@@ -150,6 +150,14 @@ export type Tag = {
   usageCount?: number;
 };
 
+export type TodoChildSummary = {
+  id: number;
+  number: number;
+  title: string;
+  state: string;
+  progress: number;
+};
+
 export type Todo = {
   id: number;
   number: number;
@@ -160,8 +168,14 @@ export type Todo = {
   priority: string;
   dueDate: string | null;
   actionBy: string | null;
-  /** Stored percent complete, 0–100. */
+  /** Stored percent complete, 0–100. Derived from sub-items when `progressDerived` is true. */
   progress: number;
+  parentId?: number | null;
+  /** True when this ToDo has sub-items and progress is calculated. */
+  progressDerived?: boolean;
+  completeCount?: number;
+  childCount?: number;
+  children?: TodoChildSummary[];
   color: string | null;
   sortOrder: number;
   sourceIdeaId: number | null;
@@ -213,6 +227,10 @@ export type TodoListItem = {
   actionBy?: string | null;
   /** Present on ToDo rows. */
   progress?: number;
+  parentId?: number | null;
+  progressDerived?: boolean;
+  completeCount?: number;
+  childCount?: number;
   virtual?: boolean;
 };
 

@@ -4576,6 +4576,48 @@ a:focus-visible {
   color: var(--text-muted);
   min-width: 2.4rem;
   text-align: right;
+  white-space: nowrap;
+}
+
+.todo-progress__count {
+  margin-right: 0.2rem;
+}
+
+.todo-item__title-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.todo-item__title-cell .todo-item__title {
+  flex: 1 1 auto;
+  min-width: 4rem;
+}
+
+.todo-item__sub,
+.todo-item__parent {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+}
+
+.todo-item__parent {
+  width: 8.5rem;
+  max-width: 8.5rem;
+  min-width: 0;
+}
+
+.todo-sub-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.todo-sub-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.85rem;
 }
 
 .todo-progress input[type="range"] {

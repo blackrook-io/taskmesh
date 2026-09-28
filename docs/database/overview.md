@@ -51,6 +51,7 @@ erDiagram
   projects ||--o{ task_description_templates : "may own"
 
   tasks ||--o{ tasks : "parent"
+  todos ||--o{ todos : "parent"
   tasks ||--o{ task_activity : has
   tasks ||--o{ task_dependencies : "depends on / required by"
 
