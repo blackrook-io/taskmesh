@@ -1,0 +1,71 @@
+# T0158 — Drag a ToDo onto a row to reparent
+
+**Task:** T0158 (id `171`) — Drag a ToDo onto a row to reparent
+**State at plan:** `ready` · Priority: none · Project: TaskMesh (4)
+**Parent:** T0093 (id `105`) — To Do list functionality enhancements (`pending`)
+**Depends on:** T0097 (id `109`) — To Do hierarchy & completion rollup (`complete`)
+**Branch (after approval):** `T0158-todo-drag-reparent`
+
+## Context
+
+Deferred from T0097. Hierarchy is `todos.parent_id`. A child indents only when its parent is also on the list (`flattenTodoList` / `visibleParentId`). `PATCH /api/v1/todos/:id` already accepts `parentId` and rejects cycles and cross-project parents. List order is `PATCH /api/v1/todo-lists/:id/items/reorder`.
+
+The list is one flat `@dnd-kit` sortable. `reorderTodoSiblings` returns null when the drop would leave the sibling group, so a drop on another parent’s row does nothing. The row `<select>` (No parent / other ToDos) and the Sub button already set `parentId`.
+
+## Size / split
+
+One list-gesture session. No schema. Suitable as a single worktask. No split. No open Depends-on blockers.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Two zones on a row.** While dragging a ToDo, the **middle** of another ToDo row sets that row as parent. The **top and bottom edges** stay sibling reorder, and only when the target is in the **same sibling group**. An edge drop on a different group does nothing (it does not reparent).
+2. **Root zone.** A drop strip above the rows, “Top level”, clears `parentId`. Dropping a row that is already top-level there does nothing.
+3. **Where it lands.** The moved ToDo becomes the **last child** of the new parent (or the last root item when cleared). Its own children stay attached and move with it.
+4. **ToDos only.** Tasks and ideas stay reorder-only. You cannot drop onto them to parent, and you cannot reparent them with this gesture.
+5. **Same drag gate as today.** Reparent works only when reorder already works: not the inbox, no active filter, manual order (no column sort).
+6. **Invalid targets.** Self, descendants, and non-ToDos show a not-allowed highlight and do not PATCH. The API still rejects cycles and cross-project parents.
+7. **Existing controls stay.** The parent `<select>` and Sub button remain.
+
+## Goal
+
+Drag a ToDo onto another ToDo in the same list to parent it, and drag it to a top-level zone to clear the parent, without changing sibling reorder.
+
+## Scope
+
+**In scope**
+
+1. Pure drop classifier in `client/src/lib/todoListTree.ts` (unit-tested): given the dragged row, the row under the pointer, and a zone (`before` | `center` | `after` | `root`), return `reorder` (item ids), `reparent` (`parentId` plus a follow-up list order), or `ignore`.
+2. `TodoListView` drag overlay:
+   - Middle-band hover on a legal ToDo highlights that row as the new parent.
+   - Edge hover inside the sibling group keeps the current reorder line.
+   - Root strip highlights when the pointer is over it.
+   - Illegal targets use a not-allowed state.
+3. On a reparent drop: `PATCH /api/v1/todos/:id` with `parentId`, then `PATCH …/items/reorder` so the item sits at the end of the new sibling group. On a root drop: `parentId: null`, then reorder among roots.
+4. Sibling-edge drops keep today’s `reorderTodoSiblings` path and do not send `parentId`.
+
+**Out of scope**
+
+- New API or schema.
+- Reparent while filtered, column-sorted, or on the inbox.
+- Drag-reparent of Tasks.
+- Changing the parent picker or Sub button.
+- Keyboard-only reparent beyond the existing select.
+
+## Approach
+
+- Pointer Y vs the hovered row rect picks the zone (about the outer 28% each edge, middle the rest). A `useDroppable` root strip wins when the pointer is inside it.
+- Cycle check reuses `blockedParentIds` (self and descendants). Cross-project parents are not offered: targets are ToDos on this list, and the API remains the backstop.
+- Subtree move needs no extra writes: descendants keep their own `parentId`.
+
+## QA
+
+- Drop a ToDo on the middle of another ToDo: it indents under that parent, at the end of that parent’s children, and its own children move with it.
+- Drop on the top-level strip: parent clears and the row sits with the other roots.
+- Drag within a sibling group (edges): order changes, parent does not.
+- Drop on self, a descendant, or a Task: no change, not-allowed feedback.
+- Filter, column sort, and inbox: drag still disabled.
+- The list row and the ToDo editor have no parent dropdown and no Sub button. New items are top-level. The editor still lists existing sub-items.
+
+## QA follow-ups
+
+- Removed the parent dropdown on the list row and in the ToDo editor, and removed the Sub button (including the “sub-item of” create banner). Parent changes are drag-only: middle of a row to parent, Top level strip to clear.

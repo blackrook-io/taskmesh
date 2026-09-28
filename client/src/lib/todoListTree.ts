@@ -106,6 +106,116 @@ export function reorderTodoSiblings(
   return flattenTodoList(next, null).map((row) => row.id);
 }
 
+export const TODO_ROOT_DROP_ID = "todo-root";
+
+const NEST_DROP_PREFIX = "nest:";
+
+/** Middle band of a row. Outer edges stay sibling reorder. */
+const ROW_EDGE = 0.28;
+
+export type TodoDropZone = "before" | "center" | "after" | "root";
+
+export type TodoDropAction =
+  | { kind: "reorder"; orderedItemIds: number[] }
+  | { kind: "reparent"; entityId: number; parentId: number | null; orderedItemIds: number[] }
+  | { kind: "reject" }
+  | { kind: "ignore" };
+
+export function todoNestDropId(itemId: number): string {
+  return `${NEST_DROP_PREFIX}${itemId}`;
+}
+
+export function parseTodoNestDropId(id: string): number | null {
+  if (!id.startsWith(NEST_DROP_PREFIX)) return null;
+  const value = Number(id.slice(NEST_DROP_PREFIX.length));
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+/** Pointer Y inside a row rect: edges reorder, the middle reparents. */
+export function todoDropZoneFromPointer(
+  pointerY: number,
+  top: number,
+  height: number,
+): Exclude<TodoDropZone, "root"> {
+  if (!(height > 0)) return "center";
+  const ratio = (pointerY - top) / height;
+  if (ratio < ROW_EDGE) return "before";
+  if (ratio > 1 - ROW_EDGE) return "after";
+  return "center";
+}
+
+function canDragReparent(item: TodoListItem): boolean {
+  return item.entityType === "todo" && !item.virtual && item.state !== "deleted";
+}
+
+function orderWithParent(
+  items: TodoListItem[],
+  activeItemId: number,
+  parentEntityId: number | null,
+): number[] {
+  const stamped = items.map((item) =>
+    item.id === activeItemId
+      ? { ...item, parentId: parentEntityId, sortOrder: Number.MAX_SAFE_INTEGER }
+      : item,
+  );
+  return flattenTodoList(stamped, null).map((row) => row.id);
+}
+
+function sameFlatOrder(items: TodoListItem[], orderedItemIds: number[]): boolean {
+  const current = flattenTodoList(items, null).map((row) => row.id);
+  return current.length === orderedItemIds.length && current.every((id, index) => id === orderedItemIds[index]);
+}
+
+/**
+ * Middle of a ToDo reparents (the item becomes that parent's last child).
+ * Edges reorder only inside the same sibling group. Root clears the parent
+ * and places the item last among top-level rows.
+ */
+export function classifyTodoDrop(
+  items: TodoListItem[],
+  activeItemId: number,
+  overItemId: number | "root",
+  zone: TodoDropZone,
+): TodoDropAction {
+  const active = items.find((item) => item.id === activeItemId);
+  if (!active || active.virtual) return { kind: "ignore" };
+
+  if (zone === "root" || overItemId === "root") {
+    if (!canDragReparent(active)) return { kind: "reject" };
+    if (active.parentId == null) return { kind: "ignore" };
+    return {
+      kind: "reparent",
+      entityId: active.entityId,
+      parentId: null,
+      orderedItemIds: orderWithParent(items, active.id, null),
+    };
+  }
+
+  const over = items.find((item) => item.id === overItemId);
+  if (!over || over.virtual) return { kind: "ignore" };
+
+  if (zone === "before" || zone === "after") {
+    const orderedItemIds = reorderTodoSiblings(items, active.id, over.id);
+    if (!orderedItemIds || sameFlatOrder(items, orderedItemIds)) return { kind: "ignore" };
+    return { kind: "reorder", orderedItemIds };
+  }
+
+  if (!canDragReparent(active) || !canDragReparent(over)) return { kind: "reject" };
+  const members = items.filter((item) => item.entityType === "todo" && item.state !== "deleted");
+  const blocked = blockedParentIds(
+    members.map((item) => ({ entityId: item.entityId, parentId: item.parentId })),
+    active.entityId,
+  );
+  if (blocked.has(over.entityId)) return { kind: "reject" };
+  if (active.parentId === over.entityId) return { kind: "ignore" };
+  return {
+    kind: "reparent",
+    entityId: active.entityId,
+    parentId: over.entityId,
+    orderedItemIds: orderWithParent(items, active.id, over.entityId),
+  };
+}
+
 /** Entity ids that cannot be a parent of `todoId` (self and descendants). */
 export function blockedParentIds(items: { entityId: number; parentId?: number | null }[], todoId: number): Set<number> {
   const children = new Map<number, number[]>();

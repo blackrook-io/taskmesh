@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.55.0",
+  "version": "0.55.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,7 @@
     "docs:sync-schema": "tsx src/scripts/syncSchemaDocsToProject.ts",
     "security:scan": "python3 security/scan/run.py",
     "security:ci": "python3 security/scan/run.py --modules repo_static --fail-on-findings --no-html",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts client/src/lib/todoListTree.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
