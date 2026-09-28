@@ -9,6 +9,7 @@ import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { loadBoardDetail, nextCardSort, seedDefaultColumns } from "../../services/boards.js";
 import { allocateBoardNumber, allocateIdeaNumber } from "../../services/entityNumbers.js";
+import { nextIdeaSortOrder } from "../../services/ideaSortOrder.js";
 import {
   assertCanAccessDualScoped,
   assertCanAccessOwned,
@@ -647,6 +648,7 @@ boardsRouter.post("/:boardId/cards", async (req, res) => {
             number: ideaNumber,
             title: parsed.title.trim(),
             ownerId: await getCurrentUserId(db),
+            sortOrder: await nextIdeaSortOrder(db),
           })
           .returning();
         if (!idea) {

@@ -13,6 +13,7 @@ type HeaderProps = {
   before?: ReactNode;
   /** Fixed chrome after the columns (row actions). */
   after?: ReactNode;
+  className?: string;
 };
 
 /** Column header for a reusable record list. Right-click opens Personalize. */
@@ -25,10 +26,11 @@ export function RecordListHeader({
   onContextMenu,
   before,
   after,
+  className,
 }: HeaderProps) {
   return (
     <div
-      className="task-list-header record-list-header"
+      className={`task-list-header record-list-header${className ? ` ${className}` : ""}`}
       style={{ gridTemplateColumns: gridTemplate }}
       onContextMenu={onContextMenu}
     >

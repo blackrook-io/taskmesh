@@ -29,6 +29,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Ideas
 
 - Park lightweight Markdown ideas with tags before they become real work
+- Drag to reorder the Ideas list, or sort by column and return to that saved order; filter by title, tags, dates, and assignee
 - Personalize the Ideas list columns the same way as Tasks (server-saved layout)
 - Convert an idea into a Project or a To Do in one step
 

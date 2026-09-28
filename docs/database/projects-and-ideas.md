@@ -28,6 +28,7 @@ erDiagram
     text title
     text body
     int owner_id FK
+    int sort_order
   }
   projects {
     int id PK
@@ -98,6 +99,7 @@ Captures early thoughts that may later convert into a project. Display number �
 | `body` | text | yes | — | Markdown / notes |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `assignee_id` | integer | yes | — | FK → `users.id` — assigned user (T0117). Ideas have no project pool; product keeps this null. |
+| `sort_order` | integer | no | `0` | Manual Ideas list order (T0157). Lower comes first. New ideas take one less than the current minimum so they appear at the top until dragged. |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 

@@ -6296,10 +6296,16 @@ a:focus-visible {
   overflow: hidden;
 }
 
+.ideas-list .record-list-header {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 0;
+}
+
 .ideas-list-header,
 .ideas-list-row {
   display: grid;
-  grid-template-columns: minmax(8rem, 1.5fr) minmax(6rem, 1fr) 7rem 4.5rem;
+  grid-template-columns: 1.5rem minmax(8rem, 1.5fr) minmax(6rem, 1fr) 7rem 4.5rem;
   gap: 0.5rem;
   align-items: center;
   padding: 0.45rem 0.75rem;
@@ -6321,6 +6327,10 @@ a:focus-visible {
 
 .ideas-list-row:hover {
   background: color-mix(in srgb, var(--bg) 92%, var(--accent) 6%);
+}
+
+.ideas-list-row.dragging {
+  opacity: 0.85;
 }
 
 .list-view-personalize-modal {
@@ -6388,13 +6398,6 @@ a:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-}
-
-.ideas-list-group__title {
-  padding: 0.4rem 0.75rem;
-  font-weight: 600;
-  background: color-mix(in srgb, var(--bg-elevated, var(--bg)) 80%, var(--accent) 10%);
-  border-bottom: 1px solid var(--border);
 }
 
 /* —— Image Board (PureRef-style) —— */
