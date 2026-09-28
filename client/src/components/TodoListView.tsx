@@ -13,7 +13,12 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { formatEntityRef } from "../lib/entityRef";
+import { buildTodoListGridTemplate, type ResolvedListColumn } from "../lib/listViewColumns";
 import { sanitizePlainText } from "../lib/plainText";
+import { cycleRecordListSort, MANUAL_RECORD_LIST_SORT, storageKeyForTodoListSort } from "../lib/recordListSort";
+import { sortTodoListItems } from "../lib/todoListSort";
+import { useListViewColumns } from "../lib/useListViewColumns";
+import { usePersistedRecordListSort } from "../lib/usePersistedRecordListSort";
 import {
   INLINE_TODO_LIST_STATES,
   evaluateTodoListFilter,
@@ -44,6 +49,9 @@ import { TaskEditorFields } from "./TaskBoard";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
+import { ListViewHeaderMenu, type ListViewHeaderMenuState } from "./shared/ListViewHeaderMenu";
+import { ListViewPersonalizeModal } from "./shared/ListViewPersonalizeModal";
+import { RecordListHeader, RecordListModeBar } from "./shared/RecordListView";
 import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
 import { AssigneeSelectField } from "./AssigneeSelectField";
@@ -53,9 +61,18 @@ function inlineStateOptions(current: string | undefined): readonly string[] {
   return INLINE_TODO_LIST_STATES;
 }
 
+function typeLabel(entityType: TodoListItem["entityType"]): string {
+  if (entityType === "todo") return "ToDo";
+  if (entityType === "task") return "Task";
+  return "Idea";
+}
+
 function SortableItem({
   item,
   dragDisabled,
+  columns,
+  gridTemplate,
+  showTagsInTitle,
   onToggle,
   onOpen,
   onRemove,
@@ -63,6 +80,9 @@ function SortableItem({
 }: {
   item: TodoListItem;
   dragDisabled?: boolean;
+  columns: ResolvedListColumn[];
+  gridTemplate: string;
+  showTagsInTitle: boolean;
   onToggle: () => void;
   onOpen: () => void;
   onRemove: () => void;
@@ -77,19 +97,109 @@ function SortableItem({
     transition,
   };
 
-  const typeLabel =
-    item.entityType === "todo" ? "ToDo" : item.entityType === "task" ? "Task" : "Idea";
   const canInline = item.entityType === "todo" || item.entityType === "task";
   const stateValue = (item.state && isSelectableTaskState(item.state) ? item.state : "new") as TaskState;
   const priorityValue = (TASK_PRIORITIES.includes((item.priority ?? "none") as TaskPriority)
     ? item.priority
     : "none") as TaskPriority;
 
+  const renderCell = (col: ResolvedListColumn) => {
+    switch (col.fieldKey) {
+      case "type":
+        return (
+          <span key="type" className="todo-item__type muted">
+            {typeLabel(item.entityType)}
+          </span>
+        );
+      case "title":
+        return (
+          <button key="title" type="button" className="todo-item__title" onClick={onOpen}>
+            <span className="todo-item__title-text">{item.title}</span>
+            {showTagsInTitle ? (
+              <RowTagChips entityType={item.entityType} entityId={item.entityId} />
+            ) : null}
+          </button>
+        );
+      case "tags":
+        return (
+          <span key="tags" className="todo-item__tags">
+            <RowTagChips entityType={item.entityType} entityId={item.entityId} />
+          </span>
+        );
+      case "state":
+        return canInline ? (
+          <select
+            key="state"
+            className={taskStateClass("task-list-row__state", stateValue)}
+            value={stateValue}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onPatchEntity({ state: e.target.value })}
+            aria-label="State"
+          >
+            {inlineStateOptions(item.state).map((s) => (
+              <option key={s} value={s}>
+                {TASK_STATE_LABELS[s as TaskState]}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span key="state" className="muted">
+            —
+          </span>
+        );
+      case "priority":
+        return canInline ? (
+          <select
+            key="priority"
+            className={taskPriorityClass("task-list-row__priority", priorityValue)}
+            value={priorityValue}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onPatchEntity({ priority: e.target.value })}
+            aria-label="Priority"
+          >
+            {TASK_PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {TASK_PRIORITY_LABELS[p]}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span key="priority" className="muted">
+            —
+          </span>
+        );
+      case "dueDate":
+        return canInline ? (
+          <input
+            key="dueDate"
+            type="date"
+            className="task-list-row__date"
+            value={item.dueDate ?? ""}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => onPatchEntity({ dueDate: e.target.value || null })}
+            aria-label="Due date"
+          />
+        ) : (
+          <span key="dueDate" className="muted">
+            —
+          </span>
+        );
+      case "checked":
+        return (
+          <span key="checked" className="muted">
+            {item.checked ? "Yes" : "No"}
+          </span>
+        );
+      default:
+        return <span key={col.fieldKey} />;
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className={`todo-item${canInline ? "" : " todo-item--compact"}${isDragging ? " dragging" : ""}${item.checked ? " is-checked" : ""}`}
+      style={{ ...style, gridTemplateColumns: gridTemplate }}
+      className={`todo-item${isDragging ? " dragging" : ""}${item.checked ? " is-checked" : ""}`}
       onDoubleClick={onOpen}
     >
       {!item.virtual && !dragDisabled ? (
@@ -108,53 +218,7 @@ function SortableItem({
         aria-label={`Mark ${item.title} ${item.checked ? "incomplete" : "complete"}`}
         onChange={onToggle}
       />
-      <span className="todo-item__type muted">{typeLabel}</span>
-      <button type="button" className="todo-item__title" onClick={onOpen} onDoubleClick={onOpen}>
-        <span className="todo-item__title-text">{item.title}</span>
-        {canInline ? (
-          <RowTagChips entityType={item.entityType} entityId={item.entityId} />
-        ) : item.entityType === "idea" ? (
-          <RowTagChips entityType="idea" entityId={item.entityId} />
-        ) : null}
-      </button>
-      {canInline ? (
-        <>
-          <select
-            className={taskStateClass("task-list-row__state", stateValue)}
-            value={stateValue}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onPatchEntity({ state: e.target.value })}
-            aria-label="State"
-          >
-            {inlineStateOptions(item.state).map((s) => (
-              <option key={s} value={s}>
-                {TASK_STATE_LABELS[s as TaskState]}
-              </option>
-            ))}
-          </select>
-          <select
-            className={taskPriorityClass("task-list-row__priority", priorityValue)}
-            value={priorityValue}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onPatchEntity({ priority: e.target.value })}
-            aria-label="Priority"
-          >
-            {TASK_PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {TASK_PRIORITY_LABELS[p]}
-              </option>
-            ))}
-          </select>
-          <input
-            type="date"
-            className="task-list-row__date"
-            value={item.dueDate ?? ""}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onPatchEntity({ dueDate: e.target.value || null })}
-            aria-label="Due date"
-          />
-        </>
-      ) : null}
+      {columns.map(renderCell)}
       {!item.virtual ? (
         <button type="button" className="task-card-dismiss" aria-label="Remove from list" onClick={onRemove}>
           ×
@@ -369,8 +433,21 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const [pickId, setPickId] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [headerMenu, setHeaderMenu] = useState<ListViewHeaderMenuState>(null);
+  const [personalizeOpen, setPersonalizeOpen] = useState(false);
+  const [personalizeError, setPersonalizeError] = useState<string | null>(null);
 
   const filterStorageKey = storageKeyForTodoList(listId);
+  const sortStorageKey = storageKeyForTodoListSort(listId);
+  const { sortCol, sortDir, setSort } = usePersistedRecordListSort(sortStorageKey, MANUAL_RECORD_LIST_SORT);
+  const {
+    visibleColumns,
+    personalizeRows,
+    isLoading: columnsLoading,
+    error: columnsError,
+    save: saveListCols,
+    reset: resetListCols,
+  } = useListViewColumns("todo_lists", "todos");
   const {
     filter: listFilter,
     applyFilter,
@@ -575,7 +652,15 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     () => evaluateTodoListFilter(items, listFilter, filterCtx),
     [items, listFilter, filterCtx],
   );
-  const visibleIds = useMemo(() => visibleItems.map((i) => i.id), [visibleItems]);
+  const effectiveSortCol = useMemo(() => {
+    if (sortCol == null) return null;
+    return visibleColumns.some((c) => c.sortable && c.fieldKey === sortCol) ? sortCol : null;
+  }, [sortCol, visibleColumns]);
+  const displayItems = useMemo(
+    () => sortTodoListItems(visibleItems, effectiveSortCol, sortDir),
+    [visibleItems, effectiveSortCol, sortDir],
+  );
+  const visibleIds = useMemo(() => displayItems.map((i) => i.id), [displayItems]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const filterActive = isTodoFilterActive(listFilter);
 
@@ -640,11 +725,19 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         ? "idea"
         : "task";
 
+  const gridTemplate = buildTodoListGridTemplate(visibleColumns);
+  const showTagsInTitle = !visibleColumns.some((c) => c.fieldKey === "tags");
+  const manualOrder = effectiveSortCol == null;
+  const dragEnabled = list.kind !== "inbox" && !filterActive && manualOrder;
+
   const renderItem = (item: TodoListItem, opts?: { readOnlyMembership?: boolean }) => (
     <SortableItem
       key={item.id}
       item={item}
-      dragDisabled={list.kind === "inbox" || !!opts?.readOnlyMembership}
+      columns={visibleColumns}
+      gridTemplate={gridTemplate}
+      showTagsInTitle={showTagsInTitle}
+      dragDisabled={list.kind === "inbox" || !!opts?.readOnlyMembership || !manualOrder || filterActive}
       onToggle={() => {
         if (opts?.readOnlyMembership) return;
         patchItem.mutate({ itemId: item.id, checked: !item.checked });
@@ -701,15 +794,61 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           {inlineError}
         </p>
       ) : null}
+      {columnsError ? (
+        <p className="tag-input__error" role="alert">
+          {columnsError.message}
+        </p>
+      ) : null}
 
-      {list.kind !== "inbox" ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
-          <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
-            {visibleItems.map((item) => renderItem(item))}
-          </SortableContext>
-        </DndContext>
+      {columnsLoading ? (
+        <p className="muted">Loading columns…</p>
       ) : (
-        <div>{visibleItems.map((item) => renderItem(item, { readOnlyMembership: true }))}</div>
+        <>
+          <RecordListModeBar
+            columnSortActive={!manualOrder}
+            onManualOrder={() => setSort(MANUAL_RECORD_LIST_SORT)}
+            dragNote={
+              filterActive
+                ? "Clear the filter to drag items into a new order."
+                : null
+            }
+          />
+          <RecordListHeader
+            gridTemplate={gridTemplate}
+            columns={visibleColumns}
+            sortCol={effectiveSortCol}
+            sortDir={sortDir}
+            onCycleSort={(fieldKey) => {
+              const col = visibleColumns.find((c) => c.fieldKey === fieldKey);
+              if (!col?.sortable) return;
+              setSort((prev) => cycleRecordListSort(prev, fieldKey));
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setHeaderMenu({ x: e.clientX, y: e.clientY });
+            }}
+            before={
+              <>
+                <span />
+                <span />
+              </>
+            }
+            after={<span />}
+          />
+          {dragEnabled ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
+              <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
+                {displayItems.map((item) => renderItem(item))}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <div>
+              {displayItems.map((item) =>
+                renderItem(item, { readOnlyMembership: list.kind === "inbox" || item.virtual }),
+              )}
+            </div>
+          )}
+        </>
       )}
       {items.length === 0 ? (
         <p className="muted">No items yet — create one above.</p>
@@ -961,6 +1100,37 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         onCancel={() => setPendingRemove(null)}
         onConfirm={() => {
           if (pendingRemove) removeItem.mutate(pendingRemove.id);
+        }}
+      />
+      <ListViewHeaderMenu
+        menu={headerMenu}
+        onClose={() => setHeaderMenu(null)}
+        onPersonalize={() => {
+          setPersonalizeError(null);
+          setPersonalizeOpen(true);
+        }}
+      />
+      <ListViewPersonalizeModal
+        open={personalizeOpen}
+        title="Personalize to-do list"
+        rows={personalizeRows}
+        saving={saveListCols.isPending}
+        resetting={resetListCols.isPending}
+        error={personalizeError}
+        onClose={() => setPersonalizeOpen(false)}
+        onSave={(columns) => {
+          setPersonalizeError(null);
+          saveListCols.mutate(columns, {
+            onSuccess: () => setPersonalizeOpen(false),
+            onError: (err) => setPersonalizeError((err as Error).message),
+          });
+        }}
+        onReset={() => {
+          setPersonalizeError(null);
+          resetListCols.mutate(undefined, {
+            onSuccess: () => setPersonalizeOpen(false),
+            onError: (err) => setPersonalizeError((err as Error).message),
+          });
         }}
       />
     </div>

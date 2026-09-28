@@ -1,0 +1,86 @@
+# T0051 — Shared list view, wired to ToDo lists
+
+**Task:** T0051 (id 51) · **Branch (on approval):** `T0051-todo-list-view`  
+**State at plan:** `ready` · no Depends-on blockers
+
+## Goal
+
+Extract a reusable list-view component (column header, column sort, personalize, drag reorder) and use it on **ToDo lists**. Task project boards and the global Tasks page stay as they are. Ideas move onto the same component in follow-up **T0157** (Draft, depends on T0051).
+
+## Interview decisions (locked)
+
+| # | Decision |
+|---|----------|
+| 1 | Shared component, **ToDo lists first**. Ideas are T0157. |
+| 2 | **Groups skipped** (project task groups are not a ToDo concept). |
+| 3 | **Manual order is default.** Drag persists `todo_list_items.sort_order`. While manual order is active, no column sort is active. Choosing a column sort leaves manual order until the user returns to it. |
+| 4 | Folding skipped. ToDo membership is a flat list (no parent tree on the list). |
+| 5 | Existing ToDo clause filter stays. Drag is disabled while a filter is active so hidden rows are not reordered. |
+
+The old pause paragraph in the T0051 description (Ideas stay separate; ToDo already has its own features) is superseded by this split.
+
+## Out of scope
+
+- Rewriting `TaskBoard` or `TasksListPage` onto the new component.
+- Ideas list (`IdeasListPage`) — **T0157**.
+- Task groups, group drag, parent/child folding.
+- Unifying the task filter engine with the ToDo filter engine.
+- Inbox / Unsorted lists: order stays virtual (API already rejects persisting that order). Column sort may still apply client-side; drag stays disabled.
+
+## Product surface
+
+| Surface | File | This task |
+|---------|------|-----------|
+| ToDo list tab | `client/src/components/TodoListView.tsx` | Adopt shared list |
+| Project Tasks / global Tasks | `TaskBoard.tsx`, `TasksListPage.tsx` | Unchanged |
+| Ideas | `IdeasListPage.tsx` | T0157 |
+
+## Shared component
+
+New client component under `client/src/components/shared/` (name in implementation: a list shell, not a second copy of `TodoListView`).
+
+It owns:
+
+- Grid header from resolved columns, reusing `ListViewHeaderMenu`, `ListViewPersonalizeModal`, and `TaskListSortHeaderBtn`.
+- Sort mode per list, persisted in localStorage:
+  - **Manual** (default): display order is `sortOrder`. Headers show no active sort. Drag handles work (except inbox, virtual rows, and active filter).
+  - **Column:** client-side sort on the chosen column and direction. Drag handles hidden. Third click on the active column (or an explicit “Manual order” control in the header) clears the column sort and restores the saved manual order.
+- Row grid template from the same column prefs. Fixed chrome stays outside personalize: drag handle, checkbox, remove. Same rule as T0056.
+
+`TodoListView` keeps create, link-existing, item modal, inline state/priority/due edits, and `TodoListFilterBar`. It renders rows through the shared shell.
+
+## Columns (ToDo list)
+
+New list-view key `todo_lists`, mapped to catalog entity type `todo_list` (list metadata, not a new record type).
+
+| field key | Default visible | Sortable | Notes |
+|-----------|-----------------|----------|--------|
+| type | yes | yes | ToDo / Task / Idea |
+| title | yes | yes | |
+| tags | yes | no | Chips via existing taggings lookup (not on `TodoListItem`) |
+| state | yes | yes | Inline edit for todo and task rows |
+| priority | yes | yes | Inline edit for todo and task rows |
+| dueDate | yes | yes | Inline edit for todo and task rows |
+| checked | no | yes | Checkbox chrome stays fixed; this column is optional display of the flag |
+
+Idea rows stay compact where state/priority/due do not apply (current behavior).
+
+Seed via a new Drizzle migration (`INSERT` into `entity_fields`). Extend `LIST_VIEW_KEYS` in `src/services/listViewPrefs.ts` and `ListViewKey` in `client/src/lib/listViewColumns.ts`. Update `docs/database/` for the new catalog rows and list-view key, then `npm run docs:sync-schema`.
+
+This migration is a MINOR version bump on finish-up.
+
+## Drag and filter
+
+- Reorder API already exists (`todo_list_items` sort). Keep using it from the shared shell.
+- Active ToDo filter: filter first, then either manual order or column sort among the visible rows. Drag disabled with a short hint.
+- Inbox (`kind === "inbox"`) and virtual rows: drag stays disabled.
+
+## QA notes for the implementation pass
+
+- A normal ToDo list: drag still persists after reload; no column shows as sorted.
+- Click State (or Title, Priority, Due, Type): rows reorder; drag handles disappear.
+- Third click on that column, or Manual order: saved drag order returns and handles work again.
+- Apply a filter: matching rows only; drag disabled until the filter is cleared.
+- Personalize: hide Priority, reload, column stays hidden for the signed-in user.
+- Inbox list: no drag; column sort still works.
+- Project task list and Ideas list look unchanged.

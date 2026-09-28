@@ -4457,17 +4457,23 @@ a:focus-visible {
   min-width: 10rem;
 }
 
+.record-list__mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.35rem 0;
+  font-size: 0.85rem;
+}
+
+.record-list-header {
+  margin-bottom: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 .todo-item {
   display: grid;
-  grid-template-columns:
-    1.5rem
-    1.75rem
-    3rem
-    minmax(6rem, 1fr)
-    7rem
-    6.5rem
-    8.5rem
-    1.75rem;
   gap: 0.35rem;
   align-items: center;
   padding: 0.35rem 0.5rem;
@@ -4547,13 +4553,9 @@ a:focus-visible {
   justify-self: center;
 }
 
-/* Idea rows (no state/priority/due): title spans field columns. */
-.todo-item--compact {
-  grid-template-columns: 1.5rem 1.75rem 3rem minmax(6rem, 1fr) 1.75rem;
-}
-
-.todo-item--compact .todo-item__title {
-  grid-column: 4;
+.todo-item__tags {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .todo-add-row {
