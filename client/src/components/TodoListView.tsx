@@ -3,7 +3,10 @@ import {
   DndContext,
   PointerSensor,
   closestCenter,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragMoveEvent,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -17,7 +20,16 @@ import { buildTodoListGridTemplate, type ResolvedListColumn } from "../lib/listV
 import { sanitizePlainText } from "../lib/plainText";
 import { cycleRecordListSort, MANUAL_RECORD_LIST_SORT, storageKeyForTodoListSort } from "../lib/recordListSort";
 import { compareTodoListItems } from "../lib/todoListSort";
-import { blockedParentIds, flattenTodoList, reorderTodoSiblings } from "../lib/todoListTree";
+import {
+  TODO_ROOT_DROP_ID,
+  classifyTodoDrop,
+  flattenTodoList,
+  parseTodoNestDropId,
+  todoDropZoneFromPointer,
+  todoNestDropId,
+  type TodoDropAction,
+  type TodoDropZone,
+} from "../lib/todoListTree";
 import { useListViewColumns } from "../lib/useListViewColumns";
 import { usePersistedRecordListSort } from "../lib/usePersistedRecordListSort";
 import {
@@ -79,9 +91,7 @@ function SortableItem({
   onRemove,
   onPatchEntity,
   depth = 0,
-  parentOptions,
-  onParent,
-  onAddChild,
+  dropHint = null,
 }: {
   item: TodoListItem;
   dragDisabled?: boolean;
@@ -93,12 +103,14 @@ function SortableItem({
   onRemove: () => void;
   onPatchEntity: (patch: Record<string, unknown>) => void;
   depth?: number;
-  parentOptions?: { id: number; label: string }[];
-  onParent?: (parentId: number | null) => void;
-  onAddChild?: () => void;
+  dropHint?: "nest" | "reject" | "before" | "after" | null;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
+    disabled: dragDisabled || !!item.virtual,
+  });
+  const { setNodeRef: setNestRef } = useDroppable({
+    id: todoNestDropId(item.id),
     disabled: dragDisabled || !!item.virtual,
   });
   const style = {
@@ -132,38 +144,6 @@ function SortableItem({
                 <RowTagChips entityType={item.entityType} entityId={item.entityId} />
               ) : null}
             </button>
-            {item.entityType === "todo" && onParent ? (
-              <select
-                className="todo-item__parent"
-                aria-label={`Parent for ${item.title}`}
-                value={item.parentId != null ? String(item.parentId) : ""}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => onParent(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">No parent</option>
-                {item.parentId != null &&
-                !(parentOptions ?? []).some((option) => option.id === item.parentId) ? (
-                  <option value={item.parentId}>Current parent</option>
-                ) : null}
-                {(parentOptions ?? []).map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {item.entityType === "todo" && onAddChild ? (
-              <button
-                type="button"
-                className="btn todo-item__sub"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddChild();
-                }}
-              >
-                Sub
-              </button>
-            ) : null}
           </div>
         );
       case "tags":
@@ -244,10 +224,16 @@ function SortableItem({
   return (
     <div
       ref={setNodeRef}
+      data-todo-item-id={item.id}
       style={{ ...style, gridTemplateColumns: gridTemplate }}
-      className={`todo-item${isDragging ? " dragging" : ""}${looksComplete ? " is-checked" : ""}`}
+      className={`todo-item${isDragging ? " dragging" : ""}${looksComplete ? " is-checked" : ""}${
+        dropHint === "nest" ? " is-drop-nest" : ""
+      }${dropHint === "reject" ? " is-drop-reject" : ""}${dropHint === "before" ? " is-drop-before" : ""}${
+        dropHint === "after" ? " is-drop-after" : ""
+      }`}
       onDoubleClick={onOpen}
     >
+      <div ref={setNestRef} className="todo-item__nest-target" aria-hidden />
       {!item.virtual && !dragDisabled ? (
         <span className="task-drag-handle" {...attributes} {...listeners} title="Drag to reorder">
           ::
@@ -290,6 +276,100 @@ function SortableItem({
   );
 }
 
+type TodoDragHint =
+  | { kind: "root" | "root-reject" }
+  | { kind: "nest" | "reject" | "before" | "after"; itemId: number };
+
+function pointerClientY(event: DragMoveEvent): number | null {
+  const start = event.activatorEvent;
+  if (!("clientY" in start) || typeof start.clientY !== "number") return null;
+  return start.clientY + event.delta.y;
+}
+
+function hintKey(hint: TodoDragHint | null): string {
+  if (!hint) return "";
+  if (hint.kind === "root" || hint.kind === "root-reject") return hint.kind;
+  return `${hint.kind}:${hint.itemId}`;
+}
+
+function pointerInRect(x: number, y: number, rect: DOMRect): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+/** Hit-test the painted rows. The middle band reparents; the edges reorder. */
+const todoListCollision: CollisionDetection = (args) => {
+  const pointer = args.pointerCoordinates;
+  if (!pointer) return closestCenter(args);
+  const root = document.querySelector(".todo-root-drop");
+  if (root instanceof HTMLElement && pointerInRect(pointer.x, pointer.y, root.getBoundingClientRect())) {
+    return [{ id: TODO_ROOT_DROP_ID }];
+  }
+  let best: { id: number; distance: number } | null = null;
+  for (const container of args.droppableContainers) {
+    if (typeof container.id !== "number" || container.id === args.active.id) continue;
+    const row = document.querySelector(`[data-todo-item-id="${container.id}"]`);
+    if (!(row instanceof HTMLElement)) continue;
+    const rect = row.getBoundingClientRect();
+    if (!pointerInRect(pointer.x, pointer.y, rect)) continue;
+    const distance = Math.abs(pointer.y - (rect.top + rect.height / 2));
+    if (!best || distance < best.distance) best = { id: container.id, distance };
+  }
+  if (!best) return closestCenter(args);
+  const row = document.querySelector(`[data-todo-item-id="${best.id}"]`);
+  if (!(row instanceof HTMLElement)) return [{ id: best.id }];
+  const rect = row.getBoundingClientRect();
+  const zone = todoDropZoneFromPointer(pointer.y, rect.top, rect.height);
+  if (zone === "center") return [{ id: todoNestDropId(best.id) }];
+  return [{ id: best.id }];
+};
+
+function resolveDragAction(
+  listItems: TodoListItem[],
+  event: DragMoveEvent,
+): { action: TodoDropAction; hint: TodoDragHint | null } {
+  const activeItemId = Number(event.active.id);
+  if (!event.over) return { action: { kind: "ignore" }, hint: null };
+  const overId = event.over.id;
+  if (overId === TODO_ROOT_DROP_ID) {
+    const action = classifyTodoDrop(listItems, activeItemId, "root", "root");
+    const hint =
+      action.kind === "reparent"
+        ? ({ kind: "root" } as const)
+        : action.kind === "reject"
+          ? ({ kind: "root-reject" } as const)
+          : null;
+    return { action, hint };
+  }
+  const nestItemId = typeof overId === "string" ? parseTodoNestDropId(overId) : null;
+  const itemId = nestItemId ?? Number(overId);
+  const pointerY = pointerClientY(event);
+  const liveRow = document.querySelector(`[data-todo-item-id="${itemId}"]`);
+  const liveRect = liveRow instanceof HTMLElement ? liveRow.getBoundingClientRect() : null;
+  const zone: TodoDropZone =
+    pointerY == null
+      ? "center"
+      : todoDropZoneFromPointer(
+          pointerY,
+          liveRect?.top ?? event.over.rect.top,
+          liveRect?.height ?? event.over.rect.height,
+        );
+  const action = classifyTodoDrop(listItems, activeItemId, itemId, zone);
+  if (action.kind === "reorder") return { action, hint: { kind: zone === "after" ? "after" : "before", itemId } };
+  if (action.kind === "reparent") return { action, hint: { kind: "nest", itemId } };
+  if (action.kind === "reject") return { action, hint: { kind: "reject", itemId } };
+  return { action, hint: null };
+}
+
+function TodoRootDrop({ hint }: { hint: TodoDragHint | null }) {
+  const { setNodeRef } = useDroppable({ id: TODO_ROOT_DROP_ID });
+  const hot = hint?.kind === "root" ? " is-over" : hint?.kind === "root-reject" ? " is-reject" : "";
+  return (
+    <div ref={setNodeRef} className={`todo-root-drop${hot}`}>
+      Top level
+    </div>
+  );
+}
+
 function datetimeLocalValue(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -312,7 +392,6 @@ export function TodoEditorFields({
   const [dueLocal, setDueLocal] = useState(todo.dueDate ?? "");
   const [actionByLocal, setActionByLocal] = useState(datetimeLocalValue(todo.actionBy));
   const [progress, setProgress] = useState(todo.progress ?? 0);
-  const [parentId, setParentId] = useState<number | null>(todo.parentId ?? null);
   const [color, setColor] = useState(todo.color);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [syncedTodo, setSyncedTodo] = useState(todo);
@@ -326,25 +405,8 @@ export function TodoEditorFields({
     setDueLocal(todo.dueDate ?? "");
     setActionByLocal(datetimeLocalValue(todo.actionBy));
     setProgress(todo.progress ?? 0);
-    setParentId(todo.parentId ?? null);
     setColor(todo.color);
   }
-
-  const parentQuery = useQuery({
-    queryKey: ["todo-parents", todo.projectId ?? "none", todo.id],
-    queryFn: async () => {
-      const query = todo.projectId == null ? "projectId=null" : `projectId=${todo.projectId}`;
-      const res = await apiJson<{ data: Todo[] }>(`/api/v1/todos?${query}`);
-      return res.data;
-    },
-  });
-  const parentChoices = (parentQuery.data ?? []).filter(
-    (candidate) =>
-      !blockedParentIds(
-        (parentQuery.data ?? []).map((row) => ({ entityId: row.id, parentId: row.parentId })),
-        todo.id,
-      ).has(candidate.id),
-  );
 
   const patch = async (body: Record<string, unknown>) => {
     try {
@@ -478,28 +540,6 @@ export function TodoEditorFields({
             <p className="muted">Calculated from sub-items.</p>
           ) : null}
         </div>
-        <div className="field">
-          <label htmlFor={`d-parent-${todo.id}`}>Parent</label>
-          <select
-            id={`d-parent-${todo.id}`}
-            value={parentId ?? ""}
-            onChange={(e) => {
-              const next = e.target.value ? Number(e.target.value) : null;
-              setParentId(next);
-              void patch({ parentId: next });
-            }}
-          >
-            <option value="">No parent</option>
-            {parentId != null && !parentChoices.some((candidate) => candidate.id === parentId) ? (
-              <option value={parentId}>Current parent</option>
-            ) : null}
-            {parentChoices.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {formatEntityRef("todo", candidate.number)} {candidate.title}
-              </option>
-            ))}
-          </select>
-        </div>
         <AssigneeSelectField
           id={`d-assignee-${todo.id}`}
           projectId={todo.projectId}
@@ -570,12 +610,12 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const [pendingRemove, setPendingRemove] = useState<TodoListItem | null>(null);
   const [createType, setCreateType] = useState<"todo" | "task">("todo");
   const [createTitle, setCreateTitle] = useState("");
-  const [childOf, setChildOf] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [linkType, setLinkType] = useState<"todo" | "task">("todo");
   const [pickId, setPickId] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [dragHint, setDragHint] = useState<TodoDragHint | null>(null);
   const [headerMenu, setHeaderMenu] = useState<ListViewHeaderMenuState>(null);
   const [personalizeOpen, setPersonalizeOpen] = useState(false);
   const [personalizeError, setPersonalizeError] = useState<string | null>(null);
@@ -649,7 +689,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["todo-list", listId] });
     void qc.invalidateQueries({ queryKey: ["todo-solo"] });
-    void qc.invalidateQueries({ queryKey: ["todo-parents"] });
     void qc.invalidateQueries({ queryKey: ["todos"] });
     void qc.invalidateQueries({ queryKey: ["todos-for-link"] });
     void qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -660,14 +699,13 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const createItem = useMutation({
     mutationFn: async () => {
       const projectId = defaultProjectId ?? detailQuery.data?.projectId ?? null;
-      const body: { entityType: "todo" | "task"; title: string; projectId?: number; parentId?: number } = {
-        entityType: childOf != null ? "todo" : createType,
+      const body: { entityType: "todo" | "task"; title: string; projectId?: number } = {
+        entityType: createType,
         title: createTitle.trim(),
       };
       if (projectId != null) {
         body.projectId = projectId;
       }
-      if (childOf != null) body.parentId = childOf;
       const res = await apiJson<{ data: TodoListItem }>(`/api/v1/todo-lists/${listId}/items/create`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -676,7 +714,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     },
     onSuccess: () => {
       setCreateTitle("");
-      setChildOf(null);
       setCreateError(null);
       invalidate();
     },
@@ -738,14 +775,24 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
     onError: (err: Error) => setInlineError(err.message),
   });
 
-  const reorder = useMutation({
-    mutationFn: async (orderedItemIds: number[]) => {
+  const applyDrop = useMutation({
+    mutationFn: async (action: Extract<TodoDropAction, { kind: "reorder" | "reparent" }>) => {
+      if (action.kind === "reparent") {
+        await apiJson(`/api/v1/todos/${action.entityId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ parentId: action.parentId }),
+        });
+      }
       await apiJson(`/api/v1/todo-lists/${listId}/items/reorder`, {
         method: "PATCH",
-        body: JSON.stringify({ orderedItemIds }),
+        body: JSON.stringify({ orderedItemIds: action.orderedItemIds }),
       });
     },
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      setInlineError(null);
+      invalidate();
+    },
+    onError: (err: Error) => setInlineError(err.message),
   });
 
   const removeItem = useMutation({
@@ -818,12 +865,15 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const filterActive = isTodoFilterActive(listFilter);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const next = reorderTodoSiblings(items, Number(active.id), Number(over.id));
-    if (!next) return;
-    await reorder.mutateAsync(next);
+  const handleDragMove = (event: DragMoveEvent) => {
+    const { hint } = resolveDragAction(items, event);
+    setDragHint((prev) => (hintKey(prev) === hintKey(hint) ? prev : hint));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { action } = resolveDragAction(items, event);
+    setDragHint(null);
+    if (action.kind === "reorder" || action.kind === "reparent") applyDrop.mutate(action);
   };
 
   const openIdeaQuery = useQuery({
@@ -887,17 +937,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   const dragEnabled = list.kind !== "inbox" && !filterActive && manualOrder;
 
   const renderItem = (item: TodoListItem & { depth?: number }, opts?: { readOnlyMembership?: boolean }) => {
-    const todoMembers = items.filter((row) => row.entityType === "todo" && row.state !== "deleted");
-    const blocked =
-      item.entityType === "todo"
-        ? blockedParentIds(
-            todoMembers.map((row) => ({ entityId: row.entityId, parentId: row.parentId })),
-            item.entityId,
-          )
-        : new Set<number>();
-    const parentOptions = todoMembers
-      .filter((row) => !blocked.has(row.entityId))
-      .map((row) => ({ id: row.entityId, label: row.title }));
     const done = item.progressDerived
       ? item.state === "complete"
       : item.checked || (item.progress ?? 0) === 100 || item.state === "complete";
@@ -910,20 +949,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
       gridTemplate={gridTemplate}
       showTagsInTitle={showTagsInTitle}
       dragDisabled={list.kind === "inbox" || !!opts?.readOnlyMembership || !manualOrder || filterActive}
-      parentOptions={item.entityType === "todo" ? parentOptions : undefined}
-      onParent={
-        item.entityType === "todo"
-          ? (parentId) => patchEntity.mutate({ item, patch: { parentId } })
-          : undefined
-      }
-      onAddChild={
-        item.entityType === "todo"
-          ? () => {
-              setChildOf(item.entityId);
-              setCreateType("todo");
-            }
-          : undefined
-      }
       onToggle={() => {
         if (item.virtual && item.entityType === "todo") {
           patchEntity.mutate({ item, patch: { progress: done ? 0 : 100 } });
@@ -938,6 +963,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         setPendingRemove(item);
       }}
       onPatchEntity={(patch) => patchEntity.mutate({ item, patch })}
+      dropHint={dragHint && "itemId" in dragHint && dragHint.itemId === item.id ? dragHint.kind : null}
     />
     );
   };
@@ -947,7 +973,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
       <div className="todo-create-row">
         <input
           type="text"
-          placeholder={childOf != null ? "Sub-item title" : "New item title"}
+          placeholder="New item title"
           value={createTitle}
           onChange={(e) => setCreateTitle(sanitizePlainText(e.target.value))}
           onKeyDown={(e) => {
@@ -957,8 +983,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
         />
         <select
           className="todo-type-select"
-          value={childOf != null ? "todo" : createType}
-          disabled={childOf != null}
+          value={createType}
           onChange={(e) => setCreateType(e.target.value as "todo" | "task")}
           aria-label="New item type"
         >
@@ -974,14 +999,6 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           Add
         </button>
       </div>
-      {childOf != null ? (
-        <p className="todo-sub-banner">
-          Sub-item of {items.find((row) => row.entityType === "todo" && row.entityId === childOf)?.title ?? "parent"}
-          <button type="button" className="btn" onClick={() => setChildOf(null)}>
-            Cancel
-          </button>
-        </p>
-      ) : null}
       {createError ? (
         <p className="tag-input__error" role="alert">
           {createError}
@@ -1037,7 +1054,14 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
             after={<span />}
           />
           {dragEnabled ? (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={todoListCollision}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setDragHint(null)}
+            >
+              <TodoRootDrop hint={dragHint} />
               <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
                 {displayItems.map((item) => renderItem(item))}
               </SortableContext>

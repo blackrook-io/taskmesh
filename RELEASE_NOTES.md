@@ -4,6 +4,13 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.55.1 — 2026-09-28
+
+### Enhancements
+- Drag a ToDo onto the middle of another ToDo in the same list to make it a child. Drag it onto the Top level strip to clear the parent. Its children move with it.
+- The top and bottom edges of a row still reorder siblings and do not change the parent. Dropping on yourself, a descendant, or a Task does nothing.
+- The parent dropdown and Sub button are removed from the list row and the ToDo editor. New items stay top-level.
+
 ## 0.55.0 — 2026-09-28
 
 ### Fixes

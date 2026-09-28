@@ -4472,7 +4472,29 @@ a:focus-visible {
   border-radius: 8px;
 }
 
+.todo-root-drop {
+  margin-bottom: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.todo-root-drop.is-over {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+
+.todo-root-drop.is-reject {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .todo-item {
+  position: relative;
   display: grid;
   gap: 0.35rem;
   align-items: center;
@@ -4482,6 +4504,32 @@ a:focus-visible {
   border-radius: 8px;
   background: var(--bg);
   font-size: 0.9rem;
+}
+
+.todo-item__nest-target {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 28%;
+  height: 44%;
+  pointer-events: none;
+}
+
+.todo-item.is-drop-nest {
+  outline: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg));
+}
+
+.todo-item.is-drop-reject {
+  outline: 2px solid var(--danger);
+}
+
+.todo-item.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.todo-item.is-drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .todo-item.dragging {
@@ -4595,29 +4643,9 @@ a:focus-visible {
   min-width: 4rem;
 }
 
-.todo-item__sub,
-.todo-item__parent {
-  flex: 0 0 auto;
-  font-size: 0.75rem;
-}
-
-.todo-item__parent {
-  width: 8.5rem;
-  max-width: 8.5rem;
-  min-width: 0;
-}
-
 .todo-sub-list {
   margin: 0.25rem 0 0;
   padding-left: 1.1rem;
-}
-
-.todo-sub-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.25rem 0 0.5rem;
-  font-size: 0.85rem;
 }
 
 .todo-progress input[type="range"] {
