@@ -55,6 +55,7 @@ import { RecordListHeader, RecordListModeBar } from "./shared/RecordListView";
 import { RowTagChips } from "./shared/RowTagChips";
 import { TagInput } from "./shared/TagInput";
 import { AssigneeSelectField } from "./AssigneeSelectField";
+import { TodoProgressControl } from "./TodoProgressControl";
 
 function inlineStateOptions(current: string | undefined): readonly string[] {
   if (current === "pending") return ["pending", ...INLINE_TODO_LIST_STATES];
@@ -199,7 +200,7 @@ function SortableItem({
     <div
       ref={setNodeRef}
       style={{ ...style, gridTemplateColumns: gridTemplate }}
-      className={`todo-item${isDragging ? " dragging" : ""}${item.checked ? " is-checked" : ""}`}
+      className={`todo-item${isDragging ? " dragging" : ""}${item.checked || item.progress === 100 ? " is-checked" : ""}`}
       onDoubleClick={onOpen}
     >
       {!item.virtual && !dragDisabled ? (
@@ -213,11 +214,19 @@ function SortableItem({
       )}
       <input
         type="checkbox"
-        checked={item.checked}
-        disabled={!!item.virtual}
-        aria-label={`Mark ${item.title} ${item.checked ? "incomplete" : "complete"}`}
+        checked={item.checked || item.progress === 100}
+        disabled={!!item.virtual && item.entityType !== "todo"}
+        aria-label={`Mark ${item.title} ${item.checked || item.progress === 100 ? "incomplete" : "complete"}`}
         onChange={onToggle}
       />
+      {item.entityType === "todo" ? (
+        <TodoProgressControl
+          progress={item.progress ?? 0}
+          onCommit={(next) => onPatchEntity({ progress: next })}
+        />
+      ) : (
+        <span className="todo-progress todo-progress--empty" aria-hidden />
+      )}
       {columns.map(renderCell)}
       {!item.virtual ? (
         <button type="button" className="task-card-dismiss" aria-label="Remove from list" onClick={onRemove}>
@@ -251,6 +260,7 @@ export function TodoEditorFields({
   const [priority, setPriority] = useState(todo.priority);
   const [dueLocal, setDueLocal] = useState(todo.dueDate ?? "");
   const [actionByLocal, setActionByLocal] = useState(datetimeLocalValue(todo.actionBy));
+  const [progress, setProgress] = useState(todo.progress ?? 0);
   const [color, setColor] = useState(todo.color);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [syncedTodo, setSyncedTodo] = useState(todo);
@@ -263,6 +273,7 @@ export function TodoEditorFields({
     setPriority(todo.priority);
     setDueLocal(todo.dueDate ?? "");
     setActionByLocal(datetimeLocalValue(todo.actionBy));
+    setProgress(todo.progress ?? 0);
     setColor(todo.color);
   }
 
@@ -373,6 +384,19 @@ export function TodoEditorFields({
                 : null;
               const prev = todo.actionBy ?? null;
               if (next !== prev) void patch({ actionBy: next });
+            }}
+          />
+        </div>
+        <div className="field">
+          <span className="field-label" id={`d-progress-${todo.id}`}>
+            Progress
+          </span>
+          <TodoProgressControl
+            progress={progress}
+            label="Progress"
+            onCommit={(next) => {
+              setProgress(next);
+              if (next !== (todo.progress ?? 0)) void patch({ progress: next });
             }}
           />
         </div>
@@ -739,6 +763,11 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
       showTagsInTitle={showTagsInTitle}
       dragDisabled={list.kind === "inbox" || !!opts?.readOnlyMembership || !manualOrder || filterActive}
       onToggle={() => {
+        if (item.virtual && item.entityType === "todo") {
+          const done = (item.progress ?? 0) === 100 || item.state === "complete";
+          patchEntity.mutate({ item, patch: { progress: done ? 0 : 100 } });
+          return;
+        }
         if (opts?.readOnlyMembership) return;
         patchItem.mutate({ itemId: item.id, checked: !item.checked });
       }}
@@ -831,6 +860,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
               <>
                 <span />
                 <span />
+                <span>Progress</span>
               </>
             }
             after={<span />}

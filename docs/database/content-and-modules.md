@@ -199,7 +199,7 @@ Per-user tag catalog (T0112) plus polymorphic attachments.
 
 ## `todos`
 
-First-class **ToDo** records (UI label “ToDo”). Display number → **D####**. Lighter than Task: due date, priority, Task-parity state, and `action_by` datetime. Optional `project_id` and `source_idea_id` (when converted from an Idea). Soft-delete via `state = 'deleted'`.
+First-class **ToDo** records (UI label “ToDo”). Display number → **D####**. Lighter than Task: due date, priority, Task-parity state, `action_by` datetime, and a stored `progress` percent (0–100). Optional `project_id` and `source_idea_id` (when converted from an Idea). Soft-delete via `state = 'deleted'`.
 
 ### Columns
 
@@ -221,10 +221,11 @@ First-class **ToDo** records (UI label “ToDo”). Display number → **D####**
 | `updated_by_id` | integer | no | — | FK → `users.id` · ON DELETE RESTRICT |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112) |
 | `assignee_id` | integer | yes | — | FK → `users.id` — assigned user (T0117); same pool rules as tasks when `project_id` is set |
+| `progress` | integer | no | `0` | User-set percent complete, 0–100 (T0155). 100% is Complete and checks To Do list memberships |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `number`; FKs as above (`assignee_id` · **ON DELETE SET NULL**).
+**Constraints:** PK `id`; UNIQUE `number`; CHECK `todos_progress_range` (`progress` between 0 and 100); FKs as above (`assignee_id` · **ON DELETE SET NULL**).
 
 ---
 

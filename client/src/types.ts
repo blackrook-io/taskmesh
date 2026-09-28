@@ -160,6 +160,8 @@ export type Todo = {
   priority: string;
   dueDate: string | null;
   actionBy: string | null;
+  /** Stored percent complete, 0–100. */
+  progress: number;
   color: string | null;
   sortOrder: number;
   sourceIdeaId: number | null;
@@ -209,6 +211,8 @@ export type TodoListItem = {
   dueDate?: string | null;
   priority?: string;
   actionBy?: string | null;
+  /** Present on ToDo rows. */
+  progress?: number;
   virtual?: boolean;
 };
 

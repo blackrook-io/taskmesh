@@ -1,0 +1,2 @@
+ALTER TABLE "todos" ADD COLUMN "progress" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "todos" ADD CONSTRAINT "todos_progress_range" CHECK ("todos"."progress" >= 0 AND "todos"."progress" <= 100);

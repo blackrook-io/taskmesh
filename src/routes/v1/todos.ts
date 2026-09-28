@@ -26,6 +26,8 @@ import { allocateTaskNumber } from "../../services/tasks.js";
 import { copyTaggings } from "../../services/copyTaggings.js";
 import { getCurrentUserId, attachAssignees, attachAssignee, attachTaskActor } from "../../services/users.js";
 import { resolveAssigneeId } from "../../services/assignees.js";
+import { resolveTodoProgressUpdate } from "../../lib/todoProgress.js";
+import { syncTodoMembershipChecked } from "../../services/todoProgress.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -44,6 +46,7 @@ const createBody = z.object({
   projectId: z.number().int().positive().optional().nullable(),
   sourceIdeaId: z.number().int().positive().optional().nullable(),
   assigneeId: z.number().int().positive().nullable().optional(),
+  progress: z.number().int().min(0).max(100).optional(),
 });
 
 const patchBody = z.object({
@@ -56,6 +59,7 @@ const patchBody = z.object({
   priority: taskPrioritySchema.optional(),
   projectId: z.number().int().positive().nullable().optional(),
   assigneeId: z.number().int().positive().nullable().optional(),
+  progress: z.number().int().min(0).max(100).optional(),
 });
 
 const listQuery = z.object({
@@ -153,6 +157,13 @@ todosRouter.post("/", async (req, res) => {
       requested: parsed.assigneeId,
       creating: true,
     });
+    const initial = resolveTodoProgressUpdate(
+      { progress: 0, state: "new" },
+      {
+        state: parsed.state ?? "new",
+        ...(parsed.progress !== undefined ? { progress: parsed.progress } : {}),
+      },
+    );
     const [row] = await db
       .insert(schema.todos)
       .values({
@@ -162,7 +173,8 @@ todosRouter.post("/", async (req, res) => {
         dueDate: parsed.dueDate ?? null,
         actionBy: parseActionBy(parsed.actionBy) ?? null,
         color: parsed.color ?? null,
-        state: parsed.state ?? "new",
+        state: initial.state,
+        progress: initial.progress,
         priority: parsed.priority ?? "none",
         projectId,
         sourceIdeaId: parsed.sourceIdeaId ?? null,
@@ -176,6 +188,9 @@ todosRouter.post("/", async (req, res) => {
     if (!row) {
       sendError(res, 500, "insert_failed", "Could not create ToDo");
       return;
+    }
+    if (initial.membershipChecked != null) {
+      await syncTodoMembershipChecked(db, row.id, initial.membershipChecked);
     }
     res.status(201).json({ data: await attachAssignee(db, row) });
   } catch (err) {
@@ -214,6 +229,7 @@ todosRouter.patch("/:id", async (req, res) => {
         "priority",
         "projectId",
         "assigneeId",
+        "progress",
       ])
     ) {
       sendError(res, 400, "empty_patch", "Provide at least one field to update");
@@ -243,6 +259,13 @@ todosRouter.patch("/:id", async (req, res) => {
       previousAssigneeId: existing.assigneeId,
       projectChanging,
     });
+    const progressUpdate = resolveTodoProgressUpdate(
+      { progress: existing.progress, state: existing.state },
+      {
+        ...(parsed.progress !== undefined ? { progress: parsed.progress } : {}),
+        ...(parsed.state !== undefined ? { state: parsed.state } : {}),
+      },
+    );
     const [row] = await db
       .update(schema.todos)
       .set({
@@ -253,7 +276,9 @@ todosRouter.patch("/:id", async (req, res) => {
           ? { actionBy: parseActionBy(parsed.actionBy) ?? null }
           : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
-        ...(parsed.state !== undefined ? { state: parsed.state } : {}),
+        ...(parsed.state !== undefined || parsed.progress !== undefined
+          ? { state: progressUpdate.state, progress: progressUpdate.progress }
+          : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.projectId !== undefined ? { projectId: parsed.projectId } : {}),
         ...(parsed.assigneeId !== undefined || nextAssigneeId !== existing.assigneeId
@@ -264,6 +289,11 @@ todosRouter.patch("/:id", async (req, res) => {
       })
       .where(eq(schema.todos.id, id))
       .returning();
+    if (parsed.state !== undefined || parsed.progress !== undefined) {
+      if (progressUpdate.membershipChecked != null) {
+        await syncTodoMembershipChecked(db, id, progressUpdate.membershipChecked);
+      }
+    }
     res.json({ data: row ? await attachAssignee(db, row) : row });
   } catch (err) {
     handleRouteError(res, err);

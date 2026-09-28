@@ -16,6 +16,7 @@ import {
 import { userHasAdministrator } from "../../services/roles.js";
 import { allocateTaskNumber } from "../../services/tasks.js";
 import { ensureInboxList } from "../../services/todoLists.js";
+import { applyTodoProgressResult, progressFieldsForCheck } from "../../services/todoProgress.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { copyTaggings } from "../../services/copyTaggings.js";
 
@@ -147,7 +148,6 @@ async function hydrateUnsortedItems(
       entityType: "todo" as const,
       entityId: todo.id,
       sortOrder: sort++,
-      checked: false,
       createdAt: todo.createdAt,
       updatedAt: todo.updatedAt,
       title: todo.title,
@@ -157,6 +157,8 @@ async function hydrateUnsortedItems(
       dueDate: todo.dueDate,
       priority: todo.priority,
       actionBy: todo.actionBy?.toISOString() ?? null,
+      progress: todo.progress,
+      checked: todo.progress === 100,
     });
   }
   for (const task of tasks) {
@@ -201,6 +203,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
     let dueDate: string | null | undefined;
     let priority: string | undefined;
     let actionBy: string | null | undefined;
+    let progress: number | undefined;
     if (row.entityType === "idea") {
       const [idea] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, row.entityId));
       if (idea) {
@@ -216,6 +219,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
         dueDate = todo.dueDate;
         priority = todo.priority;
         actionBy = todo.actionBy?.toISOString() ?? null;
+        progress = todo.progress;
       } else if (todo?.state === "deleted") {
         title = `${todo.title} (deleted)`;
         state = todo.state;
@@ -230,7 +234,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
         priority = task.priority;
       }
     }
-    out.push({ ...row, title, href, state, dueDate, priority, actionBy });
+    out.push({ ...row, title, href, state, dueDate, priority, actionBy, progress });
   }
   return out;
 }
@@ -642,6 +646,18 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
     if (!existing || existing.listId !== listId) {
       sendError(res, 404, "not_found", "Item not found");
       return;
+    }
+    if (parsed.checked !== undefined && existing.entityType === "todo") {
+      const [todo] = await db
+        .select({ progress: schema.todos.progress, state: schema.todos.state })
+        .from(schema.todos)
+        .where(eq(schema.todos.id, existing.entityId));
+      if (todo && todo.state !== "deleted") {
+        const progressUpdate = progressFieldsForCheck(parsed.checked, todo);
+        if (progressUpdate) {
+          await applyTodoProgressResult(db, existing.entityId, actorId, progressUpdate);
+        }
+      }
     }
     const [row] = await db
       .update(schema.todoListItems)
