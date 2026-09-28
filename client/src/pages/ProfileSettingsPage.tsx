@@ -20,7 +20,7 @@ type Props = {
 export function ProfileSettingsPage({ embedded = false }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, refresh } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -63,6 +63,7 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
     },
     onSuccess: (data) => {
       qc.setQueryData(["users", "me"], data);
+      void refresh();
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       flash("Display name saved.");
     },
@@ -160,7 +161,7 @@ export function ProfileSettingsPage({ embedded = false }: Props) {
           </div>
           {saveNameMutation.isError ? (
             <p role="alert" className="error-text">
-              Could not save display name.
+              {saveNameMutation.error.message}
             </p>
           ) : null}
 

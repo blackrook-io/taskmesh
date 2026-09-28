@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiJson } from "../../api/client";
+import { useAuth } from "../../lib/auth";
 import { validateEmailClient, validatePasswordClient } from "../../lib/password";
 import { roleIsAdministrator, type RoleRef } from "../../lib/roles";
 import type { UserProfile } from "../../types";
@@ -28,6 +29,7 @@ const PASSWORD_HELP =
 
 export function AdminUsersPanel() {
   const qc = useQueryClient();
+  const { refresh } = useAuth();
   const [creating, setCreating] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
@@ -42,6 +44,10 @@ export function AdminUsersPanel() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [newRoleName, setNewRoleName] = useState("");
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
+  const cancelRenameRef = useRef(false);
+  const committingRef = useRef(false);
 
   const usersQuery = useQuery({
     queryKey: ["admin", "users"],
@@ -58,6 +64,64 @@ export function AdminUsersPanel() {
       return res.data;
     },
   });
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ id, displayName }: { id: number; displayName: string }) => {
+      await apiJson(`/api/v1/admin/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ displayName }),
+      });
+    },
+    onSuccess: async (_data, vars) => {
+      setActionError(null);
+      await qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      if (meQuery.data?.id === vars.id) {
+        await refresh();
+        await qc.invalidateQueries({ queryKey: ["users", "me"] });
+      }
+    },
+    onError: (err: Error) => setActionError(err.message),
+  });
+
+  function beginRename(user: AdminUser) {
+    cancelRenameRef.current = false;
+    setActionError(null);
+    setEditingId(user.id);
+    setNameDraft(user.displayName);
+  }
+
+  function cancelRename() {
+    cancelRenameRef.current = true;
+    setEditingId(null);
+  }
+
+  async function commitRename(user: AdminUser) {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false;
+      return;
+    }
+    if (committingRef.current) return;
+    const next = nameDraft.trim();
+    if (!next) {
+      setNameDraft(user.displayName);
+      setEditingId(null);
+      setActionError("Display name is required");
+      return;
+    }
+    if (next === user.displayName) {
+      setEditingId(null);
+      return;
+    }
+    committingRef.current = true;
+    try {
+      await renameMutation.mutateAsync({ id: user.id, displayName: next });
+      setEditingId(null);
+    } catch {
+      setNameDraft(next);
+    } finally {
+      committingRef.current = false;
+    }
+  }
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -470,7 +534,38 @@ export function AdminUsersPanel() {
               return (
                 <tr key={u.id}>
                   <td>
-                    <strong>{u.displayName}</strong>
+                    {editingId === u.id ? (
+                      <input
+                        className="admin-user-name__input"
+                        aria-label={`Display name for ${u.referenceId}`}
+                        value={nameDraft}
+                        maxLength={200}
+                        autoFocus
+                        disabled={renameMutation.isPending}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onBlur={() => {
+                          void commitRename(u);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            cancelRename();
+                          }
+                        }}
+                      />
+                    ) : (
+                      <strong
+                        className="admin-user-name"
+                        title="Double-click to rename"
+                        onDoubleClick={() => beginRename(u)}
+                      >
+                        {u.displayName}
+                      </strong>
+                    )}
                     <div className="muted small">{u.referenceId}</div>
                     <div className="admin-role-chips">
                       {userRoles.length === 0 ? (

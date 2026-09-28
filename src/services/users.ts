@@ -1,4 +1,4 @@
-import { eq, max } from "drizzle-orm";
+import { and, eq, max, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { AuthenticationError } from "../lib/authErrors.js";
@@ -16,6 +16,62 @@ import {
 import { destroyAllSessionsForUser } from "./auth.js";
 
 type Db = NodePgDatabase<typeof schema>;
+
+export const DISPLAY_NAME_TAKEN = "display_name_taken";
+export const DISPLAY_NAME_TAKEN_MESSAGE = "That display name is already in use";
+
+function displayNameTaken(): Error {
+  return Object.assign(new Error(DISPLAY_NAME_TAKEN_MESSAGE), {
+    status: 409,
+    code: DISPLAY_NAME_TAKEN,
+  });
+}
+
+/** Reject a display name another user already has (case-insensitive, trimmed). */
+export async function assertDisplayNameAvailable(
+  db: Db,
+  displayName: string,
+  excludeUserId?: number,
+): Promise<void> {
+  const normalized = displayName.trim();
+  const [dup] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        sql`lower(btrim(${schema.users.displayName})) = lower(${normalized})`,
+        excludeUserId != null ? ne(schema.users.id, excludeUserId) : undefined,
+      ),
+    )
+    .limit(1);
+  if (dup) throw displayNameTaken();
+}
+
+/**
+ * First free display name. When `preferred` is taken, appends ` (2)`, ` (3)`, …
+ * Used by OAuth account creation so a colliding identity-provider name still signs in.
+ */
+export async function allocateUniqueDisplayName(db: Db, preferred: string): Promise<string> {
+  const base = preferred.trim().slice(0, 180) || "User";
+  for (let i = 0; i < 100; i++) {
+    const candidate = (i === 0 ? base : `${base} (${i + 1})`).slice(0, 200);
+    try {
+      await assertDisplayNameAvailable(db, candidate);
+      return candidate;
+    } catch (err) {
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code?: string }).code === DISPLAY_NAME_TAKEN
+      ) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw displayNameTaken();
+}
 
 /** Next app-wide unique user number (max existing + 1, or 1). */
 export async function allocateUserNumber(db: Db): Promise<number> {

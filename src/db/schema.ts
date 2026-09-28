@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -189,6 +189,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   /** App-wide unique display number → U####. */
   number: integer("number").notNull().unique(),
+  /** Unique case-insensitively via `users_display_name_ci_uidx`. */
   displayName: text("display_name").notNull(),
   /** FK to uploads; ON DELETE SET NULL. Declared after uploads via lazy ref. */
   avatarUploadId: integer("avatar_upload_id").references(
@@ -235,7 +236,9 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => [
+  uniqueIndex("users_display_name_ci_uidx").on(sql`lower(btrim(${t.displayName}))`),
+]);
 
 /**
  * Short-lived MFA challenge after password/OAuth primary auth (T0139).

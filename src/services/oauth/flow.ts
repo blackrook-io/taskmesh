@@ -8,7 +8,7 @@ import { readMfaTrustCookie } from "../../lib/mfaTrustCookie.js";
 import { createSession } from "../auth.js";
 import { resolvePostPrimaryAuth } from "../mfa.js";
 import { assignRole, createRole, listRoles } from "../roles.js";
-import { allocateUserNumber } from "../users.js";
+import { allocateUniqueDisplayName, allocateUserNumber } from "../users.js";
 import { buildAuthorizationUrl, exchangeCodeForIdentity } from "./adapters.js";
 import {
   getOauthProviderBySlug,
@@ -353,8 +353,9 @@ async function resolveLoginUser(
   if (!provider.jitEnabled) return null;
 
   const number = await allocateUserNumber(db);
-  const displayName =
+  const preferred =
     identity.displayName?.trim() || identity.email.split("@")[0] || `User ${number}`;
+  const displayName = await allocateUniqueDisplayName(db, preferred);
   const [created] = await db
     .insert(schema.users)
     .values({

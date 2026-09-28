@@ -81,6 +81,10 @@ export function handleRouteError(res: Response, err: unknown): void {
       sendError(res, 409, "email_taken", "Email is already in use");
       return;
     }
+    if (detail.includes("users_display_name")) {
+      sendError(res, 409, "display_name_taken", "That display name is already in use");
+      return;
+    }
     if (detail.includes("roles_slug") || detail.includes("roles_name")) {
       sendError(res, 409, "role_taken", "A role with that name already exists");
       return;

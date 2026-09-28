@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "users_display_name_ci_uidx" ON "users" USING btree (lower(btrim("display_name")));

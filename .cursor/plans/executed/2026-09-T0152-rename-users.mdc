@@ -1,0 +1,52 @@
+# T0152 — Rename TaskMesh users
+
+**Task:** T0152 — Ability rename TaskMesh users (`id` 165, project 4)
+**State at plan:** `ready`. No parent. Depends-on empty.
+**Branch (on approval):** `T0152-rename-users`
+
+## Brief
+
+An Administrator double-clicks a user’s name in Administration → Users and renames that user.
+
+## Assumptions (confirm or adjust)
+
+1. **Field is `displayName`** — the bold name in the User column. The `U####` reference id stays fixed. Email stays in its own column and is not part of this rename.
+2. **Inline edit**, same pattern as document titles: double-click opens an input, Enter or blur saves, Escape cancels. Empty or whitespace-only names are rejected. An unchanged name is a no-op (no request).
+3. **Display names are unique** among all users. Comparison is case-insensitive and ignores surrounding whitespace, so `Rook` and `rook` collide. A taken name fails with HTTP 409 `display_name_taken` (“That display name is already in use”).
+4. **Any listed user** can be renamed, including the signed-in Administrator and deactivated or locked accounts.
+5. Validation matches Profile: trim, 1–200 characters (`plainTitle(200)`).
+
+## API
+
+`PATCH /api/v1/admin/users/:id` with `{ displayName }`, Administrator only (existing `adminRouter` gate).
+
+- Service helper next to the other admin user writers in `src/services/adminUsers.ts`.
+- 404 if the user id does not exist.
+- Request log line naming the reference id and the new display name.
+- Response is the same admin user row shape as the list.
+- Same uniqueness check on **create** (`POST /api/v1/admin/users`) and **Profile** (`PATCH /api/v1/users/me`).
+
+## Schema
+
+Unique index `users_display_name_ci_uidx` on `lower(btrim(display_name))`. Document the constraint in `docs/database/platform.md`. OAuth just-in-time account creation, which picks a name from the identity provider, appends a numeric suffix when that name is already taken so sign-in still succeeds.
+
+## UI
+
+`AdminUsersPanel`: double-click the display name (tooltip “Double-click to rename”). On success, refresh `["admin", "users"]`. If the renamed user is the signed-in account, also refresh `["users", "me"]` and `["auth", "session"]` so the shell name updates.
+
+Show the API error in the existing panel error text. Disable the input while the request is in flight.
+
+## Out of scope
+
+- Renaming email or `U####`.
+
+## QA
+
+1. As Administrator, open Administration → Users. Double-click a user’s display name, change it, press Enter. The table shows the new name; `U####` and email are unchanged.
+2. Escape restores the previous name and does not call the API.
+3. Blur with a new name saves. Clear the field and blur: the name is unchanged and an error is shown.
+4. Rename the signed-in Administrator. The shell / profile name matches the new display name without a reload.
+5. Rename a second (non-self) user. Assignee pickers and project user lists show the new name after refresh.
+6. A non-Administrator cannot call `PATCH /api/v1/admin/users/:id` (403).
+7. Rename (or create, or Profile save) to a name another user already has, including a different case, fails and the existing name stays.
+8. Renaming a user to their own current name (any case) succeeds and does not report a conflict.

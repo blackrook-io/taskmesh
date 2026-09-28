@@ -30,6 +30,7 @@ import {
   listAdminUsers,
   lockUser,
   reactivateUser,
+  renameAdminUser,
   resetUserPassword,
   unlockUser,
 } from "../../services/adminUsers.js";
@@ -132,6 +133,27 @@ adminRouter.post("/users", async (req, res) => {
     res.locals.logUserId = actor.id;
     res.locals.logMessage = `User created: ${data.referenceId} (${data.email})`;
     res.status(201).json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+const patchUserBody = z
+  .object({
+    displayName: plainTitle(200),
+  })
+  .strict();
+
+adminRouter.patch("/users/:id", async (req, res) => {
+  try {
+    const id = parseRouteId(req, "id");
+    const parsed = patchUserBody.parse(req.body);
+    const actor = await getCurrentUser(db);
+    const data = await renameAdminUser(db, id, parsed.displayName);
+    res.locals.logUserId = actor.id;
+    res.locals.logMessage = `User renamed: ${data.referenceId} → ${data.displayName}`;
+    res.json({ data });
   } catch (err) {
     if (serviceError(res, err)) return;
     handleRouteError(res, err);
