@@ -1,0 +1,30 @@
+# This host is DEV only; finish-up does not deploy
+
+**Branch:** `phase-2-dev-only-host`  
+**Why:** TaskMesh now has a separate public production site. This development machine was still running a DEV API (`:3001`) and a production-mode API (`:3000`, systemd, nginx) on the same database. Finish-up was also deploying that local production process.
+
+## Outcome
+
+This checkout runs one server: the DEV API and Vite (`npm run dev` / `npm run dev:web`). `/worktask` reads and writes tasks on `http://127.0.0.1:3001`. Finish-up merges to `main` and closes the task. It does not deploy.
+
+Production installs stay in the repo (`npm start`, systemd, nginx, `deploy:prod`, `UPGRADES.md`). An Administrator upgrades the public site from a GitHub Release.
+
+## Changes
+
+1. Point `/worktask` task I/O at the DEV API. Cookie `taskmesh_session_dev`. If `:3001` is down, start `npm run dev`. Do not start systemd, `npm start`, or `deploy:prod`.
+2. Remove the finish-up deploy step from the worktask skill, development rules, plan-branch gate, versioning notes, and `AGENTS.md`. Completion comments record the merged version and do not claim a production deploy.
+3. Schema-doc sync defaults to the DEV API.
+4. On this host, stop and disable the local `taskmesh` systemd service so `:3000` is not a second API, and disable the nginx `taskmesh` site (it only proxied that process). The site file in the repo stays for production installs.
+
+## Host cutover
+
+Done on this machine: `taskmesh.service` is stopped and disabled, and `/etc/nginx/sites-enabled/taskmesh` was removed. nginx config test succeeded and nginx was reloaded. The DEV API remains on port 3001.
+
+## Version
+
+Finish-up ships as **0.50.1** (PATCH; no new migration).
+
+## Out of scope
+
+- Removing the production install path, `deploy:prod`, or instance branding from the product.
+- Publishing GitHub Releases (still the Administrator’s Upgrade path).

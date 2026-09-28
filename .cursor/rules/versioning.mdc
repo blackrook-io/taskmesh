@@ -37,7 +37,7 @@ Schema-changing work is MINOR only — do not also increment PATCH. Multiple new
 2. `APP_VERSION_CREATED_AT` in `src/lib/appVersion.ts` — UTC ISO datetime of this finish-up merge to `main` (`YYYY-MM-DDTHH:mm:ss.sssZ`)
 3. `APP_VERSION` and `APP_VERSION_CREATED_AT` in `client/src/lib/appVersion.ts` (same strings)
 
-Do **not** set `releasedAt` in git. `deploy/deploy-prod.sh` writes `data/prod-release.json` after PRODUCTION health checks succeed. The API exposes `releasedAt` only when that sidecar’s `version` matches the running `package.json` version.
+Do **not** set `releasedAt` in git. Finish-up does not deploy and does not stamp `releasedAt`. On a production host, `deploy/deploy-prod.sh` still writes `data/prod-release.json` after that host’s health checks succeed. The API exposes `releasedAt` only when that sidecar’s `version` matches the running `package.json` version. This development host does not write that file on finish-up. A leftover `data/prod-release.json` from an earlier local deploy still reports `releasedAt` until the file is removed.
 
 ## Workflows and skills
 
@@ -46,4 +46,4 @@ Do **not** set `releasedAt` in git. `deploy/deploy-prod.sh` writes `data/prod-re
 
 ## API / UI
 
-JSON under `/api` includes `meta: { version, createdAt, releasedAt }`. `releasedAt` is `null` until this version is deployed to PROD. The shell shows `vMAJOR.MINOR.PATCH` (e.g. `v0.22.1`).
+JSON under `/api` includes `meta: { version, createdAt, releasedAt }`. `releasedAt` is `null` until an Administrator deploys this version on a production host. The shell shows `vMAJOR.MINOR.PATCH` (e.g. `v0.22.1`).

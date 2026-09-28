@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Establish a PROD TaskMesh session cookie for /worktask curl I/O.
-# Writes: /tmp/tm-prod-cookies.txt (Netscape jar, cookie name taskmesh_session)
+# Establish a DEV TaskMesh session cookie for /worktask curl I/O.
+# Starts `npm run dev` when the DEV API is down.
+# Writes: /tmp/tm-dev-cookies.txt (Netscape jar, cookie name taskmesh_session_dev)
 #
 # Credentials (optional for password path): ~/.config/taskmesh/worktask.env
 #   TASKMESH_EMAIL=…
 #   TASKMESH_PASSWORD=…
 # Optional API key (preferred long-term; no cookie jar):
 #   TASKMESH_API_KEY=taskmesh_rw_…
+# Optional API base (default http://127.0.0.1:3001):
+#   TASKMESH_API_BASE=http://127.0.0.1:3001
 #
 # Exit 0 on success. Prints "api_key" | "session" | "mint" to stdout as the mode.
 
 set -euo pipefail
 
-BASE="${TASKMESH_PROD_BASE:-http://127.0.0.1:3000}"
-COOKIE_JAR="${TASKMESH_COOKIE_JAR:-/tmp/tm-prod-cookies.txt}"
 CREDS_FILE="${TASKMESH_CREDS_FILE:-$HOME/.config/taskmesh/worktask.env}"
 REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-PROD_COOKIE_NAME="taskmesh_session"
 
 if [[ -f "$CREDS_FILE" ]]; then
   # shellcheck disable=SC1090
@@ -26,20 +26,46 @@ if [[ -f "$CREDS_FILE" ]]; then
   set +a
 fi
 
+BASE="${TASKMESH_API_BASE:-http://127.0.0.1:3001}"
+COOKIE_JAR="${TASKMESH_COOKIE_JAR:-/tmp/tm-dev-cookies.txt}"
+COOKIE_NAME="taskmesh_session_dev"
+export TASKMESH_COOKIE_JAR="$COOKIE_JAR"
+export TASKMESH_COOKIE_NAME="$COOKIE_NAME"
+
+ensure_api() {
+  if curl -fsS "$BASE/api/health" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "dev-login: DEV API not responding at $BASE; starting npm run dev" >&2
+  (
+    cd "$REPO_ROOT"
+    nohup npm run dev > /tmp/tm-dev-api.log 2>&1 &
+  )
+  local i
+  for i in $(seq 1 40); do
+    if curl -fsS "$BASE/api/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "dev-login: DEV API did not become healthy at $BASE (see /tmp/tm-dev-api.log)" >&2
+  return 1
+}
+
+ensure_api
+
 if [[ -n "${TASKMESH_API_KEY:-}" ]]; then
   echo "api_key"
   exit 0
 fi
-
-curl -fsS "$BASE/api/health" >/dev/null
 
 write_jar() {
   local session_id="$1"
   local expires="$2"
   cat >"$COOKIE_JAR" <<EOF
 # Netscape HTTP Cookie File
-# PROD worktask session (taskmesh_session)
-127.0.0.1	FALSE	/	FALSE	${expires}	${PROD_COOKIE_NAME}	${session_id}
+# DEV worktask session (taskmesh_session_dev)
+127.0.0.1	FALSE	/	FALSE	${expires}	${COOKIE_NAME}	${session_id}
 EOF
   chmod 600 "$COOKIE_JAR" 2>/dev/null || true
 }
@@ -69,11 +95,9 @@ if [[ -n "${TASKMESH_EMAIL:-}" && -n "${TASKMESH_PASSWORD:-}" ]]; then
       -d "$(jq -n --arg e "$TASKMESH_EMAIL" --arg p "$TASKMESH_PASSWORD" '{email:$e,password:$p}')"
   )"
   if [[ "$HTTP_CODE" == "200" ]] && jq -e '.data' "$BODY" >/dev/null 2>&1; then
-    # PROD Set-Cookie is Secure; curl often will not store it from http:// — parse manually.
     RAW="$(tr -d '\r' <"$HDRS" | awk -F': ' 'tolower($1)=="set-cookie"{print $2; exit}')"
-    SID="$(printf '%s' "$RAW" | sed -n "s/.*${PROD_COOKIE_NAME}=\([^;]*\).*/\1/p")"
+    SID="$(printf '%s' "$RAW" | sed -n "s/.*${COOKIE_NAME}=\([^;]*\).*/\1/p")"
     if [[ -n "$SID" ]]; then
-      # Max-Age if present; else ~7 days
       MAX_AGE="$(printf '%s' "$RAW" | sed -n 's/.*Max-Age=\([0-9]*\).*/\1/p')"
       EXPIRES="$(( $(date +%s) + ${MAX_AGE:-604800} ))"
       write_jar "$(printf '%b' "${SID//%/\\x}")" "$EXPIRES" 2>/dev/null || write_jar "$SID" "$EXPIRES"
@@ -85,7 +109,7 @@ if [[ -n "${TASKMESH_EMAIL:-}" && -n "${TASKMESH_PASSWORD:-}" ]]; then
   fi
 fi
 
-# --- Host-local session mint (app host only; shared DB with PROD) ---
+# --- Host-local session mint (this DEV host only; not for task row updates) ---
 cd "$REPO_ROOT"
 node --import tsx <<'EOF'
 import "dotenv/config";
@@ -95,7 +119,8 @@ import { createSession } from "./src/services/auth.ts";
 import { eq } from "drizzle-orm";
 import * as schema from "./src/db/schema.ts";
 
-const jar = process.env.TASKMESH_COOKIE_JAR || "/tmp/tm-prod-cookies.txt";
+const jar = process.env.TASKMESH_COOKIE_JAR || "/tmp/tm-dev-cookies.txt";
+const cookieName = process.env.TASKMESH_COOKIE_NAME || "taskmesh_session_dev";
 const email = process.env.TASKMESH_EMAIL?.trim();
 let userId = 1;
 if (email) {
@@ -110,7 +135,7 @@ const session = await createSession(db, userId);
 const expires = Math.floor(new Date(session.expiresAt).getTime() / 1000);
 fs.writeFileSync(
   jar,
-  `# Netscape HTTP Cookie File\n127.0.0.1\tFALSE\t/\tFALSE\t${expires}\ttaskmesh_session\t${session.id}\n`,
+  `# Netscape HTTP Cookie File\n127.0.0.1\tFALSE\t/\tFALSE\t${expires}\t${cookieName}\t${session.id}\n`,
 );
 fs.chmodSync(jar, 0o600);
 await pool.end();
@@ -121,5 +146,5 @@ if session_ok; then
   exit 0
 fi
 
-echo "prod-login: failed to establish PROD session" >&2
+echo "dev-login: failed to establish DEV session" >&2
 exit 1

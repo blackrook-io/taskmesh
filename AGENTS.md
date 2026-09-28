@@ -4,7 +4,7 @@ This repo is a **Node.js + TypeScript** API (**Express**, **PostgreSQL**, **Driz
 
 ## Schema documentation
 
-Human-readable database docs live under [docs/](docs/README.md) (start at [docs/database/overview.md](docs/database/overview.md)). Drizzle definitions remain in [`src/db/schema.ts`](src/db/schema.ts). When schema or migrations change, update `docs/database/` in the same change set, then run `npm run docs:sync-schema` to copy-replace the mirror into the **TaskMesh** project Documents (PROD). See [`.cursor/rules/schema-docs.mdc`](.cursor/rules/schema-docs.mdc).
+Human-readable database docs live under [docs/](docs/README.md) (start at [docs/database/overview.md](docs/database/overview.md)). Drizzle definitions remain in [`src/db/schema.ts`](src/db/schema.ts). When schema or migrations change, update `docs/database/` in the same change set, then run `npm run docs:sync-schema` to copy-replace the mirror into the **TaskMesh** project Documents on this host’s DEV API (`http://127.0.0.1:3001`). See [`.cursor/rules/schema-docs.mdc`](.cursor/rules/schema-docs.mdc).
 
 ## Cursor rules
 
@@ -13,9 +13,9 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **platform-rules.mdc** — product vision, stack, UI, security (always applied).
 - **coding-rules.mdc** — code quality expectations when editing `**/*.ts`.
 - **development-rules.mdc** — plan files under `.cursor/plans/`, archive to `executed/`, feature git workflow (start/approve/merge), and QA checklists.
-- **versioning.mdc** — SemVer bump on finish-up (MINOR for schema-changing features, PATCH otherwise); `createdAt` vs PROD `releasedAt`; same-commit [`RELEASE_NOTES.md`](RELEASE_NOTES.md) update; update [`FEATURES.md`](FEATURES.md) when major user-facing features ship.
+- **versioning.mdc** — SemVer bump on finish-up (MINOR for schema-changing features, PATCH otherwise); `createdAt` in git, `releasedAt` only when a production host is deployed; same-commit [`RELEASE_NOTES.md`](RELEASE_NOTES.md) update; update [`FEATURES.md`](FEATURES.md) when major user-facing features ship.
 - **schema-docs.mdc** — keep `docs/database/` in sync when `schema.ts` / migrations change.
-- **`/worktask` skill** — [.cursor/skills/worktask/SKILL.md](.cursor/skills/worktask/SKILL.md): explicit Task Number → plan → `T####-*` branch → PROD task In Progress / Complete bookkeeping.
+- **`/worktask` skill** — [.cursor/skills/worktask/SKILL.md](.cursor/skills/worktask/SKILL.md): explicit Task Number → plan → `T####-*` branch → DEV API task In Progress / Complete bookkeeping. This host is DEV only (`npm run dev` on `:3001`). Finish-up does not deploy.
 
 ## Shared conventions (Phase 0+)
 
@@ -26,20 +26,20 @@ Persistent product and engineering context is under [.cursor/rules/](.cursor/rul
 - **Design tokens** — see `client/src/index.css` (`--canvas-bg`, `--radius-chip`, `--focus-ring`, etc.).
 - **Canvases** — Excalidraw (`@excalidraw/excalidraw`, MIT) in `CanvasEditor`; scene JSON in `canvases.document`. Fonts copied on client `postinstall` to `public/excalidraw-assets/`.
 - **Command palette** — Ctrl/Cmd+K (Phase 9a); see `client/src/components/CommandPalette.tsx`.
-- **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks). **QA follow-ups** (new work or corrections during review): update the active plan, mention them in the commit message, and for `/worktask` post a PROD Task comment (also include them in the completion comment). Before opening a PR (or on finish-up), run **`npm run lint`** — it must match the GitHub Actions client ESLint hard gate (`client/eslint.config.js`, `--max-warnings 0`).
-- **Feature git** — on start: branch `T####-short-slug` (worktask) or `phase-N-short-slug` (ad-hoc) from updated `main` (SSH remotes only). **Finish up** (user approval to close): commit on the feature branch (including SemVer bump per [versioning.mdc](.cursor/rules/versioning.mdc), a [`RELEASE_NOTES.md`](RELEASE_NOTES.md) prepend for that version, and [`FEATURES.md`](FEATURES.md) updates when major user-facing features ship) → archive the plan under `.cursor/plans/executed/` **on the feature branch** → push the feature branch over SSH → open PR → wait for required CI → merge on GitHub → pull `main` → delete local/remote feature branch(es) → **`npm run deploy:prod`** (confirm `:3000` + nginx HTTPS health checks) → for `/worktask`, mark the PROD Task `complete` and add a completion comment. Never push commits directly to `main`.
+- **Delivery** — at the end of every implementation pass, give the user a step-by-step **QA checklist** (features and flows to examine for approval or tweaks). **QA follow-ups** (new work or corrections during review): update the active plan, mention them in the commit message, and for `/worktask` post a Task comment on the DEV API (also include them in the completion comment). Before opening a PR (or on finish-up), run **`npm run lint`** — it must match the GitHub Actions client ESLint hard gate (`client/eslint.config.js`, `--max-warnings 0`).
+- **Feature git** — on start: branch `T####-short-slug` (worktask) or `phase-N-short-slug` (ad-hoc) from updated `main` (SSH remotes only). **Finish up** (user approval to close): commit on the feature branch (including SemVer bump per [versioning.mdc](.cursor/rules/versioning.mdc), a [`RELEASE_NOTES.md`](RELEASE_NOTES.md) prepend for that version, and [`FEATURES.md`](FEATURES.md) updates when major user-facing features ship) → archive the plan under `.cursor/plans/executed/` **on the feature branch** → push the feature branch over SSH → open PR → wait for required CI → merge on GitHub → pull `main` → delete local/remote feature branch(es) → for `/worktask`, mark the Task `complete` on the DEV API and add a completion comment. **Do not deploy.** This development host runs only `npm run dev` / `dev:web`. The public Production site is upgraded by the Administrator from a GitHub Release ([UPGRADES.md](UPGRADES.md)). Never push commits directly to `main`.
 
 ## Common commands
 
 | Goal | Command |
 |------|---------|
-| API + SPA dev (two processes) | `npm run dev:web` — UI **:5173**, DEV API **:3001** (PROD stays on **:3000** / nginx **:80**) |
+| API + SPA dev (this host’s only server) | `npm run dev:web` — UI **:5173**, DEV API **:3001**. Do not also run a production API on **:3000** |
 | Dev API only | `npm run dev` |
 | Client ESLint (same as CI hard gate) | `npm run lint` — runs `client` ESLint with `--max-warnings 0` (includes `react-hooks/set-state-in-effect`) |
 | Production bundles | `npm run build:all` then `NODE_ENV=production npm start` |
 | DB migrations | `npm run db:migrate` |
 | After editing `src/db/schema.ts` | `npm run db:generate`, review `drizzle/`, then `npm run db:migrate`; update [docs/database/](docs/database/overview.md); `npm run docs:sync-schema` |
-| Sync schema docs → TaskMesh Documents | `npm run docs:sync-schema` (PROD `:3000`, project id 4) |
+| Sync schema docs → TaskMesh Documents | `npm run docs:sync-schema` (DEV `:3001`, project id 4) |
 
 Health check when running locally: `GET /api/health`.
 

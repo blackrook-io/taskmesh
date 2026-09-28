@@ -6,7 +6,7 @@ payloads, fuzz bombs, or attack PoCs.
 
 ## Quick start
 
-From the repo root (default target: PROD `http://127.0.0.1:3000`):
+From the repo root (default target: a production API on `http://127.0.0.1:3000`). This development host runs only the DEV API, so pass `--base-url http://127.0.0.1:3001` here:
 
 ```bash
 npm run security:scan

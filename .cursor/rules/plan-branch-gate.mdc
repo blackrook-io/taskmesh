@@ -38,6 +38,6 @@ to `main`.
 Follow [development-rules.mdc](development-rules.mdc) for the full git and
 "finish up" workflow (commit on feature branch → archive plan on that branch →
 push feature branch over SSH → PR + required CI → merge on GitHub → pull `main`
-→ delete feature branch → `npm run deploy:prod`, plus worktask PROD Task
-Complete + comment when applicable). Never push commits directly to `main`.
+→ delete feature branch, plus worktask Task Complete + comment on the DEV API
+when applicable). Finish-up does not deploy. Never push commits directly to `main`.
 Give a QA checklist at the end of each implementation pass.

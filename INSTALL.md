@@ -816,9 +816,9 @@ In a browser on the LAN: open `http://<server-ip>/`, create a project, attach an
 
 For a tagged release (including 0.5 Beta), follow [UPGRADES.md](UPGRADES.md) first. It tells you to back up and to read the GitHub Release for breaking changes. The commands below are the same-host promote and the manual fallback after you have checked out the version you want.
 
-### Same-host promote to production (:80)
+### Same-host promote on a production checkout
 
-When Dev and Prod share `/srv/taskmesh` (Vite **:5173** + DEV API **:3001**, systemd Express **:3000** + nginx **:80**), promote the **current working tree** with:
+`npm run deploy:prod` rebuilds the checkout systemd is already serving and restarts that production process. The development host runs only the DEV server and does not use this script. On a production host, promote the **current working tree** with:
 
 ```bash
 cd /srv/taskmesh
@@ -827,7 +827,7 @@ npm run deploy:prod
 # npm run deploy:prod -- --skip-install --skip-migrate
 ```
 
-[`deploy/deploy-prod.sh`](deploy/deploy-prod.sh) runs install → migrate → `build:all` → restart `taskmesh` (passwordless `sudo systemctl` when available; otherwise signals the service MainPID so systemd `Restart=on-failure` reloads `dist/`), then health-checks `:3000` and nginx HTTPS (`:80` redirects to `:443`). It does not stop `dev:web`.
+[`deploy/deploy-prod.sh`](deploy/deploy-prod.sh) runs install → migrate → `build:all` → restart `taskmesh` (passwordless `sudo systemctl` when available; otherwise signals the service MainPID so systemd `Restart=on-failure` reloads `dist/`), then health-checks `:3000` and nginx HTTPS (`:80` redirects to `:443`).
 
 ### Manual update (fallback)
 
