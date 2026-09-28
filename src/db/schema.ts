@@ -33,6 +33,8 @@ export const ideas = pgTable("ideas", {
   assigneeId: integer("assignee_id").references(() => users.id, {
     onDelete: "set null",
   }),
+  /** Manual Ideas list order. Lower comes first. Column sort does not write this. */
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

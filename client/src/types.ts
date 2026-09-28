@@ -5,6 +5,7 @@ export type Idea = {
   body: string | null;
   assigneeId?: number | null;
   assignee?: UserRef | null;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };

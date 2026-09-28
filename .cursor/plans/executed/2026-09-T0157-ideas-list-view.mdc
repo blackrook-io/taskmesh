@@ -1,0 +1,55 @@
+# T0157 — Ideas list uses the shared List View
+
+**Task:** T0157 (id 170) · **Branch (on approval):** `T0157-ideas-list-view`  
+**State at plan:** `ready` · Depends on T0051 (`complete`)
+
+## Goal
+
+Put the Ideas list on the reusable list chrome shipped by T0051 (`RecordListHeader`, `RecordListModeBar`, persisted column sort, drag reorder). Keep idea rows, personalize, and open behavior on `IdeasListPage`. Do not fork a second grid.
+
+## Proposed decisions (confirm before implement)
+
+| # | Proposal |
+|---|----------|
+| 1 | Shared chrome only. `IdeasListPage` keeps cell rendering, double-click / Open, and column personalize. Header and mode bar come from `RecordListView`. Sort persistence uses `usePersistedRecordListSort` (localStorage), same rule as ToDo. |
+| 2 | **Manual order is the default.** New `ideas.sort_order`. While it is active, no column header shows a sort. Choosing a sortable column leaves manual order until the third click on that column or the Manual order control. |
+| 3 | **Seed** existing ideas so the first manual order matches today’s default (newest `createdAt` first, then `id`). **New ideas** are inserted at the start of that order so they appear at the top until dragged. |
+| 4 | **Drop** URL `?sort=` / `?order=` and tag-section grouping (`sort=tag`, which repeats an idea under each tag). Tags stay a column and stay sortable as a single string of tag names. Old query params are ignored. |
+| 5 | **Client-side clause filter** modeled on the ToDo filter bar (localStorage, not the task filter engine). Fields: title, tags, created date, updated date, assignee. Drag is off while a filter matches a subset, with the same short hint as ToDo. |
+| 6 | Folding and project groups stay out. Assignee stays a column; it is not sortable in the catalog (`sortable: false`). |
+
+## Out of scope
+
+- Task boards, the global Tasks page, and ToDo lists.
+- Unifying the task filter engine with the ToDo / Ideas filter.
+- Parent/child folding or project groups.
+- Making assignee sortable (catalog already says no).
+
+## Schema
+
+Add `ideas.sort_order` integer, not null, default `0`.
+
+Backfill in the migration: `ROW_NUMBER()` over `created_at DESC, id DESC` so the lowest `sort_order` is the newest idea.
+
+Reorder endpoint: `PATCH /api/v1/ideas/reorder` with `orderedIds` listing every idea the caller can see, exactly once (same completeness rule as ToDo item reorder). Create sets `sort_order` to one less than the current minimum (or `0` when the table is empty) so the new row is first in manual order.
+
+Update `docs/database/` for the column, then `npm run docs:sync-schema`.
+
+This migration is a MINOR version bump on finish-up.
+
+## UI
+
+- Header: `RecordListHeader` over the existing ideas grid template, plus a drag-handle track (same chrome pattern as ToDo). Sortable catalog columns: title, tags, createdAt, number, updatedAt.
+- Mode bar: `RecordListModeBar`. Drag handle hidden when a column sort is active or a filter is active.
+- Filter bar above the list, Ideas field set only.
+- Empty list and “no rows match the filter” stay distinct.
+- Personalize (right-click header) stays as it is.
+
+## QA notes for the implementation pass
+
+- Reload Ideas with no column highlighted: order matches newest-created first until a drag.
+- Drag two ideas, reload: that order sticks; headers are not sorted.
+- Click Title: rows sort; handles hide. Third click or Manual order: saved drag order returns.
+- Filter by a tag: only matching ideas; drag stays off until the filter is cleared.
+- Create an idea: it appears at the top of manual order.
+- A bookmarked `?sort=tag` URL no longer groups by tag sections.

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -11,6 +11,7 @@ import {
   assertCanAccessOwned,
   ownerScope,
 } from "../../services/ownership.js";
+import { nextIdeaSortOrder } from "../../services/ideaSortOrder.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId, attachAssignees, attachAssignee } from "../../services/users.js";
@@ -30,6 +31,10 @@ const ideaPatch = z.object({
 
 const idParam = z.coerce.number().int().positive();
 
+const reorderBody = z.object({
+  orderedIds: z.array(z.number().int().positive()),
+});
+
 export const ideasRouter = Router();
 
 ideasRouter.get("/", async (_req, res) => {
@@ -41,7 +46,7 @@ ideasRouter.get("/", async (_req, res) => {
       .select()
       .from(schema.ideas)
       .where(scope)
-      .orderBy(desc(schema.ideas.updatedAt));
+      .orderBy(asc(schema.ideas.sortOrder), asc(schema.ideas.id));
     res.json({ data: await attachAssignees(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
@@ -54,6 +59,7 @@ ideasRouter.post("/", async (req, res) => {
     const number = await allocateIdeaNumber(db);
     const ownerId = await getCurrentUserId(db);
     const assigneeId = resolveIdeaAssigneeId(parsed.assigneeId);
+    const sortOrder = await nextIdeaSortOrder(db);
     const [row] = await db
       .insert(schema.ideas)
       .values({
@@ -62,6 +68,7 @@ ideasRouter.post("/", async (req, res) => {
         body: parsed.body ?? null,
         ownerId,
         assigneeId,
+        sortOrder,
       })
       .returning();
     if (!row) {
@@ -69,6 +76,40 @@ ideasRouter.post("/", async (req, res) => {
       return;
     }
     res.status(201).json({ data: await attachAssignee(db, row) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+ideasRouter.patch("/reorder", async (req, res) => {
+  try {
+    const { orderedIds } = reorderBody.parse(req.body);
+    const actorId = await getCurrentUserId(db);
+    const isAdmin = await userHasAdministrator(db, actorId);
+    const scope = ownerScope(schema.ideas.ownerId, actorId, isAdmin);
+    const existing = await db.select({ id: schema.ideas.id }).from(schema.ideas).where(scope);
+    const allowed = new Set(existing.map((row) => row.id));
+    if (orderedIds.length !== allowed.size || new Set(orderedIds).size !== orderedIds.length) {
+      sendError(res, 400, "invalid_reorder", "orderedIds must list every idea exactly once");
+      return;
+    }
+    for (const id of orderedIds) {
+      if (!allowed.has(id)) {
+        sendError(res, 400, "invalid_reorder", "orderedIds must list every idea exactly once");
+        return;
+      }
+    }
+    for (let i = 0; i < orderedIds.length; i++) {
+      const id = orderedIds[i];
+      if (id === undefined) continue;
+      await db.update(schema.ideas).set({ sortOrder: i }).where(eq(schema.ideas.id, id));
+    }
+    const rows = await db
+      .select()
+      .from(schema.ideas)
+      .where(scope)
+      .orderBy(asc(schema.ideas.sortOrder), asc(schema.ideas.id));
+    res.json({ data: await attachAssignees(db, rows) });
   } catch (err) {
     handleRouteError(res, err);
   }

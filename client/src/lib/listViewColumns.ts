@@ -65,6 +65,7 @@ const IDEA_TRACK: Record<string, string> = {
 };
 
 const TASK_CHROME = "6px 1.5rem 1.75rem";
+const IDEA_CHROME = "1.5rem";
 const IDEA_CHROME_END = "4.5rem";
 
 export function fieldAppliesToSurface(field: ListViewField, surface: ListViewSurface): boolean {
@@ -129,7 +130,7 @@ export function buildTodoListGridTemplate(visible: ResolvedListColumn[]): string
 
 export function buildIdeasListGridTemplate(visible: ResolvedListColumn[]): string {
   const tracks = visible.map((c) => IDEA_TRACK[c.fieldKey] ?? "minmax(5rem, 8rem)");
-  return `${tracks.join(" ")} ${IDEA_CHROME_END}`;
+  return `${IDEA_CHROME} ${tracks.join(" ")} ${IDEA_CHROME_END}`;
 }
 
 export function formatListDate(iso: string | null | undefined): string {

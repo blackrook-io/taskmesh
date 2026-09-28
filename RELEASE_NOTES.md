@@ -4,6 +4,13 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.53.0 — 2026-09-28
+
+### Enhancements
+- The Ideas list uses the same column header as To Do lists. Drag reorder is the default. Clicking a column sorts the list and turns drag off until you return to the saved order.
+- Filter Ideas by title, tags, created date, updated date, or assignee. Drag stays off while a filter is hiding rows.
+- New ideas appear at the top of the manual order. Existing ideas stay newest-created first until you drag them.
+
 ## 0.52.0 — 2026-09-28
 
 ### Enhancements

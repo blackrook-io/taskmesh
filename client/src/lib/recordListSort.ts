@@ -12,6 +12,8 @@ export function storageKeyForTodoListSort(listId: number): string {
   return `taskmesh.todoListSort.list:${listId}`;
 }
 
+export const IDEAS_LIST_SORT_STORAGE_KEY = "taskmesh.ideasListSort";
+
 export function isSameRecordListSort(a: RecordListSort, b: RecordListSort): boolean {
   return a.col === b.col && a.dir === b.dir;
 }
