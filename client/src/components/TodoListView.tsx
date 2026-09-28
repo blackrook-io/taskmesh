@@ -288,7 +288,7 @@ function pointerClientY(event: DragMoveEvent): number | null {
 
 function hintKey(hint: TodoDragHint | null): string {
   if (!hint) return "";
-  if (hint.kind === "root" || hint.kind === "root-reject") return hint.kind;
+  if (!("itemId" in hint)) return hint.kind;
   return `${hint.kind}:${hint.itemId}`;
 }
 
