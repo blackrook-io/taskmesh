@@ -12,10 +12,19 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import "@xyflow/react/dist/style.css";
 import { apiJson } from "../api/client";
 import { MeshShape } from "./MeshShape";
+import { buildMeshCard, type MeshCardModel } from "../lib/meshCard";
 import { formatEntityRef } from "../lib/entityRef";
 import {
   layoutMesh,
@@ -28,6 +37,7 @@ import {
   hiddenOverdueCounts,
   isStale,
   schedule,
+  stateAppearance,
   type MeshColorMode,
 } from "../lib/meshSignals";
 import type { Project } from "../types";
@@ -56,7 +66,14 @@ type MeshNodeData = {
   y: number;
   enterFrom: { x: number; y: number } | null;
   reduceMotion: boolean;
+  cardText: string;
   onOpen: (key: string) => void;
+  onPointerEnter: (key: string) => void;
+  onPointerLeave: () => void;
+  onFocusNode: (key: string) => void;
+  onBlurNode: () => void;
+  armTouch: (key: string) => void;
+  consumeTouch: (key: string) => boolean;
 };
 
 const COLOR_MODES: { id: MeshColorMode; label: string }[] = [
@@ -186,10 +203,97 @@ function MeshEdge({
   );
 }
 
+function cardDescId(key: string): string {
+  return `mesh-card-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function placeMeshCard(canvas: HTMLElement, card: HTMLElement, key: string): boolean {
+  const node = canvas.querySelector(`[data-mesh-key="${CSS.escape(key)}"]`);
+  if (!(node instanceof HTMLElement)) return false;
+  const host = canvas.getBoundingClientRect();
+  const box = node.getBoundingClientRect();
+  const width = card.offsetWidth;
+  const height = card.offsetHeight;
+  let left = box.right - host.left + 12;
+  if (left + width > host.width - 8) left = box.left - host.left - width - 12;
+  left = Math.max(8, Math.min(left, host.width - width - 8));
+  let top = box.top - host.top - 8;
+  top = Math.max(8, Math.min(top, host.height - height - 8));
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
+  return true;
+}
+
 function prefersReducedMotion(): boolean {
   return (
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function MeshHoverCard({
+  model,
+  cardRef,
+  onPointerEnter,
+  onPointerLeave,
+}: {
+  model: MeshCardModel;
+  cardRef: RefObject<HTMLDivElement | null>;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+}) {
+  const stateInk = stateAppearance(model.state);
+  return (
+    <div
+      ref={cardRef}
+      className="mesh-card"
+      aria-hidden="true"
+      style={{ visibility: "hidden" }}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
+      <div className="mesh-card__eyebrow">
+        <span className="mesh-card__type" style={{ color: `var(--mesh-type-${model.type})` }}>
+          {model.typeLabel}
+        </span>
+        {model.referenceId ? <span>{model.referenceId}</span> : null}
+      </div>
+      <h3>{model.title}</h3>
+      {model.stateLabel || model.priorityLabel ? (
+        <div className="mesh-card__pills">
+          {model.stateLabel ? (
+            <span className="mesh-card__pill" style={{ color: stateInk.color }}>
+              {model.stateLabel}
+            </span>
+          ) : null}
+          {model.priorityLabel && model.priority ? (
+            <span
+              className="mesh-card__pill"
+              style={{ color: `var(--task-priority-${model.priority})` }}
+            >
+              {model.priorityLabel}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {model.progress != null ? (
+        <div className="mesh-card__bar" aria-hidden="true">
+          <i style={{ width: `${Math.max(0, Math.min(100, model.progress))}%` }} />
+        </div>
+      ) : null}
+      {model.rows.length > 0 ? (
+        <dl>
+          {model.rows.map((row) => (
+            <Fragment key={row.label}>
+              <dt>{row.label}</dt>
+              <dd className={row.tone ? `mesh-card__${row.tone}` : undefined}>{row.value}</dd>
+              {row.quote ? <dd className="mesh-card__quote">{row.quote}</dd> : null}
+            </Fragment>
+          ))}
+        </dl>
+      ) : null}
+      <p className="mesh-card__hint">{model.hint}</p>
+    </div>
   );
 }
 
@@ -235,19 +339,45 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         ref={buttonRef}
         type="button"
         className={`mesh-node mesh-node--${data.role}`}
+        data-mesh-key={id}
         aria-label={label}
+        aria-describedby={cardDescId(id)}
         title={data.title}
-        onClick={() => data.onOpen(id)}
+        onPointerDown={(event) => {
+          if (event.pointerType === "touch") data.armTouch(id);
+        }}
+        onClick={(event) => {
+          if (data.consumeTouch(id)) {
+            event.preventDefault();
+            return;
+          }
+          data.onOpen(id);
+        }}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
           data.onOpen(id);
         }}
-        onMouseEnter={(event) => paintMeshHot(event.currentTarget, id)}
-        onMouseLeave={(event) => paintMeshHot(event.currentTarget, null)}
-        onFocus={(event) => paintMeshHot(event.currentTarget, id)}
-        onBlur={(event) => paintMeshHot(event.currentTarget, null)}
+        onMouseEnter={(event) => {
+          paintMeshHot(event.currentTarget, id);
+          data.onPointerEnter(id);
+        }}
+        onMouseLeave={(event) => {
+          paintMeshHot(event.currentTarget, null);
+          data.onPointerLeave();
+        }}
+        onFocus={(event) => {
+          paintMeshHot(event.currentTarget, id);
+          data.onFocusNode(id);
+        }}
+        onBlur={(event) => {
+          paintMeshHot(event.currentTarget, null);
+          data.onBlurNode();
+        }}
       >
+        <span id={cardDescId(id)} className="sr-only">
+          {data.cardText}
+        </span>
         <span className="mesh-mark">
           {data.schedule === "overdue" ? (
             <span className={data.pulse ? "mesh-ring mesh-ring--overdue mesh-ring--pulse" : "mesh-ring mesh-ring--overdue"} />
@@ -363,6 +493,75 @@ export function MeshPanel({ projectId }: { projectId: number }) {
     projectsQuery.data?.find((project) => project.id === projectId)?.name ?? "this project";
 
   const reduceMotion = prefersReducedMotion();
+  const [cardKey, setCardKey] = useState<string | null>(null);
+  const cardKeyRef = useRef<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const showTimer = useRef<number | null>(null);
+  const hideTimer = useRef<number | null>(null);
+  const touchArmed = useRef<string | null>(null);
+  const clearShow = useCallback(() => {
+    if (showTimer.current != null) window.clearTimeout(showTimer.current);
+    showTimer.current = null;
+  }, []);
+  const clearHide = useCallback(() => {
+    if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  }, []);
+  const dismissCard = useCallback(() => {
+    clearShow();
+    clearHide();
+    cardKeyRef.current = null;
+    setCardKey(null);
+  }, [clearHide, clearShow]);
+  const showCardNow = useCallback(
+    (key: string) => {
+      clearShow();
+      clearHide();
+      cardKeyRef.current = key;
+      setCardKey(key);
+    },
+    [clearHide, clearShow],
+  );
+  const scheduleShow = useCallback(
+    (key: string) => {
+      clearHide();
+      clearShow();
+      showTimer.current = window.setTimeout(() => {
+        cardKeyRef.current = key;
+        setCardKey(key);
+      }, 200);
+    },
+    [clearHide, clearShow],
+  );
+  const scheduleHide = useCallback(() => {
+    clearShow();
+    clearHide();
+    hideTimer.current = window.setTimeout(() => {
+      cardKeyRef.current = null;
+      setCardKey(null);
+    }, 180);
+  }, [clearHide, clearShow]);
+  const armTouch = useCallback((key: string) => {
+    touchArmed.current = cardKeyRef.current === key ? null : key;
+  }, []);
+  const consumeTouch = useCallback(
+    (key: string) => {
+      if (touchArmed.current !== key) return false;
+      touchArmed.current = null;
+      showCardNow(key);
+      return true;
+    },
+    [showCardNow],
+  );
+  const placeCard = useCallback(() => {
+    const key = cardKeyRef.current;
+    const canvas = canvasRef.current;
+    const card = cardRef.current;
+    if (!key || !canvas || !card) return;
+    const placed = placeMeshCard(canvas, card, key);
+    card.style.visibility = placed ? "visible" : "hidden";
+  }, []);
   const layout = useMemo(() => {
     if (!graphQuery.data) return null;
     return layoutMesh({
@@ -373,6 +572,20 @@ export function MeshPanel({ projectId }: { projectId: number }) {
       projectRefs,
     });
   }, [focusKey, graphQuery.data, projectId, projectRefs]);
+  useLayoutEffect(() => {
+    placeCard();
+    const viewport = canvasRef.current?.querySelector(".react-flow__viewport");
+    if (!(viewport instanceof HTMLElement) || !cardKey) return;
+    const observer = new MutationObserver(() => placeCard());
+    observer.observe(viewport, { attributes: true, attributeFilter: ["style"] });
+    return () => observer.disconnect();
+  }, [cardKey, layout, placeCard]);
+  useLayoutEffect(() => {
+    return () => {
+      clearShow();
+      clearHide();
+    };
+  }, [clearHide, clearShow]);
 
   const focusRecord = graphQuery.data?.nodes.find((node) => node.key === focusKey);
   const outsideProject =
@@ -414,6 +627,7 @@ export function MeshPanel({ projectId }: { projectId: number }) {
 
   const openNode = useCallback(
     (key: string) => {
+      dismissCard();
       if (key === focusKey) return;
       rememberMotion();
       setStack((prev) => {
@@ -422,14 +636,36 @@ export function MeshPanel({ projectId }: { projectId: number }) {
         return [...prev, key];
       });
     },
-    [focusKey, rememberMotion],
+    [dismissCard, focusKey, rememberMotion],
   );
 
   const goBack = useCallback(() => {
     if (stack.length < 2) return;
+    dismissCard();
     rememberMotion();
     setStack((prev) => prev.slice(0, -1));
-  }, [rememberMotion, stack.length]);
+  }, [dismissCard, rememberMotion, stack.length]);
+
+  const cards = useMemo(() => {
+    const map = new Map<string, MeshCardModel>();
+    if (!layout || !graphQuery.data) return map;
+    for (const node of layout.nodes) {
+      const record = graphByKey.get(node.key);
+      if (!record) continue;
+      map.set(
+        node.key,
+        buildMeshCard({
+          node: { ...record, projectLabel: node.projectLabel },
+          nodes: graphQuery.data.nodes,
+          edges: graphQuery.data.edges,
+          today,
+          staleDays: chrome.staleDays,
+          isFocus: node.role === "focus",
+        }),
+      );
+    }
+    return map;
+  }, [chrome.staleDays, graphByKey, graphQuery.data, layout, today]);
 
   const flowNodes: MeshFlowNode[] = layout
     ? layout.nodes.map((node) => {
@@ -458,7 +694,14 @@ export function MeshPanel({ projectId }: { projectId: number }) {
             y: node.y,
             enterFrom: !motion.seen.has(node.key) && motion.origin && !reduceMotion ? motion.origin : null,
             reduceMotion,
+            cardText: cards.get(node.key)?.description ?? node.title,
             onOpen: openNode,
+            onPointerEnter: scheduleShow,
+            onPointerLeave: scheduleHide,
+            onFocusNode: showCardNow,
+            onBlurNode: scheduleHide,
+            armTouch,
+            consumeTouch,
           },
           draggable: false,
           connectable: false,
@@ -492,6 +735,8 @@ export function MeshPanel({ projectId }: { projectId: number }) {
             : undefined,
       }))
     : [];
+
+  const hoverCard = cardKey ? (cards.get(cardKey) ?? null) : null;
 
   return (
     <section className="mesh-panel" aria-label="Mesh">
@@ -561,7 +806,7 @@ export function MeshPanel({ projectId }: { projectId: number }) {
         </p>
       ) : null}
       {layout && layout.nodes.length > 0 ? (
-        <div className="mesh-canvas">
+        <div className="mesh-canvas" ref={canvasRef}>
           <svg className="mesh-hot-marker" aria-hidden="true">
             <defs>
               <marker
@@ -596,6 +841,8 @@ export function MeshPanel({ projectId }: { projectId: number }) {
             zoomOnScroll={false}
             minZoom={1}
             maxZoom={1.75}
+            onMove={placeCard}
+            onMoveEnd={placeCard}
             defaultViewport={{ x: 48, y: 120, zoom: 1 }}
             proOptions={{ hideAttribution: false }}
             colorMode="dark"
@@ -622,6 +869,17 @@ export function MeshPanel({ projectId }: { projectId: number }) {
               ))}
             </ViewportPortal>
           </ReactFlow>
+          {hoverCard ? (
+            <MeshHoverCard
+              cardRef={cardRef}
+              model={hoverCard}
+              onPointerEnter={() => {
+                clearShow();
+                clearHide();
+              }}
+              onPointerLeave={scheduleHide}
+            />
+          ) : null}
         </div>
       ) : null}
       <section className="mesh-legend">

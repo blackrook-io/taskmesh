@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.57.1 — 2026-10-11
+
+### Enhancements
+- Hover or focus a record on Mesh to see its state, due date, last change, comment, contents, blockers, and links. The card sits beside the record, follows the canvas, and a first touch opens it without changing focus.
+
 ## 0.57.0 — 2026-10-11
 
 ### Enhancements

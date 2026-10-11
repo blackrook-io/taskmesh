@@ -7573,6 +7573,7 @@ a:focus-visible {
   padding: 0.8rem 0.9rem;
 }
 .mesh-canvas {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
@@ -7658,6 +7659,100 @@ a:focus-visible {
   opacity: 0.65;
   pointer-events: none;
   white-space: nowrap;
+}
+.mesh-card {
+  position: absolute;
+  z-index: 6;
+  width: 280px;
+  max-width: calc(100% - 16px);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--bg) 55%, transparent);
+  font-size: 0.82rem;
+  pointer-events: auto;
+}
+.mesh-card__eyebrow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.mesh-card__type {
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mesh-card h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.3;
+}
+.mesh-card__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.mesh-card__pill {
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+.mesh-card__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  overflow: hidden;
+}
+.mesh-card__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--text);
+  border-radius: 3px;
+}
+.mesh-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.6rem;
+}
+.mesh-card dt {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.mesh-card dd {
+  margin: 0;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mesh-card__danger {
+  color: var(--mesh-signal-overdue);
+}
+.mesh-card__warning {
+  color: var(--mesh-signal-risk);
+}
+.mesh-card__quote {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.1rem 0 0.1rem 0.6rem;
+  border-left: 2px solid var(--border);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.mesh-card__hint {
+  margin: 0;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 .mesh-node {
   display: flex;
