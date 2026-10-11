@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.4 — 2026-10-11
+
+### Fixes
+- Hovering a Mesh record no longer leaves the browser title tooltip on top of the detail card. The tooltip appears only when the on-canvas title is truncated, and it is removed while that card is open. The card heading wraps the full title.
+
 ## 0.58.3 — 2026-10-11
 
 ### Enhancements

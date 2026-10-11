@@ -1,0 +1,51 @@
+# T0250 — Mesh hover tooltip blocks the card
+
+**Task:** T0250 (id `265`) — Mesh: When mouse-hovering, alt text blocks modals  
+**Parent:** T0159 (id `172`) — Mesh: relationship graph, backlinks and focus view (epic)  
+**State at plan:** `ready` · Priority: urgent · Project: TaskMesh (4)  
+**Branch (after approval):** `T0250-mesh-hover-tooltip`
+
+## Context
+
+Mesh record nodes set a native `title={data.title}` on the node button (`MeshRecordNode` in `client/src/components/MeshPanel.tsx`). The browser draws that as a tooltip on hover. The same hover opens the mesh card after 200ms (`scheduleShow`). The tooltip paints on top of the card and blocks it.
+
+The on-canvas label is already clamped to two lines (`.mesh-title`, `-webkit-line-clamp: 2`). The card heading (`.mesh-card h3`) is the full title, but long tokens can overflow the 280px card because the heading does not wrap unbroken strings.
+
+No schema change. Depends-on is empty.
+
+## Size / split
+
+One CSS + node-attribute fix. Suitable as a single worktask. No split.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Tooltip only when truncated.** Set the native `title` only when the on-canvas `.mesh-title` is actually clamped (scroll height/width greater than the visible box). Short titles get no browser tooltip.
+2. **Tooltip off while the card is open.** When this node’s hover card (or suggestion card) is showing, omit `title` so the browser tooltip does not cover the card. The card heading is the full title.
+3. **Card heading wraps.** `.mesh-card h3` uses normal word wrap, including long unbroken titles (`overflow-wrap: break-word`), so the full title is readable inside the card.
+4. **On-canvas label stays clamped.** The node label remains two lines. The full title lives in the card, not by expanding the node (expanding would shift the graph). Say if you want the node label itself to unclamp on hover instead.
+
+## Goal
+
+Hovering a mesh node shows the detail card without a browser title tooltip covering it. The tooltip appears only for a truncated on-canvas title, and it is absent while that node’s card is open.
+
+## Scope
+
+**In scope**
+
+1. Measure `.mesh-title` truncation in `MeshRecordNode` and set `title` only when clamped.
+2. Pass whether this node’s card is open (`cardKey === node.key`) and clear `title` in that case.
+3. Word-wrap `.mesh-card h3`.
+
+**Out of scope**
+
+- Other surfaces’ tooltips (lists, boards, drawers).
+- Changing hover delay, card placement, or graph layout.
+- Unclamping the on-canvas label.
+
+## Verification
+
+- Truncated mesh title: hover opens the card; no browser tooltip sits on top of it; card heading shows the full title wrapped.
+- Short title that fits in two lines: no browser tooltip.
+- Leave the node: card hides; a truncated node may show its tooltip again only while the card is closed.
+- Suggestion nodes follow the same rule.
+- `npm run lint` clean for touched client files.
