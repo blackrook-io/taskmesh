@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   containmentParent,
   layoutMesh,
+  MESH_COLUMN_PITCH,
+  meshEdgeHandles,
   meshNodesOverlap,
   type MeshGraphEdge,
   type MeshGraphNode,
@@ -293,5 +295,54 @@ describe("mesh cascade layout", () => {
     assert.equal(layout.nodes.filter((item) => item.key === "task:1").length, 1);
     assert.equal(layout.nodes.find((item) => item.key === "task:1")?.role, "child");
     assert.equal(layout.edges.some((edge) => edge.kind === "suggested"), true);
+  });
+});
+
+describe("mesh edge handles", () => {
+  it("keeps a rightward line on the right-to-left ports", () => {
+    assert.deepEqual(meshEdgeHandles(0, MESH_COLUMN_PITCH), { sourceHandle: "r", targetHandle: "l" });
+  });
+
+  it("leaves a leftward line on the left and enters on the right", () => {
+    assert.deepEqual(meshEdgeHandles(MESH_COLUMN_PITCH, 0), {
+      sourceHandle: "l-out",
+      targetHandle: "r-in",
+    });
+  });
+
+  it("brackets a same-column line on the right", () => {
+    assert.deepEqual(meshEdgeHandles(100, 100), { sourceHandle: "r", targetHandle: "r-in" });
+    assert.deepEqual(meshEdgeHandles(0, MESH_COLUMN_PITCH / 2 - 1), {
+      sourceHandle: "r",
+      targetHandle: "r-in",
+    });
+  });
+
+  it("uses those handles for depends lines in a cascade", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Parent", "T0001"),
+      node("task:2", "Child", "T0002"),
+      node("task:3", "Leaf", "T0003"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "project:4", target: "task:3", relation: "in_project" },
+      { source: "task:2", target: "task:1", relation: "child_of" },
+      { source: "task:2", target: "task:1", relation: "depends_on" },
+      { source: "task:1", target: "task:3", relation: "depends_on" },
+      { source: "task:3", target: "task:1", relation: "depends_on" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const byId = new Map(layout.edges.filter((edge) => edge.kind === "depends").map((edge) => [edge.id, edge]));
+    const sameColumn = byId.get("d:task:2:task:1");
+    const rightward = byId.get("d:task:1:task:3");
+    const leftward = byId.get("d:task:3:task:1");
+    assert.equal(sameColumn?.sourceHandle, "r");
+    assert.equal(sameColumn?.targetHandle, "r-in");
+    assert.equal(rightward?.sourceHandle, "r");
+    assert.equal(rightward?.targetHandle, "l");
+    assert.equal(leftward?.sourceHandle, "l-out");
+    assert.equal(leftward?.targetHandle, "r-in");
   });
 });

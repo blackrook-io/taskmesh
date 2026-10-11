@@ -286,6 +286,8 @@ function MeshEdge({
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 8,
+    offset: 20,
   });
   return (
     <>
@@ -299,6 +301,9 @@ function cardDescId(key: string): string {
   return `mesh-card-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
+/** Past the 20px line step, so the card does not cover the lines on this record. */
+const MESH_CARD_GAP = 32;
+
 function placeMeshCard(canvas: HTMLElement, card: HTMLElement, key: string): boolean {
   const node = canvas.querySelector(`[data-mesh-key="${CSS.escape(key)}"]`);
   if (!(node instanceof HTMLElement)) return false;
@@ -306,8 +311,10 @@ function placeMeshCard(canvas: HTMLElement, card: HTMLElement, key: string): boo
   const box = node.getBoundingClientRect();
   const width = card.offsetWidth;
   const height = card.offsetHeight;
-  let left = box.right - host.left + 12;
-  if (left + width > host.width - 8) left = box.left - host.left - width - 12;
+  const zoom = node.offsetWidth > 0 ? box.width / node.offsetWidth : 1;
+  const gap = MESH_CARD_GAP * (Number.isFinite(zoom) && zoom > 0 ? zoom : 1);
+  let left = box.right - host.left + gap;
+  if (left + width > host.width - 8) left = box.left - host.left - width - gap;
   left = Math.max(8, Math.min(left, host.width - width - 8));
   let top = box.top - host.top - 8;
   top = Math.max(8, Math.min(top, host.height - height - 8));
@@ -523,7 +530,9 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
       <Handle id="t" type="target" position={Position.Top} />
       <Handle id="b" type="source" position={Position.Bottom} />
       <Handle id="l" type="target" position={Position.Left} />
+      <Handle id="l-out" type="source" position={Position.Left} />
       <Handle id="r" type="source" position={Position.Right} />
+      <Handle id="r-in" type="target" position={Position.Right} />
       <button
         ref={buttonRef}
         type="button"

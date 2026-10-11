@@ -73,15 +73,29 @@ export type MeshHeading = {
   tone: "ai" | null;
 };
 
+export type MeshSourceHandle = "b" | "r" | "l-out";
+export type MeshTargetHandle = "t" | "l" | "r-in";
+
 export type MeshLayoutEdge = {
   id: string;
   source: string;
   target: string;
-  sourceHandle: "b" | "r";
-  targetHandle: "t" | "l";
+  sourceHandle: MeshSourceHandle;
+  targetHandle: MeshTargetHandle;
   kind: "link" | "depends" | "suggested";
   blocking: boolean;
 };
+
+/** Right, left, or a same-column bracket on the right. Half a column is the same column. */
+export function meshEdgeHandles(
+  sourceCenterX: number,
+  targetCenterX: number,
+): { sourceHandle: MeshSourceHandle; targetHandle: MeshTargetHandle } {
+  const dx = targetCenterX - sourceCenterX;
+  if (Math.abs(dx) < MESH_COLUMN_PITCH / 2) return { sourceHandle: "r", targetHandle: "r-in" };
+  if (dx > 0) return { sourceHandle: "r", targetHandle: "l" };
+  return { sourceHandle: "l-out", targetHandle: "r-in" };
+}
 
 /** A proposed link. The source is the suggested record; the target is already on the canvas. */
 export type MeshSuggestion = {
@@ -400,6 +414,12 @@ export function layoutMesh(input: {
   }
 
   const placedKeys = new Set(placed.map((node) => node.key));
+  const placedByKey = new Map(placed.map((node) => [node.key, node]));
+  const edgeHandles = (source: string, target: string) => {
+    const from = placedByKey.get(source);
+    const to = placedByKey.get(target);
+    return meshEdgeHandles(from?.centerX ?? 0, to?.centerX ?? 0);
+  };
   const edges: MeshLayoutEdge[] = [];
   for (const edge of input.edges) {
     if (!placedKeys.has(edge.source) || !placedKeys.has(edge.target)) continue;
@@ -408,8 +428,7 @@ export function layoutMesh(input: {
         id: `l:${edge.source}:${edge.target}:${edge.relation}`,
         source: edge.source,
         target: edge.target,
-        sourceHandle: "r",
-        targetHandle: "l",
+        ...edgeHandles(edge.source, edge.target),
         kind: "link",
         blocking: false,
       });
@@ -421,8 +440,7 @@ export function layoutMesh(input: {
       id: `d:${edge.source}:${edge.target}`,
       source: edge.source,
       target: edge.target,
-      sourceHandle: "r",
-      targetHandle: "l",
+      ...edgeHandles(edge.source, edge.target),
       kind: "depends",
       blocking: prerequisite?.state !== "complete",
     });
@@ -437,8 +455,7 @@ export function layoutMesh(input: {
       id,
       source: suggestion.sourceKey,
       target: suggestion.targetKey,
-      sourceHandle: "r",
-      targetHandle: "l",
+      ...edgeHandles(suggestion.sourceKey, suggestion.targetKey),
       kind: "suggested",
       blocking: false,
     });

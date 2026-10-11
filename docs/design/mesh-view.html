@@ -407,17 +407,55 @@ function buildNode(id, role, side) {
 }
 
 function curve(a, b, cls) {
-  if (cls.startsWith('dep') || cls === 'sug' || cls === 'ref') {
-    const rA = TYPES[byId[a.id].type].r + 6, rB = TYPES[byId[b.id].type].r + 8;
-    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-    const ux = dx / len, uy = dy / len;
-    const sx = a.x + ux * rA, sy = a.y + uy * rA, ex = b.x - ux * rB, ey = b.y - uy * rB;
-    let mx, my;
-    if (Math.abs(dx) < 40) { mx = Math.min(sx, ex) - 44; my = (sy + ey) / 2; }
-    else if (Math.abs(dy) < Math.abs(dx) * 0.35) { mx = (sx + ex) / 2; my = Math.min(sy, ey) - Math.min(150, len * 0.24); }
-    else { const bend = Math.min(60, len * 0.16); mx = (sx + ex) / 2 - uy * bend; my = (sy + ey) / 2 + ux * bend; }
-    return `M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`;
+  if (!(cls.startsWith('dep') || cls === 'sug' || cls === 'ref')) return;
+  const dx = b.x - a.x;
+  const portX = (pt, dir) => {
+    const n = byId[pt.id];
+    const rad = TYPES[n.type].r + (dir > 0 ? 6 : 8);
+    const placed = L.pos.get(pt.id);
+    if (dir < 0 || placed?.side !== 'right') return pt.x + dir * rad;
+    const lines = wrap(n.title, placed.role === 'focus' ? 24 : 22);
+    const longest = Math.max(...lines.map((line) => line.length), String(n.id).length);
+    return pt.x + rad + 8 + longest * 6.4;
+  };
+  const sy = a.y;
+  const ey = b.y;
+  let sx, ex, laneX;
+  if (Math.abs(dx) < COLW / 2) {
+    sx = portX(a, 1);
+    ex = portX(b, 1);
+    laneX = Math.max(sx, ex) + 20;
+  } else if (dx > 0) {
+    sx = portX(a, 1);
+    ex = portX(b, -1);
+    laneX = (sx + ex) / 2;
+  } else {
+    sx = portX(a, -1);
+    ex = portX(b, 1);
+    laneX = (sx + ex) / 2;
   }
+  const radius = 8;
+  const vert = Math.abs(ey - sy);
+  const h1 = Math.abs(laneX - sx);
+  const h2 = Math.abs(ex - laneX);
+  const r = Math.min(radius, h1 / 2, h2 / 2, vert / 2);
+  const fmt = (n) => n.toFixed(1);
+  if (r < 0.5 || vert < 1) {
+    return `M${fmt(sx)},${fmt(sy)} L${fmt(laneX)},${fmt(sy)} L${fmt(laneX)},${fmt(ey)} L${fmt(ex)},${fmt(ey)}`;
+  }
+  const sxSign = Math.sign(laneX - sx) || 1;
+  const exSign = Math.sign(ex - laneX) || 1;
+  const ySign = Math.sign(ey - sy) || 1;
+  const sweep1 = sxSign * ySign > 0 ? 1 : 0;
+  const sweep2 = ySign * exSign > 0 ? 0 : 1;
+  return [
+    `M${fmt(sx)},${fmt(sy)}`,
+    `L${fmt(laneX - sxSign * r)},${fmt(sy)}`,
+    `A${fmt(r)},${fmt(r)} 0 0 ${sweep1} ${fmt(laneX)},${fmt(sy + ySign * r)}`,
+    `L${fmt(laneX)},${fmt(ey - ySign * r)}`,
+    `A${fmt(r)},${fmt(r)} 0 0 ${sweep2} ${fmt(laneX + exSign * r)},${fmt(ey)}`,
+    `L${fmt(ex)},${fmt(ey)}`,
+  ].join(' ');
 }
 
 function drawFrame() {
