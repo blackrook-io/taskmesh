@@ -1,8 +1,9 @@
 import { eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { z } from "zod";
 import * as schema from "../db/schema.js";
 import { instanceBrand } from "../lib/instanceBrand.js";
-import { DEFAULT_THEME, isThemeId, type ThemeId } from "../lib/theme.js";
+import { DEFAULT_THEME, isThemeId, THEME_IDS, type ThemeId } from "../lib/theme.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -16,8 +17,17 @@ export function isMfaEnforcement(value: unknown): value is MfaEnforcement {
   );
 }
 
+/** Shared bounds for the Administrator-adjustable global and search ceilings. */
+export const CONFIGURABLE_RATE_LIMIT_MIN = 10;
+export const CONFIGURABLE_RATE_LIMIT_MAX = 100_000;
+
+/** In-memory lifetime for `getSystemProperties`. Admin saves clear the cache immediately. */
+export const SYSTEM_PROPERTIES_CACHE_TTL_MS = 15_000;
+
 export const SYSTEM_PROPERTY_KEYS = [
   "api_rate_limit_per_minute",
+  "global_api_rate_limit_per_minute",
+  "search_rate_limit_per_minute",
   "login_failure_threshold",
   "session_timeout_minutes",
   "max_concurrent_sessions",
@@ -32,6 +42,8 @@ export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
 
 export type SystemProperties = {
   apiRateLimitPerMinute: number;
+  globalApiRateLimitPerMinute: number;
+  searchRateLimitPerMinute: number;
   loginFailureThreshold: number;
   sessionTimeoutMinutes: number;
   maxConcurrentSessions: number;
@@ -56,6 +68,8 @@ export type PublicSystemConfig = {
 
 const DEFAULTS: {
   api_rate_limit_per_minute: number;
+  global_api_rate_limit_per_minute: number;
+  search_rate_limit_per_minute: number;
   login_failure_threshold: number;
   session_timeout_minutes: number;
   max_concurrent_sessions: number;
@@ -66,6 +80,8 @@ const DEFAULTS: {
   mfa_trusted_device_max: number;
 } = {
   api_rate_limit_per_minute: 60,
+  global_api_rate_limit_per_minute: 300,
+  search_rate_limit_per_minute: 60,
   login_failure_threshold: 3,
   session_timeout_minutes: 60,
   max_concurrent_sessions: 1,
@@ -100,7 +116,32 @@ function asMfaEnforcement(value: unknown, fallback: MfaEnforcement): MfaEnforcem
   return fallback;
 }
 
-export async function getSystemProperties(db: Db): Promise<SystemProperties> {
+type SystemPropertiesCacheSlot = {
+  expiresAt: number;
+  value: SystemProperties;
+};
+
+let systemPropertiesCache: SystemPropertiesCacheSlot | null = null;
+
+export function invalidateSystemPropertiesCache(): void {
+  systemPropertiesCache = null;
+}
+
+export function readSystemPropertiesCache(now = Date.now()): SystemProperties | null {
+  if (!systemPropertiesCache || now >= systemPropertiesCache.expiresAt) return null;
+  return systemPropertiesCache.value;
+}
+
+export function rememberSystemPropertiesCache(value: SystemProperties, now = Date.now()): void {
+  systemPropertiesCache = {
+    value,
+    expiresAt: now + SYSTEM_PROPERTIES_CACHE_TTL_MS,
+  };
+}
+
+export async function getSystemProperties(db: Db, now = Date.now()): Promise<SystemProperties> {
+  const cached = readSystemPropertiesCache(now);
+  if (cached) return cached;
   const rows = await db
     .select()
     .from(schema.systemProperties)
@@ -130,10 +171,22 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
     if (row && (!latest || row.updatedAt > latest)) latest = row.updatedAt;
   }
 
-  return {
+  const resolved: SystemProperties = {
     apiRateLimitPerMinute: asNumber(
       map.get("api_rate_limit_per_minute")?.value,
       DEFAULTS.api_rate_limit_per_minute,
+    ),
+    globalApiRateLimitPerMinute: asIntInRange(
+      map.get("global_api_rate_limit_per_minute")?.value,
+      DEFAULTS.global_api_rate_limit_per_minute,
+      CONFIGURABLE_RATE_LIMIT_MIN,
+      CONFIGURABLE_RATE_LIMIT_MAX,
+    ),
+    searchRateLimitPerMinute: asIntInRange(
+      map.get("search_rate_limit_per_minute")?.value,
+      DEFAULTS.search_rate_limit_per_minute,
+      CONFIGURABLE_RATE_LIMIT_MIN,
+      CONFIGURABLE_RATE_LIMIT_MAX,
     ),
     loginFailureThreshold: asNumber(
       map.get("login_failure_threshold")?.value,
@@ -165,6 +218,8 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
     ),
     updatedAt: latest?.toISOString() ?? null,
   };
+  rememberSystemPropertiesCache(resolved, now);
+  return resolved;
 }
 
 export async function getPublicSystemConfig(db: Db): Promise<PublicSystemConfig> {
@@ -182,6 +237,8 @@ export async function patchSystemProperties(
   db: Db,
   patch: {
     apiRateLimitPerMinute?: number;
+    globalApiRateLimitPerMinute?: number;
+    searchRateLimitPerMinute?: number;
     loginFailureThreshold?: number;
     sessionTimeoutMinutes?: number;
     maxConcurrentSessions?: number;
@@ -204,6 +261,32 @@ export async function patchSystemProperties(
       .onConflictDoUpdate({
         target: schema.systemProperties.key,
         set: { value: patch.apiRateLimitPerMinute, updatedAt: now },
+      });
+  }
+  if (patch.globalApiRateLimitPerMinute !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "global_api_rate_limit_per_minute",
+        value: patch.globalApiRateLimitPerMinute,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.globalApiRateLimitPerMinute, updatedAt: now },
+      });
+  }
+  if (patch.searchRateLimitPerMinute !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "search_rate_limit_per_minute",
+        value: patch.searchRateLimitPerMinute,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.searchRateLimitPerMinute, updatedAt: now },
       });
   }
   if (patch.loginFailureThreshold !== undefined) {
@@ -310,5 +393,32 @@ export async function patchSystemProperties(
         set: { value: patch.mfaTrustedDeviceMax, updatedAt: now },
       });
   }
+  invalidateSystemPropertiesCache();
   return getSystemProperties(db);
 }
+
+export const systemPropertiesPatchSchema = z
+  .object({
+    apiRateLimitPerMinute: z.number().int().min(1).max(100_000).optional(),
+    globalApiRateLimitPerMinute: z
+      .number()
+      .int()
+      .min(CONFIGURABLE_RATE_LIMIT_MIN)
+      .max(CONFIGURABLE_RATE_LIMIT_MAX)
+      .optional(),
+    searchRateLimitPerMinute: z
+      .number()
+      .int()
+      .min(CONFIGURABLE_RATE_LIMIT_MIN)
+      .max(CONFIGURABLE_RATE_LIMIT_MAX)
+      .optional(),
+    loginFailureThreshold: z.number().int().min(1).max(1000).optional(),
+    sessionTimeoutMinutes: z.number().int().min(1).max(10_080).optional(),
+    maxConcurrentSessions: z.number().int().min(1).max(20).optional(),
+    defaultTheme: z.enum(THEME_IDS).optional(),
+    mfaEnforcement: z.enum(["none", "administrators"]).optional(),
+    mfaGraceDays: z.number().int().min(0).max(365).optional(),
+    mfaTrustedDeviceDays: z.number().int().min(0).max(365).optional(),
+    mfaTrustedDeviceMax: z.number().int().min(1).max(50).optional(),
+  })
+  .strict();

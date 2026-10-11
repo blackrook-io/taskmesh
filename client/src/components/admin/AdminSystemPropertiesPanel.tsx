@@ -6,8 +6,13 @@ import { isThemeId, type ThemeId } from "../../lib/theme";
 
 type MfaEnforcement = "none" | "administrators";
 
+const CONFIGURABLE_RATE_LIMIT_MIN = 10;
+const CONFIGURABLE_RATE_LIMIT_MAX = 100_000;
+
 type SystemProperties = {
   apiRateLimitPerMinute: number;
+  globalApiRateLimitPerMinute?: number;
+  searchRateLimitPerMinute?: number;
   loginFailureThreshold: number;
   sessionTimeoutMinutes?: number;
   maxConcurrentSessions?: number;
@@ -31,9 +36,34 @@ function hasMaxConcurrentSessions(
   return typeof data?.maxConcurrentSessions === "number";
 }
 
+function hasGlobalApiRateLimit(
+  data: SystemProperties | undefined,
+): data is SystemProperties & { globalApiRateLimitPerMinute: number } {
+  return typeof data?.globalApiRateLimitPerMinute === "number";
+}
+
+function hasSearchRateLimit(
+  data: SystemProperties | undefined,
+): data is SystemProperties & { searchRateLimitPerMinute: number } {
+  return typeof data?.searchRateLimitPerMinute === "number";
+}
+
+function configurableRateLimitError(label: string, value: number): string | null {
+  if (
+    !Number.isInteger(value) ||
+    value < CONFIGURABLE_RATE_LIMIT_MIN ||
+    value > CONFIGURABLE_RATE_LIMIT_MAX
+  ) {
+    return `${label} must be an integer from ${CONFIGURABLE_RATE_LIMIT_MIN} to ${CONFIGURABLE_RATE_LIMIT_MAX}`;
+  }
+  return null;
+}
+
 export function AdminSystemPropertiesPanel() {
   const qc = useQueryClient();
   const [rate, setRate] = useState("60");
+  const [globalRate, setGlobalRate] = useState("300");
+  const [searchRate, setSearchRate] = useState("60");
   const [threshold, setThreshold] = useState("3");
   const [sessionTimeout, setSessionTimeout] = useState("60");
   const [maxConcurrentSessions, setMaxConcurrentSessions] = useState("1");
@@ -60,6 +90,12 @@ export function AdminSystemPropertiesPanel() {
     setPrevData(propsQuery.data);
     if (propsQuery.data) {
       setRate(String(propsQuery.data.apiRateLimitPerMinute));
+      if (hasGlobalApiRateLimit(propsQuery.data)) {
+        setGlobalRate(String(propsQuery.data.globalApiRateLimitPerMinute));
+      }
+      if (hasSearchRateLimit(propsQuery.data)) {
+        setSearchRate(String(propsQuery.data.searchRateLimitPerMinute));
+      }
       setThreshold(String(propsQuery.data.loginFailureThreshold));
       if (hasSessionTimeoutMinutes(propsQuery.data)) {
         setSessionTimeout(String(propsQuery.data.sessionTimeoutMinutes));
@@ -91,7 +127,11 @@ export function AdminSystemPropertiesPanel() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const apiRateLimitPerMinute = Number(rate);
+      const globalApiRateLimitPerMinute = Number(globalRate);
+      const searchRateLimitPerMinute = Number(searchRate);
       const loginFailureThreshold = Number(threshold);
+      const supportsGlobalRate = hasGlobalApiRateLimit(propsQuery.data);
+      const supportsSearchRate = hasSearchRateLimit(propsQuery.data);
       const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
       const supportsMaxSessions = hasMaxConcurrentSessions(propsQuery.data);
       const sessionTimeoutMinutes = Number(sessionTimeout);
@@ -101,6 +141,20 @@ export function AdminSystemPropertiesPanel() {
       const trustMax = Number(mfaTrustedDeviceMax);
       if (!Number.isInteger(apiRateLimitPerMinute) || apiRateLimitPerMinute < 1) {
         throw new Error("API rate limit must be a positive integer");
+      }
+      if (supportsGlobalRate) {
+        const message = configurableRateLimitError(
+          "Global API rate limit",
+          globalApiRateLimitPerMinute,
+        );
+        if (message) throw new Error(message);
+      }
+      if (supportsSearchRate) {
+        const message = configurableRateLimitError(
+          "Search rate limit",
+          searchRateLimitPerMinute,
+        );
+        if (message) throw new Error(message);
       }
       if (!Number.isInteger(loginFailureThreshold) || loginFailureThreshold < 1) {
         throw new Error("Login failure threshold must be a positive integer");
@@ -131,6 +185,8 @@ export function AdminSystemPropertiesPanel() {
       }
       const body: {
         apiRateLimitPerMinute: number;
+        globalApiRateLimitPerMinute?: number;
+        searchRateLimitPerMinute?: number;
         loginFailureThreshold: number;
         defaultTheme: ThemeId;
         sessionTimeoutMinutes?: number;
@@ -148,6 +204,12 @@ export function AdminSystemPropertiesPanel() {
         mfaTrustedDeviceDays: trustDays,
         mfaTrustedDeviceMax: trustMax,
       };
+      if (supportsGlobalRate) {
+        body.globalApiRateLimitPerMinute = globalApiRateLimitPerMinute;
+      }
+      if (supportsSearchRate) {
+        body.searchRateLimitPerMinute = searchRateLimitPerMinute;
+      }
       if (supportsSessionTimeout) {
         body.sessionTimeoutMinutes = sessionTimeoutMinutes;
       }
@@ -174,6 +236,8 @@ export function AdminSystemPropertiesPanel() {
 
   const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
   const supportsMaxSessions = hasMaxConcurrentSessions(propsQuery.data);
+  const supportsGlobalRate = hasGlobalApiRateLimit(propsQuery.data);
+  const supportsSearchRate = hasSearchRateLimit(propsQuery.data);
 
   return (
     <div className="settings-panel admin-panel">
@@ -207,6 +271,45 @@ export function AdminSystemPropertiesPanel() {
           onChange={(e) => setRate(e.target.value)}
         />
       </label>
+
+      {supportsGlobalRate ? (
+        <>
+          <label className="field">
+            <span>Global API rate limit (requests per minute)</span>
+            <input
+              type="number"
+              min={CONFIGURABLE_RATE_LIMIT_MIN}
+              max={CONFIGURABLE_RATE_LIMIT_MAX}
+              value={globalRate}
+              onChange={(e) => setGlobalRate(e.target.value)}
+            />
+          </label>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Ceiling for each signed-in user, API key, or anonymous IP on /api/v1. Takes effect
+            within a few seconds of Save. Login, upload, assistant chat, and backup or import
+            limits stay fixed.
+          </p>
+        </>
+      ) : null}
+
+      {supportsSearchRate ? (
+        <>
+          <label className="field">
+            <span>Search rate limit (requests per minute)</span>
+            <input
+              type="number"
+              min={CONFIGURABLE_RATE_LIMIT_MIN}
+              max={CONFIGURABLE_RATE_LIMIT_MAX}
+              value={searchRate}
+              onChange={(e) => setSearchRate(e.target.value)}
+            />
+          </label>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Ceiling for global search, counted separately per signed-in user, API key, or
+            anonymous IP.
+          </p>
+        </>
+      ) : null}
 
       <label className="field">
         <span>Login failure threshold (locks account after failed sign-in attempts)</span>

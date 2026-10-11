@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { Request, Response } from "express";
 import {
   clientRateLimitKey,
+  configurableRateLimit,
   createRateLimiter,
   loginRateLimitKey,
   rateLimitsDisabled,
@@ -132,6 +133,39 @@ describe("createRateLimiter", () => {
 
     const other = await hit(limiter, mockReq({ sessionUserId: 2 }));
     assert.equal(other.next, true);
+  });
+});
+
+describe("configurable rate limits", () => {
+  it("uses the property value inside the allowed range", async () => {
+    assert.equal(await configurableRateLimit(async () => 1000), 1000);
+    assert.equal(await configurableRateLimit(async () => 10), 10);
+    assert.equal(await configurableRateLimit(async () => 100_000), 100_000);
+    assert.equal(await configurableRateLimit(async () => 9), 10);
+    assert.equal(await configurableRateLimit(async () => 100_001), 100_000);
+  });
+
+  it("sets RateLimit-Limit from an async limit and 429s past it", async () => {
+    const limiter = createRateLimiter({
+      windowMs: 60_000,
+      limit: async () => 3,
+      skipValidation: true,
+      keyGenerator: () => "dyn-limit",
+    });
+    const req = mockReq({ sessionUserId: 11 });
+    const first = await hit(limiter, req);
+    assert.equal(first.next, true);
+    assert.equal(first.res.headers["ratelimit-limit"], "3");
+
+    await hit(limiter, req);
+    const third = await hit(limiter, req);
+    assert.equal(third.next, true);
+    assert.equal(third.res.headers["ratelimit-limit"], "3");
+
+    const blocked = await hit(limiter, req);
+    assert.equal(blocked.next, false);
+    assert.equal(blocked.res.statusCode, 429);
+    assert.equal(blocked.res.headers["ratelimit-limit"], "3");
   });
 });
 

@@ -132,6 +132,8 @@ Exact FK lists are on the domain pages.
 - **`system_properties.value`** — arbitrary jsonb config values
 - **`system_properties` keys (current app)** —
   - `api_rate_limit_per_minute` — number
+  - `global_api_rate_limit_per_minute` — number (default **300**, range **10**–**100000**; ceiling per user, API key, or IP on `/api/v1`)
+  - `search_rate_limit_per_minute` — number (default **60**, range **10**–**100000**; ceiling per user, API key, or IP for global search)
   - `login_failure_threshold` — number (default **3**; locks account after failed sign-in attempts)
   - `session_timeout_minutes` — number (default **60**; cookie lifetime and absolute session lifetime)
   - `max_concurrent_sessions` — number (default **1**, range **1**–**20**; live browser sessions kept per user when a new session is created)
