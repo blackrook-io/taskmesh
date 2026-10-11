@@ -73,6 +73,7 @@ const PROJECT_MIDDLE: {
     moduleKey: "canvases",
     icon: shellIcons.canvas,
   },
+  { id: "mesh", label: "Mesh", tab: "mesh", moduleKey: "mesh", icon: shellIcons.mesh },
   { id: "images", label: "Images", tab: "images", icon: shellIcons.imageBoard },
   {
     id: "wiki",

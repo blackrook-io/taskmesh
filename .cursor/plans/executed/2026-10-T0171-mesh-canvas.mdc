@@ -1,0 +1,71 @@
+# T0171 — Mesh canvas and cascade layout
+
+**Task:** T0171 (id `186`) — Mesh view: canvas and cascade layout
+**Parent:** T0164 (id `177`) — stays Ready as the Mesh-tab container
+**Depends on:** T0163 complete (graph API)
+**Required by:** T0172, T0173, T0174 — not this session
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0171-mesh-canvas`
+
+T0164’s children T0171–T0174 are Ready. This session is T0171 only. T0173 also depends on T0169 (activity history), which is still Draft, so T0173 stays blocked after this task.
+
+## Decisions
+
+1. **`@xyflow/react` with computed positions.** Pan and zoom come from the library. Nodes are not draggable (saved positions are T0165). No force simulation.
+2. **One plain node for every type.** A rounded rectangle in `--accent`, title and display number to its right. Shapes, color modes, badges, and edge styles stay on T0172. Hover cards stay on T0173. Filter chips and the AI slot stay on T0174.
+3. **Containment is the cascade.** A record’s parent is the first match: `child_of` target, else the `in_list` list, else the `in_project` project. Nested tasks and to-dos are not also drawn as direct project children.
+4. **Links are the two side bands.** `entity_links` only (any of the four relations). The focus’s own links sit in the upper band. A link that touches a cascade record and a record not already placed sits on the right rail. `depends_on`, `tagged`, `from_idea`, `on_board`, and `in_wiki` are not drawn here.
+5. **Fetch `depth=3`.** Children are depth 1, grandchildren depth 2, and a grandchild’s link can be depth 3. Show a short toolbar note when `truncated` is true.
+6. **Mesh module defaults off**, same as Wiki and Canvases. Enable it in project Settings. No new SQL file (the module key is text). Finish-up is a PATCH bump, and `FEATURES.md` gets one Mesh bullet because this is a new project module.
+
+## Layout
+
+Root opens on the project. Clicking a record, or pressing Enter on it, refocuses. Positions are a pure function of the graph plus the focus key, stable for a given payload.
+
+- **Focus** centered over its columns, larger than the other records, with a two-line title and the reference on the next line.
+- **Parent** directly above the focus when it has a containment parent. A project focus has no parent row.
+- **Linked to this** in one labeled row to the right of the focus, level with the parent.
+- **Cascade** below the focus, two levels only, drawn as one bus: a stem, a horizontal run, then a spine and stub per record. Each child that itself has children is a column head. Children with no children share one extra column on that same stub, with no head. Deeper records appear only after a click.
+- **Linked from inside** in a labeled rail to the right of the columns and the top link row. A record from another project shows that project’s number (`N0057 · P0009`) when the app already has it.
+- Records that are not the focus, its parent, a cascade member, or a placed link are never drawn.
+
+Toolbar breadcrumb is the containment ancestors’ titles, separated by ›. A Back control returns one step in this visit. When the focus belongs to another project, the toolbar also offers “Back to {this project}”. Narrow widths scroll horizontally inside the canvas. Labels stay at a readable size (the canvas zooms; text does not shrink below the token size). The canvas background is a dotted plotting table.
+
+Refocus animates about 500ms ease-out: existing nodes move from their last positions, new nodes grow from the previous focus. `prefers-reduced-motion` snaps with no transition.
+
+Every node is a button in reading order (parent, link band, focus, columns left to right, rail). Enter refocuses.
+
+Colors use `--bg`, `--surface`, `--text`, `--border`, and `--accent`.
+
+## Scope
+
+**In**
+
+1. Add `mesh` to the project-module allowlists (`src/services/projectModules.ts`, `client/src/lib/projectModules.ts`), default off, sort order after canvases. Settings, nav, and `ProjectDetailPage` (`?tab=mesh`) follow the canvases pattern.
+2. `client/src/lib/meshLayout.ts` plus unit tests: parent choice, no duplicate nested records, column split, two-level cutoff, link bands, stable order.
+3. `client/src/components/MeshPanel.tsx` loads `GET /api/v1/graph` and renders the layout. Empty focus (no children and no links) still shows the focus node.
+
+**Out**
+
+- Type shapes, state/priority colors, progress, stale, overdue, legend (T0172).
+- Hover cards and an Open button (T0173).
+- Relation chips and AI suggestions (T0174).
+- Saved coordinates (T0165) and Plan view (T0166).
+
+## Acceptance
+
+- With Mesh enabled, P0003 and another project show the cascade with no overlapping nodes or labels.
+- Click and Enter refocus. Back and the breadcrumb return. Another project’s linked record can be focused and left again.
+- Reduced motion does not animate. `npm run lint` is clean.
+
+## QA follow-ups
+
+The prototype in `docs/design/mesh-view.html` is the layout source. These corrections land in this task:
+
+- Containment is one bus: a stem under the focus, a horizontal run across the columns, then a spine and short stub to each record. The shared leaf column has no head.
+- The focus and its parent sit on the center of the columns.
+- “Linked to this” is a labeled row to the right of the focus, level with the parent. “Linked from inside” labels the right rail, which starts to the right of both the columns and that top row.
+- Titles wrap to two lines, the reference sits on the next line, and the focused record is larger. A record from another project shows that project’s number (`N0057 · P0009`) when the app already has it.
+- The canvas is a dotted plotting table. Reference lines are dashed so they stay distinct from the bus.
+- Breadcrumbs are titles separated by ›. When the focus belongs to another project, the toolbar adds “Back to {this project}”. Visit Back stays for one step inside the project.
+- Pan stays at a readable size. The prototype’s fit-to-width shrinks a project as wide as TaskMesh.

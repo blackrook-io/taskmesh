@@ -18,6 +18,7 @@ import { TodoListView } from "../components/TodoListView";
 import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
 import { CanvasesPanel } from "../components/CanvasesPanel";
+import { MeshPanel } from "../components/MeshPanel";
 import { DocumentsToc } from "../components/DocumentsToc";
 import { ImageBoardList } from "../components/imageBoard/ImageBoardList";
 import { OverviewPanels } from "../components/projectOverview/OverviewPanels";
@@ -62,6 +63,7 @@ const TAB_ALIASES: Record<string, Tab> = {
   boards: "boards",
   wiki: "wiki",
   canvases: "canvases",
+  mesh: "mesh",
 };
 
 function parseTab(raw: string | null): Tab {
@@ -1147,6 +1149,8 @@ export function ProjectDetailPage() {
           onInitialCanvasConsumed={() => clearSearchParam("canvas")}
         />
       ) : null}
+
+      {tab === "mesh" ? <MeshPanel key={projectId} projectId={projectId} /> : null}
 
       <ConfirmDialog
         open={deleteProjectOpen}

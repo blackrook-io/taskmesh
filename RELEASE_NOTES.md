@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.56.2 — 2026-10-11
+
+### New Functionality
+- A project can turn on Mesh and open a cascade of its records. The focused record sits over its contents, with its own links in a row beside it and links from inside on a rail.
+- Click or press Enter to refocus. Back and the breadcrumb return, and a record from another project can be sent back to this project. Labels stay readable while you pan.
+
 ## 0.56.1 — 2026-10-11
 
 ### New Functionality
