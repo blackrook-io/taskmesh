@@ -27,6 +27,7 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 | `system_properties` | System-wide key/value settings (`key` text PK, `value` jsonb). Known keys include `api_rate_limit_per_minute`, `login_failure_threshold` (default **3**), `session_timeout_minutes` (default **60**), `max_concurrent_sessions` (integer **1**–**20**, default **1**), `default_theme` (accent theme id string, seeded `green`), `mfa_enforcement` (`none` \| `administrators`, default `none`), `mfa_grace_days` (integer days, default **7**), `mfa_trusted_device_days` (default **15**; `0` disables trust), and `mfa_trusted_device_max` (default **5**). | Standalone; no FKs. |
 | `entity_fields` | Schema metadata for List View columns (T0056): per-`entity_type` field catalog with `field_key`, `label`, `displayable`, `default_visible`, `default_sort_order`, `sortable`, optional `scope` (`global` = global Tasks only). Non-displayable rows never appear in Personalize or as columns. Seeded in migration; maintain alongside schema changes. | Standalone; unique `(entity_type, field_key)`. |
 | `user_list_view_prefs` | Per-user List View column order/visibility (T0056). One row per `(user_id, list_view_key)` (`tasks` \| `ideas` \| `todo_lists`); `columns` jsonb is ordered `{ fieldKey, visible }[]`. Shared across projects for `tasks`, and across ToDo lists for `todo_lists`. Missing row → defaults from `entity_fields`. `todo_lists` reads catalog rows with `entity_type` `todo_list` (Type, Title, Tags, State, Priority, Due date, Checked). Those keys describe a list membership row, not columns of the `todo_lists` table. | FK `user_id` → `users` · **CASCADE**. |
+| `user_task_list_state` | Per-user Task List open/closed state (T0191). One row per user (`user_id` PK). JSON arrays store **collapsed** ids only: Task Group ids, project ids whose Unassigned section is collapsed, and parent task ids. The parent set applies on the project Tasks list and on All Tasks / Unassigned. Missing row means everything is expanded. Stale ids are ignored. Task Group **order** stays on `task_groups.sort_order`, not here. | FK `user_id` → `users` · **CASCADE**. |
 | `user_project_overview_prefs` | Per-user Project Overview canvas layout (T0135/T0136). One row per `(user_id, project_id)`; `panels` jsonb is an ordered `{ id, type, limit, days? }[]` of panel instances. Missing row → follow `project_overview_defaults` (not customized). Legacy T0135 key→prefs maps are accepted on read and rewritten to instances. | FKs `user_id` → `users`, `project_id` → `projects` · **CASCADE**. |
 | `project_overview_defaults` | Project default Overview canvas layout (T0136). One row per `project_id`; `layout` jsonb is ordered panel instances (seed = T0135 four panels). Editable by Owner/Manager/Admin (`settings`). Missing row is seeded on first read. | FKs `project_id` → `projects` · **CASCADE**; optional `updated_by_id` → `users` · **SET NULL**. |
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag, request/response byte counts). Indexed on `created_at` for retention prune (default **90** days via in-process job; override `API_REQUEST_LOG_RETENTION_DAYS`). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
@@ -41,6 +42,7 @@ erDiagram
   users ||--o{ password_history : "prior hashes"
   users ||--o{ user_roles : has
   users ||--o{ user_list_view_prefs : "list columns"
+  users ||--o| user_task_list_state : "list collapse"
   users ||--o{ user_project_overview_prefs : "overview panels"
   projects ||--o{ user_project_overview_prefs : "overview panels"
   projects ||--o| project_overview_defaults : "overview default"
@@ -86,6 +88,9 @@ erDiagram
     int id PK
     int user_id FK
     text list_view_key
+  }
+  user_task_list_state {
+    int user_id PK
   }
   user_project_overview_prefs {
     int id PK

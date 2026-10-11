@@ -27,6 +27,7 @@ import {
 } from "../components/shared/TaskDependencyLists";
 import { buildTaskListGridTemplate } from "../lib/listViewColumns";
 import { useListViewColumns } from "../lib/useListViewColumns";
+import { useTaskListViewState } from "../lib/useTaskListViewState";
 import {
   formatTaskNumber,
   nextTaskState,
@@ -134,7 +135,7 @@ export function TasksListPage() {
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
-  const [collapsedParents, setCollapsedParents] = useState<Set<number>>(() => new Set());
+  const { collapsedParents, toggle: toggleListState } = useTaskListViewState();
   const sortStorageKey = storageKeyForGlobalTaskSort(filter);
   const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
     sortStorageKey,
@@ -236,11 +237,10 @@ export function TasksListPage() {
   const tasks = filteredTasks;
 
   const toggleParentCollapse = (taskId: number) => {
-    setCollapsedParents((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
-      return next;
+    toggleListState({
+      kind: "parent",
+      id: taskId,
+      collapsed: !collapsedParents.has(taskId),
     });
   };
 

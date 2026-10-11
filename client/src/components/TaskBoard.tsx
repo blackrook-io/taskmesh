@@ -71,6 +71,7 @@ import {
   type ResolvedListColumn,
 } from "../lib/listViewColumns";
 import { useListViewColumns } from "../lib/useListViewColumns";
+import { useTaskListViewState } from "../lib/useTaskListViewState";
 import { TagInput } from "./shared/TagInput";
 import { TaskDescriptionTemplatesMenu } from "./shared/TaskDescriptionTemplatesMenu";
 import {
@@ -1247,6 +1248,17 @@ export function TaskBoard({
     save: saveListCols,
     reset: resetListCols,
   } = useListViewColumns("tasks", "project");
+  const {
+    collapsedGroupIds,
+    collapsedUngroupedProjectIds,
+    collapsedParents,
+    toggle: toggleListState,
+  } = useTaskListViewState();
+  const collapsed = useMemo(() => {
+    const next = new Set<number | "none">(collapsedGroupIds);
+    if (collapsedUngroupedProjectIds.includes(projectId)) next.add("none");
+    return next;
+  }, [collapsedGroupIds, collapsedUngroupedProjectIds, projectId]);
   const gridTemplate = useMemo(
     () => buildTaskListGridTemplate(visibleColumns, "project"),
     [visibleColumns],
@@ -1255,8 +1267,6 @@ export function TaskBoard({
   const [modalTaskId, setModalTaskId] = useState<number | null>(null);
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
-  const [collapsed, setCollapsed] = useState<Set<number | "none">>(() => new Set());
-  const [collapsedParents, setCollapsedParents] = useState<Set<number>>(() => new Set());
   const sortStorageKey = storageKeyForProjectTaskSort(projectId);
   const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
     sortStorageKey,
@@ -1276,12 +1286,27 @@ export function TaskBoard({
   const [parentTaskId, setParentTaskId] = useState<number | null>(null);
   const [assignTaskId, setAssignTaskId] = useState<number | null>(null);
 
+  const toggleGroup = (groupKey: number | "none") => {
+    if (groupKey === "none") {
+      toggleListState({
+        kind: "ungrouped",
+        id: projectId,
+        collapsed: !collapsed.has("none"),
+      });
+      return;
+    }
+    toggleListState({
+      kind: "group",
+      id: groupKey,
+      collapsed: !collapsed.has(groupKey),
+    });
+  };
+
   const toggleParentCollapse = (taskId: number) => {
-    setCollapsedParents((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
-      return next;
+    toggleListState({
+      kind: "parent",
+      id: taskId,
+      collapsed: !collapsedParents.has(taskId),
     });
   };
 
@@ -1750,14 +1775,7 @@ export function TaskBoard({
                     collapsed={collapsed.has(section.groupKey)}
                     taskCount={section.header.taskCount}
                     filterCtx={filterCtx}
-                    onToggle={() => {
-                      setCollapsed((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(section.groupKey)) next.delete(section.groupKey);
-                        else next.add(section.groupKey);
-                        return next;
-                      });
-                    }}
+                    onToggle={() => toggleGroup(section.groupKey)}
                     onOpenEdit={group ? () => setEditGroup(group) : undefined}
                     onRequestDelete={group ? () => setPendingGroupDelete(group) : undefined}
                   />

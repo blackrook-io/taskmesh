@@ -2,6 +2,8 @@
 
 Task records, timeline activity, blocking dependencies, and reusable description templates. Source: [`src/db/schema.ts`](../../src/db/schema.ts).
 
+Collapsed parent tasks in List View are per-user UI state on [`user_task_list_state`](platform.md), not a column on `tasks`.
+
 Related: [overview](overview.md) · [projects and ideas](projects-and-ideas.md) · [glossary](glossary.md)
 
 ## Logical model
