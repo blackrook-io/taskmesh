@@ -70,6 +70,8 @@ export type TaskColumnCellContext = {
   depth: number;
   duplicate?: boolean;
   hasChildren?: boolean;
+  /** Descendants hidden while this parent is collapsed. */
+  hiddenCount?: number;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onPatch?: (patch: { priority?: TaskPriority; dueDate?: string | null }) => void;
@@ -92,6 +94,7 @@ export function renderTaskColumnCell(
     depth,
     duplicate,
     hasChildren,
+    hiddenCount = 0,
     collapsed,
     onToggleCollapse,
     onPatch,
@@ -111,7 +114,11 @@ export function renderTaskColumnCell(
               type="button"
               className="task-list-row__twist"
               aria-expanded={!collapsed}
-              aria-label={collapsed ? "Expand child tasks" : "Collapse child tasks"}
+              aria-label={
+                collapsed
+                  ? `Expand child tasks, ${hiddenCount} hidden`
+                  : "Collapse child tasks"
+              }
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
@@ -119,6 +126,9 @@ export function renderTaskColumnCell(
               }}
             >
               {collapsed ? "▸" : "▾"}
+              {collapsed && hiddenCount > 0 ? (
+                <span className="task-list-row__hidden-count">{hiddenCount}</span>
+              ) : null}
             </button>
           ) : null}
         </span>

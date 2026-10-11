@@ -1,0 +1,56 @@
+---
+description: "T0222 — Light-grey recursive child count beside a collapsed parent twistie on task list views"
+todos:
+  - id: count
+    content: Count descendants the current list would reveal if this parent were expanded
+  - id: ui
+    content: Show a muted count next to the twistie only while collapsed (global list, project board, group nav list)
+  - id: qa
+    content: Manual QA on nested collapse, filters, and expanded rows
+---
+
+# T0222 — Collapsed parent child counts
+
+**Task:** T0222 · id `237` · project 4 (TaskMesh) · priority none  
+**Branch:** `T0222-collapsed-child-counts`  
+**Ships as:** `0.58.1`
+
+## QA follow-ups
+
+None requested. Before finish-up, All Tasks, the project Tasks list, and the MCP group sub-list showed the recursive count only while the parent was collapsed.
+
+## Goal
+
+On task list views, a collapsed parent shows a light grey number next to its twistie: how many descendant rows that collapse is hiding.
+
+## Size
+
+One client-only pass. No schema, no API. No split.
+
+## Depends-on
+
+None.
+
+## Decisions (confirm or adjust)
+
+| # | Decision |
+|---|----------|
+| 1 | **Task list views only.** Global Tasks (`TasksListPage`), project grouped Tasks (`TaskBoard`), and a Task Group nav sub-list. Same twistie in `renderTaskColumnCell`. |
+| 2 | **Out of scope:** wiki TOC, document folders, Ideas, ToDos, and Task Group / Unassigned section headers. Group headers already show a root count; they are not parent records. |
+| 3 | **Recursive.** The number is every descendant the current list would draw if this parent were expanded, including grandchildren. A parent with two children, one of which has a child, shows `3`. |
+| 4 | **Same visibility as the tree.** Filtered lists count only rows the existing walk would emit (matched tasks on the global list and nav list; all loaded children of a shown root on the grouped board). Rows excluded by the filter are not “hidden by the collapse.” |
+| 5 | **Collapsed only.** Expanded parents and leaves show no count. Nested collapse still counts under the collapsed ancestor (a collapsed grandparent includes descendants of a child that is also collapsed). |
+| 6 | **Placement.** Muted span immediately after the ▸, in the number cell. Widen the number column slightly if `T####` plus the count would clip. Screen readers: twistie label includes the hidden count. |
+| 7 | **No new persistence.** Collapse state stays on the T0191 user preference. The count is derived while rendering. |
+
+## Implementation
+
+1. Pure helper used by both row builders: given a parent id and the same child lookup the walk already uses, return the descendant count, ignoring collapse flags.
+2. Pass `hiddenCount` into `TaskColumnCellContext`. When `collapsed` and `hiddenCount > 0`, render `<span className="task-list-row__hidden-count muted">`.
+3. CSS: `--text-muted` (or existing `.muted`), small tabular numerals, not accent green. Do not let the completed-row grey rule fight a second color; completed rows can keep the existing muted treatment.
+
+## Out of scope
+
+- Counts on wiki, documents, ToDos, or group-section twisties.
+- Showing the number while the parent is expanded.
+- A server-computed `childCount` field.

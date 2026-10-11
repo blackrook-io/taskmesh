@@ -70,6 +70,7 @@ import {
   buildTaskListGridTemplate,
   type ResolvedListColumn,
 } from "../lib/listViewColumns";
+import { hiddenDescendantCount } from "../lib/hiddenDescendantCount";
 import { useListViewColumns } from "../lib/useListViewColumns";
 import { useTaskListViewState } from "../lib/useTaskListViewState";
 import { TagInput } from "./shared/TagInput";
@@ -212,6 +213,7 @@ type FlatRow =
       groupKey: number | "none";
       duplicate: boolean;
       hasChildren: boolean;
+      hiddenCount: number;
     };
 
 /** Pixels of title indent per nesting depth (T0103). */
@@ -238,8 +240,10 @@ function buildRows(
     const matched = evaluateTaskListFilter(tasks, listFilter, filterCtx);
     const matchedIds = new Set(matched.map((t) => t.id));
     const visualRoots = matched.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
+    const countCache = new Map<number, number>();
+    const visibleKidsOf = (id: number) => childrenOf(tasks, id).filter((c) => matchedIds.has(c.id));
     const walk = (t: Task, depth: number) => {
-      const visibleKids = childrenOf(tasks, t.id).filter((c) => matchedIds.has(c.id));
+      const visibleKids = visibleKidsOf(t.id);
       rows.push({
         kind: "task",
         task: t,
@@ -248,6 +252,7 @@ function buildRows(
         groupKey: "none",
         duplicate: false,
         hasChildren: visibleKids.length > 0,
+        hiddenCount: hiddenDescendantCount(t.id, visibleKidsOf, countCache),
       });
       if (collapsedParents.has(t.id)) return;
       for (const c of visibleKids) {
@@ -282,7 +287,9 @@ function buildRows(
   const claimed = new Set(appearCount.keys());
   const unassigned = evaluateTaskListFilter(allRoots, listFilter, filterCtx).filter((t) => !claimed.has(t.id));
 
-  const pushGroup = (group: TaskGroup | null, groupKey: number | "none", groupRoots: Task[]) => {
+    const countCache = new Map<number, number>();
+    const kidsOf = (id: number) => childrenOf(tasks, id);
+    const pushGroup = (group: TaskGroup | null, groupKey: number | "none", groupRoots: Task[]) => {
     rows.push({
       kind: "group",
       group,
@@ -291,7 +298,7 @@ function buildRows(
     });
     if (collapsed.has(groupKey)) return;
     const pushTree = (t: Task, depth: number) => {
-      const kids = childrenOf(tasks, t.id);
+      const kids = kidsOf(t.id);
       rows.push({
         kind: "task",
         task: t,
@@ -300,6 +307,7 @@ function buildRows(
         groupKey,
         duplicate: (appearCount.get(t.id) ?? 0) > 1,
         hasChildren: kids.length > 0,
+        hiddenCount: hiddenDescendantCount(t.id, kidsOf, countCache),
       });
       if (collapsedParents.has(t.id)) return;
       for (const c of kids) {
@@ -956,6 +964,7 @@ function SortableTaskRow({
   duplicate,
   groupKey,
   hasChildren,
+  hiddenCount,
   collapsed,
   onToggleCollapse,
   onOpen,
@@ -971,6 +980,7 @@ function SortableTaskRow({
   duplicate: boolean;
   groupKey: number | "none";
   hasChildren: boolean;
+  hiddenCount: number;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onOpen: () => void;
@@ -1017,6 +1027,7 @@ function SortableTaskRow({
           depth,
           duplicate,
           hasChildren,
+          hiddenCount,
           collapsed,
           onToggleCollapse,
           onPatch,
@@ -1650,6 +1661,7 @@ export function TaskBoard({
       duplicate={row.duplicate}
       groupKey={row.groupKey}
       hasChildren={row.hasChildren}
+      hiddenCount={row.hiddenCount}
       collapsed={collapsedParents.has(row.task.id)}
       onToggleCollapse={() => toggleParentCollapse(row.task.id)}
       onOpen={() => setModalTaskId(row.task.id)}

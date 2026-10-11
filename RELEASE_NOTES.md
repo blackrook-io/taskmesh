@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.1 — 2026-10-11
+
+### Enhancements
+- A collapsed parent on a task list shows a light grey count of the descendant rows that collapse is hiding. The number sits next to the twistie on All Tasks, a project Tasks list, and a Task Group sub-list, and it disappears when the parent is open.
+
 ## 0.58.0 — 2026-10-11
 
 ### Enhancements
