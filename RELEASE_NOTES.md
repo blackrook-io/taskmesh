@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.56.0 — 2026-10-11
+
+### Fixes
+- Production dependencies are pinned past the current high and critical npm advisories (`shell-quote`, and the nested `sass` copy pulled in by canvases) so the security scan can pass.
+
+### New Functionality
+- Any two records can be linked with a directed relation: relates to, references, supports, or part of. The links API lists what a record points to and what points at it, with display numbers and a path to open each record.
+- Deleting a record removes its links, including when a project delete cascades to its contents. Soft-deleted tasks and to-dos stay stored and drop out of the link list until they are restored.
+
 ## 0.55.1 — 2026-09-28
 
 ### Enhancements

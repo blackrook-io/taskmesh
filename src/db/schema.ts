@@ -1029,6 +1029,66 @@ export const taggings = pgTable(
 );
 
 /**
+ * Directed record-to-record links (T0160). Polymorphic ends, so no FK cascade;
+ * AFTER DELETE triggers purge rows when either end is hard-deleted.
+ * `origin` separates manual links from later mention sync (T0161).
+ */
+const ENTITY_LINK_TYPES_SQL = `'idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board'`;
+
+export const entityLinks = pgTable(
+  "entity_links",
+  {
+    id: serial("id").primaryKey(),
+    srcType: text("src_type").notNull(),
+    srcId: integer("src_id").notNull(),
+    dstType: text("dst_type").notNull(),
+    dstId: integer("dst_id").notNull(),
+    /** relates_to | references | supports | part_of */
+    relation: text("relation").notNull().default("relates_to"),
+    /** manual | mention */
+    origin: text("origin").notNull().default("manual"),
+    createdById: integer("created_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pairUniq: unique("entity_links_pair_uidx").on(
+      t.srcType,
+      t.srcId,
+      t.dstType,
+      t.dstId,
+      t.relation,
+      t.origin,
+    ),
+    srcIdx: index("entity_links_src_idx").on(t.srcType, t.srcId),
+    dstIdx: index("entity_links_dst_idx").on(t.dstType, t.dstId),
+    srcTypeCheck: check(
+      "entity_links_src_type_chk",
+      sql`${t.srcType} in (${sql.raw(ENTITY_LINK_TYPES_SQL)})`,
+    ),
+    dstTypeCheck: check(
+      "entity_links_dst_type_chk",
+      sql`${t.dstType} in (${sql.raw(ENTITY_LINK_TYPES_SQL)})`,
+    ),
+    relationCheck: check(
+      "entity_links_relation_chk",
+      sql`${t.relation} in ('relates_to', 'references', 'supports', 'part_of')`,
+    ),
+    originCheck: check(
+      "entity_links_origin_chk",
+      sql`${t.origin} in ('manual', 'mention')`,
+    ),
+    notSelf: check(
+      "entity_links_not_self",
+      sql`not (${t.srcType} = ${t.dstType} and ${t.srcId} = ${t.dstId})`,
+    ),
+  }),
+);
+
+/**
  * First-class ToDo records (UI: "ToDo"; display D####).
  * Lighter than Task: scheduled work without full task hierarchy/phases.
  */
@@ -1495,6 +1555,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   ownedProjects: many(projects, { relationName: "project_owner" }),
   ownedUploads: many(uploads, { relationName: "upload_owner" }),
   ownedTags: many(tags, { relationName: "tag_owner" }),
+  createdEntityLinks: many(entityLinks, { relationName: "entity_link_created_by" }),
   ownedTodoLists: many(todoLists, { relationName: "todo_list_owner" }),
   ownedImageBoards: many(imageBoards, { relationName: "image_board_owner" }),
   createdTaskDescriptionTemplates: many(taskDescriptionTemplates, {
@@ -1762,6 +1823,14 @@ export const taggingsRelations = relations(taggings, ({ one }) => ({
   tag: one(tags, {
     fields: [taggings.tagId],
     references: [tags.id],
+  }),
+}));
+
+export const entityLinksRelations = relations(entityLinks, ({ one }) => ({
+  createdBy: one(users, {
+    fields: [entityLinks.createdById],
+    references: [users.id],
+    relationName: "entity_link_created_by",
   }),
 }));
 

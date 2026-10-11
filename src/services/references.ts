@@ -38,7 +38,7 @@ export type ReferenceHit = {
   projectId: number | null;
 };
 
-function hrefFor(
+export function hrefFor(
   entityType: EntityType,
   id: number,
   projectId: number | null,

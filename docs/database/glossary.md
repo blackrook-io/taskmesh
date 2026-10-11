@@ -45,12 +45,19 @@ Several tables store **`entity_type`** (text) + **`entity_id`** (integer) instea
 - `todo_list_items`
 - `board_cards`
 - `wiki_nodes`
+- `entity_links` (`src_type` / `src_id` and `dst_type` / `dst_id`)
 
 Canonical `entity_type` values (`EntityType`):
 
 `idea` · `project` · `task` · `todo` · `document` · `todo_list` · `board` · `canvas` · `wiki_node` · `image_board`
 
-There is **no database FK** enforcing that `entity_id` exists in the target table; integrity is an application concern. Unique indexes usually prevent duplicate attachments of the same entity in the same parent (tag, list, board, or project wiki).
+There is **no database FK** enforcing that `entity_id` exists in the target table; integrity is an application concern. Unique indexes usually prevent duplicate attachments of the same entity in the same parent (tag, list, board, or project wiki). `entity_links` is unique on the full directed pair plus relation and origin. Hard-deleting either end purges matching rows via triggers.
+
+## Entity link relation and origin
+
+`entity_links.relation`: `relates_to` (default) · `references` · `supports` · `part_of`.
+
+`entity_links.origin`: `manual` (API create/delete) · `mention` (reserved for markdown sync). The same pair may exist once per origin. Soft-deleted tasks and todos keep their link rows; list APIs hide those ends until the record is restored.
 
 ## Task states
 
