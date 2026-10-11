@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.7 — 2026-10-11
+
+### Enhancements
+- Mesh lines that share a side leave at separate ports, ordered so they do not cross at the record. Lines through the same gutter each get their own lane, and a crowded gutter widens so the next columns shift right. The containment bus still meets those columns.
+
+### Fixes
+- Opening a Mesh hover card no longer rebuilds the records, so reference lines stay on the canvas instead of flashing off and back.
+
 ## 0.58.6 — 2026-10-11
 
 ### Enhancements

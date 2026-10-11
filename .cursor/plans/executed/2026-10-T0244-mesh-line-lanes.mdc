@@ -1,0 +1,44 @@
+# T0244 — Mesh lines: spread ports and give shared gutters their own lanes
+
+**Task:** T0244 (id `259`) — Mesh lines: spread ports and give shared gutters their own lanes
+**Parent:** T0243 (id `258`, Pending) — direction-aware handles; own work is done
+**Depends on:** T0243 Pending (does not block)
+**Required by:** T0245 trunk corridor, T0247 crossing halos — not this session
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Branch (after approval):** `T0244-mesh-line-lanes`
+
+Lines that share a side leave one handle, and lines through the same gutter share one vertical x, so they draw on top of each other. A column pitch of 240 and a record box of 200 leave about 40px between heads. A grandchild stub eats most of that, so the real gap is often smaller.
+
+## Decisions
+
+1. **Ports.** Each line on a side gets its own anchor, 8px apart, centered on that side, ordered by the other record’s `centerY` so the lines do not cross at the node. The offsets travel on the edge. `MeshEdge` applies them along the side from the handle React Flow already provides.
+2. **Lanes.** Spacing is 10px (inside the 8–12px range). A vertical run is assigned an x in the gutter between the rightmost box of the left column and the leftmost box of the next. Same-column brackets use the gutter to the right of that column. Two lines in one gutter never share an x.
+3. **Widening.** Count how many 10px lanes fit in the measured gap after a 4px inset on each side. Each extra line adds 10px to that gutter and shifts every column to its right by the same amount. The containment bus is drawn from those shifted centers, so it still meets the columns. `meshNodesOverlap` stays false.
+4. **Router.** `MeshEdge` stops using `getSmoothStepPath`. A small orthogonal builder uses the layout lane and the port offsets, with the same 8px rounded corners. A single line in a gutter still steps 20px out, as it does today.
+5. **Bus.** Lane x values stay in the gutter, off the bus verticals that run through column centers. The bus geometry is otherwise unchanged.
+6. **Card.** The hover card stays 32px out. The nearest lane is inside that, so the lines on the hovered record stay visible. Lanes farther across the gutter may still pass under the card.
+7. **No schema.** Finish-up is a PATCH bump. `FEATURES.md` already lists the Mesh tab. `RELEASE_NOTES.md` gets an Enhancements bullet on finish-up.
+
+## Scope
+
+1. Pure helpers in `client/src/lib/meshLayout.ts` for port offsets, lane x, and gutter extra width. Store `sourceOffset`, `targetOffset`, and `laneX` on `MeshLayoutEdge`. Shift columns before the bus is drawn.
+2. `MeshEdge` in `MeshPanel.tsx` draws the rounded orthogonal path from those fields.
+3. Tests in `meshLayout.test.ts`: port order follows the other end’s y; two lines in one gutter get lane x 10px apart; a crowded gutter shifts the next column; `meshNodesOverlap` stays false.
+4. `npm run lint` clean. Run the mesh layout tests.
+
+## Out
+
+- A trunk corridor for rail and band links (T0245).
+- Halos or hops where lines still cross (T0247).
+- Redrawing `docs/design/mesh-view.html`. The app router is the one that lanes.
+
+## Acceptance
+
+- Two lines between the same pair of columns do not share a lane x.
+- Ports on one side are ordered by the other record’s y.
+- A gutter with more lines than fit pushes the next columns right, and records still do not overlap.
+- Corners stay rounded. The containment bus still meets the columns and does not sit on a line lane.
+
+## QA follow-ups
+
+- Hover no longer rebuilds Mesh nodes when the detail card opens. That rebuild cleared measured handles for a moment, so reference lines unmounted and flashed back. The card still opens, and truncated titles still hide their tooltip while it is open.

@@ -84,6 +84,12 @@ export type MeshLayoutEdge = {
   targetHandle: MeshTargetHandle;
   kind: "link" | "depends" | "suggested";
   blocking: boolean;
+  /** Pixels along the source side, centered on the handle. */
+  sourceOffset: number;
+  /** Pixels along the target side, centered on the handle. */
+  targetOffset: number;
+  /** Flow x of the vertical run. */
+  laneX: number;
 };
 
 /** Right, left, or a same-column bracket on the right. Half a column is the same column. */
@@ -95,6 +101,73 @@ export function meshEdgeHandles(
   if (Math.abs(dx) < MESH_COLUMN_PITCH / 2) return { sourceHandle: "r", targetHandle: "r-in" };
   if (dx > 0) return { sourceHandle: "r", targetHandle: "l" };
   return { sourceHandle: "l-out", targetHandle: "r-in" };
+}
+
+export const MESH_PORT_GAP = 8;
+export const MESH_LANE_GAP = 10;
+export const MESH_LANE_INSET = 4;
+export const MESH_LINE_STEP = 20;
+
+/** Centered on the side, one slot per line, ordered by the other end's y. */
+export function meshPortOffsets(otherYs: readonly number[]): number[] {
+  const order = otherYs.map((y, index) => ({ y, index }));
+  order.sort((a, b) => a.y - b.y || a.index - b.index);
+  const offsets = new Array<number>(otherYs.length);
+  order.forEach((item, rank) => {
+    offsets[item.index] = (rank - (order.length - 1) / 2) * MESH_PORT_GAP;
+  });
+  return offsets;
+}
+
+/** Extra pixels a gutter needs so its lines are not forced onto one x. */
+export function meshGutterExtra(count: number, gap: number): number {
+  if (count <= 0) return 0;
+  const fit = Math.max(1, Math.floor(Math.max(0, gap - MESH_LANE_INSET * 2) / MESH_LANE_GAP));
+  let extra = Math.max(0, count - fit) * MESH_LANE_GAP;
+  const room =
+    MESH_LANE_INSET +
+    (count === 1 ? MESH_LINE_STEP : MESH_LANE_INSET + (count - 1) * MESH_LANE_GAP);
+  if (gap + extra < room) extra = room - gap;
+  return extra;
+}
+
+/** Lane x values in a gutter. One line steps 20px out; several sit 10px apart. */
+export function meshLaneXs(count: number, gutterLeft: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [gutterLeft + MESH_LINE_STEP];
+  return Array.from({ length: count }, (_, index) => gutterLeft + MESH_LANE_INSET + index * MESH_LANE_GAP);
+}
+
+/** Rounded orthogonal step through `laneX`. */
+export function meshOrthogonalPath(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  laneX: number,
+  radius = 8,
+): string {
+  const fmt = (n: number) => n.toFixed(1);
+  const vert = Math.abs(ty - sy);
+  const h1 = Math.abs(laneX - sx);
+  const h2 = Math.abs(tx - laneX);
+  const r = Math.min(radius, h1 / 2, h2 / 2, vert / 2);
+  if (r < 0.5 || vert < 1) {
+    return `M${fmt(sx)},${fmt(sy)} L${fmt(laneX)},${fmt(sy)} L${fmt(laneX)},${fmt(ty)} L${fmt(tx)},${fmt(ty)}`;
+  }
+  const sxSign = Math.sign(laneX - sx) || 1;
+  const exSign = Math.sign(tx - laneX) || 1;
+  const ySign = Math.sign(ty - sy) || 1;
+  const sweep1 = sxSign * ySign > 0 ? 1 : 0;
+  const sweep2 = ySign * exSign > 0 ? 0 : 1;
+  return [
+    `M${fmt(sx)},${fmt(sy)}`,
+    `L${fmt(laneX - sxSign * r)},${fmt(sy)}`,
+    `A${fmt(r)},${fmt(r)} 0 0 ${sweep1} ${fmt(laneX)},${fmt(sy + ySign * r)}`,
+    `L${fmt(laneX)},${fmt(ty - ySign * r)}`,
+    `A${fmt(r)},${fmt(r)} 0 0 ${sweep2} ${fmt(laneX + exSign * r)},${fmt(ty)}`,
+    `L${fmt(tx)},${fmt(ty)}`,
+  ].join(" ");
 }
 
 /** A proposed link. The source is the suggested record; the target is already on the canvas. */
@@ -184,6 +257,102 @@ function placedNode(
     type: node.type,
     projectLabel: projectLabel(node, meshProjectId, projectRefs),
   };
+}
+
+function columnCenters(
+  column: { head: MeshGraphNode | null; members: MeshGraphNode[] },
+  x: number,
+): number[] {
+  if (column.head) return [x, ...column.members.map(() => x + MESH_STUB)];
+  return column.members.map(() => x + MESH_STUB);
+}
+
+function columnExtent(centers: readonly number[]): { left: number; right: number } {
+  if (centers.length === 0) return { left: 0, right: 0 };
+  const left = Math.min(...centers.map((center) => center - MESH_GLYPH / 2));
+  const right = Math.max(...centers.map((center) => center - MESH_GLYPH / 2 + MESH_NODE_WIDTH));
+  return { left, right };
+}
+
+function assignMeshPorts(
+  edges: MeshLayoutEdge[],
+  placedByKey: ReadonlyMap<string, MeshLayoutNode>,
+): void {
+  const groups = new Map<
+    string,
+    { edge: MeshLayoutEdge; end: "source" | "target"; otherY: number }[]
+  >();
+  for (const edge of edges) {
+    const from = placedByKey.get(edge.source);
+    const to = placedByKey.get(edge.target);
+    if (!from || !to) continue;
+    const sourceSide = edge.sourceHandle === "l-out" ? "left" : "right";
+    const targetSide = edge.targetHandle === "l" ? "left" : "right";
+    const sourceGroup = groups.get(`${edge.source}:${sourceSide}`) ?? [];
+    sourceGroup.push({ edge, end: "source", otherY: to.centerY });
+    groups.set(`${edge.source}:${sourceSide}`, sourceGroup);
+    const targetGroup = groups.get(`${edge.target}:${targetSide}`) ?? [];
+    targetGroup.push({ edge, end: "target", otherY: from.centerY });
+    groups.set(`${edge.target}:${targetSide}`, targetGroup);
+  }
+  for (const group of groups.values()) {
+    const offsets = meshPortOffsets(group.map((item) => item.otherY));
+    group.forEach((item, index) => {
+      const offset = offsets[index] ?? 0;
+      if (item.end === "source") item.edge.sourceOffset = offset;
+      else item.edge.targetOffset = offset;
+    });
+  }
+}
+
+function assignMeshLanes(
+  edges: MeshLayoutEdge[],
+  placedByKey: ReadonlyMap<string, MeshLayoutNode>,
+  columnOf: ReadonlyMap<string, number>,
+  gutterLeftOf: (index: number) => number,
+  busX: ReadonlySet<number>,
+): void {
+  const cascade = new Map<number, MeshLayoutEdge[]>();
+  const other = new Map<string, { left: number; edges: MeshLayoutEdge[] }>();
+  for (const edge of edges) {
+    const sourceColumn = columnOf.get(edge.source);
+    const targetColumn = columnOf.get(edge.target);
+    if (sourceColumn != null && targetColumn != null) {
+      const gutter = Math.min(sourceColumn, targetColumn);
+      const list = cascade.get(gutter) ?? [];
+      list.push(edge);
+      cascade.set(gutter, list);
+      continue;
+    }
+    const from = placedByKey.get(edge.source);
+    const to = placedByKey.get(edge.target);
+    if (!from || !to) continue;
+    const same = Math.abs(from.centerX - to.centerX) < MESH_COLUMN_PITCH / 2;
+    const gutterLeft = same
+      ? Math.max(from.x + MESH_NODE_WIDTH, to.x + MESH_NODE_WIDTH)
+      : (from.centerX <= to.centerX ? from : to).x + MESH_NODE_WIDTH;
+    const key = `${same ? "same" : "gap"}:${Math.round(gutterLeft)}`;
+    const group = other.get(key) ?? { left: gutterLeft, edges: [] };
+    group.edges.push(edge);
+    other.set(key, group);
+  }
+  const used = new Set<number>();
+  const place = (list: MeshLayoutEdge[], left: number) => {
+    const sorted = [...list].sort((a, b) => {
+      const span = (edge: MeshLayoutEdge) =>
+        (placedByKey.get(edge.source)?.centerY ?? 0) + (placedByKey.get(edge.target)?.centerY ?? 0);
+      return span(a) - span(b) || a.id.localeCompare(b.id);
+    });
+    const lanes = meshLaneXs(sorted.length, left);
+    for (let index = 0; index < sorted.length; index += 1) {
+      let lane = lanes[index] ?? left + MESH_LINE_STEP;
+      while (busX.has(Math.round(lane)) || used.has(Math.round(lane))) lane += MESH_LANE_GAP;
+      used.add(Math.round(lane));
+      sorted[index]!.laneX = lane;
+    }
+  };
+  for (const [gutter, list] of cascade) place(list, gutterLeftOf(gutter));
+  for (const group of other.values()) place(group.edges, group.left);
 }
 
 function readingRank(node: MeshLayoutNode): number {
@@ -315,15 +484,56 @@ export function layoutMesh(input: {
   }));
   if (leaves.length > 0) columns.push({ head: null, members: leaves });
 
-  const colX = (index: number) => MESH_ORIGIN_X + index * MESH_COLUMN_PITCH;
-  const cx = columns.length > 0 ? colX(0) + ((columns.length - 1) * MESH_COLUMN_PITCH) / 2 : MESH_ORIGIN_X;
+  const columnOf = new Map<string, number>();
+  columns.forEach((column, index) => {
+    if (column.head) columnOf.set(column.head.key, index);
+    for (const member of column.members) columnOf.set(member.key, index);
+  });
+  const gutterCount = new Array<number>(columns.length).fill(0);
+  const addGutter = (source: string, target: string) => {
+    const sourceColumn = columnOf.get(source);
+    const targetColumn = columnOf.get(target);
+    if (sourceColumn == null || targetColumn == null) return;
+    const gutter = Math.min(sourceColumn, targetColumn);
+    gutterCount[gutter] = (gutterCount[gutter] ?? 0) + 1;
+  };
+  for (const edge of input.edges) {
+    if (referencesOn && LINK_RELATIONS.has(edge.relation)) {
+      addGutter(edge.source, edge.target);
+      continue;
+    }
+    if (dependsOn && edge.relation === "depends_on") addGutter(edge.source, edge.target);
+  }
+  const countedSuggestions = new Set<string>();
+  for (const suggestion of suggestions) {
+    const id = `s:${suggestion.sourceKey}:${suggestion.targetKey}`;
+    if (countedSuggestions.has(id)) continue;
+    countedSuggestions.add(id);
+    addGutter(suggestion.sourceKey, suggestion.targetKey);
+  }
+  const baseX = (index: number) => MESH_ORIGIN_X + index * MESH_COLUMN_PITCH;
+  const baseExtent = columns.map((column, index) => columnExtent(columnCenters(column, baseX(index))));
+  const baseMaxX = columns.length > 0 ? baseX(columns.length - 1) + MESH_STUB + 190 : MESH_ORIGIN_X + 260;
+  const gutterExtra = gutterCount.map((count, index) => {
+    const extent = baseExtent[index];
+    if (!extent) return 0;
+    const next = baseExtent[index + 1];
+    const gap = next ? next.left - extent.right : baseMaxX + 40 - extent.right;
+    return meshGutterExtra(count, gap);
+  });
+  const shiftBefore = (index: number) => gutterExtra.slice(0, index).reduce((sum, extra) => sum + extra, 0);
+  const colX = (index: number) => baseX(index) + shiftBefore(index);
+  const cx = columns.length > 0 ? (colX(0) + colX(columns.length - 1)) / 2 : MESH_ORIGIN_X;
   const fy = parent || linkNodes.length > 0 || bandSuggestions.length > 0 ? 170 : 60;
   const focusR = MESH_FOCUS_GLYPH / 2;
   const glyphR = MESH_GLYPH / 2;
   const tree: string[] = [];
   const headings: MeshHeading[] = [];
   const placed: MeshLayoutNode[] = [];
-  let maxX = columns.length > 0 ? colX(columns.length - 1) + MESH_STUB + 190 : cx + 260;
+  let maxX =
+    columns.length > 0
+      ? colX(columns.length - 1) + MESH_STUB + 190 + (gutterExtra[columns.length - 1] ?? 0)
+      : cx + 260;
 
   if (columns.length > 0) {
     const rowY = fy + 150;
@@ -431,6 +641,9 @@ export function layoutMesh(input: {
         ...edgeHandles(edge.source, edge.target),
         kind: "link",
         blocking: false,
+        sourceOffset: 0,
+        targetOffset: 0,
+        laneX: 0,
       });
       continue;
     }
@@ -443,6 +656,9 @@ export function layoutMesh(input: {
       ...edgeHandles(edge.source, edge.target),
       kind: "depends",
       blocking: prerequisite?.state !== "complete",
+      sourceOffset: 0,
+      targetOffset: 0,
+      laneX: 0,
     });
   }
   const suggestedSeen = new Set<string>();
@@ -458,8 +674,19 @@ export function layoutMesh(input: {
       ...edgeHandles(suggestion.sourceKey, suggestion.targetKey),
       kind: "suggested",
       blocking: false,
+      sourceOffset: 0,
+      targetOffset: 0,
+      laneX: 0,
     });
   }
+  assignMeshPorts(edges, placedByKey);
+  assignMeshLanes(
+    edges,
+    placedByKey,
+    columnOf,
+    (index) => (baseExtent[index]?.right ?? 0) + shiftBefore(index),
+    new Set<number>([Math.round(cx), ...columns.map((_, index) => Math.round(colX(index)))]),
+  );
 
   const ancestors: MeshAncestor[] = [];
   const seen = new Set<string>();
