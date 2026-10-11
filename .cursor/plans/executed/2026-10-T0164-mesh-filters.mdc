@@ -1,0 +1,45 @@
+# T0164 — Mesh depth, hide-done, and type filters
+
+**Task:** T0164 (id `177`) — Mesh: project Mesh tab with xyflow focus view
+**Parent:** T0159 (id `172`) — Mesh epic
+**Depends on:** T0163 complete (graph API)
+**Children:** T0171–T0174 complete (canvas, encoding, cards, relation chips)
+**Required by:** T0165 saved layouts, T0166 Plan view — not this session
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0164-mesh-filters`
+
+The Mesh tab, xyflow canvas, cascade, encoding, hover cards, and References / Depends on chips already shipped. T0174 left three controls on this task because the prototype toolbar does not have them and no child owns them: entity-type chips, hide done, and depth 1/2/3.
+
+## Decisions
+
+1. **Depth is a refetch.** The graph route already accepts `depth` 1–3. Mesh hardcodes 3 so a grandchild’s link can reach the rail. The toolbar offers 1, 2, and 3. Default stays 3. The choice is stored in this browser under `mesh-depth`.
+2. **Hide done is client-side.** `GET /api/v1/graph?hideDone=true` exists, but every neighbour is reported `done: false`, so the flag drops nothing. This task does not repair that walk. A toolbar chip hides records whose `state` is `complete` before layout. The focused record stays even when it is complete. Canceled records stay. Default is off. Stored under `mesh-hide-done`.
+3. **Type chips are client-side.** One chip per entity type that appears in the loaded graph, all on. Turning a type off drops those records before layout. The focused record stays. Stored as the set of hidden types under `mesh-hidden-types`.
+4. **Filters compose.** Depth changes the payload. Hide-done and type chips then drop nodes (and edges that no longer have both ends) and the existing cascade layout runs on what remains. Relation chips stay as they are.
+5. **No cluster nodes.** Collapsing a busy type into a “12 tasks” group was in the original write-up and is not in the prototype. Deferred to T0242 (id `257`, Draft, depends on this task).
+6. **No schema.** Finish-up is a PATCH bump. `FEATURES.md` already lists the Mesh tab; these controls refine it, so that file stays as it is. `RELEASE_NOTES.md` gets an Enhancements bullet on finish-up.
+
+## Scope
+
+1. Toolbar controls on `MeshPanel`: depth 1/2/3, Hide done, and the type chips, remembered the same way Color and the relation chips are.
+2. Apply hide-done and hidden types in one pure step before `layoutMesh`, with unit tests: focus kept, complete neighbours dropped, a hidden type dropped, edges to dropped records dropped.
+3. `npm run lint` clean.
+
+## Out
+
+- Saved positions (T0165) and Plan view (T0166).
+- Making the server `hideDone` walk actually mark complete neighbours.
+- AI suggestions (T0168) and Admin Mesh appearance (T0175).
+- Group nodes when a type is crowded (T0242).
+
+## Acceptance
+
+- On TaskMesh Mesh, depth starts at 3, Hide done starts off, and every type present starts on. A reload keeps a change.
+- Depth 1 shows a smaller neighbourhood than depth 3. The focused record remains.
+- Hide done removes complete records other than the focus. Canceled records remain.
+- Turning off Tasks removes task records other than the focus. The cascade, cards, and relation chips still work on what remains.
+- `npm run lint` is clean.
+
+## Deferred
+
+T0242 — collapse a busy type into one group node. Draft under the Mesh epic, depends on T0164.

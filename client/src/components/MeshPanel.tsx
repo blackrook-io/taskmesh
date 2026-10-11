@@ -31,6 +31,7 @@ import {
   type MeshSuggestionCardModel,
 } from "../lib/meshCard";
 import { isEntityType, type EntityType } from "../lib/entityType";
+import { filterMeshGraph } from "../lib/meshFilters";
 import { formatEntityRef } from "../lib/entityRef";
 import {
   layoutMesh,
@@ -139,6 +140,38 @@ function parseEntityKey(key: string): { entityType: EntityType; id: number } | n
   const id = Number(key.slice(colon + 1));
   if (!isEntityType(entityType) || !Number.isInteger(id) || id <= 0) return null;
   return { entityType, id };
+}
+
+type MeshDepth = 1 | 2 | 3;
+
+function readDepth(): MeshDepth {
+  try {
+    const stored = localStorage.getItem("mesh-depth");
+    if (stored === "1" || stored === "2" || stored === "3") return Number(stored) as MeshDepth;
+  } catch {
+    /* private browsing */
+  }
+  return 3;
+}
+
+function readHideDone(): boolean {
+  try {
+    return localStorage.getItem("mesh-hide-done") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function readHiddenTypes(): ReadonlySet<string> {
+  try {
+    const raw = localStorage.getItem("mesh-hidden-types");
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((item): item is string => typeof item === "string" && isEntityType(item)));
+  } catch {
+    return new Set();
+  }
 }
 
 function readColorMode(): MeshColorMode {
@@ -597,6 +630,9 @@ export function MeshPanel({
   const [stack, setStack] = useState<string[]>([rootKey]);
   const focusKey = stack[stack.length - 1] ?? rootKey;
   const [colorMode, setColorMode] = useState<MeshColorMode>(readColorMode);
+  const [depth, setDepth] = useState<MeshDepth>(readDepth);
+  const [hideDone, setHideDone] = useState(readHideDone);
+  const [hiddenTypes, setHiddenTypes] = useState<ReadonlySet<string>>(readHiddenTypes);
   const [relations, setRelations] = useState<MeshRelations>(readRelations);
   const [droppedFor, setDroppedFor] = useState<{ focus: string; ids: ReadonlySet<string> }>({
     focus: rootKey,
@@ -610,11 +646,11 @@ export function MeshPanel({
   }>({ seen: new Set(), origin: null });
 
   const graphQuery = useQuery({
-    queryKey: ["graph", focusKey],
+    queryKey: ["graph", focusKey, depth],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const res = await apiJson<{ data: GraphPayload }>(
-        `/api/v1/graph?root=${encodeURIComponent(focusKey)}&depth=3`,
+        `/api/v1/graph?root=${encodeURIComponent(focusKey)}&depth=${depth}`,
       );
       return res.data;
     },
@@ -714,11 +750,21 @@ export function MeshPanel({
     [droppedIds, suggestions],
   );
   const shownSuggestions = relations.suggestions ? liveSuggestions : EMPTY_SUGGESTIONS;
-  const layout = useMemo(() => {
+  const filteredGraph = useMemo(() => {
     if (!graphQuery.data) return null;
-    return layoutMesh({
+    return filterMeshGraph({
       nodes: graphQuery.data.nodes,
       edges: graphQuery.data.edges,
+      focusKey,
+      hideDone,
+      hiddenTypes,
+    });
+  }, [focusKey, graphQuery.data, hiddenTypes, hideDone]);
+  const layout = useMemo(() => {
+    if (!filteredGraph) return null;
+    return layoutMesh({
+      nodes: filteredGraph.nodes,
+      edges: filteredGraph.edges,
       focusKey,
       meshProjectId: projectId,
       projectRefs,
@@ -727,8 +773,8 @@ export function MeshPanel({
       suggestions: shownSuggestions,
     });
   }, [
+    filteredGraph,
     focusKey,
-    graphQuery.data,
     projectId,
     projectRefs,
     relations.dependsOn,
@@ -764,12 +810,52 @@ export function MeshPanel({
   const hiddenOver = useMemo(() => {
     if (!graphQuery.data || !layout) return new Map<string, number>();
     return hiddenOverdueCounts(
-      graphQuery.data.nodes,
-      graphQuery.data.edges,
+      filteredGraph?.nodes ?? graphQuery.data.nodes,
+      filteredGraph?.edges ?? graphQuery.data.edges,
       new Set(layout.nodes.map((node) => node.key)),
       today,
     );
-  }, [graphQuery.data, layout, today]);
+  }, [filteredGraph, graphQuery.data, layout, today]);
+
+  const chooseDepth = useCallback((next: MeshDepth) => {
+    setDepth(next);
+    try {
+      localStorage.setItem("mesh-depth", String(next));
+    } catch {
+      /* private browsing */
+    }
+  }, []);
+
+  const toggleHideDone = useCallback(() => {
+    setHideDone((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("mesh-hide-done", next ? "1" : "0");
+      } catch {
+        /* private browsing */
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleType = useCallback((type: string) => {
+    setHiddenTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      try {
+        localStorage.setItem("mesh-hidden-types", JSON.stringify([...next]));
+      } catch {
+        /* private browsing */
+      }
+      return next;
+    });
+  }, []);
+
+  const typeChips = useMemo(() => {
+    const present = new Set(graphQuery.data?.nodes.map((node) => node.type) ?? []);
+    return LEGEND_SHAPES.filter((shape) => present.has(shape.type));
+  }, [graphQuery.data]);
 
   const chooseColor = useCallback((mode: MeshColorMode) => {
     setColorMode(mode);
@@ -1049,6 +1135,42 @@ export function MeshPanel({
               AI suggestions
             </button>
           ) : null}
+        </div>
+        <button
+          type="button"
+          className="mesh-filter"
+          aria-pressed={hideDone}
+          onClick={toggleHideDone}
+        >
+          Hide done
+        </button>
+        {typeChips.length > 0 ? (
+          <div className="mesh-filters" role="group" aria-label="Record types">
+            {typeChips.map((shape) => (
+              <button
+                key={shape.type}
+                type="button"
+                className="mesh-filter"
+                aria-pressed={!hiddenTypes.has(shape.type)}
+                onClick={() => toggleType(shape.type)}
+              >
+                {shape.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="mesh-depth" role="group" aria-label="Depth">
+          <span>Depth</span>
+          {([1, 2, 3] as const).map((level) => (
+            <button
+              key={level}
+              type="button"
+              aria-pressed={depth === level}
+              onClick={() => chooseDepth(level)}
+            >
+              {level}
+            </button>
+          ))}
         </div>
         <div className="mesh-colors" role="group" aria-label="Color nodes by">
           <span>Color</span>
