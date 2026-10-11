@@ -261,7 +261,7 @@ export function layoutMeshPlan(input: {
   const suggestions = input.suggestions ?? [];
   const byKey = new Map(input.nodes.map((node) => [node.key, node]));
   const focus = byKey.get(input.focusKey);
-  if (!focus) return { nodes: [], edges: [], ancestors: [], tree: [], headings: [] };
+  if (!focus) return { nodes: [], edges: [], ancestors: [], tree: [], treeTies: [], headings: [] };
 
   const keys = input.nodes.map((node) => node.key);
   const keySet = new Set(keys);
@@ -324,6 +324,7 @@ export function layoutMeshPlan(input: {
 
   const placedByKey = new Map(placed.map((node) => [node.key, node]));
   const tree: string[] = [];
+  const treeTies: MeshLayout["treeTies"] = [];
   const edges: MeshLayoutEdge[] = [];
   for (const edge of input.edges) {
     const from = placedByKey.get(edge.source);
@@ -331,6 +332,7 @@ export function layoutMeshPlan(input: {
     if (!from || !to) continue;
     if (edge.relation === "child_of") {
       const mid = (from.centerX + to.centerX) / 2;
+      treeTies.push({ pathIndex: tree.length, fromKey: edge.target, toKey: edge.source });
       tree.push(meshOrthogonalPath(to.centerX, to.centerY, from.centerX, from.centerY, mid));
       continue;
     }
@@ -410,5 +412,5 @@ export function layoutMeshPlan(input: {
   ancestors.reverse();
 
   const reading = [...placed].sort((a, b) => a.y - b.y || a.x - b.x);
-  return { nodes: reading, edges, ancestors, tree, headings };
+  return { nodes: reading, edges, ancestors, tree, treeTies, headings };
 }

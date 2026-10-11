@@ -770,6 +770,47 @@ export const userProjectOverviewPrefs = pgTable(
   ],
 );
 
+/** One saved Mesh canvas per user, focused record, and view (T0165). */
+export type MeshLayoutPin = { x: number; y: number };
+export type MeshLayoutViewport = { x: number; y: number; zoom: number };
+
+export const meshLayouts = pgTable(
+  "mesh_layouts",
+  {
+    id: serial("id").primaryKey(),
+    ownerId: integer("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Graph root type, including `tag`. */
+    rootType: text("root_type").notNull(),
+    rootId: integer("root_id").notNull(),
+    /** `focus` | `plan` */
+    view: text("view").notNull(),
+    /** Pinned node key → top-left. Missing keys stay on the computed layout. */
+    positions: jsonb("positions")
+      .$type<Record<string, MeshLayoutPin>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    /** Saved pan and zoom. Null until the user moves the canvas. */
+    viewport: jsonb("viewport").$type<MeshLayoutViewport | null>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("mesh_layouts_owner_root_view_uidx").on(t.ownerId, t.rootType, t.rootId, t.view),
+    index("mesh_layouts_owner_id_idx").on(t.ownerId),
+    check(
+      "mesh_layouts_root_type_chk",
+      sql`${t.rootType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'tag')`,
+    ),
+    check("mesh_layouts_view_chk", sql`${t.view} in ('focus', 'plan')`),
+  ],
+);
+
 /** Append-only API request / auth audit log for Admin APIs + Logging. */
 export const apiRequestLogs = pgTable(
   "api_request_logs",
@@ -1628,6 +1669,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   listViewPrefs: many(userListViewPrefs),
   taskListState: many(userTaskListState),
   overviewPrefs: many(userProjectOverviewPrefs),
+  meshLayouts: many(meshLayouts),
 }));
 
 export const mfaLoginChallengesRelations = relations(mfaLoginChallenges, ({ one }) => ({
@@ -1709,6 +1751,13 @@ export const userProjectOverviewPrefsRelations = relations(
     }),
   }),
 );
+
+export const meshLayoutsRelations = relations(meshLayouts, ({ one }) => ({
+  owner: one(users, {
+    fields: [meshLayouts.ownerId],
+    references: [users.id],
+  }),
+}));
 
 export const projectOverviewDefaultsRelations = relations(
   projectOverviewDefaults,

@@ -23,6 +23,7 @@ import {
 } from "react";
 import "@xyflow/react/dist/style.css";
 import { apiJson } from "../api/client";
+import { ConfirmDialog } from "./ConfirmDialog";
 import {
   MESH_APPEARANCE_DEFAULTS,
   meshAppearanceStyle,
@@ -38,6 +39,7 @@ import {
 } from "../lib/meshCard";
 import { isEntityType, type EntityType } from "../lib/entityType";
 import { filterMeshGraph } from "../lib/meshFilters";
+import { applyMeshPins, meshPinsInGraph, type MeshPin } from "../lib/meshPins";
 import { formatEntityRef } from "../lib/entityRef";
 import { layoutMeshPlan } from "../lib/meshPlanLayout";
 import {
@@ -725,6 +727,34 @@ function FrameFocus({
   return null;
 }
 
+type MeshViewport = { x: number; y: number; zoom: number };
+type SavedMeshLayout = {
+  positions: Record<string, MeshPin>;
+  viewport: MeshViewport | null;
+};
+
+const EMPTY_MESH_PINS: Record<string, MeshPin> = {};
+
+function RestoreViewport({
+  token,
+  viewport,
+}: {
+  token: string;
+  viewport: MeshViewport;
+}) {
+  const { setViewport } = useReactFlow();
+  const applied = useRef("");
+  useLayoutEffect(() => {
+    if (applied.current === token) return;
+    applied.current = token;
+    const frame = requestAnimationFrame(() => {
+      void setViewport(viewport, { duration: 0 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [setViewport, token, viewport]);
+  return null;
+}
+
 export function MeshPanel({
   projectId,
   suggestions = EMPTY_SUGGESTIONS,
@@ -746,6 +776,15 @@ export function MeshPanel({
     ids: EMPTY_IDS,
   });
   const [view, setView] = useState<"focus" | "plan">("focus");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [dragPos, setDragPos] = useState<{
+    focus: string;
+    view: "focus" | "plan";
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const [today] = useState(() => new Date());
   const [motion, setMotion] = useState<{
@@ -787,6 +826,9 @@ export function MeshPanel({
   const cardKeyRef = useRef<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const skipOpen = useRef(false);
+  const dragStart = useRef<{ id: string; x: number; y: number } | null>(null);
+  const viewportTimer = useRef<number | null>(null);
   const hotKeyRef = useRef<string | null>(null);
   const rememberHot = useCallback((key: string | null) => {
     hotKeyRef.current = key;
@@ -886,6 +928,16 @@ export function MeshPanel({
       hiddenTypes,
     });
   }, [focusKey, graphQuery.data, hiddenTypes, hideDone]);
+  const layoutQuery = useQuery({
+    queryKey: ["mesh-layout", focusKey, view] as const,
+    queryFn: async () => {
+      const res = await apiJson<{ data: SavedMeshLayout | null }>(
+        `/api/v1/mesh-layouts?root=${encodeURIComponent(focusKey)}&view=${view}`,
+      );
+      return res.data;
+    },
+  });
+  const savedPins = layoutQuery.data?.positions ?? EMPTY_MESH_PINS;
   const layout = useMemo(() => {
     if (!filteredGraph) return null;
     const shared = {
@@ -898,14 +950,15 @@ export function MeshPanel({
       dependsOn: relations.dependsOn,
       suggestions: shownSuggestions,
     };
-    if (view === "plan") {
-      return layoutMeshPlan({
-        ...shared,
-        blockNodes: graphQuery.data?.nodes ?? filteredGraph.nodes,
-        blockEdges: graphQuery.data?.edges ?? filteredGraph.edges,
-      });
-    }
-    return layoutMesh(shared);
+    const base =
+      view === "plan"
+        ? layoutMeshPlan({
+            ...shared,
+            blockNodes: graphQuery.data?.nodes ?? filteredGraph.nodes,
+            blockEdges: graphQuery.data?.edges ?? filteredGraph.edges,
+          })
+        : layoutMesh(shared);
+    return applyMeshPins(base, savedPins);
   }, [
     filteredGraph,
     focusKey,
@@ -914,6 +967,7 @@ export function MeshPanel({
     projectRefs,
     relations.dependsOn,
     relations.references,
+    savedPins,
     shownSuggestions,
     view,
   ]);
@@ -1086,6 +1140,10 @@ export function MeshPanel({
 
   const openNode = useCallback(
     (key: string) => {
+      if (skipOpen.current) {
+        skipOpen.current = false;
+        return;
+      }
       dismissCard();
       if (key === focusKey) return;
       rememberMotion();
@@ -1104,6 +1162,83 @@ export function MeshPanel({
     rememberMotion();
     setStack((prev) => prev.slice(0, -1));
   }, [dismissCard, rememberMotion, stack.length]);
+
+  const saveLayout = useMutation({
+    mutationFn: async (input: { root: string; view: "focus" | "plan"; body: SavedMeshLayout }) => {
+      const res = await apiJson<{ data: SavedMeshLayout }>(
+        `/api/v1/mesh-layouts?root=${encodeURIComponent(input.root)}&view=${input.view}`,
+        { method: "PUT", body: JSON.stringify(input.body) },
+      );
+      return { key: ["mesh-layout", input.root, input.view] as const, data: res.data };
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData(result.key, result.data);
+      setSaveError(null);
+    },
+    onError: (err: Error) => setSaveError(err.message),
+  });
+
+  const resetSavedLayout = useMutation({
+    mutationFn: async (input: { root: string; view: "focus" | "plan" }) => {
+      await apiJson(
+        `/api/v1/mesh-layouts?root=${encodeURIComponent(input.root)}&view=${input.view}`,
+        { method: "DELETE" },
+      );
+      return ["mesh-layout", input.root, input.view] as const;
+    },
+    onSuccess: (key) => {
+      queryClient.setQueryData(key, null);
+      setSaveError(null);
+    },
+    onError: (err: Error) => setSaveError(err.message),
+  });
+
+  const commitPin = useCallback(
+    (id: string, x: number, y: number) => {
+      const graphKeys = new Set(graphQuery.data?.nodes.map((node) => node.key) ?? []);
+      if (!graphKeys.has(id) || !layoutQuery.isSuccess) return;
+      const positions = meshPinsInGraph(
+        { ...(layoutQuery.data?.positions ?? EMPTY_MESH_PINS), [id]: { x, y } },
+        graphKeys,
+      );
+      const body: SavedMeshLayout = {
+        positions,
+        viewport: layoutQuery.data?.viewport ?? null,
+      };
+      const key = ["mesh-layout", focusKey, view] as const;
+      queryClient.setQueryData(key, body);
+      saveLayout.mutate({ root: focusKey, view, body });
+    },
+    [focusKey, graphQuery.data?.nodes, layoutQuery.data, layoutQuery.isSuccess, queryClient, saveLayout, view],
+  );
+
+  const scheduleViewport = useCallback(
+    (viewport: MeshViewport) => {
+      const root = focusKey;
+      const mode = view;
+      const keys = new Set(graphQuery.data?.nodes.map((node) => node.key) ?? []);
+      if (viewportTimer.current != null) window.clearTimeout(viewportTimer.current);
+      viewportTimer.current = window.setTimeout(() => {
+        const queryKey = ["mesh-layout", root, mode] as const;
+        if (queryClient.getQueryState(queryKey)?.status !== "success") return;
+        const saved = queryClient.getQueryData<SavedMeshLayout | null>(queryKey);
+        const body: SavedMeshLayout = {
+          positions: meshPinsInGraph(saved?.positions ?? EMPTY_MESH_PINS, keys),
+          viewport,
+        };
+        queryClient.setQueryData(queryKey, body);
+        saveLayout.mutate({ root, view: mode, body });
+      }, 400);
+    },
+    [focusKey, graphQuery.data?.nodes, queryClient, saveLayout, view],
+  );
+
+  useLayoutEffect(
+    () => () => {
+      if (viewportTimer.current != null) window.clearTimeout(viewportTimer.current);
+    },
+    [],
+  );
 
   const cards = useMemo(() => {
     const map = new Map<string, MeshCardModel>();
@@ -1154,7 +1289,10 @@ export function MeshPanel({
         return {
           id: node.key,
           type: "mesh" as const,
-          position: { x: node.x, y: node.y },
+          position:
+            dragPos?.focus === focusKey && dragPos.view === view && dragPos.id === node.key
+              ? { x: dragPos.x, y: dragPos.y }
+              : { x: node.x, y: node.y },
           data: {
             title: node.title,
             referenceId: node.referenceId,
@@ -1187,7 +1325,7 @@ export function MeshPanel({
             armTouch,
             consumeTouch,
           },
-          draggable: false,
+          draggable: layoutQuery.isSuccess,
           connectable: false,
         };
       })
@@ -1199,9 +1337,12 @@ export function MeshPanel({
       chrome.staleDays,
       colorMode,
       consumeTouch,
+      dragPos,
+      focusKey,
       graphByKey,
       hiddenOver,
       layout,
+      layoutQuery.isSuccess,
       motion,
       openNode,
       reduceMotion,
@@ -1211,6 +1352,7 @@ export function MeshPanel({
       showCardNow,
       suggestionCards,
       today,
+      view,
     ],
   );
   const flowEdges = useMemo(
@@ -1418,6 +1560,22 @@ export function MeshPanel({
         {graphQuery.data?.truncated ? (
           <p className="mesh-note">Some nearby records are not shown.</p>
         ) : null}
+        <button
+          type="button"
+          className="btn small ghost mesh-reset"
+          disabled={
+            !layoutQuery.data ||
+            (Object.keys(layoutQuery.data.positions).length === 0 && layoutQuery.data.viewport == null)
+          }
+          onClick={() => setResetOpen(true)}
+        >
+          Reset layout
+        </button>
+        {saveError ? (
+          <p className="mesh-note" role="alert">
+            {saveError}
+          </p>
+        ) : null}
       </div>
       {graphQuery.isLoading ? <p className="mesh-status">Loading mesh…</p> : null}
       {graphQuery.isError ? (
@@ -1454,24 +1612,56 @@ export function MeshPanel({
             edges={flowEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            nodesDraggable={false}
+            nodesDraggable={layoutQuery.isSuccess}
             nodesConnectable={false}
             elementsSelectable={false}
             panOnScroll
             zoomOnScroll={false}
+            nodeDragThreshold={4}
             minZoom={1}
             maxZoom={1.75}
             onMove={placeCard}
-            onMoveEnd={placeCard}
+            onMoveEnd={(event, viewport) => {
+              placeCard();
+              if (!event) return;
+              scheduleViewport(viewport);
+            }}
+            onNodeDragStart={(_event, node) => {
+              dragStart.current = { id: node.id, x: node.position.x, y: node.position.y };
+              skipOpen.current = false;
+            }}
+            onNodeDrag={(_event, node) => {
+              const start = dragStart.current;
+              if (!start || start.id !== node.id) return;
+              if (Math.hypot(node.position.x - start.x, node.position.y - start.y) > 4) {
+                skipOpen.current = true;
+              }
+              setDragPos({ focus: focusKey, view, id: node.id, x: node.position.x, y: node.position.y });
+            }}
+            onNodeDragStop={(_event, node) => {
+              const start = dragStart.current;
+              dragStart.current = null;
+              setDragPos(null);
+              if (!start || start.id !== node.id) return;
+              if (Math.hypot(node.position.x - start.x, node.position.y - start.y) <= 4) {
+                skipOpen.current = false;
+                return;
+              }
+              commitPin(node.id, node.position.x, node.position.y);
+            }}
             defaultViewport={{ x: 48, y: 0, zoom: 1 }}
             proOptions={{ hideAttribution: false }}
             colorMode="dark"
           >
-            <FrameFocus
-              focusKey={focusKey}
-              x={focusNode?.centerX ?? 0}
-              top={frameTop}
-            />
+            {layoutQuery.isSuccess && layoutQuery.data?.viewport ? (
+              <RestoreViewport token={`${focusKey}:${view}`} viewport={layoutQuery.data.viewport} />
+            ) : layoutQuery.isSuccess ? (
+              <FrameFocus
+                focusKey={focusKey}
+                x={focusNode?.centerX ?? 0}
+                top={frameTop}
+              />
+            ) : null}
             <ViewportPortal>
               <svg className="mesh-tree" width="12000" height="12000">
                 {layout.tree.map((d, index) => (
@@ -1603,6 +1793,18 @@ export function MeshPanel({
           </div>
         ) : null}
       </section>
+      <ConfirmDialog
+        open={resetOpen}
+        title="Reset layout"
+        message="Clear pinned positions and the saved pan and zoom for this record in this view?"
+        confirmLabel="Reset"
+        confirmTone="danger"
+        onConfirm={() => {
+          setResetOpen(false);
+          resetSavedLayout.mutate({ root: focusKey, view });
+        }}
+        onCancel={() => setResetOpen(false)}
+      />
     </section>
   );
 }

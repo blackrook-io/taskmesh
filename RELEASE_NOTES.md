@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.60.0 — 2026-10-11
+
+### New Functionality
+- Drag a node on Mesh to pin it. That position, and the canvas pan and zoom, come back after a reload, separately for Focus and Plan and for each record you open. Reset layout clears that saved view after you confirm. A new node is placed so it does not cover a pin.
+
 ## 0.59.1 — 2026-10-11
 
 ### New Functionality

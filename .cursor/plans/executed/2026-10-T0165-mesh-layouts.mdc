@@ -1,0 +1,66 @@
+# T0165 — Mesh saved layouts
+
+**Task:** T0165 (id `178`) — Mesh: saved layouts (pinned node positions per view)
+**Parent:** T0159 (id `172`) — Mesh: relationship graph, backlinks and focus view (epic), In Progress
+**Depends on:** T0164 complete (project Mesh tab)
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch (after approval):** `T0165-mesh-layouts`
+
+The task text still says force layouts reshuffle on each load. The shipped Mesh does not use a force simulation. Focus and Plan positions are pure functions of the graph (`layoutMesh`, `layoutMeshPlan`), and nodes are not draggable. This task stores the positions a person drags, and lays everyone else out around those pins.
+
+## Decisions (confirm or adjust)
+
+1. **One layout per user, focused record, and view.** Unique key `(owner_id, root_type, root_id, view)` with `view` of `focus` or `plan`. The root is the record currently focused (`project:4`, `task:12`, …), the same key the graph API uses. Drilling into another record is a different graph, so it has its own pins. Focus and Plan do not share pins.
+2. **A drag pins that node.** `positions` stores only pins: node key → `{ x, y }`. Nodes with no pin keep the cascade or plan slot. **Reset layout** deletes that user’s row for the current focus and view (pins and saved pan/zoom) after a confirm. There is no per-node unpin.
+3. **Pan and zoom restore with the pins.** `viewport` is `{ x, y, zoom }` from the canvas `onMoveEnd`. Switching focus or view loads that pair’s viewport. A missing row uses today’s fit behavior.
+4. **Pins are obstacles, not a new layout.** The existing cascade and plan algorithms still place unpinned nodes. A follow-up pass sets pinned coordinates, then shifts any unpinned node that would overlap a pin (or another shifted node). Stale pin keys (records no longer in this graph) are ignored and dropped on the next save. Connector geometry is rebuilt from the final centers so a dragged node’s lines meet the node.
+5. **Private to the signed-in user.** Read and write use the same entity access check as `GET /api/v1/graph`. One user cannot read another user’s layout.
+
+## Schema
+
+New non-main table `mesh_layouts` (same class as `user_list_view_prefs`):
+
+| Column | Notes |
+|--------|--------|
+| `id` | serial PK |
+| `owner_id` | FK `users`, cascade delete |
+| `root_type` | text, same entity types as the graph root (including `tag`) |
+| `root_id` | integer |
+| `view` | text, `focus` \| `plan` |
+| `positions` | jsonb object, default `{}` |
+| `viewport` | jsonb object or null |
+| `created_at` / `updated_at` | timestamptz |
+
+Unique `(owner_id, root_type, root_id, view)`.
+
+Migration via `npm run db:generate` (next file after `0055`). Update `docs/database/overview.md`, `platform.md`, and `glossary.md` in the same change, then `npm run docs:sync-schema`. Finish-up is a **MINOR** bump because of the new SQL file.
+
+## API
+
+- `GET /api/v1/mesh-layouts?root=project:4&view=focus` → `{ positions, viewport }` or `null` when no row exists.
+- `PUT` the same query, body `{ positions, viewport }`, upserts the actor’s row.
+- `DELETE` the same query removes the row (Reset).
+
+Reject unknown views, non-finite coordinates, and payloads over 500 pins. Node keys must match `type:id`.
+
+## UI
+
+In `MeshPanel`, nodes become draggable. Drag end writes that node’s position into the pin map and saves. A toolbar **Reset layout** button confirms, then deletes the row and returns to the computed layout. The query key is the focus key plus the view, so a slow response cannot paint another record’s pins.
+
+## Tests
+
+Unit tests for the pin pass: a pin wins over the computed slot; a new unpinned node does not overlap a pin; a pin whose node left the graph is ignored. Overlap uses the existing mesh node boxes.
+
+## Out of scope
+
+- Force-directed simulation.
+- Shared or project-wide layouts.
+- Remembering filters, depth, or hidden types.
+- Unpinning one node without Reset.
+
+## Acceptance
+
+- Drag a node on a project Mesh (Focus), reload, and it is still there. Switch to Plan, drag a different node, reload: each view keeps its own pins.
+- Focus a child record, pin a node, go back to the project: the project layout is unchanged. Return to the child: its pin is restored.
+- Add a record that appears as a new node: it does not sit on top of a pinned node.
+- Reset layout (confirm) clears pins and the saved pan/zoom for that focus and view only.

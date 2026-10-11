@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.59.1",
+  "version": "0.60.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,7 @@
     "docs:sync-schema": "tsx src/scripts/syncSchemaDocsToProject.ts",
     "security:scan": "python3 security/scan/run.py",
     "security:ci": "python3 security/scan/run.py --modules repo_static --fail-on-findings --no-html",
-    "test": "tsx --test src/**/*.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts"
+    "test": "tsx --test src/**/*.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshPins.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
