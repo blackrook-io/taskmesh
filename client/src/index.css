@@ -7612,7 +7612,8 @@ a:focus-visible {
   border-radius: 0;
   pointer-events: all !important;
   transition: transform 500ms ease-out, opacity 160ms ease;
-  z-index: 2;
+  /* React Flow writes z-index inline (0). Lines sit at 1 so they clear the bus. */
+  z-index: 2 !important;
 }
 .mesh-canvas .react-flow__handle {
   width: 1px;
@@ -7623,6 +7624,18 @@ a:focus-visible {
   border: none;
   background: transparent;
   pointer-events: none;
+}
+.mesh-canvas .react-flow__edges {
+  z-index: 1;
+}
+.mesh-canvas .mesh-edge__halo {
+  stroke: var(--bg);
+  stroke-width: 4px;
+  fill: none;
+  pointer-events: none;
+}
+.mesh-canvas .react-flow__edge.mesh-edge--hot .mesh-edge__halo {
+  stroke-width: 6px;
 }
 .mesh-canvas .react-flow__edge.mesh-edge--ref .react-flow__edge-path {
   stroke: var(--mesh-rel-ref);
@@ -7690,6 +7703,7 @@ a:focus-visible {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 0;
   overflow: visible;
   pointer-events: none;
 }
@@ -7766,6 +7780,7 @@ a:focus-visible {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 1;
   margin: 0;
   font-size: 0.68rem;
   letter-spacing: 0.09em;

@@ -311,6 +311,7 @@ function MeshEdge({
   const badge = info?.trunkCount && info.trunkPath ? info.trunkPath[info.trunkPath.length - 1] : null;
   return (
     <>
+      <path d={path} className="mesh-edge__halo" fill="none" />
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
       {badge && info?.trunkCount ? (
         <g className="mesh-trunk-badge" transform={`translate(${badge.x - 18}, ${badge.y})`}>
