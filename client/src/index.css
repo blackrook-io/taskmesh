@@ -7486,6 +7486,34 @@ a:focus-visible {
 }
 
 .mesh-panel {
+  --mesh-type-project: #8cb0e6;
+  --mesh-type-todo_list: #95a5f3;
+  --mesh-type-task: #5cc6b6;
+  --mesh-type-todo: #f0a562;
+  --mesh-type-document: #a8b7c7;
+  --mesh-type-idea: #e0c158;
+  --mesh-type-board: #7eb6d9;
+  --mesh-type-canvas: #d4a0c8;
+  --mesh-type-wiki_node: #9bbf8a;
+  --mesh-type-image_board: #e7a3a3;
+  --mesh-rel-tree: var(--border);
+  --mesh-rel-ref: #8a99ab;
+  --mesh-rel-dep: #c9d3de;
+  --mesh-rel-suggested: #e86aae;
+  --mesh-signal-overdue: var(--danger);
+  --mesh-signal-risk: #f0b53c;
+  --mesh-signal-stale: #f0b53c;
+  --mesh-line-tree: 1.4;
+  --mesh-line-ref: 1.3;
+  --mesh-line-dep: 1.3;
+  --mesh-line-suggested: 1.8;
+  --mesh-glyph: 22px;
+  --mesh-glyph-focus: 28px;
+  --mesh-label-size: 0.8rem;
+  --mesh-label-size-focus: 0.95rem;
+  --mesh-badge: 13px;
+  --mesh-stale-days: 30;
+  --mesh-pulse: 1;
   display: flex;
   flex-direction: column;
   height: calc(100dvh - 8.5rem);
@@ -7583,10 +7611,27 @@ a:focus-visible {
   background: transparent;
   pointer-events: none;
 }
-.mesh-canvas .react-flow__edge-path {
-  stroke: var(--border);
-  stroke-width: 1.3;
+.mesh-canvas .react-flow__edge.mesh-edge--ref .react-flow__edge-path {
+  stroke: var(--mesh-rel-ref);
+  stroke-width: var(--mesh-line-ref);
   stroke-dasharray: 5 4;
+}
+.mesh-canvas .react-flow__edge.mesh-edge--dep .react-flow__edge-path {
+  stroke: var(--mesh-rel-dep);
+  stroke-width: var(--mesh-line-dep);
+}
+.mesh-canvas .react-flow__edge.mesh-edge--blocking .react-flow__edge-path {
+  stroke: var(--mesh-signal-overdue);
+  stroke-width: var(--mesh-line-dep);
+}
+.mesh-hot-marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.mesh-canvas .react-flow__edge.mesh-edge--hot .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.6;
 }
 .mesh-tree {
   position: absolute;
@@ -7597,8 +7642,8 @@ a:focus-visible {
 }
 .mesh-tree__path {
   fill: none;
-  stroke: var(--border);
-  stroke-width: 1.4;
+  stroke: var(--mesh-rel-tree);
+  stroke-width: var(--mesh-line-tree);
 }
 .mesh-rail-head {
   position: absolute;
@@ -7632,16 +7677,109 @@ a:focus-visible {
   outline-offset: 2px;
   border-radius: 0.35rem;
 }
-.mesh-glyph {
-  width: 22px;
-  height: 22px;
+.mesh-mark {
+  position: relative;
   flex: none;
-  border-radius: 6px;
-  background: var(--accent);
+  width: var(--mesh-glyph);
+  height: var(--mesh-glyph);
+  display: grid;
+  place-items: center;
 }
-.mesh-node--focus .mesh-glyph {
-  width: 28px;
-  height: 28px;
+.mesh-node--focus .mesh-mark {
+  width: var(--mesh-glyph-focus);
+  height: var(--mesh-glyph-focus);
+}
+.mesh-shape {
+  width: var(--mesh-glyph);
+  height: var(--mesh-glyph);
+  display: block;
+  overflow: visible;
+}
+.mesh-node--focus .mesh-shape {
+  width: var(--mesh-glyph-focus);
+  height: var(--mesh-glyph-focus);
+}
+.mesh-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.mesh-ring--overdue {
+  border: 1.5px solid var(--mesh-signal-overdue);
+}
+.mesh-ring--pulse {
+  animation: mesh-throb 1.7s ease-out infinite;
+}
+.mesh-ring--risk {
+  border: 1.6px dashed var(--mesh-signal-risk);
+}
+.mesh-progress {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  overflow: visible;
+  pointer-events: none;
+}
+.mesh-progress__track,
+.mesh-progress__value {
+  fill: none;
+  stroke-width: 2.4;
+}
+.mesh-progress__track { stroke: var(--border); }
+.mesh-progress__value {
+  stroke: var(--text);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 18px 18px;
+}
+.mesh-badge,
+.mesh-count,
+.mesh-stale {
+  position: absolute;
+  width: var(--mesh-badge);
+  height: var(--mesh-badge);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+.mesh-badge {
+  top: -4px;
+  right: -6px;
+  color: var(--surface);
+}
+.mesh-badge--high { background: var(--task-priority-high); }
+.mesh-badge--urgent { background: var(--task-priority-urgent); }
+.mesh-count {
+  top: -5px;
+  left: -6px;
+  background: var(--mesh-signal-overdue);
+  color: var(--surface);
+}
+.mesh-stale {
+  bottom: -4px;
+  left: -5px;
+  overflow: visible;
+}
+.mesh-stale circle {
+  fill: var(--surface);
+  stroke: var(--mesh-signal-stale);
+  stroke-width: 1.2;
+}
+.mesh-stale path {
+  fill: none;
+  stroke: var(--mesh-signal-stale);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+@keyframes mesh-throb {
+  0% { transform: scale(0.82); opacity: 0.95; }
+  100% { transform: scale(1.55); opacity: 0; }
 }
 .mesh-copy {
   display: flex;
@@ -7661,14 +7799,14 @@ a:focus-visible {
   overflow: hidden;
   white-space: normal;
   max-width: 10.5rem;
-  font-size: 0.8rem;
+  font-size: var(--mesh-label-size);
   font-weight: 500;
   line-height: 1.15;
   color: var(--text);
 }
 .mesh-node--focus .mesh-title {
   max-width: 12rem;
-  font-size: 0.95rem;
+  font-size: var(--mesh-label-size-focus);
   font-weight: 700;
   line-height: 1.2;
 }
@@ -7682,8 +7820,103 @@ a:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.mesh-colors {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.mesh-colors span {
+  font-size: 0.68rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.7;
+  padding: 0.35rem 0.45rem 0.35rem 0.6rem;
+  align-self: center;
+}
+.mesh-colors button {
+  font: inherit;
+  font-size: 0.82rem;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+}
+.mesh-colors button[aria-pressed="true"] {
+  background: var(--text);
+  color: var(--bg);
+}
+.mesh-legend {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  max-height: 11rem;
+  overflow: auto;
+}
+.mesh-legend__toggle {
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.75;
+  background: none;
+  border: 0;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+.mesh-legend__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem 1.2rem;
+  padding: 0 0.8rem 0.7rem;
+}
+.mesh-legend h2 {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.65;
+}
+.mesh-legend ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
+}
+.mesh-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.mesh-legend .mesh-shape { width: 16px; height: 16px; }
+.mesh-legend .mesh-badge { position: static; }
+.mesh-swatch {
+  width: 1.6rem;
+  height: 0;
+  border-top: 2px solid var(--mesh-rel-tree);
+  flex: none;
+}
+.mesh-swatch--ref { border-top-style: dashed; border-top-color: var(--mesh-rel-ref); }
+.mesh-swatch--dep { border-top-color: var(--mesh-rel-dep); }
+.mesh-swatch--block { border-top-color: var(--mesh-signal-overdue); }
+.mesh-swatch--ai { border-top-style: dotted; border-top-color: var(--mesh-rel-suggested); border-top-width: 3px; }
+.mesh-swatch--ring { border-top-color: var(--text); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
+.mesh-swatch--over { border-top-color: var(--mesh-signal-overdue); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
+.mesh-swatch--risk { border-top-style: dashed; border-top-color: var(--mesh-signal-risk); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
 @media (prefers-reduced-motion: reduce) {
-  .mesh-canvas .react-flow__node {
+  .mesh-canvas .react-flow__node,
+  .mesh-ring--pulse {
     transition: none;
+    animation: none;
   }
 }

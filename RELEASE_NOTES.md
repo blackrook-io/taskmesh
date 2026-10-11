@@ -4,6 +4,13 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.56.4 — 2026-10-11
+
+### Enhancements
+- Mesh draws each record as its own shape and can color the cascade by type, state, or priority. In Progress and Complete stay hollow so they stay distinct from Draft and Ready.
+- Due dates show as overdue or at risk, quiet records show a stale clock, and high or urgent priority shows a badge. A depends-on line points at the prerequisite and stays red until that record is complete.
+- Hovering a record thickens the lines that touch it in the theme accent and draws them above the other lines, without moving the cascade.
+
 ## 0.56.3 — 2026-10-11
 
 ### Enhancements

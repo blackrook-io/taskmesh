@@ -113,7 +113,7 @@ describe("mesh cascade layout", () => {
     );
     assert.equal(byKey.has("task:2"), false);
     assert.equal(
-      layout.edges.some((edge) => edge.id.includes("depends_on")),
+      layout.edges.some((edge) => edge.kind === "depends"),
       false,
     );
     assert.equal(meshNodesOverlap(layout.nodes), false);
@@ -140,5 +140,20 @@ describe("mesh cascade layout", () => {
       layout.ancestors.map((item) => item.key),
       ["project:4", "task:1", "task:2"],
     );
+  });
+
+  it("draws a depends-on line toward a placed prerequisite", () => {
+    const nodes = [
+      { ...node("task:1", "First", "T0001"), state: "ready" },
+      node("task:2", "Needs", "T0002"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "task:2", target: "task:1", relation: "child_of" },
+      { source: "task:2", target: "task:1", relation: "depends_on" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "task:1", meshProjectId: 4 });
+    const edge = layout.edges.find((item) => item.kind === "depends");
+    assert.equal(edge?.target, "task:1");
+    assert.equal(edge?.blocking, true);
   });
 });
