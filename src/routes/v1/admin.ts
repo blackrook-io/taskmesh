@@ -650,6 +650,7 @@ const patchPropsBody = z
     apiRateLimitPerMinute: z.number().int().min(1).max(100_000).optional(),
     loginFailureThreshold: z.number().int().min(1).max(1000).optional(),
     sessionTimeoutMinutes: z.number().int().min(1).max(10_080).optional(),
+    maxConcurrentSessions: z.number().int().min(1).max(20).optional(),
     defaultTheme: z.enum(THEME_IDS).optional(),
     mfaEnforcement: z.enum(["none", "administrators"]).optional(),
     mfaGraceDays: z.number().int().min(0).max(365).optional(),
@@ -665,6 +666,7 @@ adminRouter.patch("/system-properties", async (req, res) => {
       parsed.apiRateLimitPerMinute === undefined &&
       parsed.loginFailureThreshold === undefined &&
       parsed.sessionTimeoutMinutes === undefined &&
+      parsed.maxConcurrentSessions === undefined &&
       parsed.defaultTheme === undefined &&
       parsed.mfaEnforcement === undefined &&
       parsed.mfaGraceDays === undefined &&
@@ -700,6 +702,14 @@ adminRouter.patch("/system-properties", async (req, res) => {
     ) {
       parts.push(
         `session_timeout_minutes ${before.sessionTimeoutMinutes}→${after.sessionTimeoutMinutes}`,
+      );
+    }
+    if (
+      parsed.maxConcurrentSessions !== undefined &&
+      before.maxConcurrentSessions !== after.maxConcurrentSessions
+    ) {
+      parts.push(
+        `max_concurrent_sessions ${before.maxConcurrentSessions}→${after.maxConcurrentSessions}`,
       );
     }
     if (

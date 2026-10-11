@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { hashPassword, needsPasswordRehash, verifyPassword } from "../lib/password.js";
@@ -38,6 +38,41 @@ function newSessionId(): string {
   return randomBytes(32).toString("base64url");
 }
 
+export type SessionEvictionRow = {
+  id: string;
+  createdAt: Date;
+  expiresAt: Date;
+};
+
+/**
+ * Sessions to delete after a new login. Expired rows never occupy a slot.
+ * Live rows beyond `maxConcurrent` are dropped oldest-first. `keepSessionId`
+ * is the session just created and is never returned.
+ */
+export function sessionIdsToEvict(
+  existing: readonly SessionEvictionRow[],
+  keepSessionId: string,
+  maxConcurrent: number,
+  now: Date,
+): string[] {
+  const cap = Math.max(1, Math.floor(maxConcurrent));
+  const nowMs = now.getTime();
+  const expired: string[] = [];
+  const live: SessionEvictionRow[] = [];
+  for (const row of existing) {
+    if (row.id === keepSessionId) continue;
+    if (row.expiresAt.getTime() <= nowMs) expired.push(row.id);
+    else live.push(row);
+  }
+  live.sort((a, b) => {
+    const byAge = a.createdAt.getTime() - b.createdAt.getTime();
+    if (byAge !== 0) return byAge;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+  const overflow = Math.max(0, live.length + 1 - cap);
+  return [...expired, ...live.slice(0, overflow).map((row) => row.id)];
+}
+
 export async function getSessionById(
   db: Db,
   sessionId: string,
@@ -63,9 +98,22 @@ export async function createSession(
   const maxAgeSeconds = props.sessionTimeoutMinutes * 60;
   const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000);
   const id = newSessionId();
+  const now = new Date();
   await db.insert(schema.sessions).values({ id, userId, expiresAt });
-  // Single concurrent browser session: drop every other session for this user.
-  await destroyOtherSessionsForUser(db, userId, id);
+  const existing = await db
+    .select({
+      id: schema.sessions.id,
+      createdAt: schema.sessions.createdAt,
+      expiresAt: schema.sessions.expiresAt,
+    })
+    .from(schema.sessions)
+    .where(eq(schema.sessions.userId, userId));
+  const dropIds = sessionIdsToEvict(existing, id, props.maxConcurrentSessions, now);
+  if (dropIds.length > 0) {
+    await db
+      .delete(schema.sessions)
+      .where(and(eq(schema.sessions.userId, userId), inArray(schema.sessions.id, dropIds)));
+  }
   return { id, expiresAt, maxAgeSeconds };
 }
 

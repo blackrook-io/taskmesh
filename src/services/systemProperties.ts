@@ -20,6 +20,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "api_rate_limit_per_minute",
   "login_failure_threshold",
   "session_timeout_minutes",
+  "max_concurrent_sessions",
   "default_theme",
   "mfa_enforcement",
   "mfa_grace_days",
@@ -33,6 +34,7 @@ export type SystemProperties = {
   apiRateLimitPerMinute: number;
   loginFailureThreshold: number;
   sessionTimeoutMinutes: number;
+  maxConcurrentSessions: number;
   defaultTheme: ThemeId;
   mfaEnforcement: MfaEnforcement;
   mfaGraceDays: number;
@@ -56,6 +58,7 @@ const DEFAULTS: {
   api_rate_limit_per_minute: number;
   login_failure_threshold: number;
   session_timeout_minutes: number;
+  max_concurrent_sessions: number;
   default_theme: ThemeId;
   mfa_enforcement: MfaEnforcement;
   mfa_grace_days: number;
@@ -65,6 +68,7 @@ const DEFAULTS: {
   api_rate_limit_per_minute: 60,
   login_failure_threshold: 3,
   session_timeout_minutes: 60,
+  max_concurrent_sessions: 1,
   default_theme: DEFAULT_THEME,
   mfa_enforcement: "none",
   mfa_grace_days: 7,
@@ -78,6 +82,12 @@ function asNumber(value: unknown, fallback: number): number {
     return Number(value);
   }
   return fallback;
+}
+
+function asIntInRange(value: unknown, fallback: number, min: number, max: number): number {
+  const n = asNumber(value, fallback);
+  if (!Number.isInteger(n) || n < min || n > max) return fallback;
+  return n;
 }
 
 function asThemeId(value: unknown, fallback: ThemeId): ThemeId {
@@ -133,6 +143,12 @@ export async function getSystemProperties(db: Db): Promise<SystemProperties> {
       map.get("session_timeout_minutes")?.value,
       DEFAULTS.session_timeout_minutes,
     ),
+    maxConcurrentSessions: asIntInRange(
+      map.get("max_concurrent_sessions")?.value,
+      DEFAULTS.max_concurrent_sessions,
+      1,
+      20,
+    ),
     defaultTheme: asThemeId(map.get("default_theme")?.value, DEFAULTS.default_theme),
     mfaEnforcement: asMfaEnforcement(
       map.get("mfa_enforcement")?.value,
@@ -168,6 +184,7 @@ export async function patchSystemProperties(
     apiRateLimitPerMinute?: number;
     loginFailureThreshold?: number;
     sessionTimeoutMinutes?: number;
+    maxConcurrentSessions?: number;
     defaultTheme?: ThemeId;
     mfaEnforcement?: MfaEnforcement;
     mfaGraceDays?: number;
@@ -213,6 +230,19 @@ export async function patchSystemProperties(
       .onConflictDoUpdate({
         target: schema.systemProperties.key,
         set: { value: patch.sessionTimeoutMinutes, updatedAt: now },
+      });
+  }
+  if (patch.maxConcurrentSessions !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "max_concurrent_sessions",
+        value: patch.maxConcurrentSessions,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.maxConcurrentSessions, updatedAt: now },
       });
   }
   if (patch.defaultTheme !== undefined) {
