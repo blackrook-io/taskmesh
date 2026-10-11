@@ -1,7 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BaseEdge,
-  getSmoothStepPath,
   Handle,
   MarkerType,
   Position,
@@ -35,6 +34,7 @@ import { filterMeshGraph } from "../lib/meshFilters";
 import { formatEntityRef } from "../lib/entityRef";
 import {
   layoutMesh,
+  meshOrthogonalPath,
   type MeshGraphEdge,
   type MeshGraphNode,
   type MeshLayoutNode,
@@ -75,7 +75,6 @@ type MeshNodeData = {
   enterFrom: { x: number; y: number } | null;
   reduceMotion: boolean;
   cardText: string;
-  cardOpen: boolean;
   onOpen: (key: string) => void;
   onPointerEnter: (key: string) => void;
   onPointerLeave: () => void;
@@ -226,6 +225,16 @@ type MeshFlowNode = Node<MeshNodeData, "mesh">;
 
 const MESH_HOT_MARKER = "url('#mesh-hot-arrow')";
 
+function applyMeshNodeTitle(button: HTMLButtonElement, cardKey: string | null) {
+  const titleEl = button.querySelector(".mesh-title");
+  if (!(titleEl instanceof HTMLElement)) return;
+  const key = button.getAttribute("data-mesh-key");
+  const truncated =
+    titleEl.scrollHeight > titleEl.clientHeight + 1 || titleEl.scrollWidth > titleEl.clientWidth + 1;
+  if (key !== cardKey && truncated) button.setAttribute("title", titleEl.textContent ?? "");
+  else button.removeAttribute("title");
+}
+
 function paintMeshHot(from: Element, key: string | null) {
   const canvas = from.closest(".mesh-canvas");
   if (!canvas) return;
@@ -274,21 +283,18 @@ function MeshEdge({
   sourceY,
   targetX,
   targetY,
-  sourcePosition,
-  targetPosition,
   markerEnd,
   style,
+  data,
 }: EdgeProps) {
-  const [path] = getSmoothStepPath({
+  const info = data as { sourceOffset?: number; targetOffset?: number; laneX?: number } | undefined;
+  const path = meshOrthogonalPath(
     sourceX,
-    sourceY,
-    sourcePosition,
+    sourceY + (info?.sourceOffset ?? 0),
     targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 8,
-    offset: 20,
-  });
+    targetY + (info?.targetOffset ?? 0),
+    info?.laneX ?? sourceX + 20,
+  );
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
@@ -483,17 +489,15 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
     const titleEl = titleRef.current;
     if (!button || !titleEl) return;
     const apply = () => {
-      const truncated =
-        titleEl.scrollHeight > titleEl.clientHeight + 1 ||
-        titleEl.scrollWidth > titleEl.clientWidth + 1;
-      if (!data.cardOpen && truncated) button.setAttribute("title", data.title);
-      else button.removeAttribute("title");
+      const canvas = button.closest(".mesh-canvas");
+      const open = canvas instanceof HTMLElement ? (canvas.dataset.meshCard ?? null) : null;
+      applyMeshNodeTitle(button, open);
     };
     apply();
     const observer = new ResizeObserver(apply);
     observer.observe(titleEl);
     return () => observer.disconnect();
-  }, [data.cardOpen, data.title]);
+  }, [data.title]);
   useLayoutEffect(() => {
     if (played.current || data.reduceMotion || !data.enterFrom) return;
     const host = buttonRef.current?.closest(".react-flow__node");
@@ -867,7 +871,12 @@ export function MeshPanel({
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (cardKey) canvas.dataset.meshCard = cardKey;
+    else delete canvas.dataset.meshCard;
     paintMeshHot(canvas, hotKeyRef.current);
+    canvas.querySelectorAll(".mesh-node").forEach((button) => {
+      if (button instanceof HTMLButtonElement) applyMeshNodeTitle(button, cardKey);
+    });
   }, [layout, cardKey]);
   useLayoutEffect(() => {
     placeCard();
@@ -1072,7 +1081,9 @@ export function MeshPanel({
     return map;
   }, [graphByKey, graphQuery.data, layout, shownSuggestions]);
 
-  const flowNodes: MeshFlowNode[] = layout
+  const flowNodes: MeshFlowNode[] = useMemo(
+    () =>
+      layout
     ? layout.nodes.map((node) => {
         const record = graphByKey.get(node.key);
         const ink = glyphStyle(colorMode, { key: node.key, type: node.type, ...record });
@@ -1103,7 +1114,6 @@ export function MeshPanel({
               (node.role === "suggestion"
                 ? suggestionCards.get(node.key)?.description
                 : cards.get(node.key)?.description) ?? node.title,
-            cardOpen: cardKey === node.key,
             onOpen: openNode,
             onPointerEnter: scheduleShow,
             onPointerLeave: scheduleHide,
@@ -1117,8 +1127,31 @@ export function MeshPanel({
           connectable: false,
         };
       })
-    : [];
-  const flowEdges = layout
+        : [],
+    [
+      armTouch,
+      cards,
+      chrome.pulse,
+      chrome.staleDays,
+      colorMode,
+      consumeTouch,
+      graphByKey,
+      hiddenOver,
+      layout,
+      motion,
+      openNode,
+      reduceMotion,
+      rememberHot,
+      scheduleHide,
+      scheduleShow,
+      showCardNow,
+      suggestionCards,
+      today,
+    ],
+  );
+  const flowEdges = useMemo(
+    () =>
+      layout
     ? layout.edges.map((edge) => ({
         id: edge.id,
         source: edge.source,
@@ -1126,6 +1159,11 @@ export function MeshPanel({
         sourceHandle: edge.sourceHandle,
         targetHandle: edge.targetHandle,
         type: "mesh" as const,
+        data: {
+          sourceOffset: edge.sourceOffset,
+          targetOffset: edge.targetOffset,
+          laneX: edge.laneX,
+        },
         className: [
           "mesh-edge",
           edge.kind === "suggested"
@@ -1147,7 +1185,9 @@ export function MeshPanel({
               }
             : undefined,
       }))
-    : [];
+        : [],
+    [layout],
+  );
 
   const suggestionCard = cardKey ? (suggestionCards.get(cardKey) ?? null) : null;
   const hoverCard = suggestionCard || !cardKey ? null : (cards.get(cardKey) ?? null);

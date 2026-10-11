@@ -4,8 +4,11 @@ import {
   containmentParent,
   layoutMesh,
   MESH_COLUMN_PITCH,
+  MESH_LANE_GAP,
   meshEdgeHandles,
   meshNodesOverlap,
+  meshOrthogonalPath,
+  meshPortOffsets,
   type MeshGraphEdge,
   type MeshGraphNode,
 } from "./meshLayout.ts";
@@ -344,5 +347,99 @@ describe("mesh edge handles", () => {
     assert.equal(rightward?.targetHandle, "l");
     assert.equal(leftward?.sourceHandle, "l-out");
     assert.equal(leftward?.targetHandle, "r-in");
+  });
+});
+
+describe("mesh line lanes", () => {
+  it("orders ports by the other end's y", () => {
+    assert.deepEqual(meshPortOffsets([30, 10, 20]), [8, -8, 0]);
+  });
+
+  it("gives two lines in one gutter lane x values 10px apart", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Head A", "T0001"),
+      node("task:10", "Child A", "T0010"),
+      node("task:2", "Head B", "T0002"),
+      node("task:20", "Child B", "T0020"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "project:4", target: "task:2", relation: "in_project" },
+      { source: "task:10", target: "task:1", relation: "child_of" },
+      { source: "task:20", target: "task:2", relation: "child_of" },
+      { source: "task:1", target: "task:2", relation: "depends_on" },
+      { source: "task:10", target: "task:2", relation: "depends_on" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const lanes = layout.edges
+      .filter((edge) => edge.kind === "depends")
+      .map((edge) => edge.laneX)
+      .sort((a, b) => a - b);
+    assert.equal(lanes.length, 2);
+    assert.equal((lanes[1] ?? 0) - (lanes[0] ?? 0), MESH_LANE_GAP);
+    const centers = new Set(layout.nodes.map((item) => item.centerX));
+    assert.equal(centers.has(lanes[0]!), false);
+    assert.equal(centers.has(lanes[1]!), false);
+    const headB = layout.nodes.find((item) => item.key === "task:2");
+    const arrivals = layout.edges
+      .filter((edge) => edge.kind === "depends" && edge.target === "task:2")
+      .map((edge) => ({
+        y: layout.nodes.find((item) => item.key === edge.source)?.centerY ?? 0,
+        offset: edge.targetOffset,
+      }))
+      .sort((a, b) => a.y - b.y);
+    assert.equal(arrivals.length, 2);
+    assert.ok((arrivals[0]?.offset ?? 0) < (arrivals[1]?.offset ?? 0));
+    assert.equal(meshNodesOverlap(layout.nodes), false);
+    assert.equal(headB != null, true);
+  });
+
+  it("shifts the next column when a gutter cannot hold every line", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Head A", "T0001"),
+      node("task:10", "A1", "T0010"),
+      node("task:11", "A2", "T0011"),
+      node("task:12", "A3", "T0012"),
+      node("task:13", "A4", "T0013"),
+      node("task:2", "Head B", "T0002"),
+      node("task:20", "B1", "T0020"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "project:4", target: "task:2", relation: "in_project" },
+      { source: "task:10", target: "task:1", relation: "child_of" },
+      { source: "task:11", target: "task:1", relation: "child_of" },
+      { source: "task:12", target: "task:1", relation: "child_of" },
+      { source: "task:13", target: "task:1", relation: "child_of" },
+      { source: "task:20", target: "task:2", relation: "child_of" },
+      { source: "task:1", target: "task:2", relation: "depends_on" },
+      { source: "task:10", target: "task:2", relation: "depends_on" },
+      { source: "task:11", target: "task:2", relation: "depends_on" },
+      { source: "task:12", target: "task:2", relation: "depends_on" },
+      { source: "task:13", target: "task:2", relation: "depends_on" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const headA = layout.nodes.find((item) => item.key === "task:1");
+    const headB = layout.nodes.find((item) => item.key === "task:2");
+    assert.equal((headB?.centerX ?? 0) - (headA?.centerX ?? 0), MESH_COLUMN_PITCH + 40);
+    const lanes = layout.edges
+      .filter((edge) => edge.kind === "depends")
+      .map((edge) => edge.laneX)
+      .sort((a, b) => a - b);
+    assert.equal(new Set(lanes).size, 5);
+    for (let index = 1; index < lanes.length; index += 1) {
+      assert.equal((lanes[index] ?? 0) - (lanes[index - 1] ?? 0), MESH_LANE_GAP);
+    }
+    assert.equal(
+      layout.tree.some((path) => path.startsWith(`M${headB?.centerX},`)),
+      true,
+    );
+    assert.equal(meshNodesOverlap(layout.nodes), false);
+  });
+
+  it("rounds an orthogonal step", () => {
+    assert.match(meshOrthogonalPath(0, 0, 80, 40, 40), /A/);
   });
 });
