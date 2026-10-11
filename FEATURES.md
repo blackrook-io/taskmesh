@@ -7,6 +7,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Project Overview dashboard with a pinned description (Owners and Managers can edit it) and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including My Tasks Today); click a panel row to open that Task or To Do
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, Mesh, and Image Boards
 - Open Mesh to see the focused record centered over its contents, with its own links beside it and links from inside on a rail
+- Switch Mesh to Plan view to read dependencies and parent/child links left to right, one row per phase, and see which Ready work is next or still blocked
 - Color Mesh by type, state, or priority, and see overdue, at-risk, stale, and depends-on signals on the cascade
 - Hover a Mesh record to read its state, due date, last change, contents, blockers, and links without leaving the cascade
 - Administrators set Mesh colors and readability for everyone: record colors, suggestion and signal colors, line weight, size, label halo, overdue pulse, and how soon a quiet record counts as stale

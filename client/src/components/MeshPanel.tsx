@@ -39,6 +39,7 @@ import {
 import { isEntityType, type EntityType } from "../lib/entityType";
 import { filterMeshGraph } from "../lib/meshFilters";
 import { formatEntityRef } from "../lib/entityRef";
+import { layoutMeshPlan } from "../lib/meshPlanLayout";
 import {
   layoutMesh,
   meshCorridorPoints,
@@ -72,6 +73,7 @@ type MeshNodeData = {
   projectLabel: string | null;
   type: string;
   role: MeshLayoutNode["role"];
+  planMark: MeshLayoutNode["planMark"];
   color: string;
   hollow: boolean;
   progress: number | null;
@@ -539,6 +541,7 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
   const label = [
     data.referenceId,
     data.role === "suggestion" ? "AI suggestion" : null,
+    data.planMark === "blocked" ? "blocked" : data.planMark === "next" ? "next" : null,
     data.title,
     data.projectLabel,
     data.role === "suggestion" ? null : data.schedule === "overdue" ? "overdue" : null,
@@ -559,7 +562,12 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
       <button
         ref={buttonRef}
         type="button"
-        className={`mesh-node mesh-node--${data.role}`}
+        className={[
+          `mesh-node mesh-node--${data.role}`,
+          data.planMark ? `mesh-node--${data.planMark}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         data-mesh-key={id}
         aria-label={label}
         aria-describedby={cardDescId(id)}
@@ -737,6 +745,7 @@ export function MeshPanel({
     focus: rootKey,
     ids: EMPTY_IDS,
   });
+  const [view, setView] = useState<"focus" | "plan">("focus");
   const [legendOpen, setLegendOpen] = useState(false);
   const [today] = useState(() => new Date());
   const [motion, setMotion] = useState<{
@@ -879,7 +888,7 @@ export function MeshPanel({
   }, [focusKey, graphQuery.data, hiddenTypes, hideDone]);
   const layout = useMemo(() => {
     if (!filteredGraph) return null;
-    return layoutMesh({
+    const shared = {
       nodes: filteredGraph.nodes,
       edges: filteredGraph.edges,
       focusKey,
@@ -888,15 +897,25 @@ export function MeshPanel({
       references: relations.references,
       dependsOn: relations.dependsOn,
       suggestions: shownSuggestions,
-    });
+    };
+    if (view === "plan") {
+      return layoutMeshPlan({
+        ...shared,
+        blockNodes: graphQuery.data?.nodes ?? filteredGraph.nodes,
+        blockEdges: graphQuery.data?.edges ?? filteredGraph.edges,
+      });
+    }
+    return layoutMesh(shared);
   }, [
     filteredGraph,
     focusKey,
+    graphQuery.data,
     projectId,
     projectRefs,
     relations.dependsOn,
     relations.references,
     shownSuggestions,
+    view,
   ]);
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -1142,6 +1161,7 @@ export function MeshPanel({
             projectLabel: node.projectLabel,
             type: node.type,
             role: node.role,
+            planMark: node.planMark,
             color: ink.color,
             hollow: ink.hollow,
             progress: record?.progress ?? null,
@@ -1290,6 +1310,31 @@ export function MeshPanel({
             </>
           ) : null}
         </nav>
+        <div className="mesh-view" role="group" aria-label="Mesh view">
+          <span>View</span>
+          <button
+            type="button"
+            aria-pressed={view === "focus"}
+            onClick={() => {
+              if (view === "focus") return;
+              rememberMotion();
+              setView("focus");
+            }}
+          >
+            Focus
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === "plan"}
+            onClick={() => {
+              if (view === "plan") return;
+              rememberMotion();
+              setView("plan");
+            }}
+          >
+            Plan
+          </button>
+        </div>
         <div className="mesh-filters" role="group" aria-label="Relationships">
           <button
             type="button"
@@ -1542,6 +1587,16 @@ export function MeshPanel({
                 <li><span className="mesh-swatch mesh-swatch--risk" /> At risk</li>
                 <li><span className="mesh-badge mesh-badge--urgent">!!</span> High or urgent</li>
                 <li>Clock mark: no state change in 30+ days</li>
+                {view === "plan" ? (
+                  <>
+                    <li>
+                      <span className="mesh-swatch mesh-swatch--over" /> Blocked
+                    </li>
+                    <li>
+                      <span className="mesh-swatch mesh-swatch--next" /> Next
+                    </li>
+                  </>
+                ) : null}
                 <li>A red count is overdue work sitting further down, out of view.</li>
               </ul>
             </div>
