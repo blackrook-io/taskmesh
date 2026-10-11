@@ -13,7 +13,13 @@ export type MeshSignalNode = {
   signalAt?: string | null;
 };
 
-export type MeshSchedule = { kind: "none" | "ok" | "overdue" | "risk" };
+export type MeshSchedule = {
+  kind: "none" | "ok" | "overdue" | "risk";
+  /** Days overdue, or days left. Null when the due date has no countdown. */
+  days: number | null;
+  /** Share of the created-to-due span already elapsed, when the record is at risk. */
+  used: number | null;
+};
 
 const MS_DAY = 864e5;
 
@@ -56,19 +62,23 @@ export function glyphStyle(
 }
 
 export function schedule(node: MeshSignalNode, today: Date): MeshSchedule {
-  if (!node.dueDate || node.state === "complete" || node.state === "canceled") return { kind: "none" };
+  if (!node.dueDate || node.state === "complete" || node.state === "canceled") {
+    return { kind: "none", days: null, used: null };
+  }
   const due = dueAtNoon(node.dueDate);
   const left = Math.round((due.getTime() - today.getTime()) / MS_DAY);
-  if (left < 0) return { kind: "overdue" };
+  if (left < 0) return { kind: "overdue", days: -left, used: null };
   if (node.createdAt && node.progress != null) {
     const start = new Date(node.createdAt).getTime();
     const span = due.getTime() - start;
     if (span > 0) {
       const frac = (today.getTime() - start) / span;
-      if (frac - node.progress / 100 > 0.25) return { kind: "risk" };
+      if (frac - node.progress / 100 > 0.25) {
+        return { kind: "risk", days: left, used: Math.round(frac * 100) };
+      }
     }
   }
-  return { kind: "ok" };
+  return { kind: "ok", days: left, used: null };
 }
 
 export function isStale(node: MeshSignalNode, today: Date, staleDays: number): boolean {

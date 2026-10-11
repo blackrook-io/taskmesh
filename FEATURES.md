@@ -8,6 +8,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, Mesh, and Image Boards
 - Open Mesh to see the focused record centered over its contents, with its own links beside it and links from inside on a rail
 - Color Mesh by type, state, or priority, and see overdue, at-risk, stale, and depends-on signals on the cascade
+- Hover a Mesh record to read its state, due date, last change, contents, blockers, and links without leaving the cascade
 - Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
 - Assign users to Managers, Members, and Viewers per project — Managers and Owners get Settings; Members write; Viewers read-only

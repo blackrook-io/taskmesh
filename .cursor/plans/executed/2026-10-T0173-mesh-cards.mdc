@@ -1,0 +1,35 @@
+# T0173 — Mesh hover and focus cards
+
+**Task:** T0173 (id `188`) — Mesh view: hover and focus context cards
+**Parent:** T0164 (id `177`) — Mesh tab. Prototype: `docs/design/mesh-view.html` (hover card section).
+**Depends on:** T0171 complete (canvas), T0169 complete (`lastUpdate`, `lastComment`, stale clock)
+**Required by:** none
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0173-mesh-cards`
+
+The card is the prototype's hover card, drawn beside a node that is already on the cascade. No new API. Counts use the records already loaded for this focus (depth 3).
+
+## Decisions
+
+1. **One card for the canvas.** It opens 200ms after the pointer enters a node, and immediately on keyboard focus. It stays open while the pointer is on the card. Leaving the node or the card hides it after 180ms, so the pointer can cross the gap. A pan or zoom moves it with the node; if the node leaves the canvas, the card closes.
+2. **Placement.** Beside the whole node, 12px clear of its box, never over the label. If the right side would leave the canvas, it flips left. It stays inside the canvas vertically.
+3. **Touch.** The first tap opens the card and does not refocus. The second tap on that same node refocuses, which is today's click. Mouse click and Enter or Space still refocus immediately. The hot edge highlight stays as it is.
+4. **Content, in this order.** Eyebrow is the display number and the type name (Project, ToDo List, Task, …) in the type color. Then the title. State pill, and a priority pill when priority is not none. A progress bar when `progress` is a number, plus `Progress · N% complete`.
+5. **Due.** Date as `Mon D`. Overdue is `N days overdue` in the danger color. At risk is `at risk, X% of time used` in the warning color, where X is how much of the span from `createdAt` to the due date has passed. Otherwise `N days left`. A complete or canceled record with a due date shows the date only. Same noon rule as the rings.
+6. **Last update and comment.** When `lastUpdate` exists: `6 days ago · Progress 60% → 70%`. A document body edit with no stored values reads `Content edited`. Append `· stale` in the warning color when the existing stale rule says so. Age is `today`, `yesterday`, or `N days ago`. A record with no recorded update omits this row. `signalAt` falling back to the created time is not shown as an update.
+7. **Comment pairing.** If `lastComment.withUpdate` is true, the excerpt sits under that update as one entry. Otherwise a separate **Last comment** row shows the age and the excerpt. An update with no comment stays visible. A comment with no update is only the comment row.
+8. **Inside.** Shown when the record has direct containment children in this payload (parent task or to-do, else the list, else the project — the same rule as the cascade). `x of y done` counts those direct children whose state is `complete`. Overdue, at risk, and stale counts walk every loaded descendant and omit a count that is zero. Danger color when any are overdue, otherwise warning when any are at risk.
+9. **Blocked by** lists open `depends_on` prerequisites (this record is the dependent, the other end is not complete) as `T0042 Title`, in the danger color. **Links** counts reference edges (`relates_to`, `references`, `supports`, `part_of`) and dependency edges that touch this record in the payload. Suggested links stay on T0174. **Project** shows the other project's reference when the node already carries that label.
+10. **Footer.** Focused record: `This is the focused record.` A record with direct children: `Click to cascade its contents underneath.` Otherwise: `Click to focus and see its links.`
+11. **Screen readers.** The card text is on the node button as its description, so focusing the node reads it. The floating card is hidden from the accessibility tree so it is not read twice.
+12. **Out of scope.** AI suggestion cards (T0174). Counts for records the graph did not return.
+
+## Scope
+
+1. `client/src/lib/meshCard.ts` plus unit tests: due line, ages, comment pairing, inside roll-up, blocked-by, link counts, footer.
+2. Card markup and placement in `MeshPanel`, including the hover delay, the touch second-tap, and the accessible description.
+3. `npm run lint` clean. No migration, so the finish-up bump is PATCH.
+
+## Finish-up note
+
+No Drizzle file. PATCH bump only, on finish-up.
