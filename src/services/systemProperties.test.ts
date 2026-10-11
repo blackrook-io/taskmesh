@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
+import { MESH_APPEARANCE_DEFAULTS } from "../lib/meshAppearance.js";
 import {
   invalidateSystemPropertiesCache,
   readSystemPropertiesCache,
@@ -22,6 +23,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     mfaGraceDays: 7,
     mfaTrustedDeviceDays: 15,
     mfaTrustedDeviceMax: 5,
+    meshAppearance: MESH_APPEARANCE_DEFAULTS,
     updatedAt: null,
     ...overrides,
   };

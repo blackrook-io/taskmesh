@@ -60,6 +60,7 @@ import {
   type ApiLogOutcome,
 } from "../../services/apiRequestLogs.js";
 import { getDatabaseStatsSummary } from "../../services/dbStats.js";
+import { meshAppearanceEqual } from "../../lib/meshAppearance.js";
 import { isUsageRange } from "../../lib/usageRange.js";
 import {
   getSystemProperties,
@@ -737,6 +738,12 @@ adminRouter.patch("/system-properties", async (req, res) => {
       parts.push(
         `mfa_trusted_device_max ${before.mfaTrustedDeviceMax}→${after.mfaTrustedDeviceMax}`,
       );
+    }
+    if (
+      parsed.meshAppearance !== undefined &&
+      !meshAppearanceEqual(before.meshAppearance, after.meshAppearance)
+    ) {
+      parts.push("mesh_appearance updated");
     }
     res.locals.logUserId = actor.id;
     res.locals.logMessage =

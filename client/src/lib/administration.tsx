@@ -19,6 +19,7 @@ export const ADMIN_SECTIONS = [
   "backups",
   "logging",
   "system-properties",
+  "mesh",
   "templates",
   "ownership",
   "deleted-tasks",
@@ -36,6 +37,7 @@ export const ADMIN_SECTION_LABELS: Record<AdminSection, string> = {
   backups: "Backups",
   logging: "System Logs",
   "system-properties": "System Properties",
+  mesh: "Mesh",
   templates: "Templates",
   ownership: "Ownership",
   "deleted-tasks": "Deleted Tasks",
@@ -58,6 +60,7 @@ export function adminSectionFromPath(pathname: string): AdminSection | null {
   }
   if (pathname === "/admin/backups") return "backups";
   if (pathname === "/admin/system-properties") return "system-properties";
+  if (pathname === "/admin/mesh") return "mesh";
   if (pathname === "/admin/templates") return "templates";
   if (pathname === "/admin/ownership") return "ownership";
   if (pathname === "/admin/deleted-tasks") return "deleted-tasks";

@@ -8,6 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { contrastBelowMinimum, isMeshHex } from "../../lib/meshAppearance";
 import { DEFAULT_COLOR_PALETTE } from "../../lib/palette";
 
 type Props = {
@@ -22,6 +23,8 @@ type Props = {
   openOn?: "click" | "contextmenu" | "both";
   /** Where the panel appears relative to the trigger. Defaults to "bottom". */
   placement?: "bottom" | "top" | "left";
+  /** When set, warn inside the picker if the color is below 3:1 against this `#rrggbb` background. */
+  contrastAgainst?: string;
 };
 
 export function ColorPopover({
@@ -33,6 +36,7 @@ export function ColorPopover({
   label = "Color",
   openOn = "both",
   placement = "bottom",
+  contrastAgainst,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(color ?? "");
@@ -76,6 +80,11 @@ export function ColorPopover({
       : openOn === "click"
         ? label
         : `${label} (right-click also opens)`;
+  const contrastHex = isMeshHex(custom.trim()) ? custom.trim() : color;
+  const lowContrast =
+    contrastAgainst != null &&
+    contrastHex != null &&
+    contrastBelowMinimum(contrastHex, contrastAgainst);
 
   const triggerStyle = {
     "--swatch": color?.trim() || "var(--border)",
@@ -178,6 +187,11 @@ export function ColorPopover({
               Apply
             </button>
           </div>
+          {lowContrast ? (
+            <p className="color-popover-contrast" role="status">
+              Below 3:1 contrast on the current background.
+            </p>
+          ) : null}
           {allowClear ? (
             <button
               type="button"

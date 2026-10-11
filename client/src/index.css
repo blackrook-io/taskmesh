@@ -4204,6 +4204,13 @@ a:focus-visible {
   padding: 0.2rem 0.35rem;
 }
 
+.color-popover-contrast {
+  margin: 0.35rem 0 0;
+  color: var(--danger);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
 /* —— ElementShell —— */
 .element-shell {
   --element-accent: var(--accent);
@@ -8237,6 +8244,10 @@ a:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.mesh-panel--no-halo .mesh-title,
+.mesh-panel--no-halo .mesh-ref {
+  background: transparent;
+}
 .mesh-colors,
 .mesh-depth {
   display: inline-flex;
@@ -8344,4 +8355,75 @@ a:focus-visible {
     transition: none;
     animation: none;
   }
+}
+
+.mesh-appearance-heading {
+  margin: 1rem 0 0.45rem;
+  font-size: 0.85rem;
+}
+.mesh-appearance-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.55rem 1rem;
+}
+.mesh-appearance-color {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.mesh-appearance-contrast {
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+.mesh-appearance-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.35rem 0.8rem;
+}
+.mesh-appearance-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.35rem 0;
+}
+.mesh-appearance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.mesh-appearance-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  padding: 0.85rem;
+  background-color: var(--bg);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--border) 80%, var(--bg)) 1.2px,
+    transparent 1.3px
+  );
+  background-size: 22px 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.mesh-appearance-preview__nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.mesh-appearance-preview__lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.mesh-appearance-preview__lines li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text);
 }

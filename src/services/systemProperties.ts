@@ -3,6 +3,12 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { z } from "zod";
 import * as schema from "../db/schema.js";
 import { instanceBrand } from "../lib/instanceBrand.js";
+import {
+  MESH_APPEARANCE_DEFAULTS,
+  meshAppearanceSchema,
+  normalizeMeshAppearance,
+  type MeshAppearance,
+} from "../lib/meshAppearance.js";
 import { DEFAULT_THEME, isThemeId, THEME_IDS, type ThemeId } from "../lib/theme.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -36,6 +42,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "mfa_grace_days",
   "mfa_trusted_device_days",
   "mfa_trusted_device_max",
+  "mesh_appearance",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -52,6 +59,7 @@ export type SystemProperties = {
   mfaGraceDays: number;
   mfaTrustedDeviceDays: number;
   mfaTrustedDeviceMax: number;
+  meshAppearance: MeshAppearance;
   updatedAt: string | null;
 };
 
@@ -64,6 +72,7 @@ export type PublicSystemConfig = {
   instanceTheme: ThemeId | null;
   /** MFA trust duration in days (0 = trust-this-device disabled). */
   mfaTrustedDeviceDays: number;
+  meshAppearance: MeshAppearance;
 };
 
 const DEFAULTS: {
@@ -78,6 +87,7 @@ const DEFAULTS: {
   mfa_grace_days: number;
   mfa_trusted_device_days: number;
   mfa_trusted_device_max: number;
+  mesh_appearance: MeshAppearance;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -90,6 +100,7 @@ const DEFAULTS: {
   mfa_grace_days: 7,
   mfa_trusted_device_days: 15,
   mfa_trusted_device_max: 5,
+  mesh_appearance: MESH_APPEARANCE_DEFAULTS,
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -216,6 +227,7 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
       map.get("mfa_trusted_device_max")?.value,
       DEFAULTS.mfa_trusted_device_max,
     ),
+    meshAppearance: normalizeMeshAppearance(map.get("mesh_appearance")?.value),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);
@@ -230,6 +242,7 @@ export async function getPublicSystemConfig(db: Db): Promise<PublicSystemConfig>
     instance: brand.instance,
     instanceTheme: brand.instanceTheme,
     mfaTrustedDeviceDays: props.mfaTrustedDeviceDays,
+    meshAppearance: props.meshAppearance,
   };
 }
 
@@ -247,6 +260,7 @@ export async function patchSystemProperties(
     mfaGraceDays?: number;
     mfaTrustedDeviceDays?: number;
     mfaTrustedDeviceMax?: number;
+    meshAppearance?: MeshAppearance;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -393,6 +407,19 @@ export async function patchSystemProperties(
         set: { value: patch.mfaTrustedDeviceMax, updatedAt: now },
       });
   }
+  if (patch.meshAppearance !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "mesh_appearance",
+        value: patch.meshAppearance,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.meshAppearance, updatedAt: now },
+      });
+  }
   invalidateSystemPropertiesCache();
   return getSystemProperties(db);
 }
@@ -420,5 +447,6 @@ export const systemPropertiesPatchSchema = z
     mfaGraceDays: z.number().int().min(0).max(365).optional(),
     mfaTrustedDeviceDays: z.number().int().min(0).max(365).optional(),
     mfaTrustedDeviceMax: z.number().int().min(1).max(50).optional(),
+    meshAppearance: meshAppearanceSchema.optional(),
   })
   .strict();

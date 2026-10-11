@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.12 — 2026-10-11
+
+### New Functionality
+- An Administrator sets Mesh colors and accessibility for every project from Administration → Mesh. The sample updates as you edit, a color below 3:1 contrast warns without blocking the save, and Reset returns the built-in look.
+
 ## 0.58.11 — 2026-10-11
 
 ### Enhancements

@@ -1,0 +1,69 @@
+# T0175 Mesh appearance and accessibility settings
+
+## Goal
+
+Let an Administrator set Mesh colors and accessibility. Store them as `system_properties.mesh_appearance` (jsonb), serve them on the existing public config call, and apply them as CSS custom properties on `.mesh-panel`. Priority and state colors stay on `--task-priority-*` / `--task-state-*`.
+
+## Branch
+
+`T0175-mesh-appearance` from updated `main` (created only after this plan is approved).
+
+## Current behavior
+
+- Mesh colors, line weights, glyph size, label size, badge size, stale days, and overdue pulse are hardcoded on `.mesh-panel` in `client/src/index.css`.
+- `MeshPanel` already reads `--mesh-stale-days` and `--mesh-pulse` from that element (`meshChrome()`).
+- Labels always sit on a translucent chip (`.mesh-title`, `.mesh-ref`).
+- `prefers-reduced-motion: reduce` already disables `.mesh-ring--pulse`.
+- System properties follow `default_theme`: key list + defaults + zod patch in `src/services/systemProperties.ts`, change log in `src/routes/v1/admin.ts`, public read via `GET /api/v1/config`.
+- Admin hub sections live in `client/src/lib/administration.tsx` and `AdministrationModal`. System Properties is already a long security/limits form.
+
+## Decisions
+
+- **New Admin section “Mesh”** (`/admin/mesh`), not a block inside System Properties. Same write path: Administrator `PATCH /api/v1/admin/system-properties`. Command palette gets a matching entry.
+- **No Drizzle migration.** Missing key falls back to code defaults. The existing system-properties read inserts the default object on first load, and Save upserts changes. Finish-up is a PATCH bump. Document the key in `docs/database/platform.md` and `docs/database/glossary.md`.
+- **One palette for every accent pack.** Stored colors are hex. The settings preview uses the pack currently applied in the browser, including the 3:1 contrast check against `--bg`.
+- **Live preview is the sample in the Mesh admin panel.** The project Mesh updates after Save, when config is refetched. Reset restores the form to defaults; Save persists that.
+- **Contrast is a warning, not a save block.** Optional hint on `ColorPopover` (palette + custom hex already exist). Other pickers omit it.
+- **Label halo** is the existing chip behind the title and reference. Off removes that background.
+- **Glyph scale** (0.75–1.5, step 0.05, default 1) multiplies the current 22px / 28px focus sizes.
+- **Label size** is one control (0.7–1.2rem, default 0.8rem). The focus label stays 0.15rem larger.
+- **Badge size** 8–24px, default 13. **Line weight** per relation 0.5–4px. **Stale threshold** integer 1–365 days, default 30.
+- Tree, reference, and depends-on **stroke colors stay CSS defaults**. Their weights are configurable. The AI suggestion color is the configurable suggested-edge color (`--mesh-rel-suggested`).
+
+## Stored shape
+
+`mesh_appearance` jsonb object. Invalid or partial stored values fall back field-by-field to defaults. PATCH rejects a bad object with the existing zod error.
+
+| Field | CSS variable | Default |
+| --- | --- | --- |
+| `types.project` … `types.image_board` (all 10 `EntityType`s) | `--mesh-type-*` | current `.mesh-panel` hexes |
+| `suggestion` | `--mesh-rel-suggested` | `#e86aae` |
+| `signals.overdue` / `risk` / `stale` | `--mesh-signal-*` | `#e57373` / `#f0b53c` / `#f0b53c` |
+| `lines.tree` / `ref` / `dep` / `suggested` | `--mesh-line-*` | `1.4` / `1.3` / `1.3` / `1.8` |
+| `glyphScale` | `--mesh-glyph`, `--mesh-glyph-focus` | `1` |
+| `labelSizeRem` | `--mesh-label-size`, focus +0.15rem | `0.8` |
+| `badgePx` | `--mesh-badge` | `13` |
+| `labelHalo` | class or `--mesh-label-halo` | `true` |
+| `overduePulse` | `--mesh-pulse` (`1` / `0`) | `true` |
+| `staleDays` | `--mesh-stale-days` | `30` |
+
+Overdue default is the shared `--danger` hex so the first paint matches today. After an admin sets it, that hex is used on every pack.
+
+## Implementation
+
+1. Shared defaults + zod schema (server `systemProperties.ts`, mirrored types on the client). Include `meshAppearance` on `SystemProperties`, the patch schema, and `PublicSystemConfig`.
+2. Change-log one line when the JSON differs (`mesh_appearance updated`), same style as `default_theme`.
+3. `AdminMeshPanel`: color rows (`ColorPopover`), accessibility controls, sample nodes and lines bound to the draft, Reset, Save. Members do not see the section.
+4. Apply saved vars on `.mesh-panel` from `GET /api/v1/config`. Invalidate that query on save. `meshChrome()` keeps reading stale days and pulse from the element.
+5. Tests: schema rejects bad hex / out-of-range scale; missing key returns defaults; a valid patch round-trips. Client contrast helper: below 3:1 warns, at or above does not.
+
+## Out of scope
+
+- Priority and state colors.
+- Per-user Mesh preferences.
+- Configurable tree / reference / depends-on stroke colors.
+- A migration seed row.
+
+## Finish-up notes
+
+PATCH version bump. `FEATURES.md` gets one Mesh bullet (Administrator appearance and accessibility). No deploy.
