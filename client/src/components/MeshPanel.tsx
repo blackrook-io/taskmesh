@@ -23,6 +23,12 @@ import {
 } from "react";
 import "@xyflow/react/dist/style.css";
 import { apiJson } from "../api/client";
+import {
+  MESH_APPEARANCE_DEFAULTS,
+  meshAppearanceStyle,
+  normalizeMeshAppearance,
+  type MeshAppearance,
+} from "../lib/meshAppearance";
 import { MeshShape } from "./MeshShape";
 import {
   buildMeshCard,
@@ -213,16 +219,8 @@ function legendColors(mode: MeshColorMode): { color: string; label: string; holl
   return LEGEND_SHAPES.map((item) => ({ color: `var(--mesh-type-${item.type})`, label: item.label }));
 }
 
-function meshChrome(): { staleDays: number; pulse: boolean } {
-  if (typeof document === "undefined") return { staleDays: 30, pulse: true };
-  const panel = document.querySelector(".mesh-panel");
-  if (!(panel instanceof HTMLElement)) return { staleDays: 30, pulse: true };
-  const style = getComputedStyle(panel);
-  const days = Number(style.getPropertyValue("--mesh-stale-days"));
-  return {
-    staleDays: Number.isFinite(days) && days > 0 ? days : 30,
-    pulse: style.getPropertyValue("--mesh-pulse").trim() !== "0",
-  };
+function meshChrome(appearance: MeshAppearance): { staleDays: number; pulse: boolean } {
+  return { staleDays: appearance.staleDays, pulse: appearance.overduePulse };
 }
 
 type MeshFlowNode = Node<MeshNodeData, "mesh">;
@@ -935,7 +933,16 @@ export function MeshPanel({
     const ys = [...layout.nodes.map((node) => node.y), ...layout.headings.map((heading) => heading.y)];
     return ys.length > 0 ? Math.min(...ys) : 0;
   }, [layout]);
-  const chrome = meshChrome();
+  const configQuery = useQuery({
+    queryKey: ["config"],
+    queryFn: async () => {
+      const res = await apiJson<{ data: { meshAppearance?: unknown } }>("/api/v1/config");
+      return normalizeMeshAppearance(res.data.meshAppearance);
+    },
+    staleTime: 15_000,
+  });
+  const appearance = configQuery.data ?? MESH_APPEARANCE_DEFAULTS;
+  const chrome = meshChrome(appearance);
   const graphByKey = useMemo(() => {
     const map = new Map<string, MeshGraphNode>();
     for (const node of graphQuery.data?.nodes ?? []) map.set(node.key, node);
@@ -1236,7 +1243,11 @@ export function MeshPanel({
   const hoverCard = suggestionCard || !cardKey ? null : (cards.get(cardKey) ?? null);
 
   return (
-    <section className="mesh-panel" aria-label="Mesh">
+    <section
+      className={appearance.labelHalo ? "mesh-panel" : "mesh-panel mesh-panel--no-halo"}
+      style={meshAppearanceStyle(appearance)}
+      aria-label="Mesh"
+    >
       <div className="mesh-toolbar">
         <button
           type="button"

@@ -9,6 +9,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Open Mesh to see the focused record centered over its contents, with its own links beside it and links from inside on a rail
 - Color Mesh by type, state, or priority, and see overdue, at-risk, stale, and depends-on signals on the cascade
 - Hover a Mesh record to read its state, due date, last change, contents, blockers, and links without leaving the cascade
+- Administrators set Mesh colors and readability for everyone: record colors, suggestion and signal colors, line weight, size, label halo, overdue pulse, and how soon a quiet record counts as stale
 - On a Task, To Do, Idea, or Document, see what it links to and what links to it, and add or remove a manual link
 - Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme

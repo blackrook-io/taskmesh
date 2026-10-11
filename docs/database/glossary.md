@@ -142,6 +142,7 @@ Exact FK lists are on the domain pages.
   - `mfa_grace_days` — number of days (default **7**) before MFA-deadline lock when enforcement applies
   - `mfa_trusted_device_days` — trust duration in days (default **15**; `0` disables; T0141)
   - `mfa_trusted_device_max` — max trusted devices per user (default **5**; T0141)
+  - `mesh_appearance` — jsonb object (T0175): colors for each record type, the AI suggestion, and overdue / at-risk / stale signals; line weights for tree, references, depends-on, and suggested edges; glyph scale, label size, badge size, label halo, overdue pulse, and stale threshold in days. Invalid fields fall back to the built-in Mesh defaults. Priority and state colors are not stored here.
 
 ## Uploads vs database
 
