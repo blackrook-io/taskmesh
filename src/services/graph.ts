@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, ne, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, max, ne, or, type SQL } from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
@@ -28,6 +28,12 @@ export type GraphNode = {
   title: string;
   state: string | null;
   progress: number | null;
+  priority: string | null;
+  /** Date-only due date (YYYY-MM-DD). */
+  dueDate: string | null;
+  createdAt: string | null;
+  /** Latest state change for a task; otherwise the record's updatedAt. */
+  signalAt: string | null;
   projectId: number | null;
   href: string | null;
 };
@@ -919,7 +925,64 @@ type NodeRow = {
   projectId: number | null;
   state: string | null;
   progress: number | null;
+  priority: string | null;
+  dueDate: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  signalAt: Date | null;
 };
+
+function iso(value: Date | null | undefined): string | null {
+  if (value == null) return null;
+  return value.toISOString();
+}
+
+function asRow(
+  row: {
+    id: number;
+    number: number;
+    title: string;
+    projectId: number | null;
+    state?: string | null;
+    progress?: number | null;
+    priority?: string | null;
+    dueDate?: string | null;
+    createdAt?: Date | null;
+    updatedAt?: Date | null;
+    signalAt?: Date | null;
+  },
+): NodeRow {
+  return {
+    id: row.id,
+    number: row.number,
+    title: row.title,
+    projectId: row.projectId,
+    state: row.state ?? null,
+    progress: row.progress ?? null,
+    priority: row.priority ?? null,
+    dueDate: row.dueDate ?? null,
+    createdAt: row.createdAt ?? null,
+    updatedAt: row.updatedAt ?? null,
+    signalAt: row.signalAt ?? row.updatedAt ?? null,
+  };
+}
+
+async function taskSignalTimes(db: Db, taskIds: number[]): Promise<Map<number, Date>> {
+  const times = new Map<number, Date>();
+  if (taskIds.length === 0) return times;
+  const rows = await db
+    .select({
+      taskId: schema.taskActivity.taskId,
+      at: max(schema.taskActivity.createdAt),
+    })
+    .from(schema.taskActivity)
+    .where(and(inArray(schema.taskActivity.taskId, taskIds), eq(schema.taskActivity.field, "state")))
+    .groupBy(schema.taskActivity.taskId);
+  for (const row of rows) {
+    if (row.at) times.set(row.taskId, row.at);
+  }
+  return times;
+}
 
 async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
   const grouped = groupIds(keys);
@@ -936,6 +999,10 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         title: row.title,
         state: row.state,
         progress: row.progress,
+        priority: row.priority,
+        dueDate: row.dueDate,
+        createdAt: iso(row.createdAt),
+        signalAt: iso(row.signalAt),
         projectId: row.projectId,
         href: hrefFor(type, row.id, row.projectId),
       });
@@ -945,12 +1012,18 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
   const ideaIds = idsOf(grouped, "idea");
   if (ideaIds.length > 0) {
     const rows = await db
-      .select({ id: schema.ideas.id, number: schema.ideas.number, title: schema.ideas.title })
+      .select({
+        id: schema.ideas.id,
+        number: schema.ideas.number,
+        title: schema.ideas.title,
+        createdAt: schema.ideas.createdAt,
+        updatedAt: schema.ideas.updatedAt,
+      })
       .from(schema.ideas)
       .where(inArray(schema.ideas.id, ideaIds));
     await load(
       "idea",
-      rows.map((row) => ({ ...row, projectId: null, state: null, progress: null })),
+      rows.map((row) => asRow({ ...row, projectId: null })),
     );
   }
 
@@ -962,12 +1035,14 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         number: schema.projects.number,
         title: schema.projects.name,
         state: schema.projects.status,
+        createdAt: schema.projects.createdAt,
+        updatedAt: schema.projects.updatedAt,
       })
       .from(schema.projects)
       .where(inArray(schema.projects.id, projectIds));
     await load(
       "project",
-      rows.map((row) => ({ ...row, projectId: row.id, progress: null })),
+      rows.map((row) => asRow({ ...row, projectId: row.id })),
     );
   }
 
@@ -980,12 +1055,17 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         title: schema.tasks.title,
         projectId: schema.tasks.projectId,
         state: schema.tasks.state,
+        priority: schema.tasks.priority,
+        dueDate: schema.tasks.dueDate,
+        createdAt: schema.tasks.createdAt,
+        updatedAt: schema.tasks.updatedAt,
       })
       .from(schema.tasks)
       .where(and(inArray(schema.tasks.id, taskIds), ne(schema.tasks.state, "deleted")));
+    const signals = await taskSignalTimes(db, taskIds);
     await load(
       "task",
-      rows.map((row) => ({ ...row, progress: null })),
+      rows.map((row) => asRow({ ...row, signalAt: signals.get(row.id) ?? row.updatedAt })),
     );
   }
 
@@ -999,10 +1079,17 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         projectId: schema.todos.projectId,
         state: schema.todos.state,
         progress: schema.todos.progress,
+        priority: schema.todos.priority,
+        dueDate: schema.todos.dueDate,
+        createdAt: schema.todos.createdAt,
+        updatedAt: schema.todos.updatedAt,
       })
       .from(schema.todos)
       .where(and(inArray(schema.todos.id, todoIds), ne(schema.todos.state, "deleted")));
-    await load("todo", rows);
+    await load(
+      "todo",
+      rows.map((row) => asRow(row)),
+    );
   }
 
   await loadPlain(db, "document", idsOf(grouped, "document"), schema.projectDocuments, load);
@@ -1028,6 +1115,10 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         title: row.title,
         state: null,
         progress: null,
+        priority: null,
+        dueDate: null,
+        createdAt: null,
+        signalAt: null,
         projectId: null,
         href: null,
       });
@@ -1059,12 +1150,14 @@ async function loadPlain(
       number: table.number,
       title: table.title,
       projectId: table.projectId,
+      createdAt: table.createdAt,
+      updatedAt: table.updatedAt,
     })
     .from(table)
     .where(inArray(table.id, ids));
   await load(
     type,
-    rows.map((row) => ({ ...row, state: null, progress: null })),
+    rows.map((row) => asRow(row)),
   );
 }
 
@@ -1081,11 +1174,13 @@ async function loadNamed(
       number: schema.boards.number,
       title: schema.boards.name,
       projectId: schema.boards.projectId,
+      createdAt: schema.boards.createdAt,
+      updatedAt: schema.boards.updatedAt,
     })
     .from(schema.boards)
     .where(inArray(schema.boards.id, ids));
   await load(
     type,
-    rows.map((row) => ({ ...row, state: null, progress: null })),
+    rows.map((row) => asRow(row)),
   );
 }

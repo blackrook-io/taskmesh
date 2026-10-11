@@ -1,0 +1,68 @@
+# T0172 — Mesh node and edge visual encoding
+
+**Task:** T0172 (id `187`) — Mesh view: node and edge visual encoding
+**Parent:** T0164 (id `177`) — stays Ready as the Mesh-tab container
+**Depends on:** T0171 complete (canvas and cascade)
+**Required by:** T0175 (Draft) — Administrator appearance settings. This task only exposes CSS variables.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0172-mesh-encoding`
+
+`docs/design/mesh-view.html` is the picture. T0171 already placed the cascade. This task paints it.
+
+## Decisions
+
+1. **Shapes.** Project hexagon, ToDo List diamond, Task circle, ToDo rounded square, Document page, Idea triangle. The other four, picked so they still read at glyph size: Board a wide rounded bar, Canvas a parallelogram, Wiki a bookmark, Image board a landscape frame.
+2. **Color mode** Type | State | Priority, in the Mesh toolbar. Remembered per browser under `mesh-color`. Default is Type.
+3. **State colors stay the app tokens.** Draft and In Progress both use `--task-state-draft` / `--task-state-progress` (the same blue). Ready and Complete both use `--task-state-ready` / `--task-state-done` (the same green). **Mesh-only distinction, not an app-wide token change:** In Progress and Complete are hollow (colored stroke, surface fill). Draft, Ready, Pending, On Hold, and Canceled stay filled. A record with no state uses the neutral border.
+4. **Priority colors** use `--task-priority-*`. None is the neutral border and draws no badge.
+5. **Type colors** are defaults on the Mesh container (`--mesh-type-project` and one variable per type). T0175 will override them later. No admin API in this task.
+6. **Depends-on lines are drawn** between records that are already placed. Arrow points at the prerequisite. The line is red while that prerequisite is not complete. The References / Depends on / AI chips stay on T0174. All four entity-link relations keep one dashed reference style.
+7. **AI suggestions are not drawn.** T0174 owns that, and the chip stays hidden until T0168. This task defines `--mesh-rel-suggested` and a legend row so that task can use them.
+8. **Signals use fields added to the graph response.** No new SQL. Priority, due date, `createdAt`, and `signalAt` join the node. Progress stays as it is (ToDos only; tasks have no progress column).
+9. **Stale clock.** For a task, `signalAt` is the latest activity row whose field is `state`. Other types have no activity history yet (T0169), so `signalAt` is `updatedAt`. Stale means that instant is 30 days old or more and the record is not complete. The 30 is `--mesh-stale-days`, read at render, so T0175 can change it.
+10. **At risk** when the record has a due date and a progress percent, is not complete or canceled, and the share of time elapsed since `createdAt` exceeds the progress share by more than 0.25. No start-date column exists.
+11. **Overdue** when the due date is before today and the state is not complete or canceled. Red ring. It throbs unless `prefers-reduced-motion` is set or `--mesh-pulse` is `0`.
+12. **Collapsed count.** A placed record shows a red count of overdue descendants that are in the payload but not placed (deeper than the two cascade levels).
+
+## What the user sees
+
+- The glyph is the type shape. In Type mode it is filled with the type color. State and Priority modes recolor that same shape.
+- Focus stays larger. Title still wraps to two lines; the reference stays on the next line, with a halo so a line does not cut the words.
+- High shows `!` and urgent shows `!!`, in the priority color.
+- A progress ring sits around the glyph when `progress` is a number.
+- At risk is a dashed amber ring. Overdue is the red ring (and replaces the at-risk ring). Stale is a small clock on the glyph.
+- Containment stays the solid bus. Reference lines stay dashed. Depends-on lines are solid with an arrowhead.
+- Hovering or focusing a node thickens the lines that touch it. The hover card itself stays on T0173.
+- A collapsible legend under the canvas: shapes, the active color mode, lines, and signals. It starts closed so the cascade keeps the canvas.
+
+Every color, line weight, glyph size, label size, and badge size used above is a custom property on `.mesh-panel`, set to the current sizes so the cascade pitch does not move.
+
+## Scope
+
+**In**
+
+1. Extend `GET /api/v1/graph` nodes with `priority`, `dueDate`, `createdAt`, and `signalAt`. Update `docs/database/` only if a documented response field lives there; no Drizzle file.
+2. `client/src/lib/meshSignals.ts` plus unit tests: hollow vs filled state, overdue, at-risk threshold, stale, blocking depends-on, hidden overdue count.
+3. Replace the accent square in `MeshPanel` with the shape, rings, and badges. Toolbar color switch. Legend. Edge styles for references and depends-on.
+
+**Out**
+
+- Hover cards and Open (T0173).
+- Filter chips and AI suggestion nodes (T0174, T0168).
+- Admin editor for these variables (T0175).
+- App-wide changes to `--task-state-*`.
+- Activity history for non-tasks (T0169).
+
+## QA follow-ups
+
+Hovering a node rebuilt every node, and the position transition then slid the whole cascade, which read as the canvas flashing. Connected lines now thicken from the pointer event itself, without a React render.
+
+Highlighted lines use the theme accent (`--accent`) and sit above the other lines. Arrowheads on a highlighted depends-on line use the same color.
+
+## Acceptance
+
+- On TaskMesh Mesh, tasks and lists show distinct shapes. Switching Type / State / Priority recolors them and the legend, and a reload keeps the choice.
+- A complete task is hollow green; a ready task is filled green. In Progress is hollow blue; Draft is filled blue.
+- An overdue task shows the red ring. With reduced motion the ring is still. A high or urgent task shows the badge.
+- A depends-on line between two placed records points at the prerequisite and is red while that record is not complete.
+- Signals stay readable on all six accent packs. `npm run lint` is clean.

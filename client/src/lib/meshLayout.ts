@@ -22,6 +22,12 @@ export type MeshGraphNode = {
   referenceId: string | null;
   title: string;
   projectId: number | null;
+  state?: string | null;
+  progress?: number | null;
+  priority?: string | null;
+  dueDate?: string | null;
+  createdAt?: string | null;
+  signalAt?: string | null;
 };
 
 export type MeshGraphEdge = {
@@ -59,6 +65,8 @@ export type MeshLayoutEdge = {
   target: string;
   sourceHandle: "b" | "r";
   targetHandle: "t" | "l";
+  kind: "link" | "depends";
+  blocking: boolean;
 };
 
 export type MeshAncestor = {
@@ -291,14 +299,29 @@ export function layoutMesh(input: {
   const placedKeys = new Set(placed.map((node) => node.key));
   const edges: MeshLayoutEdge[] = [];
   for (const edge of input.edges) {
-    if (!LINK_RELATIONS.has(edge.relation)) continue;
     if (!placedKeys.has(edge.source) || !placedKeys.has(edge.target)) continue;
+    if (LINK_RELATIONS.has(edge.relation)) {
+      edges.push({
+        id: `l:${edge.source}:${edge.target}:${edge.relation}`,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: "r",
+        targetHandle: "l",
+        kind: "link",
+        blocking: false,
+      });
+      continue;
+    }
+    if (edge.relation !== "depends_on") continue;
+    const prerequisite = byKey.get(edge.target);
     edges.push({
-      id: `l:${edge.source}:${edge.target}:${edge.relation}`,
+      id: `d:${edge.source}:${edge.target}`,
       source: edge.source,
       target: edge.target,
       sourceHandle: "r",
       targetHandle: "l",
+      kind: "depends",
+      blocking: prerequisite?.state !== "complete",
     });
   }
 
