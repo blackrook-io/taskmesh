@@ -1,0 +1,44 @@
+# T0243 — Mesh lines: direction-aware handles and rounded corners
+
+**Task:** T0243 (id `258`) — Mesh lines: direction-aware handles and rounded corners
+**Parent:** T0164 (id `177`, Pending) — Mesh tab; own work done, children may start
+**Depends on:** none
+**Required by:** T0244 (id `259`, Ready) — spread ports and lanes; not this session
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Branch (after approval):** `T0243-mesh-line-handles`
+
+Every link, depends-on, and suggestion line leaves the source on the right and enters the target on the left. When the target is in the same column or to the left, smoothstep wraps around the nodes and crosses labels and the containment bus.
+
+## Decisions
+
+1. **Side from centers.** After nodes are placed, each edge picks handles from `target.centerX - source.centerX`. Right of half a column (`MESH_COLUMN_PITCH / 2`, 120) stays `r` → `l`. Left of that uses a new source handle on the left and a new target handle on the right. Inside that band, both ends use the right side so the line is a C in the gutter beside the labels.
+2. **New handle ids.** `l` stays a target on the left and `r` stays a source on the right. Add `l-out` (source, left) and `r-in` (target, right). Same-column is source `r` and target `r-in`. A handle has one type, so the two right-side ports cannot share an id.
+3. **Rounded step.** `getSmoothStepPath` gets `borderRadius: 8` and `offset: 20`. The handle already sits on the outer edge of the label, so 20 steps into the gutter without a long detour on ordinary left-to-right lines.
+4. **Bus unchanged.** `layout.tree` stays the containment drawing. T0244 (ports and lanes) stays a later task.
+5. **No schema.** Finish-up is a PATCH bump. `FEATURES.md` already lists the Mesh tab. `RELEASE_NOTES.md` gets an Enhancements bullet on finish-up.
+
+## Scope
+
+1. A pure handle choice in `client/src/lib/meshLayout.ts`, used for link, depends-on, and suggestion edges. Widen `MeshLayoutEdge` handle unions.
+2. Left source and right target handles on the Mesh node in `MeshPanel.tsx`. Pass `borderRadius` and `offset` into `getSmoothStepPath`.
+3. Tests in `meshLayout.test.ts` for right, left, and same-column pairs.
+4. Update the curve in `docs/design/mesh-view.html` so a near-vertical pair brackets to the right of the labels. Today that prototype bends left.
+5. `npm run lint` clean. Run the mesh layout tests.
+
+## Out
+
+- Spreading several lines across a side, or giving shared gutters their own lanes (T0244).
+- Changing the containment bus.
+- Hover dimming (T0246, already on `main`).
+
+## QA follow-ups
+
+- The hover card sat 12px from the record and covered the new right-side brackets. It now sits 32px out (scaled with zoom), past that 20px step, on either side.
+
+## Acceptance
+
+- In the layout tests, a target to the right uses `r` → `l`, a target to the left uses `l-out` → `r-in`, and a same-column pair uses `r` → `r-in`.
+- On TaskMesh Mesh, a same-column depends line is a rounded bracket on the right of that column, not a loop through the labels.
+- A line whose target sits to the left does not wrap through the cascade.
+- The containment bus is unchanged.
+- The hover card sits about 32px past the record (further when zoomed), so the lines on that record stay visible.

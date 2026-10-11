@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.6 — 2026-10-11
+
+### Enhancements
+- Mesh lines leave the side that faces the other record. A same-column line is a rounded bracket in the gutter beside the labels, and a line to the left no longer wraps through the cascade. The hover card sits farther out so those nearby lines stay visible.
+
 ## 0.58.5 — 2026-10-11
 
 ### Enhancements
