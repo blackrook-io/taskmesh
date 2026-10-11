@@ -7625,6 +7625,12 @@ a:focus-visible {
   stroke: var(--mesh-signal-overdue);
   stroke-width: var(--mesh-line-dep);
 }
+.mesh-canvas .react-flow__edge.mesh-edge--suggested .react-flow__edge-path {
+  stroke: var(--mesh-rel-suggested);
+  stroke-width: var(--mesh-line-suggested);
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+}
 .mesh-hot-marker {
   position: absolute;
   width: 0;
@@ -7645,6 +7651,70 @@ a:focus-visible {
   fill: none;
   stroke: var(--mesh-rel-tree);
   stroke-width: var(--mesh-line-tree);
+}
+.mesh-rail-head--ai {
+  color: var(--mesh-rel-suggested);
+  opacity: 1;
+}
+.mesh-filters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.mesh-filter {
+  font: inherit;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.mesh-filter[aria-pressed="false"] {
+  background: transparent;
+  opacity: 0.55;
+}
+.mesh-filter--ai[aria-pressed="true"] {
+  border-color: var(--mesh-rel-suggested);
+  color: var(--mesh-rel-suggested);
+}
+.mesh-node--suggestion .mesh-shape {
+  fill: var(--surface);
+  stroke: var(--mesh-rel-suggested);
+  stroke-dasharray: 2.4 1.6;
+}
+.mesh-card__ai {
+  color: var(--mesh-rel-suggested);
+  font-weight: 600;
+}
+.mesh-card__note,
+.mesh-card__meta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.mesh-card__target {
+  margin: 0;
+  font-weight: 600;
+}
+.mesh-card__suggest {
+  display: grid;
+  gap: 0.35rem;
+}
+.mesh-card__bar--ai > i {
+  background: var(--mesh-rel-suggested);
+}
+.mesh-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.mesh-card__actions .btn.small {
+  min-height: 2rem;
 }
 .mesh-rail-head {
   position: absolute;

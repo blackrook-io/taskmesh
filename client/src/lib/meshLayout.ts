@@ -47,7 +47,7 @@ export type MeshGraphEdge = {
   relation: string;
 };
 
-export type MeshRole = "focus" | "parent" | "link" | "child" | "grandchild" | "rail";
+export type MeshRole = "focus" | "parent" | "link" | "child" | "grandchild" | "rail" | "suggestion";
 
 export type MeshLayoutNode = {
   key: string;
@@ -57,6 +57,8 @@ export type MeshLayoutNode = {
   centerX: number;
   centerY: number;
   role: MeshRole;
+  /** Band or rail for a suggestion glyph. Null for every other role. */
+  lane: "band" | "rail" | null;
   title: string;
   referenceId: string | null;
   type: string;
@@ -68,6 +70,7 @@ export type MeshHeading = {
   x: number;
   y: number;
   text: string;
+  tone: "ai" | null;
 };
 
 export type MeshLayoutEdge = {
@@ -76,8 +79,16 @@ export type MeshLayoutEdge = {
   target: string;
   sourceHandle: "b" | "r";
   targetHandle: "t" | "l";
-  kind: "link" | "depends";
+  kind: "link" | "depends" | "suggested";
   blocking: boolean;
+};
+
+/** A proposed link. The source is the suggested record; the target is already on the canvas. */
+export type MeshSuggestion = {
+  sourceKey: string;
+  targetKey: string;
+  confidence: number;
+  reason: string;
 };
 
 export type MeshAncestor = {
@@ -153,11 +164,30 @@ function placedNode(
     centerX,
     centerY,
     role,
+    lane: null,
     title: node.title,
     referenceId: node.referenceId,
     type: node.type,
     projectLabel: projectLabel(node, meshProjectId, projectRefs),
   };
+}
+
+function readingRank(node: MeshLayoutNode): number {
+  if (node.role === "suggestion") return node.lane === "rail" ? 6 : 1;
+  switch (node.role) {
+    case "parent":
+      return 0;
+    case "link":
+      return 1;
+    case "focus":
+      return 2;
+    case "child":
+      return 3;
+    case "grandchild":
+      return 4;
+    case "rail":
+      return 5;
+  }
 }
 
 export function layoutMesh(input: {
@@ -166,8 +196,17 @@ export function layoutMesh(input: {
   focusKey: string;
   meshProjectId: number;
   projectRefs?: ReadonlyMap<number, string>;
+  /** Entity-link lines and records that exist only because of them. Default on. */
+  references?: boolean;
+  /** Depends-on lines. Default on. */
+  dependsOn?: boolean;
+  /** Proposed links. Empty until a caller such as T0168 supplies them. */
+  suggestions?: readonly MeshSuggestion[];
 }): MeshLayout {
   const refs = input.projectRefs ?? new Map<number, string>();
+  const referencesOn = input.references !== false;
+  const dependsOn = input.dependsOn !== false;
+  const suggestions = input.suggestions ?? [];
   const byKey = new Map(input.nodes.map((node) => [node.key, node]));
   const focus = byKey.get(input.focusKey);
   if (!focus) return { nodes: [], edges: [], ancestors: [], tree: [], headings: [] };
@@ -206,7 +245,7 @@ export function layoutMesh(input: {
   cascadeOnly.delete(focus.key);
 
   for (const edge of input.edges) {
-    if (!LINK_RELATIONS.has(edge.relation)) continue;
+    if (!referencesOn || !LINK_RELATIONS.has(edge.relation)) continue;
     const touchFocus = edge.source === focus.key || edge.target === focus.key;
     const otherKey = edge.source === focus.key ? edge.target : edge.target === focus.key ? edge.source : null;
     if (touchFocus && otherKey && !cascadeKeys.has(otherKey) && !linkSeen.has(otherKey)) {
@@ -232,6 +271,28 @@ export function layoutMesh(input: {
   linkNodes.sort(compareNodes);
   railNodes.sort(compareNodes);
 
+  const structural = new Set<string>(cascadeKeys);
+  for (const node of linkNodes) structural.add(node.key);
+  for (const node of railNodes) structural.add(node.key);
+  const bySource = new Map<string, MeshSuggestion[]>();
+  for (const suggestion of suggestions) {
+    const group = bySource.get(suggestion.sourceKey) ?? [];
+    group.push(suggestion);
+    bySource.set(suggestion.sourceKey, group);
+  }
+  const bandSuggestions: MeshGraphNode[] = [];
+  const railSuggestions: MeshGraphNode[] = [];
+  for (const [sourceKey, group] of bySource) {
+    if (structural.has(sourceKey)) continue;
+    const source = byKey.get(sourceKey);
+    if (!source) continue;
+    const live = group.filter((item) => structural.has(item.targetKey));
+    if (live.some((item) => item.targetKey === focus.key)) bandSuggestions.push(source);
+    else if (live.some((item) => cascadeOnly.has(item.targetKey))) railSuggestions.push(source);
+  }
+  bandSuggestions.sort(compareNodes);
+  railSuggestions.sort(compareNodes);
+
   const branching = level1.filter((child) => (level2.get(child.key) ?? []).length > 0);
   const leaves = level1.filter((child) => (level2.get(child.key) ?? []).length === 0);
   const columns: { head: MeshGraphNode | null; members: MeshGraphNode[] }[] = branching.map((head) => ({
@@ -242,7 +303,7 @@ export function layoutMesh(input: {
 
   const colX = (index: number) => MESH_ORIGIN_X + index * MESH_COLUMN_PITCH;
   const cx = columns.length > 0 ? colX(0) + ((columns.length - 1) * MESH_COLUMN_PITCH) / 2 : MESH_ORIGIN_X;
-  const fy = parent || linkNodes.length > 0 ? 170 : 60;
+  const fy = parent || linkNodes.length > 0 || bandSuggestions.length > 0 ? 170 : 60;
   const focusR = MESH_FOCUS_GLYPH / 2;
   const glyphR = MESH_GLYPH / 2;
   const tree: string[] = [];
@@ -287,31 +348,62 @@ export function layoutMesh(input: {
     placed.push(placedNode(parent, cx, parentY, "parent", input.meshProjectId, refs));
     tree.push(`M${cx},${parentY + glyphR + 4} V${fy - focusR - 6}`);
   }
-  if (linkNodes.length > 0) {
+  const bandCount = linkNodes.length + bandSuggestions.length;
+  if (bandCount > 0) {
     const bandX = cx + 280;
-    headings.push({ x: bandX - 14, y: 16, text: "Linked to this" });
+    headings.push({ x: bandX - 14, y: 16, text: "Linked to this", tone: null });
     linkNodes.forEach((node, index) => {
       placed.push(placedNode(node, bandX + index * MESH_COLUMN_PITCH, 56, "link", input.meshProjectId, refs));
     });
-    maxX = Math.max(maxX, bandX + (linkNodes.length - 1) * MESH_COLUMN_PITCH + 200);
+    bandSuggestions.forEach((node, index) => {
+      const placedSuggestion = placedNode(
+        node,
+        bandX + (linkNodes.length + index) * MESH_COLUMN_PITCH,
+        56,
+        "suggestion",
+        input.meshProjectId,
+        refs,
+      );
+      placed.push({ ...placedSuggestion, lane: "band" });
+    });
+    maxX = Math.max(maxX, bandX + (bandCount - 1) * MESH_COLUMN_PITCH + 200);
   }
 
   const railX = Math.max(maxX + 40, cx + 280);
-  if (railNodes.length > 0) {
+  if (railNodes.length > 0 || railSuggestions.length > 0) {
     let railY = fy + 40;
-    headings.push({ x: railX - 14, y: railY, text: "Linked from inside" });
-    railY += 34;
-    railNodes.forEach((node) => {
-      placed.push(placedNode(node, railX, railY, "rail", input.meshProjectId, refs));
-      railY += MESH_ROW_PITCH;
-    });
+    if (railNodes.length > 0) {
+      headings.push({ x: railX - 14, y: railY, text: "Linked from inside", tone: null });
+      railY += 34;
+      railNodes.forEach((node) => {
+        placed.push(placedNode(node, railX, railY, "rail", input.meshProjectId, refs));
+        railY += MESH_ROW_PITCH;
+      });
+      if (railSuggestions.length > 0) railY += 14;
+    }
+    if (railSuggestions.length > 0) {
+      headings.push({ x: railX - 14, y: railY, text: "Suggested by AI", tone: "ai" });
+      railY += 34;
+      railSuggestions.forEach((node) => {
+        const placedSuggestion = placedNode(
+          node,
+          railX,
+          railY,
+          "suggestion",
+          input.meshProjectId,
+          refs,
+        );
+        placed.push({ ...placedSuggestion, lane: "rail" });
+        railY += MESH_ROW_PITCH;
+      });
+    }
   }
 
   const placedKeys = new Set(placed.map((node) => node.key));
   const edges: MeshLayoutEdge[] = [];
   for (const edge of input.edges) {
     if (!placedKeys.has(edge.source) || !placedKeys.has(edge.target)) continue;
-    if (LINK_RELATIONS.has(edge.relation)) {
+    if (referencesOn && LINK_RELATIONS.has(edge.relation)) {
       edges.push({
         id: `l:${edge.source}:${edge.target}:${edge.relation}`,
         source: edge.source,
@@ -323,7 +415,7 @@ export function layoutMesh(input: {
       });
       continue;
     }
-    if (edge.relation !== "depends_on") continue;
+    if (!dependsOn || edge.relation !== "depends_on") continue;
     const prerequisite = byKey.get(edge.target);
     edges.push({
       id: `d:${edge.source}:${edge.target}`,
@@ -333,6 +425,22 @@ export function layoutMesh(input: {
       targetHandle: "l",
       kind: "depends",
       blocking: prerequisite?.state !== "complete",
+    });
+  }
+  const suggestedSeen = new Set<string>();
+  for (const suggestion of suggestions) {
+    if (!placedKeys.has(suggestion.sourceKey) || !placedKeys.has(suggestion.targetKey)) continue;
+    const id = `s:${suggestion.sourceKey}:${suggestion.targetKey}`;
+    if (suggestedSeen.has(id)) continue;
+    suggestedSeen.add(id);
+    edges.push({
+      id,
+      source: suggestion.sourceKey,
+      target: suggestion.targetKey,
+      sourceHandle: "r",
+      targetHandle: "l",
+      kind: "suggested",
+      blocking: false,
     });
   }
 
@@ -350,16 +458,8 @@ export function layoutMesh(input: {
   }
   ancestors.reverse();
 
-  const order: Record<MeshRole, number> = {
-    parent: 0,
-    link: 1,
-    focus: 2,
-    child: 3,
-    grandchild: 4,
-    rail: 5,
-  };
   const reading = [...placed].sort((a, b) => {
-    const role = order[a.role] - order[b.role];
+    const role = readingRank(a) - readingRank(b);
     if (role !== 0) return role;
     if (a.y !== b.y) return a.y - b.y;
     return a.x - b.x;

@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BaseEdge,
   getSmoothStepPath,
@@ -24,13 +24,20 @@ import {
 import "@xyflow/react/dist/style.css";
 import { apiJson } from "../api/client";
 import { MeshShape } from "./MeshShape";
-import { buildMeshCard, type MeshCardModel } from "../lib/meshCard";
+import {
+  buildMeshCard,
+  buildMeshSuggestionCard,
+  type MeshCardModel,
+  type MeshSuggestionCardModel,
+} from "../lib/meshCard";
+import { isEntityType, type EntityType } from "../lib/entityType";
 import { formatEntityRef } from "../lib/entityRef";
 import {
   layoutMesh,
   type MeshGraphEdge,
   type MeshGraphNode,
   type MeshLayoutNode,
+  type MeshSuggestion,
 } from "../lib/meshLayout";
 import {
   glyphStyle,
@@ -94,6 +101,45 @@ const LEGEND_SHAPES: { type: string; label: string }[] = [
   { type: "wiki_node", label: "Wiki" },
   { type: "image_board", label: "Image board" },
 ];
+
+type MeshRelations = {
+  references: boolean;
+  dependsOn: boolean;
+  suggestions: boolean;
+};
+
+const EMPTY_SUGGESTIONS: readonly MeshSuggestion[] = [];
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
+function readRelations(): MeshRelations {
+  const fallback: MeshRelations = { references: true, dependsOn: true, suggestions: true };
+  try {
+    const raw = localStorage.getItem("mesh-relations");
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<MeshRelations>;
+    if (typeof parsed !== "object" || parsed == null) return fallback;
+    return {
+      references: parsed.references !== false,
+      dependsOn: parsed.dependsOn !== false,
+      suggestions: parsed.suggestions !== false,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function suggestionIdentity(item: MeshSuggestion): string {
+  return `${item.sourceKey}|${item.targetKey}|${item.confidence}|${item.reason}`;
+}
+
+function parseEntityKey(key: string): { entityType: EntityType; id: number } | null {
+  const colon = key.indexOf(":");
+  if (colon <= 0) return null;
+  const entityType = key.slice(0, colon);
+  const id = Number(key.slice(colon + 1));
+  if (!isEntityType(entityType) || !Number.isInteger(id) || id <= 0) return null;
+  return { entityType, id };
+}
 
 function readColorMode(): MeshColorMode {
   try {
@@ -297,6 +343,84 @@ function MeshHoverCard({
   );
 }
 
+function MeshSuggestionCard({
+  model,
+  cardRef,
+  pending,
+  error,
+  onAccept,
+  onDismiss,
+  onPointerEnter,
+  onPointerLeave,
+}: {
+  model: MeshSuggestionCardModel;
+  cardRef: RefObject<HTMLDivElement | null>;
+  pending: boolean;
+  error: string | null;
+  onAccept: (targetKey: string) => void;
+  onDismiss: (item: { targetKey: string; confidence: number; reason: string }) => void;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+}) {
+  return (
+    <div
+      ref={cardRef}
+      className="mesh-card mesh-card--suggestion"
+      style={{ visibility: "hidden" }}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
+      <div className="mesh-card__eyebrow">
+        <span className="mesh-card__type" style={{ color: `var(--mesh-type-${model.type})` }}>
+          {model.typeLabel}
+        </span>
+        {model.referenceId ? <span>{model.referenceId}</span> : null}
+        <span className="mesh-card__ai">AI suggestion</span>
+      </div>
+      <h3>{model.title}</h3>
+      <p className="mesh-card__note">{model.projectNote}</p>
+      {model.items.map((item) => (
+        <div key={`${item.targetKey}:${item.confidence}:${item.reason}`} className="mesh-card__suggest">
+          <p className="mesh-card__target">Link to {item.targetLabel}</p>
+          <div
+            className="mesh-card__bar mesh-card__bar--ai"
+            aria-label={`${item.confidence}% match`}
+          >
+            <i style={{ width: `${Math.max(0, Math.min(100, item.confidence))}%` }} />
+          </div>
+          <p className="mesh-card__meta">
+            {item.confidence}% match · {item.reason}
+          </p>
+          <div className="mesh-card__actions">
+            <button
+              type="button"
+              className="btn small primary"
+              disabled={pending}
+              onClick={() => onAccept(item.targetKey)}
+            >
+              Accept link
+            </button>
+            <button
+              type="button"
+              className="btn small ghost"
+              disabled={pending}
+              onClick={() => onDismiss(item)}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ))}
+      {error ? (
+        <p className="mesh-card__danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <p className="mesh-card__hint">{model.hint}</p>
+    </div>
+  );
+}
+
 function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const played = useRef(false);
@@ -321,14 +445,16 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
 
   const label = [
     data.referenceId,
+    data.role === "suggestion" ? "AI suggestion" : null,
     data.title,
     data.projectLabel,
-    data.schedule === "overdue" ? "overdue" : null,
-    data.stale ? "stale" : null,
+    data.role === "suggestion" ? null : data.schedule === "overdue" ? "overdue" : null,
+    data.role === "suggestion" ? null : data.stale ? "stale" : null,
   ]
     .filter(Boolean)
     .join(", ");
-  const ring = data.progress == null ? null : Math.max(0, Math.min(100, data.progress));
+  const suggested = data.role === "suggestion";
+  const ring = suggested || data.progress == null ? null : Math.max(0, Math.min(100, data.progress));
   return (
     <>
       <Handle id="t" type="target" position={Position.Top} />
@@ -347,6 +473,10 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
           if (event.pointerType === "touch") data.armTouch(id);
         }}
         onClick={(event) => {
+          if (suggested) {
+            data.onFocusNode(id);
+            return;
+          }
           if (data.consumeTouch(id)) {
             event.preventDefault();
             return;
@@ -356,6 +486,10 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
+          if (suggested) {
+            data.onFocusNode(id);
+            return;
+          }
           data.onOpen(id);
         }}
         onMouseEnter={(event) => {
@@ -379,10 +513,10 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
           {data.cardText}
         </span>
         <span className="mesh-mark">
-          {data.schedule === "overdue" ? (
+          {!suggested && data.schedule === "overdue" ? (
             <span className={data.pulse ? "mesh-ring mesh-ring--overdue mesh-ring--pulse" : "mesh-ring mesh-ring--overdue"} />
           ) : null}
-          {data.schedule === "risk" ? <span className="mesh-ring mesh-ring--risk" /> : null}
+          {!suggested && data.schedule === "risk" ? <span className="mesh-ring mesh-ring--risk" /> : null}
           {ring != null ? (
             <svg className="mesh-progress" viewBox="0 0 36 36" aria-hidden>
               <circle cx="18" cy="18" r="15" className="mesh-progress__track" />
@@ -396,18 +530,18 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
             </svg>
           ) : null}
           <MeshShape type={data.type} color={data.color} hollow={data.hollow} />
-          {data.priority === "urgent" || data.priority === "high" ? (
+          {!suggested && (data.priority === "urgent" || data.priority === "high") ? (
             <span className={`mesh-badge mesh-badge--${data.priority}`} aria-hidden>
               {data.priority === "urgent" ? "!!" : "!"}
             </span>
           ) : null}
-          {data.stale ? (
+          {!suggested && data.stale ? (
             <svg className="mesh-stale" viewBox="0 0 12 12" aria-hidden>
               <circle cx="6" cy="6" r="5" />
               <path d="M6 3.4 V6.2 L8 7.3" />
             </svg>
           ) : null}
-          {data.hiddenOver > 0 ? (
+          {!suggested && data.hiddenOver > 0 ? (
             <span className="mesh-count" aria-hidden>
               {data.hiddenOver}
             </span>
@@ -451,11 +585,23 @@ function FrameFocus({
   return null;
 }
 
-export function MeshPanel({ projectId }: { projectId: number }) {
+export function MeshPanel({
+  projectId,
+  suggestions = EMPTY_SUGGESTIONS,
+}: {
+  projectId: number;
+  suggestions?: readonly MeshSuggestion[];
+}) {
+  const queryClient = useQueryClient();
   const rootKey = `project:${projectId}`;
   const [stack, setStack] = useState<string[]>([rootKey]);
   const focusKey = stack[stack.length - 1] ?? rootKey;
   const [colorMode, setColorMode] = useState<MeshColorMode>(readColorMode);
+  const [relations, setRelations] = useState<MeshRelations>(readRelations);
+  const [droppedFor, setDroppedFor] = useState<{ focus: string; ids: ReadonlySet<string> }>({
+    focus: rootKey,
+    ids: EMPTY_IDS,
+  });
   const [legendOpen, setLegendOpen] = useState(false);
   const [today] = useState(() => new Date());
   const [motion, setMotion] = useState<{
@@ -562,6 +708,12 @@ export function MeshPanel({ projectId }: { projectId: number }) {
     const placed = placeMeshCard(canvas, card, key);
     card.style.visibility = placed ? "visible" : "hidden";
   }, []);
+  const droppedIds = droppedFor.focus === focusKey ? droppedFor.ids : EMPTY_IDS;
+  const liveSuggestions = useMemo(
+    () => suggestions.filter((item) => !droppedIds.has(suggestionIdentity(item))),
+    [droppedIds, suggestions],
+  );
+  const shownSuggestions = relations.suggestions ? liveSuggestions : EMPTY_SUGGESTIONS;
   const layout = useMemo(() => {
     if (!graphQuery.data) return null;
     return layoutMesh({
@@ -570,8 +722,19 @@ export function MeshPanel({ projectId }: { projectId: number }) {
       focusKey,
       meshProjectId: projectId,
       projectRefs,
+      references: relations.references,
+      dependsOn: relations.dependsOn,
+      suggestions: shownSuggestions,
     });
-  }, [focusKey, graphQuery.data, projectId, projectRefs]);
+  }, [
+    focusKey,
+    graphQuery.data,
+    projectId,
+    projectRefs,
+    relations.dependsOn,
+    relations.references,
+    shownSuggestions,
+  ]);
   useLayoutEffect(() => {
     placeCard();
     const viewport = canvasRef.current?.querySelector(".react-flow__viewport");
@@ -617,6 +780,56 @@ export function MeshPanel({ projectId }: { projectId: number }) {
     }
   }, []);
 
+  const toggleRelation = useCallback((key: keyof MeshRelations) => {
+    setRelations((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem("mesh-relations", JSON.stringify(next));
+      } catch {
+        /* private browsing */
+      }
+      return next;
+    });
+  }, []);
+
+  const hideSuggestions = useCallback(
+    (match: (item: MeshSuggestion) => boolean) => {
+      setDroppedFor((prev) => {
+        const ids = new Set(prev.focus === focusKey ? prev.ids : EMPTY_IDS);
+        for (const item of suggestions) {
+          if (match(item)) ids.add(suggestionIdentity(item));
+        }
+        return { focus: focusKey, ids };
+      });
+    },
+    [focusKey, suggestions],
+  );
+
+  const acceptLink = useMutation({
+    mutationFn: async (item: MeshSuggestion) => {
+      const src = parseEntityKey(item.sourceKey);
+      const dst = parseEntityKey(item.targetKey);
+      if (!src || !dst) throw new Error("That suggestion does not name two records.");
+      await apiJson("/api/v1/links", {
+        method: "POST",
+        body: JSON.stringify({
+          srcType: src.entityType,
+          srcId: src.id,
+          dstType: dst.entityType,
+          dstId: dst.id,
+          relation: "references",
+        }),
+      });
+      return item;
+    },
+    onSuccess: (item) => {
+      hideSuggestions(
+        (row) => row.sourceKey === item.sourceKey && row.targetKey === item.targetKey,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["graph"] });
+    },
+  });
+
   const rememberMotion = useCallback(() => {
     const focus = layout?.nodes.find((node) => node.role === "focus");
     setMotion({
@@ -661,11 +874,29 @@ export function MeshPanel({ projectId }: { projectId: number }) {
           today,
           staleDays: chrome.staleDays,
           isFocus: node.role === "focus",
+          suggestions: shownSuggestions,
         }),
       );
     }
     return map;
-  }, [chrome.staleDays, graphByKey, graphQuery.data, layout, today]);
+  }, [chrome.staleDays, graphByKey, graphQuery.data, layout, shownSuggestions, today]);
+
+  const suggestionCards = useMemo(() => {
+    const map = new Map<string, MeshSuggestionCardModel>();
+    if (!layout || !graphQuery.data) return map;
+    for (const node of layout.nodes) {
+      if (node.role !== "suggestion") continue;
+      const record = graphByKey.get(node.key);
+      if (!record) continue;
+      const model = buildMeshSuggestionCard({
+        node: { ...record, projectLabel: node.projectLabel },
+        nodes: graphQuery.data.nodes,
+        suggestions: shownSuggestions,
+      });
+      if (model) map.set(node.key, model);
+    }
+    return map;
+  }, [graphByKey, graphQuery.data, layout, shownSuggestions]);
 
   const flowNodes: MeshFlowNode[] = layout
     ? layout.nodes.map((node) => {
@@ -694,7 +925,10 @@ export function MeshPanel({ projectId }: { projectId: number }) {
             y: node.y,
             enterFrom: !motion.seen.has(node.key) && motion.origin && !reduceMotion ? motion.origin : null,
             reduceMotion,
-            cardText: cards.get(node.key)?.description ?? node.title,
+            cardText:
+              (node.role === "suggestion"
+                ? suggestionCards.get(node.key)?.description
+                : cards.get(node.key)?.description) ?? node.title,
             onOpen: openNode,
             onPointerEnter: scheduleShow,
             onPointerLeave: scheduleHide,
@@ -718,11 +952,13 @@ export function MeshPanel({ projectId }: { projectId: number }) {
         type: "mesh" as const,
         className: [
           "mesh-edge",
-          edge.kind === "depends"
-            ? edge.blocking
-              ? "mesh-edge--blocking"
-              : "mesh-edge--dep"
-            : "mesh-edge--ref",
+          edge.kind === "suggested"
+            ? "mesh-edge--suggested"
+            : edge.kind === "depends"
+              ? edge.blocking
+                ? "mesh-edge--blocking"
+                : "mesh-edge--dep"
+              : "mesh-edge--ref",
         ].join(" "),
         markerEnd:
           edge.kind === "depends"
@@ -736,7 +972,8 @@ export function MeshPanel({ projectId }: { projectId: number }) {
       }))
     : [];
 
-  const hoverCard = cardKey ? (cards.get(cardKey) ?? null) : null;
+  const suggestionCard = cardKey ? (suggestionCards.get(cardKey) ?? null) : null;
+  const hoverCard = suggestionCard || !cardKey ? null : (cards.get(cardKey) ?? null);
 
   return (
     <section className="mesh-panel" aria-label="Mesh">
@@ -782,6 +1019,37 @@ export function MeshPanel({ projectId }: { projectId: number }) {
             </>
           ) : null}
         </nav>
+        <div className="mesh-filters" role="group" aria-label="Relationships">
+          <button
+            type="button"
+            className="mesh-filter"
+            aria-pressed={relations.references}
+            onClick={() => toggleRelation("references")}
+          >
+            <span className="mesh-swatch mesh-swatch--ref" aria-hidden="true" />
+            References
+          </button>
+          <button
+            type="button"
+            className="mesh-filter"
+            aria-pressed={relations.dependsOn}
+            onClick={() => toggleRelation("dependsOn")}
+          >
+            <span className="mesh-swatch mesh-swatch--dep" aria-hidden="true" />
+            Depends on
+          </button>
+          {suggestions.length > 0 ? (
+            <button
+              type="button"
+              className="mesh-filter mesh-filter--ai"
+              aria-pressed={relations.suggestions}
+              onClick={() => toggleRelation("suggestions")}
+            >
+              <span className="mesh-swatch mesh-swatch--ai" aria-hidden="true" />
+              AI suggestions
+            </button>
+          ) : null}
+        </div>
         <div className="mesh-colors" role="group" aria-label="Color nodes by">
           <span>Color</span>
           {COLOR_MODES.map((mode) => (
@@ -861,7 +1129,7 @@ export function MeshPanel({ projectId }: { projectId: number }) {
               {layout.headings.map((heading) => (
                 <div
                   key={`${heading.text}:${heading.y}`}
-                  className="mesh-rail-head"
+                  className={heading.tone === "ai" ? "mesh-rail-head mesh-rail-head--ai" : "mesh-rail-head"}
                   style={{ transform: `translate(${heading.x}px, ${heading.y}px)` }}
                 >
                   {heading.text}
@@ -873,6 +1141,34 @@ export function MeshPanel({ projectId }: { projectId: number }) {
             <MeshHoverCard
               cardRef={cardRef}
               model={hoverCard}
+              onPointerEnter={() => {
+                clearShow();
+                clearHide();
+              }}
+              onPointerLeave={scheduleHide}
+            />
+          ) : null}
+          {suggestionCard && cardKey ? (
+            <MeshSuggestionCard
+              cardRef={cardRef}
+              model={suggestionCard}
+              pending={acceptLink.isPending}
+              error={acceptLink.isError ? (acceptLink.error as Error).message : null}
+              onAccept={(targetKey) => {
+                const item = liveSuggestions.find(
+                  (row) => row.sourceKey === cardKey && row.targetKey === targetKey,
+                );
+                if (item) acceptLink.mutate(item);
+              }}
+              onDismiss={(item) => {
+                hideSuggestions(
+                  (row) =>
+                    row.sourceKey === cardKey &&
+                    row.targetKey === item.targetKey &&
+                    row.confidence === item.confidence &&
+                    row.reason === item.reason,
+                );
+              }}
               onPointerEnter={() => {
                 clearShow();
                 clearHide();
