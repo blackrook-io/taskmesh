@@ -61,10 +61,10 @@ import {
 } from "../../services/apiRequestLogs.js";
 import { getDatabaseStatsSummary } from "../../services/dbStats.js";
 import { isUsageRange } from "../../lib/usageRange.js";
-import { THEME_IDS } from "../../lib/theme.js";
 import {
   getSystemProperties,
   patchSystemProperties,
+  systemPropertiesPatchSchema,
 } from "../../services/systemProperties.js";
 import {
   listOauthProviders,
@@ -645,34 +645,10 @@ adminRouter.get("/system-properties", async (_req, res) => {
   }
 });
 
-const patchPropsBody = z
-  .object({
-    apiRateLimitPerMinute: z.number().int().min(1).max(100_000).optional(),
-    loginFailureThreshold: z.number().int().min(1).max(1000).optional(),
-    sessionTimeoutMinutes: z.number().int().min(1).max(10_080).optional(),
-    maxConcurrentSessions: z.number().int().min(1).max(20).optional(),
-    defaultTheme: z.enum(THEME_IDS).optional(),
-    mfaEnforcement: z.enum(["none", "administrators"]).optional(),
-    mfaGraceDays: z.number().int().min(0).max(365).optional(),
-    mfaTrustedDeviceDays: z.number().int().min(0).max(365).optional(),
-    mfaTrustedDeviceMax: z.number().int().min(1).max(50).optional(),
-  })
-  .strict();
-
 adminRouter.patch("/system-properties", async (req, res) => {
   try {
-    const parsed = patchPropsBody.parse(req.body);
-    if (
-      parsed.apiRateLimitPerMinute === undefined &&
-      parsed.loginFailureThreshold === undefined &&
-      parsed.sessionTimeoutMinutes === undefined &&
-      parsed.maxConcurrentSessions === undefined &&
-      parsed.defaultTheme === undefined &&
-      parsed.mfaEnforcement === undefined &&
-      parsed.mfaGraceDays === undefined &&
-      parsed.mfaTrustedDeviceDays === undefined &&
-      parsed.mfaTrustedDeviceMax === undefined
-    ) {
+    const parsed = systemPropertiesPatchSchema.parse(req.body);
+    if (Object.keys(parsed).length === 0) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
     }
@@ -686,6 +662,22 @@ adminRouter.patch("/system-properties", async (req, res) => {
     ) {
       parts.push(
         `api_rate_limit_per_minute ${before.apiRateLimitPerMinute}→${after.apiRateLimitPerMinute}`,
+      );
+    }
+    if (
+      parsed.globalApiRateLimitPerMinute !== undefined &&
+      before.globalApiRateLimitPerMinute !== after.globalApiRateLimitPerMinute
+    ) {
+      parts.push(
+        `global_api_rate_limit_per_minute ${before.globalApiRateLimitPerMinute}→${after.globalApiRateLimitPerMinute}`,
+      );
+    }
+    if (
+      parsed.searchRateLimitPerMinute !== undefined &&
+      before.searchRateLimitPerMinute !== after.searchRateLimitPerMinute
+    ) {
+      parts.push(
+        `search_rate_limit_per_minute ${before.searchRateLimitPerMinute}→${after.searchRateLimitPerMinute}`,
       );
     }
     if (

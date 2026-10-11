@@ -54,7 +54,7 @@ Anyone who can reach the process without authenticating cannot read or mutate ap
 | Trust proxy | Explicit `TRUST_PROXY` env (not inferred from `NODE_ENV`) | Set `1` behind nginx (systemd unit + Compose defaults); `false` when Express is exposed without a proxy |
 | TLS | nginx terminates HTTPS :443; Express on loopback / Compose network only | See [`deploy/ssl/README.md`](deploy/ssl/README.md); Compose: `docker/nginx/generate-certs.sh` |
 | Import/export | Multer 20 MB; Zod row mapping; immutable fields rejected | Import rate-limited (T0085) |
-| Rate limits | Per-route + global + per-API-key `express-rate-limit` (memory store) | Login IP; user/key for authenticated; Admin `api_rate_limit_per_minute` |
+| Rate limits | Per-route + global + per-API-key `express-rate-limit` (memory store) | Login IP; user/key/IP for authenticated and anonymous; Admin `api_rate_limit_per_minute`, `global_api_rate_limit_per_minute` (default 300), and `search_rate_limit_per_minute` (default 60) |
 | API keys | Hashed secrets; Bearer / X-API-Key; RO/RW method gate | Profile + Admin lifecycle; query-string keys rejected |
 | Client text inputs | Capture-phase sanitizer on every `<input>` / `<textarea>` | Skips password/file/number/date/color and TipTap `contenteditable` |
 

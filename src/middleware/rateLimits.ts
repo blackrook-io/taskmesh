@@ -2,7 +2,11 @@ import type { Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { db } from "../db/client.js";
 import { sendError } from "../lib/httpError.js";
-import { getSystemProperties } from "../services/systemProperties.js";
+import {
+  CONFIGURABLE_RATE_LIMIT_MAX,
+  CONFIGURABLE_RATE_LIMIT_MIN,
+  getSystemProperties,
+} from "../services/systemProperties.js";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -52,11 +56,25 @@ function sendRateLimited(req: Request, res: Response): void {
 
 export type CreateRateLimiterOptions = {
   windowMs: number;
-  limit: number;
+  limit: number | ((req: Request, res: Response) => number | Promise<number>);
   keyGenerator?: (req: Request) => string;
   /** Disable library validations (unit tests with mock requests). */
   skipValidation?: boolean;
 };
+
+/** Keep an Administrator-set ceiling inside the allowed range. */
+export function clampConfigurableRateLimit(value: number): number {
+  if (!Number.isInteger(value) || value < CONFIGURABLE_RATE_LIMIT_MIN) {
+    return CONFIGURABLE_RATE_LIMIT_MIN;
+  }
+  if (value > CONFIGURABLE_RATE_LIMIT_MAX) return CONFIGURABLE_RATE_LIMIT_MAX;
+  return value;
+}
+
+/** Resolve a global or search ceiling from System Properties. */
+export async function configurableRateLimit(read: () => Promise<number>): Promise<number> {
+  return clampConfigurableRateLimit(await read());
+}
 
 /** Shared factory so tests can use tiny windows/limits with the same handler shape. */
 export function createRateLimiter(opts: CreateRateLimiterOptions) {
@@ -77,7 +95,11 @@ export function createRateLimiter(opts: CreateRateLimiterOptions) {
 /** Loose ceiling so miscellaneous CRUD cannot unbounded-flood. */
 export const globalApiRateLimit = createRateLimiter({
   windowMs: MINUTE,
-  limit: 300,
+  limit: () =>
+    configurableRateLimit(async () => {
+      const props = await getSystemProperties(db);
+      return props.globalApiRateLimitPerMinute;
+    }),
 });
 
 /** Credential stuffing / lockout amplification. */
@@ -108,7 +130,11 @@ export const assistantChatRateLimit = createRateLimiter({
 /** Global search (Postgres ILIKE fan-out). */
 export const searchRateLimit = createRateLimiter({
   windowMs: MINUTE,
-  limit: 60,
+  limit: () =>
+    configurableRateLimit(async () => {
+      const props = await getSystemProperties(db);
+      return props.searchRateLimitPerMinute;
+    }),
 });
 
 /**

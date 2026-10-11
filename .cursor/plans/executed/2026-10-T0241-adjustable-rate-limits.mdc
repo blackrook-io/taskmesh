@@ -1,0 +1,74 @@
+# T0241 — Administrator-adjustable global API and search rate limits
+
+**Task:** T0241 (id 256) · project TaskMesh · priority medium · state ready  
+**Branch (after approval):** `T0241-adjustable-rate-limits`  
+**Version on finish-up:** PATCH +1 (no Drizzle migration; properties seed on read).
+
+## Goal
+
+Let an Administrator raise or lower the global API ceiling and the search ceiling from Admin → System Properties, without a restart. Today both numbers are hard-coded in `src/middleware/rateLimits.ts` (300 and 60). Only the per-API-key budget is already a System Property.
+
+## Decisions
+
+- **Cache TTL: 15 seconds.** `getSystemProperties` keeps the last resolved object in memory. `patchSystemProperties` clears that cache before returning, so an Admin save is visible on the next request. Other readers (session timeout, MFA) share the same cache and stay at most 15 seconds stale.
+- **Current window keeps its hit count.** `express-rate-limit` re-reads the limit on each request and compares it to the in-memory counter. Raising the ceiling allows more requests in the current minute. Lowering it below the current count returns 429 until the window rolls. Counters are not reset.
+- **New fields only:** integer **10–100000**. The existing API-key field stays **1–100000**.
+- **Defaults:** global **300**, search **60**, matching today’s hard-coded values. Missing keys are inserted on read, same as the other properties.
+- Login, upload, assistant chat, and heavy-write limits stay hard-coded. `RATE_LIMIT_DISABLE=1` stays DEV-only and is ignored in production.
+
+## Scope
+
+### 1. System properties
+
+`src/services/systemProperties.ts`
+
+- Add keys `global_api_rate_limit_per_minute` (default 300) and `search_rate_limit_per_minute` (default 60) to `SYSTEM_PROPERTY_KEYS`, `DEFAULTS`, `SystemProperties`, and `patchSystemProperties`.
+- In-memory cache (15s) around the load, plus `invalidateSystemPropertiesCache()` called from `patchSystemProperties`.
+
+### 2. Limiters
+
+`src/middleware/rateLimits.ts`
+
+- Widen `createRateLimiter` so `limit` may be a number or an async function (the library already supports this).
+- `globalApiRateLimit` and `searchRateLimit` read the cached property each request (`Math.max(10, …)`), the same pattern as `apiKeyRateLimit`.
+- `standardHeaders: true` already sends `RateLimit-Limit`; the header follows the resolved limit.
+
+### 3. Admin API
+
+`src/routes/v1/admin.ts`
+
+- Zod: both new fields `z.number().int().min(10).max(100_000).optional()`.
+- Include them in the empty-patch check and the change log (`global_api_rate_limit_per_minute 300→1000`).
+
+### 4. Admin UI
+
+`client/src/components/admin/AdminSystemPropertiesPanel.tsx`
+
+- Two number inputs, client checks matching 10–100000.
+- Help text: each limit is per user, per API key, or per IP, per minute. Global covers `/api/v1` traffic. Search covers global search only. Login, upload, assistant, and heavy-write limits are unchanged.
+
+### 5. Docs
+
+- `docs/database/platform.md` and `docs/database/glossary.md` — known keys, defaults, and range.
+- `SECURITY.md` rate-limit row — Admin can set the global and search ceilings.
+- Then `npm run docs:sync-schema` so the TaskMesh project Documents match.
+
+### 6. Tests
+
+- Limiter: a `createRateLimiter` with an async limit sets `RateLimit-Limit` from that value and 429s once the count exceeds it (`src/middleware/rateLimits.test.ts`).
+- Cache: after `invalidateSystemPropertiesCache()`, the next `getSystemProperties` reloads (unit-test the cache with a stub loader, or assert invalidate + TTL behavior without a live window).
+- Validation: the admin patch schema rejects 9 and 100001 and accepts 10 and 100000. Extract the schema (or a shared range helper) so this does not need a running server.
+
+## Out of scope
+
+- No migration, no change to login / upload / assistant / heavy-write limits.
+- No reset of in-memory counters when the Administrator saves.
+- Version bump and `RELEASE_NOTES.md` wait for finish-up.
+
+## QA checklist (after implementation)
+
+1. Admin → System Properties shows Global API rate limit (default 300) and Search rate limit (default 60), with the help text.
+2. Save 1000 / 120. A following API response `RateLimit-Limit` is `1000` (no restart). Search responses show `120`.
+3. Values 9 and 100001 are rejected in the panel and by `PATCH /api/v1/admin/system-properties`.
+4. API-key limit, login threshold, and MFA fields still save.
+5. `npm test` for the new cases, and `npm run lint`.
