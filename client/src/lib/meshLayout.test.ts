@@ -3,14 +3,18 @@ import { describe, it } from "node:test";
 import {
   containmentParent,
   layoutMesh,
+  MESH_BOX_HEIGHT,
   MESH_COLUMN_PITCH,
+  MESH_FOCUS_BOX_HEIGHT,
   MESH_LANE_GAP,
+  MESH_NODE_WIDTH,
   meshEdgeHandles,
   meshNodesOverlap,
   meshOrthogonalPath,
   meshPortOffsets,
   type MeshGraphEdge,
   type MeshGraphNode,
+  type MeshLayoutNode,
 } from "./meshLayout.ts";
 
 function node(
@@ -441,5 +445,101 @@ describe("mesh line lanes", () => {
 
   it("rounds an orthogonal step", () => {
     assert.match(meshOrthogonalPath(0, 0, 80, 40, 40), /A/);
+  });
+});
+
+function boxBottom(node: MeshLayoutNode): number {
+  return node.y + (node.role === "focus" ? MESH_FOCUS_BOX_HEIGHT : MESH_BOX_HEIGHT);
+}
+
+describe("mesh trunk corridor", () => {
+  it("keeps a rail line under the columns and out of the next column", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Head A", "T0001"),
+      node("task:10", "Child A", "T0010"),
+      node("task:2", "Head B", "T0002"),
+      node("task:20", "Child B", "T0020"),
+      node("document:8", "Inside", "D0008", 9),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "project:4", target: "task:2", relation: "in_project" },
+      { source: "task:10", target: "task:1", relation: "child_of" },
+      { source: "task:20", target: "task:2", relation: "child_of" },
+      { source: "task:10", target: "document:8", relation: "references" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const columns = layout.nodes.filter((item) => item.role === "child" || item.role === "grandchild");
+    const link = layout.edges.find((edge) => edge.id === "l:task:10:document:8:references");
+    const headB = layout.nodes.find((item) => item.key === "task:2");
+    const childA = layout.nodes.find((item) => item.key === "task:10");
+    assert.ok(link?.corridor);
+    const corridorY = link?.corridor?.corridorY ?? 0;
+    assert.ok(columns.every((item) => corridorY > boxBottom(item)));
+    assert.ok((link?.corridor?.dropX ?? 0) > (childA?.x ?? 0) + MESH_NODE_WIDTH);
+    assert.ok((link?.corridor?.dropX ?? 0) < (headB?.x ?? 0));
+    assert.equal(meshNodesOverlap(layout.nodes), false);
+  });
+
+  it("draws one trunk when four lines share a rail record", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Head A", "T0001"),
+      node("task:10", "A1", "T0010"),
+      node("task:11", "A2", "T0011"),
+      node("task:12", "A3", "T0012"),
+      node("task:2", "Head B", "T0002"),
+      node("task:20", "B1", "T0020"),
+      node("document:8", "Inside", "D0008", 9),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "project:4", target: "task:2", relation: "in_project" },
+      { source: "task:10", target: "task:1", relation: "child_of" },
+      { source: "task:11", target: "task:1", relation: "child_of" },
+      { source: "task:12", target: "task:1", relation: "child_of" },
+      { source: "task:20", target: "task:2", relation: "child_of" },
+      { source: "task:1", target: "document:8", relation: "references" },
+      { source: "task:10", target: "document:8", relation: "references" },
+      { source: "task:11", target: "document:8", relation: "references" },
+      { source: "task:12", target: "document:8", relation: "references" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const members = layout.edges.filter((edge) => edge.target === "document:8" && edge.trunkCount == null);
+    const trunk = layout.edges.find((edge) => edge.id === "trunk:document:8");
+    assert.equal(members.length, 4);
+    assert.ok(members.every((edge) => edge.bundled && edge.corridor));
+    assert.equal(new Set(members.map((edge) => Math.round(edge.corridor?.arrivalX ?? 0))).size, 4);
+    assert.equal(trunk?.trunkCount, 4);
+    assert.equal(trunk?.bundled, false);
+    const columns = layout.nodes.filter((item) => item.role === "child" || item.role === "grandchild");
+    assert.ok(
+      members.every((edge) => columns.every((item) => (edge.corridor?.corridorY ?? 0) > boxBottom(item))),
+    );
+    assert.equal(meshNodesOverlap(layout.nodes), false);
+  });
+
+  it("runs a far band link under the columns", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Head", "T0001"),
+      node("task:10", "Child", "T0010"),
+      node("idea:7", "Own link", "I0007", null),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "task:10", target: "task:1", relation: "child_of" },
+      { source: "project:4", target: "idea:7", relation: "supports" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const link = layout.edges.find((edge) => edge.target === "idea:7" || edge.source === "idea:7");
+    const columns = layout.nodes.filter((item) => item.role === "child" || item.role === "grandchild");
+    const band = layout.nodes.find((item) => item.key === "idea:7");
+    assert.equal(band?.role, "link");
+    assert.ok(link?.corridor);
+    assert.ok(columns.every((item) => (link?.corridor?.corridorY ?? 0) > boxBottom(item)));
+    assert.ok(Math.abs((band?.centerX ?? 0) - (layout.nodes.find((item) => item.role === "focus")?.centerX ?? 0)) > MESH_COLUMN_PITCH / 2);
+    assert.equal(meshNodesOverlap(layout.nodes), false);
   });
 });

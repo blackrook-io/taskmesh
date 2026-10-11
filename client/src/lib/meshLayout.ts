@@ -88,9 +88,27 @@ export type MeshLayoutEdge = {
   sourceOffset: number;
   /** Pixels along the target side, centered on the handle. */
   targetOffset: number;
-  /** Flow x of the vertical run. */
+  /** Flow x of the vertical run. Direct lines only. */
   laneX: number;
+  /** Drop, floor, and rise for a line that runs under the columns. */
+  corridor: MeshCorridor | null;
+  /** Hidden until the channel record is hovered. */
+  bundled: boolean;
+  /** Set on the one visible line that stands in for a bundle. */
+  trunkCount: number | null;
+  /** Absolute points for a trunk. Members use `corridor` instead. */
+  trunkPath: { x: number; y: number }[] | null;
 };
+
+export type MeshCorridor = {
+  dropX: number;
+  corridorY: number;
+  arrivalX: number;
+  approachY: number;
+};
+
+export const MESH_CORRIDOR_PAD = 16;
+export const MESH_TRUNK_AT = 4;
 
 /** Right, left, or a same-column bracket on the right. Half a column is the same column. */
 export function meshEdgeHandles(
@@ -168,6 +186,64 @@ export function meshOrthogonalPath(
     `A${fmt(r)},${fmt(r)} 0 0 ${sweep2} ${fmt(laneX + exSign * r)},${fmt(ty)}`,
     `L${fmt(tx)},${fmt(ty)}`,
   ].join(" ");
+}
+
+/** Rounded orthogonal polyline. Zero-length segments are dropped. */
+export function meshRoundedPolyline(points: readonly { x: number; y: number }[], radius = 8): string {
+  const fmt = (n: number) => n.toFixed(1);
+  const unique = points.filter((point, index) => {
+    const prev = points[index - 1];
+    return index === 0 || !prev || point.x !== prev.x || point.y !== prev.y;
+  });
+  if (unique.length === 0) return "";
+  if (unique.length === 1) return `M${fmt(unique[0]!.x)},${fmt(unique[0]!.y)}`;
+  const parts = [`M${fmt(unique[0]!.x)},${fmt(unique[0]!.y)}`];
+  for (let index = 1; index < unique.length - 1; index += 1) {
+    const prev = unique[index - 1]!;
+    const curr = unique[index]!;
+    const next = unique[index + 1]!;
+    const inDx = curr.x - prev.x;
+    const inDy = curr.y - prev.y;
+    const outDx = next.x - curr.x;
+    const outDy = next.y - curr.y;
+    const inLen = Math.hypot(inDx, inDy);
+    const outLen = Math.hypot(outDx, outDy);
+    const r = Math.min(radius, inLen / 2, outLen / 2);
+    if (r < 0.5 || inLen === 0 || outLen === 0) {
+      parts.push(`L${fmt(curr.x)},${fmt(curr.y)}`);
+      continue;
+    }
+    const inUx = inDx / inLen;
+    const inUy = inDy / inLen;
+    const outUx = outDx / outLen;
+    const outUy = outDy / outLen;
+    const sweep = inUx * outUy - inUy * outUx > 0 ? 1 : 0;
+    parts.push(`L${fmt(curr.x - inUx * r)},${fmt(curr.y - inUy * r)}`);
+    parts.push(
+      `A${fmt(r)},${fmt(r)} 0 0 ${sweep} ${fmt(curr.x + outUx * r)},${fmt(curr.y + outUy * r)}`,
+    );
+  }
+  const last = unique[unique.length - 1]!;
+  parts.push(`L${fmt(last.x)},${fmt(last.y)}`);
+  return parts.join(" ");
+}
+
+export function meshCorridorPoints(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  corridor: MeshCorridor,
+): { x: number; y: number }[] {
+  return [
+    { x: sx, y: sy },
+    { x: corridor.dropX, y: sy },
+    { x: corridor.dropX, y: corridor.corridorY },
+    { x: corridor.arrivalX, y: corridor.corridorY },
+    { x: corridor.arrivalX, y: corridor.approachY },
+    { x: tx, y: corridor.approachY },
+    { x: tx, y: ty },
+  ];
 }
 
 /** A proposed link. The source is the suggested record; the target is already on the canvas. */
@@ -355,6 +431,208 @@ function assignMeshLanes(
   for (const group of other.values()) place(group.edges, group.left);
 }
 
+type MeshBox = { key: string; left: number; right: number; top: number; bottom: number };
+
+function meshNodeBox(node: MeshLayoutNode): MeshBox {
+  const height = node.role === "focus" ? MESH_FOCUS_BOX_HEIGHT : MESH_BOX_HEIGHT;
+  return {
+    key: node.key,
+    left: node.x,
+    right: node.x + MESH_NODE_WIDTH,
+    top: node.y,
+    bottom: node.y + height,
+  };
+}
+
+function clearRiseX(
+  start: number,
+  dir: number,
+  y0: number,
+  y1: number,
+  boxes: readonly MeshBox[],
+  ignore: ReadonlySet<string>,
+  used: ReadonlySet<number>,
+): number {
+  for (let step = 0; step <= 80; step += 1) {
+    const x = start + dir * step * MESH_LANE_GAP;
+    if (used.has(Math.round(x))) continue;
+    if (!verticalHits(x, y0, y1, boxes, ignore)) return x;
+  }
+  return start;
+}
+
+function verticalHits(x: number, y0: number, y1: number, boxes: readonly MeshBox[], ignore: ReadonlySet<string>): boolean {
+  const top = Math.min(y0, y1);
+  const bottom = Math.max(y0, y1);
+  return boxes.some(
+    (box) =>
+      !ignore.has(box.key) &&
+      x > box.left + 0.5 &&
+      x < box.right - 0.5 &&
+      box.bottom > top &&
+      box.top < bottom,
+  );
+}
+
+function channelKind(node: MeshLayoutNode): "rail" | "band" | null {
+  if (node.role === "rail" || node.lane === "rail") return "rail";
+  if (node.role === "link" || node.lane === "band") return "band";
+  return null;
+}
+
+/** Rail and far band lines share a floor under the columns. Busy targets become one trunk. */
+function assignMeshCorridors(
+  edges: MeshLayoutEdge[],
+  placed: readonly MeshLayoutNode[],
+  placedByKey: ReadonlyMap<string, MeshLayoutNode>,
+  columnOf: ReadonlyMap<string, number>,
+  gutterLeftOf: (index: number) => number,
+): void {
+  const columnNodes = placed.filter((node) => node.role === "child" || node.role === "grandchild");
+  if (columnNodes.length === 0) return;
+  const boxes = placed.map(meshNodeBox);
+  const floor = Math.max(...boxes.map((box) => box.bottom)) + MESH_CORRIDOR_PAD;
+  const columnRight = Math.max(...columnNodes.map((node) => node.x + MESH_NODE_WIDTH));
+
+  type Run = { edge: MeshLayoutEdge; anchor: MeshLayoutNode; channel: MeshLayoutNode };
+  const runs: Run[] = [];
+  for (const edge of edges) {
+    const source = placedByKey.get(edge.source);
+    const target = placedByKey.get(edge.target);
+    if (!source || !target || edge.kind === "depends") continue;
+    const sourceChannel = channelKind(source);
+    const targetChannel = channelKind(target);
+    const anchor = sourceChannel && !targetChannel ? target : targetChannel && !sourceChannel ? source : null;
+    const channel = anchor === source ? target : anchor === target ? source : null;
+    if (!anchor || !channel) continue;
+    if (Math.abs(anchor.centerX - channel.centerX) < MESH_COLUMN_PITCH / 2) continue;
+    runs.push({ edge, anchor, channel });
+  }
+  if (runs.length === 0) return;
+
+  const byDrop = new Map<string, Run[]>();
+  for (const run of runs) {
+    const column = columnOf.get(run.anchor.key);
+    const key = column == null ? "open" : String(column);
+    const list = byDrop.get(key) ?? [];
+    list.push(run);
+    byDrop.set(key, list);
+  }
+  const corridorIds = new Set(runs.map((run) => run.edge.id));
+  const usedX = new Set<number>(
+    edges.filter((edge) => !corridorIds.has(edge.id)).map((edge) => Math.round(edge.laneX)),
+  );
+  for (const [key, list] of byDrop) {
+    const sorted = [...list].sort(
+      (a, b) => a.anchor.centerY - b.anchor.centerY || a.edge.id.localeCompare(b.edge.id),
+    );
+    const left = key === "open" ? columnRight : gutterLeftOf(Number(key));
+    const lanes = meshLaneXs(sorted.length, left);
+    sorted.forEach((run, index) => {
+      let dropX = lanes[index] ?? left + MESH_LINE_STEP;
+      const ignore = new Set([run.anchor.key]);
+      for (let step = 0; step < 40; step += 1) {
+        const blocked =
+          usedX.has(Math.round(dropX)) ||
+          verticalHits(dropX, run.anchor.centerY, floor, boxes, ignore);
+        if (!blocked) break;
+        dropX += MESH_LANE_GAP;
+      }
+      usedX.add(Math.round(dropX));
+      run.edge.laneX = dropX;
+    });
+  }
+
+  const ordered = [...runs].sort(
+    (a, b) => a.anchor.centerX - b.anchor.centerX || a.anchor.centerY - b.anchor.centerY || a.edge.id.localeCompare(b.edge.id),
+  );
+  ordered.forEach((run, index) => {
+    const corridorY = floor + index * MESH_LANE_GAP;
+    const approachY =
+      channelKind(run.channel) === "band"
+        ? run.channel.y + MESH_BOX_HEIGHT + 8
+        : run.channel.centerY;
+    let arrivalX = run.channel.x - MESH_LINE_STEP;
+    const ignore = new Set([run.channel.key]);
+    if (verticalHits(arrivalX, corridorY, approachY, boxes, ignore)) {
+      let found = arrivalX;
+      for (let step = 1; step <= 80; step += 1) {
+        const right = run.channel.x - MESH_LINE_STEP + step * MESH_LANE_GAP;
+        const left = run.channel.x - MESH_LINE_STEP - step * MESH_LANE_GAP;
+        if (!verticalHits(right, corridorY, approachY, boxes, ignore)) {
+          found = right;
+          break;
+        }
+        if (!verticalHits(left, corridorY, approachY, boxes, ignore)) {
+          found = left;
+          break;
+        }
+      }
+      arrivalX = found;
+    }
+    run.edge.corridor = { dropX: run.edge.laneX, corridorY, arrivalX, approachY };
+  });
+
+  const byChannel = new Map<string, Run[]>();
+  for (const run of runs) {
+    const list = byChannel.get(run.channel.key) ?? [];
+    list.push(run);
+    byChannel.set(run.channel.key, list);
+  }
+  for (const list of byChannel.values()) {
+    if (list.length < 2) continue;
+    const channel = list[0]!.channel;
+    const fromLeft =
+      list.filter((run) => run.anchor.centerX < channel.centerX).length >= list.length / 2;
+    const dir = fromLeft ? -1 : 1;
+    const start = fromLeft
+      ? channel.x - MESH_LINE_STEP
+      : channel.x + MESH_NODE_WIDTH + MESH_LINE_STEP;
+    const ignore = new Set([channel.key]);
+    const used = new Set<number>();
+    const sorted = [...list].sort((a, b) => a.anchor.centerX - b.anchor.centerX);
+    for (const run of sorted) {
+      const corridor = run.edge.corridor;
+      if (!corridor) continue;
+      const x = clearRiseX(start, dir, corridor.corridorY, corridor.approachY, boxes, ignore, used);
+      used.add(Math.round(x));
+      corridor.arrivalX = x;
+    }
+  }
+  for (const [key, list] of byChannel) {
+    if (list.length < MESH_TRUNK_AT) continue;
+    for (const run of list) run.edge.bundled = true;
+    const channel = list[0]!.channel;
+    const lead = [...list].sort((a, b) => a.anchor.centerX - b.anchor.centerX)[0]!;
+    const approachY = lead.edge.corridor?.approachY ?? channel.centerY;
+    const corridorY = Math.min(...list.map((run) => run.edge.corridor?.corridorY ?? floor));
+    const arrivalX = lead.edge.corridor?.arrivalX ?? channel.x - MESH_LINE_STEP;
+    const dropX = Math.min(...list.map((run) => run.edge.laneX));
+    const handles = meshEdgeHandles(dropX, channel.centerX);
+    edges.push({
+      id: `trunk:${key}`,
+      source: lead.anchor.key,
+      target: channel.key,
+      ...handles,
+      kind: lead.edge.kind,
+      blocking: false,
+      sourceOffset: 0,
+      targetOffset: 0,
+      laneX: dropX,
+      corridor: null,
+      bundled: false,
+      trunkCount: list.length,
+      trunkPath: [
+        { x: dropX, y: corridorY },
+        { x: arrivalX, y: corridorY },
+        { x: arrivalX, y: approachY },
+        { x: channel.x, y: approachY },
+        { x: channel.x, y: channel.centerY },
+      ],
+    });
+  }
+}
+
 function readingRank(node: MeshLayoutNode): number {
   if (node.role === "suggestion") return node.lane === "rail" ? 6 : 1;
   switch (node.role) {
@@ -490,12 +768,26 @@ export function layoutMesh(input: {
     for (const member of column.members) columnOf.set(member.key, index);
   });
   const gutterCount = new Array<number>(columns.length).fill(0);
+  const channelKeys = new Set<string>([
+    ...linkNodes.map((node) => node.key),
+    ...railNodes.map((node) => node.key),
+    ...bandSuggestions.map((node) => node.key),
+    ...railSuggestions.map((node) => node.key),
+  ]);
   const addGutter = (source: string, target: string) => {
     const sourceColumn = columnOf.get(source);
     const targetColumn = columnOf.get(target);
-    if (sourceColumn == null || targetColumn == null) return;
-    const gutter = Math.min(sourceColumn, targetColumn);
-    gutterCount[gutter] = (gutterCount[gutter] ?? 0) + 1;
+    if (sourceColumn != null && targetColumn != null) {
+      const gutter = Math.min(sourceColumn, targetColumn);
+      gutterCount[gutter] = (gutterCount[gutter] ?? 0) + 1;
+      return;
+    }
+    if (sourceColumn != null && channelKeys.has(target)) {
+      gutterCount[sourceColumn] = (gutterCount[sourceColumn] ?? 0) + 1;
+    }
+    if (targetColumn != null && channelKeys.has(source)) {
+      gutterCount[targetColumn] = (gutterCount[targetColumn] ?? 0) + 1;
+    }
   };
   for (const edge of input.edges) {
     if (referencesOn && LINK_RELATIONS.has(edge.relation)) {
@@ -644,6 +936,10 @@ export function layoutMesh(input: {
         sourceOffset: 0,
         targetOffset: 0,
         laneX: 0,
+        corridor: null,
+        bundled: false,
+        trunkCount: null,
+        trunkPath: null,
       });
       continue;
     }
@@ -659,6 +955,10 @@ export function layoutMesh(input: {
       sourceOffset: 0,
       targetOffset: 0,
       laneX: 0,
+      corridor: null,
+      bundled: false,
+      trunkCount: null,
+      trunkPath: null,
     });
   }
   const suggestedSeen = new Set<string>();
@@ -677,6 +977,10 @@ export function layoutMesh(input: {
       sourceOffset: 0,
       targetOffset: 0,
       laneX: 0,
+      corridor: null,
+      bundled: false,
+      trunkCount: null,
+      trunkPath: null,
     });
   }
   assignMeshPorts(edges, placedByKey);
@@ -686,6 +990,13 @@ export function layoutMesh(input: {
     columnOf,
     (index) => (baseExtent[index]?.right ?? 0) + shiftBefore(index),
     new Set<number>([Math.round(cx), ...columns.map((_, index) => Math.round(colX(index)))]),
+  );
+  assignMeshCorridors(
+    edges,
+    placed,
+    placedByKey,
+    columnOf,
+    (index) => (baseExtent[index]?.right ?? 0) + shiftBefore(index),
   );
 
   const ancestors: MeshAncestor[] = [];

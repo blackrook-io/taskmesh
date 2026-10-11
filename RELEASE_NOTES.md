@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.8 — 2026-10-11
+
+### Enhancements
+- Rail and band links that would cross other columns share a corridor under the columns. Four or more lines into the same record draw as one trunk with a count, and hovering that record shows the separate lines.
+
+### Fixes
+- Opening a Mesh focus pins the highest record just below the top of the canvas. The focus record is no longer centered, so the project mesh does not open with a large empty band above it.
+
 ## 0.58.7 — 2026-10-11
 
 ### Enhancements

@@ -7652,6 +7652,31 @@ a:focus-visible {
   stroke: var(--accent);
   stroke-width: 2.6;
 }
+.mesh-canvas .react-flow__edge.mesh-edge--bundled:not(.mesh-edge--hot) {
+  opacity: 0;
+  pointer-events: none;
+}
+.mesh-canvas--focusing .react-flow__edge.mesh-edge--bundled.mesh-edge--hot {
+  opacity: 1;
+}
+.mesh-canvas--focusing .react-flow__edge.mesh-edge--trunk.mesh-edge--hot {
+  opacity: 0;
+}
+.mesh-trunk-badge {
+  pointer-events: none;
+}
+.mesh-trunk-badge circle {
+  fill: var(--surface);
+  stroke: var(--mesh-rel-ref);
+  stroke-width: 1.4;
+}
+.mesh-trunk-badge text {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
 .mesh-canvas .react-flow__edge,
 .mesh-canvas .mesh-tree {
   transition: opacity 160ms ease;

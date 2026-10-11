@@ -1,0 +1,39 @@
+# T0245 — Mesh lines: route rail and band links through a trunk corridor
+
+**Task:** T0245 (id `260`) — Mesh lines: route rail and band links through a trunk corridor
+**Parent:** T0244 (id `259`, Pending) — ports and gutter lanes; own work is done
+**Depends on:** T0244 Pending (does not block)
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0245-mesh-trunk-corridor`
+
+Rail records sit to the right of every column. A link from an early column to the rail currently takes one vertical in a shared gutter, so it crosses the columns in between. Band links that travel along the top row do the same through the other band records. T0244 lanes stay the way a line leaves its own column. This task is the long horizontal run after that.
+
+## Decisions
+
+1. **Corridor under the columns.** Rail, rail-suggestion, and far band lines share one horizontal corridor below the deepest column box. Each line leaves through its own column gutter (the T0244 lane) and stays in that gutter until it is under every column. The long run is there, below the records. Extra lines stack 10px apart downward. Column positions do not move, and `meshNodesOverlap` stays false.
+2. **Band arrival.** A band or band-suggestion line whose ends are not in the same column uses that same floor, then rises in a clear gutter (beside a column, or in open space to the right of the cascade) and only then turns into the band record. It does not climb through another column's box or through another band record. A line whose ends already share a column stays a direct step.
+3. **Trunk.** Four or more lines to the same rail or band record draw as one trunk plus a count badge at the record. One, two, or three lines stay separate in the corridor, 10px apart, same spacing as the gutter lanes. Hovering that record reveals the separate corridor lines and which records they come from. The reveal is a DOM class from the existing hover paint, so the canvas does not rebuild nodes.
+4. **Depends lines.** Depends-on lines keep the T0244 port and lane router. They do not join these corridors.
+5. **Crossings.** A corridor line may still cross the containment bus. Halos for that stay on T0247. `docs/design/mesh-view.html` is not redrawn.
+6. **No schema.** Finish-up is a PATCH bump. `FEATURES.md` already lists the Mesh tab.
+
+## Scope
+
+1. Corridor waypoints on `MeshLayoutEdge` for rail and band links. A rounded polyline builder (radius 8) draws them. Direct edges still use `meshOrthogonalPath`.
+2. Trunk edges with a count badge. Member lines stay in the DOM and stay hidden until hover.
+3. Tests: a rail line from an early column keeps its long horizontal below every column node; four lines to one rail record produce one trunk with count 4; `meshNodesOverlap` stays false; a far band link uses that same floor and does not cross another column's box.
+4. `npm run lint` clean. Run the mesh layout tests.
+
+## Out
+
+- Halos or hops where a corridor line crosses the bus or another line (T0247).
+- Redrawing `docs/design/mesh-view.html`.
+
+## Acceptance
+
+- No rail-bound line crosses a node in another column.
+- A record with many inside links shows one trunk plus a count, and hover reveals which records it comes from.
+
+## QA follow-ups
+
+- Opening a focus was vertically centering that record, so the project mesh started with a large empty band above TaskMesh. The frame now pins the highest record (or heading) 36px below the canvas top. Horizontal placement is unchanged.
