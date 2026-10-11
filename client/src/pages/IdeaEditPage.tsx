@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
+import { EntityLinksPanel } from "../components/shared/EntityLinksPanel";
 import { TagInput } from "../components/shared/TagInput";
 import { AssigneeSelectField } from "../components/AssigneeSelectField";
 import { useRegisterAssistantAttach } from "../lib/assistantAttach";
@@ -180,9 +181,12 @@ export function IdeaEditPage() {
       </div>
 
       {!isNew && ideaId != null ? (
-        <div className="field field--tags-below">
-          <TagInput entityType="idea" entityId={ideaId} />
-        </div>
+        <>
+          <div className="field field--tags-below">
+            <TagInput entityType="idea" entityId={ideaId} />
+          </div>
+          <EntityLinksPanel entityType="idea" entityId={ideaId} />
+        </>
       ) : (
         <p className="muted field--tags-below">Save the idea to add tags.</p>
       )}
