@@ -48,6 +48,7 @@ import {
 } from "../lib/taskListSort";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
+import { hiddenDescendantCount } from "../lib/hiddenDescendantCount";
 import type { Project, Task } from "../types";
 
 type SortCol = TaskListSortCol;
@@ -56,6 +57,7 @@ type DisplayRow = {
   task: Task;
   depth: number;
   hasChildren: boolean;
+  hiddenCount: number;
 };
 
 function taskDue(task: Task): string | null {
@@ -112,9 +114,16 @@ function buildGlobalDisplayRows(
   const visualRoots = filtered.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
   const sortedRoots = sortTasks(visualRoots, sortCol, sortDir, projectName);
   const rows: DisplayRow[] = [];
+  const countCache = new Map<number, number>();
+  const visibleKidsOf = (id: number) => childrenOf(filtered, id).filter((c) => matchedIds.has(c.id));
   const walk = (t: Task, depth: number) => {
-    const visibleKids = childrenOf(filtered, t.id).filter((c) => matchedIds.has(c.id));
-    rows.push({ task: t, depth, hasChildren: visibleKids.length > 0 });
+    const visibleKids = visibleKidsOf(t.id);
+    rows.push({
+      task: t,
+      depth,
+      hasChildren: visibleKids.length > 0,
+      hiddenCount: hiddenDescendantCount(t.id, visibleKidsOf, countCache),
+    });
     if (collapsedParents.has(t.id)) return;
     for (const c of visibleKids) walk(c, depth + 1);
   };
@@ -436,7 +445,7 @@ export function TasksListPage() {
             {isFilterActive(taskListFilter) ? "No tasks match this filter." : "No tasks yet."}
           </p>
         ) : (
-          displayRows.map(({ task, depth, hasChildren }) => {
+          displayRows.map(({ task, depth, hasChildren, hiddenCount }) => {
             const showTagsInTitle = !visibleColumns.some((c) => c.fieldKey === "tags");
             return (
             <div
@@ -492,6 +501,7 @@ export function TasksListPage() {
                   task,
                   depth,
                   hasChildren,
+                  hiddenCount,
                   collapsed: collapsedParents.has(task.id),
                   onToggleCollapse: () => toggleParentCollapse(task.id),
                   onPatch: (patch) => void patchTask.mutateAsync({ id: task.id, patch }),
