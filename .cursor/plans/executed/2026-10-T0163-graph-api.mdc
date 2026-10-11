@@ -1,0 +1,61 @@
+# T0163 — graph API (rooted neighbourhood)
+
+**Task:** T0163 (id `176`) — Mesh: graph API (rooted neighbourhood query)
+**Parent epic:** T0159 (id `172`) — stays Ready
+**Depends on:** T0160 complete (`entity_links`)
+**Required by:** T0164 (Mesh tab), T0167 (path finder / orphans) — not this session
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0163-graph-api`
+
+## Context
+
+T0159 wants a rooted, depth-limited graph, not a full-instance store. Structural edges already exist (project membership, parents, task dependencies, list/board/wiki membership, tags, source ideas). T0160 added `entity_links`. This task is the read API that unions them. No UI and no new table. CI still has no Postgres, so traversal rules are unit-tested and the SQL path is checked on the DEV API against P0003.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Walk is undirected; edges keep a direction.** Breadth-first expansion crosses an edge either way. The returned edge still has one `source` and one `target`.
+2. **Edge direction**
+   - `in_project`, `in_list`, `on_board`: container → member
+   - `in_wiki`: wiki node → the record it points at
+   - `child_of`: child → parent
+   - `depends_on`: dependent task → the task it depends on
+   - `from_idea`: project or todo → its `source_idea_id`
+   - `tagged`: record → tag (only when `rel` includes `tagged`)
+   - `entity_links`: stored `src` → `dst`, with that row’s `relation` and `origin`
+3. **Structural `origin` is null.** Link rows use `manual` or `mention`.
+4. **`rel` omitted** means every relation except `tagged`. Pass `tagged` (alone or in the list) to include tag nodes. Unknown names are **400**.
+5. **`depth` defaults to 2, clamped to 1–3.** The root is depth 0.
+6. **Cap is 300 nodes, including the root.** `truncated: true` only when more neighbours exist beyond the cap. Hitting the requested depth is not truncation.
+7. **`hideDone=true`** drops tasks and todos in `complete`, `canceled`, or `deleted`, and does not expand through them. Other types have no done state. Soft-deleted tasks and todos are always omitted, even when `hideDone` is false.
+8. **Visibility.** The root the actor cannot see is **404** if missing or soft-deleted, **403** if it exists but is out of scope. Other nodes use the same ownership filters as link listing. Edges to a dropped node are dropped. Tag nodes are visible when the actor can see the tag (owner or admin), same as tag listings.
+9. **Node shape.** `key` is `type:id` (database id). `progress` is set for todos only. `state` is the task/todo state, or the project `status`; otherwise null. Tags use `type: "tag"`, `referenceId` null, `title` = tag name, `href` null.
+10. **No UI, no migration.** Path finding and orphans stay on T0167. Mesh drawing stays on T0164.
+
+## Goal
+
+`GET /api/v1/graph?root=project:4&depth=2` returns the visible neighbourhood of one record, with a hard depth and a node cap.
+
+## Scope
+
+**In scope**
+
+1. **`src/lib/graphWalk.ts`** — pure BFS over an adjacency list: depth, relation filter, hide-done, visibility set, cap, `truncated`. Unit tests cover those four acceptance cases.
+2. **`src/services/graph.ts`** — load one frontier at a time (batch by relation, not one query per node). Union the relations above plus `entity_links`. Resolve titles, display numbers, and hrefs with the existing reference helpers.
+3. **`GET /api/v1/graph`** — query `root` (`type:id`), optional `depth`, `rel` (comma-separated), `hideDone`. Response `{ nodes, edges, truncated }`.
+4. **DEV check** on project 4 (P0003): depth 1 returns quickly and stays under the cap; a link created in T0160’s shape appears as an edge.
+
+**Out of scope**
+
+- xyflow, layouts, plan view, path search, orphan report, mention sync.
+- Phase lanes, task-group membership, Apache AGE.
+- A Drizzle migration. Finish-up version bump is **PATCH**.
+
+## Acceptance
+
+- Depth, `rel`, hide-done, visibility, and the 300 cap behave as above, covered by unit tests.
+- Invisible neighbours and their edges are absent.
+- `npm test` passes. A neighbourhood of P0003 returns in well under a second.
+
+## Versioning note
+
+No new `drizzle/*.sql` → **PATCH** bump on finish-up (`0.56.0` → `0.56.1`).

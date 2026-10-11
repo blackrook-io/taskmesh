@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.56.1 — 2026-10-11
+
+### New Functionality
+- Ask for the neighbourhood of one record and get the nearby records and how they connect, up to three steps away. Membership, parents, task dependencies, lists, boards, wiki links, source ideas, and directed links are included. Tags are included only when requested.
+- Finished tasks and to-dos can be left out, and a neighbourhood stops at 300 records. A missing record is not found. A record outside your access is refused.
+
 ## 0.56.0 — 2026-10-11
 
 ### Fixes
