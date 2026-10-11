@@ -1,0 +1,38 @@
+# T0246 — Mesh hover: dim unrelated lines and records
+
+**Task:** T0246 (id `261`) — Mesh hover: dim unrelated lines and records
+**Parent:** T0164 (id `177`, Pending) — Mesh tab; own work done, children may start
+**Depends on:** none
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0246-mesh-hover-dim`
+
+`paintMeshHot` already thickens and recolors the lines that touch the hovered or keyboard-focused record. Every other line and record stays at full strength, so the hot set is hard to see in a dense Mesh. The hover card from T0173 stays as it is.
+
+## Decisions
+
+1. **Live focus only.** Hover and keyboard focus turn dimming on. Mouse leave and blur turn it off, except that keyboard focus is kept if the pointer leaves the focused record, and hover is kept if focus moves away while the pointer is still on that record. Click still opens the record (Enter / Space too). Pinning the dim until Escape or an empty-canvas click is out of this task (confirmed).
+2. **Neighbours are line ends.** A record stays bright when it is the focused record or the other end of a line that `paintMeshHot` marks hot. The containment bus (`.mesh-tree`) dims with the unrelated lines.
+3. **Opacity 20%.** Inside the task’s 15–25% range. A short opacity transition; `prefers-reduced-motion: reduce` drops that transition. No layout change.
+4. **No schema.** Finish-up is a PATCH bump. `FEATURES.md` already lists the Mesh tab; this is a polish of that view, so that file stays as it is. `RELEASE_NOTES.md` gets an Enhancements bullet on finish-up.
+
+## Scope
+
+1. `paintMeshHot` toggles `mesh-canvas--focusing`, marks the focused record and its line neighbours with `mesh-node--keep`, and keeps those lines `mesh-edge--hot`. A ref remembers the key so a later hover-card render can restore the classes without rebuilding the nodes. Mouse leave and blur clear it, except keyboard focus survives a pointer leave, hover survives a blur while the pointer remains, and moving onto the hover card keeps the fade.
+2. CSS in `client/src/index.css`: while focusing, unrelated edges, the containment bus, and nodes without `mesh-node--keep` fade to opacity `0.2`, with a short transition. Reduced motion disables the transition. The hover card is not a flow node, so it stays full strength.
+3. `npm run lint` clean.
+
+## Out
+
+- Pinning focus with a click or key.
+- Edge routing, filters, clustering, and hover-card content.
+
+## QA follow-ups
+
+- Hover dimmed by putting the focused record in React state. That rebuilt every node, and the position transition slid the whole canvas. The fade is applied in `paintMeshHot` again, with the hot lines, and a ref restores those classes after the hover card renders.
+
+## Acceptance
+
+- Hovering a record leaves its own lines and the records at both ends of those lines at full strength. Other lines, the containment bus, and other records fade to about 20%.
+- Keyboard focus does the same. Leaving the record or moving focus clears the fade.
+- The hover card still appears and reads as it does today. Nothing shifts position.
+- Hovering does not slide or blink the canvas.

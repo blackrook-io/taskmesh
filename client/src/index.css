@@ -7611,7 +7611,7 @@ a:focus-visible {
   box-shadow: none;
   border-radius: 0;
   pointer-events: all !important;
-  transition: transform 500ms ease-out;
+  transition: transform 500ms ease-out, opacity 160ms ease;
   z-index: 2;
 }
 .mesh-canvas .react-flow__handle {
@@ -7651,6 +7651,15 @@ a:focus-visible {
 .mesh-canvas .react-flow__edge.mesh-edge--hot .react-flow__edge-path {
   stroke: var(--accent);
   stroke-width: 2.6;
+}
+.mesh-canvas .react-flow__edge,
+.mesh-canvas .mesh-tree {
+  transition: opacity 160ms ease;
+}
+.mesh-canvas--focusing .react-flow__edge:not(.mesh-edge--hot),
+.mesh-canvas--focusing .mesh-tree,
+.mesh-canvas--focusing .react-flow__node:not(.mesh-node--keep) {
+  opacity: 0.2;
 }
 .mesh-tree {
   position: absolute;
@@ -8099,6 +8108,8 @@ a:focus-visible {
 .mesh-swatch--risk { border-top-style: dashed; border-top-color: var(--mesh-signal-risk); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
 @media (prefers-reduced-motion: reduce) {
   .mesh-canvas .react-flow__node,
+  .mesh-canvas .react-flow__edge,
+  .mesh-canvas .mesh-tree,
   .mesh-ring--pulse {
     transition: none;
     animation: none;
