@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.57.2 — 2026-10-11
+
+### Enhancements
+- Mesh can hide reference lines or depends-on lines from the toolbar. Turning References off also hides records that are on the canvas only because of those links. The choice stays in this browser.
+- The AI suggestion slot is ready for a later suggestion list: a dashed outline, a dotted join, and a card to accept the link or dismiss it. The AI chip stays hidden until suggestions exist.
+
 ## 0.57.1 — 2026-10-11
 
 ### Enhancements

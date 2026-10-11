@@ -1,0 +1,41 @@
+# T0174 — Mesh relation filters and AI suggestion slot
+
+**Task:** T0174 (id `189`) — Mesh view: relation filters and AI suggestion slot
+**Parent:** T0164 (id `177`) — Mesh tab. Prototype: `docs/design/mesh-view.html` (toolbar chips and ghost cards).
+**Depends on:** T0171 complete (canvas and cascade). T0172 and T0173 are also complete and stay as they are.
+**Required by:** none. T0168 (suggested links) is still Ready and will feed this slot later.
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch (after approval):** `T0174-mesh-filters`
+
+One session. The toolbar gains two remembered chips. The AI rendering path is built and tested, and the AI chip stays off the toolbar until T0168 supplies suggestions.
+
+## Decisions
+
+1. **References** is one chip for every entity link (`relates_to`, `references`, `supports`, `part_of`). Those four already share one dashed line. Turning the chip off drops those lines and any record that is on the canvas only because of them: the “Linked to this” row and the “Linked from inside” rail. The focus, its parent, and the cascade stay.
+2. **Depends on** drops `depends_on` lines. A record stays when containment or a remaining reference still places it. Today a depends-on line never places a record by itself, so this chip hides lines between records that are already drawn.
+3. **Both chips start on.** The choice is stored in this browser under `mesh-relations`, the same way Color uses `mesh-color`. There is no account-preferences store, so this does not follow the user to another browser.
+4. **The AI chip is not rendered.** T0168 has not shipped, and the graph response has no suggestions. The chip appears only when a suggestion list is passed in.
+5. **Suggestion contract, for T0168 to fill.** A suggestion is a source record, a target record key, a match percent, and a reason. With the list non-empty and the (future) chip on:
+   - A suggestion aimed at the focus, whose source is not already placed, sits in “Linked to this” after the real links.
+   - A suggestion aimed at a cascade record, whose source is not already placed, sits on the right rail under a “Suggested by AI” heading, after “Linked from inside”.
+   - The glyph uses a dashed outline in `--mesh-rel-suggested`. It does not show overdue, progress, priority, or stale marks.
+   - A dotted line in that same color joins the suggestion to its target.
+   - Hover or focus opens a suggestion card: “AI suggestion”, the match percent, the reason, the target’s reference and title, **Accept link**, and **Dismiss**. Clicking the glyph opens that card and does not refocus.
+6. **Accept link** posts a manual `references` link through `POST /api/v1/links` (source = suggested record, destination = the target already on the canvas). The suggestion then leaves the view. **Dismiss** drops it from the current list only. Remembering a dismissal so it never returns is T0168’s store; this task does not add a table.
+7. **Ordinary hover cards** gain a “N suggested” count on the Links row when the suggestion list touches that record. With an empty list the row is unchanged.
+8. **Out of this task.** Entity-type chips, hide-done, and depth 1/2/3 were in T0164 before the prototype split. The prototype toolbar does not have them, and no child owns them. Saved positions (T0165) and Plan view (T0166) stay out.
+
+## Scope
+
+1. `layoutMesh` takes `{ references, dependsOn, suggestions }`. Defaults keep today’s picture: both relations on, no suggestions. Unit tests cover a hidden reference rail, a hidden depends-on line, and suggestion placement in the band and on the rail.
+2. Toolbar chips in `MeshPanel`, with the line swatches from the legend. `mesh-relations` in `localStorage`.
+3. Suggestion node style, dotted edge kind, and suggestion card. Accept calls the links API. Dismiss removes that suggestion from the list in memory.
+4. `npm run lint` clean. No migration, so the finish-up bump is PATCH. No `FEATURES.md` change: this refines the Mesh tab T0171 already listed.
+
+## Acceptance
+
+- On TaskMesh Mesh, References and Depends on start on, and a reload keeps a chip that was turned off.
+- Turning References off removes dashed link lines and any record that was only in “Linked to this” or “Linked from inside”. The cascade remains.
+- Turning Depends on off removes those arrow lines. Records that are also in the cascade remain.
+- The AI chip is absent. A unit test with a fixture suggestion places it, draws the dotted join, and builds the Accept / Dismiss card.
+- `npm run lint` is clean.

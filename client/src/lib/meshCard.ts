@@ -1,4 +1,4 @@
-import { containmentParent, type MeshGraphEdge } from "./meshLayout";
+import { containmentParent, type MeshGraphEdge, type MeshSuggestion } from "./meshLayout";
 import { isStale, schedule, type MeshSignalNode } from "./meshSignals";
 
 const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of"]);
@@ -90,6 +90,24 @@ export type MeshCardModel = {
   description: string;
 };
 
+export type MeshSuggestionCardItem = {
+  targetKey: string;
+  targetLabel: string;
+  confidence: number;
+  reason: string;
+};
+
+export type MeshSuggestionCardModel = {
+  referenceId: string | null;
+  type: string;
+  typeLabel: string;
+  title: string;
+  projectNote: string;
+  items: MeshSuggestionCardItem[];
+  hint: string;
+  description: string;
+};
+
 function ageLabel(at: string, today: Date): string {
   const days = Math.round((today.getTime() - new Date(at).getTime()) / MS_DAY);
   if (days <= 0) return "today";
@@ -149,6 +167,7 @@ export function buildMeshCard(input: {
   today: Date;
   staleDays: number;
   isFocus: boolean;
+  suggestions?: readonly Pick<MeshSuggestion, "sourceKey" | "targetKey">[];
 }): MeshCardModel {
   const { node, nodes, edges, today, staleDays, isFocus } = input;
   const byKey = new Map(nodes.map((item) => [item.key, item]));
@@ -256,6 +275,10 @@ export function buildMeshCard(input: {
   const links: string[] = [];
   if (references > 0) links.push(plural(references, "reference", "references"));
   if (dependencies > 0) links.push(plural(dependencies, "dependency", "dependencies"));
+  const suggested = (input.suggestions ?? []).filter(
+    (item) => item.sourceKey === node.key || item.targetKey === node.key,
+  ).length;
+  if (suggested > 0) links.push(plural(suggested, "suggested", "suggested"));
   if (links.length > 0) {
     rows.push({ label: "Links", value: links.join(" · "), tone: null, quote: null });
   }
@@ -298,4 +321,55 @@ function cardDescription(card: MeshCardModel): string {
     card.hint,
   ];
   return parts.filter((part) => part != null && part !== "").join(". ");
+}
+
+export function buildMeshSuggestionCard(input: {
+  node: MeshCardNode;
+  nodes: readonly MeshCardNode[];
+  suggestions: readonly MeshSuggestion[];
+}): MeshSuggestionCardModel | null {
+  const { node, nodes } = input;
+  const byKey = new Map(nodes.map((item) => [item.key, item]));
+  const items: MeshSuggestionCardItem[] = [];
+  for (const suggestion of input.suggestions) {
+    if (suggestion.sourceKey !== node.key) continue;
+    const target = byKey.get(suggestion.targetKey);
+    if (!target) continue;
+    const ref = target.referenceId ?? target.key;
+    items.push({
+      targetKey: suggestion.targetKey,
+      targetLabel: `${ref} ${target.title}`,
+      confidence: suggestion.confidence,
+      reason: suggestion.reason,
+    });
+  }
+  if (items.length === 0) return null;
+  const type = node.type ?? "task";
+  const typeLabel = TYPE_LABELS[type] ?? type;
+  const model: MeshSuggestionCardModel = {
+    referenceId: node.referenceId ?? null,
+    type,
+    typeLabel,
+    title: node.title,
+    projectNote: node.projectLabel ? `From ${node.projectLabel}` : "Already in this project",
+    items,
+    hint: "Suggestions stay dotted until you accept them. Accepted links become ordinary references.",
+    description: "",
+  };
+  const parts = [
+    [model.referenceId, model.typeLabel].filter(Boolean).join(" "),
+    "AI suggestion",
+    model.title,
+    model.projectNote,
+    ...items.flatMap((item) => [
+      `Link to ${item.targetLabel}`,
+      `${item.confidence}% match`,
+      item.reason,
+    ]),
+    "Accept link",
+    "Dismiss",
+    model.hint,
+  ];
+  model.description = parts.filter((part) => part !== "").join(". ");
+  return model;
 }

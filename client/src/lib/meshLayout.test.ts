@@ -156,4 +156,142 @@ describe("mesh cascade layout", () => {
     assert.equal(edge?.target, "task:1");
     assert.equal(edge?.blocking, true);
   });
+
+  it("hides reference lines and records that exist only as links", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Work", "T0001"),
+      node("idea:7", "Own link", "I0007"),
+      node("document:8", "Inside link", "D0008", 9),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "project:4", target: "idea:7", relation: "supports" },
+      { source: "task:1", target: "document:8", relation: "references" },
+    ];
+    const layout = layoutMesh({
+      nodes,
+      edges,
+      focusKey: "project:4",
+      meshProjectId: 4,
+      references: false,
+    });
+    const keys = layout.nodes.map((item) => item.key);
+    assert.deepEqual(keys.sort(), ["project:4", "task:1"]);
+    assert.equal(layout.edges.some((edge) => edge.kind === "link"), false);
+    assert.deepEqual(layout.headings, []);
+  });
+
+  it("hides a depends-on line without removing the cascade", () => {
+    const nodes = [
+      { ...node("task:1", "First", "T0001"), state: "ready" },
+      node("task:2", "Needs", "T0002"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "task:2", target: "task:1", relation: "child_of" },
+      { source: "task:2", target: "task:1", relation: "depends_on" },
+    ];
+    const layout = layoutMesh({
+      nodes,
+      edges,
+      focusKey: "task:1",
+      meshProjectId: 4,
+      dependsOn: false,
+    });
+    assert.equal(layout.nodes.some((item) => item.key === "task:2"), true);
+    assert.equal(layout.edges.some((edge) => edge.kind === "depends"), false);
+  });
+
+  it("places a suggestion beside the focus and a dotted join", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Work", "T0001"),
+      node("idea:7", "Own link", "I0007"),
+      node("document:9", "Maybe", "N0009"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      { source: "project:4", target: "idea:7", relation: "supports" },
+    ];
+    const layout = layoutMesh({
+      nodes,
+      edges,
+      focusKey: "project:4",
+      meshProjectId: 4,
+      suggestions: [
+        {
+          sourceKey: "document:9",
+          targetKey: "project:4",
+          confidence: 72,
+          reason: "shared tags",
+        },
+      ],
+    });
+    const byKey = new Map(layout.nodes.map((item) => [item.key, item]));
+    const link = byKey.get("idea:7");
+    const ghost = byKey.get("document:9");
+    assert.equal(ghost?.role, "suggestion");
+    assert.equal(ghost?.lane, "band");
+    assert.ok((ghost?.centerX ?? 0) > (link?.centerX ?? 0));
+    const edge = layout.edges.find((item) => item.kind === "suggested");
+    assert.equal(edge?.source, "document:9");
+    assert.equal(edge?.target, "project:4");
+    assert.equal(meshNodesOverlap(layout.nodes), false);
+  });
+
+  it("places a cascade suggestion on the rail under Suggested by AI", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Work", "T0001"),
+      node("document:9", "Maybe", "N0009"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+    ];
+    const layout = layoutMesh({
+      nodes,
+      edges,
+      focusKey: "project:4",
+      meshProjectId: 4,
+      suggestions: [
+        {
+          sourceKey: "document:9",
+          targetKey: "task:1",
+          confidence: 40,
+          reason: "title mention",
+        },
+      ],
+    });
+    const ghost = layout.nodes.find((item) => item.key === "document:9");
+    assert.equal(ghost?.role, "suggestion");
+    assert.equal(ghost?.lane, "rail");
+    assert.deepEqual(
+      layout.headings.map((item) => item.text),
+      ["Suggested by AI"],
+    );
+    assert.equal(layout.headings[0]?.tone, "ai");
+    assert.equal(layout.edges.some((edge) => edge.kind === "suggested" && edge.target === "task:1"), true);
+  });
+
+  it("draws a suggestion line to a record that is already placed", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      node("task:1", "Work", "T0001"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+    ];
+    const layout = layoutMesh({
+      nodes,
+      edges,
+      focusKey: "project:4",
+      meshProjectId: 4,
+      suggestions: [
+        { sourceKey: "task:1", targetKey: "project:4", confidence: 10, reason: "same list" },
+      ],
+    });
+    assert.equal(layout.nodes.filter((item) => item.key === "task:1").length, 1);
+    assert.equal(layout.nodes.find((item) => item.key === "task:1")?.role, "child");
+    assert.equal(layout.edges.some((edge) => edge.kind === "suggested"), true);
+  });
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildMeshCard, type MeshCardNode } from "./meshCard.ts";
+import { buildMeshCard, buildMeshSuggestionCard, type MeshCardNode } from "./meshCard.ts";
 
 const today = new Date("2026-10-11T12:00:00.000Z");
 
@@ -193,5 +193,44 @@ describe("mesh hover card", () => {
     assert.equal(card.hint, "Click to focus and see its links.");
     assert.match(card.description, /T0001 Task/);
     assert.match(card.description, /Blocked by/);
+  });
+
+  it("adds a suggested count when a proposal touches the record", () => {
+    const card = buildMeshCard({
+      node: node({ key: "task:1", title: "Focus", referenceId: "T0001" }),
+      nodes: [node({ key: "task:1", title: "Focus", referenceId: "T0001" })],
+      edges: [],
+      today,
+      staleDays: 30,
+      isFocus: true,
+      suggestions: [{ sourceKey: "document:2", targetKey: "task:1" }],
+    });
+    assert.equal(card.rows.find((row) => row.label === "Links")?.value, "1 suggested");
+  });
+
+  it("builds an accept and dismiss card for a suggestion", () => {
+    const nodes = [
+      node({ key: "document:2", type: "document", title: "Notes", referenceId: "N0002" }),
+      node({ key: "task:1", title: "Focus", referenceId: "T0001" }),
+    ];
+    const card = buildMeshSuggestionCard({
+      node: { ...nodes[0]!, projectLabel: "P0009" },
+      nodes,
+      suggestions: [
+        {
+          sourceKey: "document:2",
+          targetKey: "task:1",
+          confidence: 64,
+          reason: "shared tags",
+        },
+      ],
+    });
+    assert.equal(card?.projectNote, "From P0009");
+    assert.equal(card?.items[0]?.targetLabel, "T0001 Focus");
+    assert.equal(card?.items[0]?.confidence, 64);
+    assert.equal(card?.items[0]?.reason, "shared tags");
+    assert.match(card?.description ?? "", /Accept link/);
+    assert.match(card?.description ?? "", /Dismiss/);
+    assert.match(card?.description ?? "", /64% match/);
   });
 });
