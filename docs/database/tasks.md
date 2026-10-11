@@ -12,7 +12,7 @@ erDiagram
   project_phases ||--o{ tasks : "phase_id"
   tasks ||--o{ tasks : "parent_id"
   users ||--o{ tasks : "created_by / updated_by / owner / assignee"
-  tasks ||--o{ task_activity : "task_id"
+  tasks ||--o{ task_activity : "task rows"
   tasks ||--o{ task_dependencies : "task_id"
   tasks ||--o{ task_dependencies : "depends_on_task_id"
   projects ||--o{ task_description_templates : "project_id"
@@ -34,6 +34,8 @@ erDiagram
   }
   task_activity {
     int id PK
+    text entity_type
+    int entity_id
     int task_id FK
     text kind
   }
@@ -101,20 +103,26 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 
 ## `task_activity`
 
-Append-style timeline: user **comments** and auto-recorded **field changes**.
+Append-style timeline for any record: user **comments** and auto-recorded **field changes**. Rows are keyed by `(entity_type, entity_id)`, the same polymorphic pair used by `entity_links`.
+
+Task History still reads and writes this table. A task row keeps `task_id` equal to `entity_id` so deleting a task cascades its timeline. ToDo, Project, and Document rows leave `task_id` null. Deleting those records runs a database trigger that removes their activity. ToDo Lists do not store a row: a list's last update is the newest state or progress change among its ToDo and Task members.
+
+Mesh reads the latest `state`, `progress`, `status`, or `body` change as **last update**, and the latest comment separately. A comment does not count as the update. Document `body` changes store the field name only, not the old or new markdown.
 
 ### Columns
 
 | Column | Type | Nullable | Default | Notes |
 |--------|------|----------|---------|--------|
 | `id` | serial | no | — | Primary key |
-| `task_id` | integer | no | — | FK → `tasks.id` |
+| `entity_type` | text | no | — | One of the ten record types (`idea`, `project`, `task`, `todo`, `document`, `todo_list`, `board`, `canvas`, `wiki_node`, `image_board`) |
+| `entity_id` | integer | no | — | Id of that record. No foreign key, because the type varies |
+| `task_id` | integer | yes | — | Set only when `entity_type` is `task`, and then equal to `entity_id`. FK → `tasks.id` |
 | `kind` | text | no | — | `comment` \| `change` |
 | `body` | text | yes | — | Comment Markdown; also used for session `summary` text |
 | `edited_at` | timestamptz | yes | — | Last edit time for comments |
-| `field` | text | yes | — | Change rows: field name; session summaries use `summary` |
-| `old_value` | text | yes | — | Display before value |
-| `new_value` | text | yes | — | Display after value |
+| `field` | text | yes | — | Change rows: field name; session summaries use `summary`. Task state changes also store a `state` row beside the summary |
+| `old_value` | text | yes | — | Display before value. Null for document body edits |
+| `new_value` | text | yes | — | Display after value. Null for document body edits |
 | `created_by_id` | integer | yes | — | FK → `users.id`; null on some legacy rows |
 | `source` | text | no | `'api'` | `ui` when SPA sends `X-TaskMesh-Client: ui`; else `api` |
 | `created_at` | timestamptz | no | `now()` | |
@@ -122,8 +130,12 @@ Append-style timeline: user **comments** and auto-recorded **field changes**.
 ### Constraints
 
 - **PK:** `id`
+- **INDEX:** `(entity_type, entity_id, created_at)` — `task_activity_entity_idx`
+- **CHECK:** `entity_type` is one of the ten record types — `task_activity_entity_type_chk`
+- **CHECK:** task rows have `task_id = entity_id`; every other type has `task_id` null — `task_activity_task_link_chk`
 - **FK:** `task_id` → `tasks.id` · **ON DELETE CASCADE**
 - **FK:** `created_by_id` → `users.id` · **ON DELETE SET NULL**
+- **TRIGGER:** after delete on `todos`, `projects`, and `project_documents`, `purge_entity_activity` removes matching rows
 
 ---
 

@@ -3,6 +3,7 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
@@ -17,6 +18,7 @@ import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
+import { recordProjectStatusChange } from "../../services/entityActivity.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { listAssignableUsers } from "../../services/assignees.js";
 import {
@@ -213,11 +215,10 @@ projectsRouter.patch("/:id", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     // Description is Owner/Manager/Admin only; name/status remain write-level.
-    if (parsed.description !== undefined) {
-      await assertCanAccessProject(db, actorId, id, "settings");
-    } else {
-      await assertCanAccessProject(db, actorId, id, "write");
-    }
+    const existing =
+      parsed.description !== undefined
+        ? await assertCanAccessProject(db, actorId, id, "settings")
+        : await assertCanAccessProject(db, actorId, id, "write");
     const [row] = await db
       .update(schema.projects)
       .set({
@@ -228,6 +229,16 @@ projectsRouter.patch("/:id", async (req, res) => {
       })
       .where(eq(schema.projects.id, id))
       .returning();
+    if (parsed.status !== undefined) {
+      await recordProjectStatusChange(
+        db,
+        id,
+        existing.status,
+        parsed.status,
+        actorId,
+        activitySourceFromRequest(req),
+      );
+    }
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);

@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { EPUB_MIME } from "../../lib/epubMagic.js";
 import { PDF_MIME } from "../../lib/pdfMagic.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
@@ -15,6 +16,7 @@ import {
   attachDocumentActors,
   deleteUploadById,
 } from "../../services/documents.js";
+import { recordDocumentBodyChange } from "../../services/entityActivity.js";
 import { assertCanAccessOwned } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
@@ -247,6 +249,16 @@ documentsRouter.patch("/:docId", async (req, res) => {
       .where(eq(schema.projectDocuments.id, docId))
       .returning();
 
+    if (existing.kind === "markdown" && parsed.body !== undefined) {
+      await recordDocumentBodyChange(
+        db,
+        docId,
+        existing.body,
+        parsed.body,
+        actorId,
+        activitySourceFromRequest(req),
+      );
+    }
     if (oldUploadToDelete != null) {
       await deleteUploadById(db, oldUploadToDelete);
     }

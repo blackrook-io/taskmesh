@@ -1,7 +1,9 @@
 import { and, asc, eq, isNull, max } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { stateLabel } from "../lib/entityActivity.js";
 import { formatTaskNumber } from "../lib/taskFields.js";
+import { recordTrackedChanges } from "./entityActivity.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -111,17 +113,6 @@ export async function syncDescendantPhases(
   }
 }
 
-const STATE_LABELS: Record<string, string> = {
-  new: "Draft",
-  ready: "Ready",
-  in_progress: "In Progress",
-  pending: "Pending",
-  complete: "Complete",
-  canceled: "Canceled",
-  on_hold: "On Hold",
-  deleted: "Deleted",
-};
-
 const PRIORITY_LABELS: Record<string, string> = {
   none: "None",
   low: "Low",
@@ -180,7 +171,7 @@ async function formatChangeValue(
   if (value == null || value === "") return "none";
   switch (field) {
     case "state":
-      return STATE_LABELS[String(value)] ?? String(value);
+      return stateLabel(String(value));
     case "priority":
       return PRIORITY_LABELS[String(value)] ?? String(value);
     case "phaseId": {
@@ -264,6 +255,8 @@ export async function recordTaskChanges(
     .insert(schema.taskActivity)
     .values({
       taskId,
+      entityType: "task",
+      entityId: taskId,
       kind: "change",
       field: "summary",
       body: summary,
@@ -273,6 +266,21 @@ export async function recordTaskChanges(
       source: opts.source ?? "api",
     })
     .returning();
+  if ((before.state ?? null) !== (after.state ?? null)) {
+    await recordTrackedChanges(db, {
+      entityType: "task",
+      entityId: taskId,
+      actorId: opts.actorId ?? null,
+      source: opts.source ?? "api",
+      changes: [
+        {
+          field: "state",
+          oldValue: stateLabel(String(before.state)),
+          newValue: stateLabel(String(after.state)),
+        },
+      ],
+    });
+  }
   return row ?? null;
 }
 
