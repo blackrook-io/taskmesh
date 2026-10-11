@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.59.1 — 2026-10-11
+
+### New Functionality
+- Mesh Plan view lays the same neighbourhood left to right along dependencies and parent/child links, with a row per project phase. A Ready task with an open dependency is marked Blocked, and a Ready task with none is marked Next. Switching back to Focus keeps the same record selected.
+
 ## 0.59.0 — 2026-10-11
 
 ### New Functionality

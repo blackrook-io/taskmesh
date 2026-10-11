@@ -39,7 +39,12 @@ export type MeshGraphNode = {
     excerpt: string;
     withUpdate: boolean;
   } | null;
+  phaseId?: number | null;
+  phaseName?: string | null;
+  phaseSort?: number | null;
 };
+
+export type MeshPlanMark = "blocked" | "next";
 
 export type MeshGraphEdge = {
   source: string;
@@ -64,6 +69,8 @@ export type MeshLayoutNode = {
   type: string;
   /** Other project's display number, such as `P0009`, when this app already has it. */
   projectLabel: string | null;
+  /** Plan view only. Focus view leaves this null. */
+  planMark: MeshPlanMark | null;
 };
 
 export type MeshHeading = {
@@ -332,6 +339,7 @@ function placedNode(
     referenceId: node.referenceId,
     type: node.type,
     projectLabel: projectLabel(node, meshProjectId, projectRefs),
+    planMark: null,
   };
 }
 

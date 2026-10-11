@@ -1,0 +1,54 @@
+# T0166 — Mesh Plan view
+
+**Task:** T0166 (id `179`) — Mesh: Plan view (directed layout along depends_on / child_of)
+**Parent:** T0159 (id `172`) — Mesh epic, In Progress
+**Depends on:** T0164 complete
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch (after approval):** `T0166-mesh-plan-view`
+
+## Decisions (confirm before implementation)
+
+1. **Own ranker, no dagre or ELK.** The task names dagre/ELK. The Mesh already places nodes in `meshLayout.ts` with a deterministic function and no physics library. Phase lanes are the main axis, and neither dagre (no lanes) nor ELK (large async dependency) fits that as well as a small ranker next to the cascade. Say if you want `elkjs` instead.
+2. **Lanes are horizontal.** Each project phase is a row, top to bottom by `project_phases.sort_order`. Reading order inside and across lanes is left → right. Tasks with no phase share a bottom **No phase** row. A project with no phases is one row.
+3. **Same subgraph, same focus.** The toggle does not refetch and does not change the visit stack. Focus, Back, breadcrumbs, depth, filters, and Hide done stay as they are. Saved positions stay on T0165.
+
+## Layout
+
+`layoutMeshPlan` is a pure function of the filtered graph plus focus key.
+
+**Rank (x).** Only `depends_on` and `child_of` set order. A prerequisite sits left of the task that depends on it (`depends_on` is stored dependent → prerequisite). A parent sits left of its child (`child_of` is stored child → parent). Other relations (`in_project`, references, lists, boards, wiki, tags) are drawn when their chip is on and never move a node. A cycle in those edges is ignored. Task dependency cycles cannot occur; if a `child_of` / `depends_on` cycle still appears, those edges are dropped from ranking and the layout still returns.
+
+**Lane (y).** Task nodes use `phaseId` from the graph payload. Other records take the lane of the nearest placed task along `child_of` / `in_list` / `in_project`, and otherwise **No phase**. Inside a lane, records joined by `depends_on` or `child_of` share a band so a chain stays on one row. Records with no sequence edge do not push that chain apart. Boxes do not overlap. Column pitch stays readable (same order of size as the cascade).
+
+**Edges.** Sequence edges (`depends_on`, `child_of`) run left to right with the existing depends/containment styling. Non-ranking edges use a simple smooth step and do not join the cascade bus.
+
+**Highlights** (tasks and to-dos only):
+
+- **Blocked** — at least one `depends_on` target in the fetched graph is not `complete` or `canceled`, including when Hide done has removed that node from the drawing. Class `mesh-node--blocked`.
+- **Next** — state is `ready` and the node is not blocked. Class `mesh-node--next`.
+
+The focused record keeps its focus treatment. Blocked and next are an extra outline plus a short accessible name (`Blocked`, `Next`), not a new color mode.
+
+## Scope
+
+**In**
+
+1. Graph hydrate: tasks gain `phaseId`, `phaseName`, and `phaseSort` (nullable). No migration. Other types send nulls.
+2. `client/src/lib/meshPlanLayout.ts` plus unit tests: phase row order, prerequisite left of dependent, parent left of child, reference cycle does not throw, blocked vs next, non-task lane fallback.
+3. Mesh toolbar control **Focus | Plan** (`aria-pressed`). Default Focus. Switching runs the existing position transition and leaves the focused record selected.
+4. Plan mode renders lane labels (phase name, or “No phase” only when that row is used).
+
+**Out**
+
+- Saved or dragged coordinates (T0165).
+- Path finder and orphans (T0167), suggested-link ranking (T0168).
+- A new dependency (`elkjs`, `@dagrejs/dagre`).
+- Changing Focus-view cascade geometry.
+
+## Acceptance
+
+- On a project with phases and task dependencies, Plan reads left → right and phases stack as rows. Focus view is unchanged.
+- A Ready task with an open dependency reads as Blocked. A Ready task with no open dependency reads as Next.
+- Toggling Focus/Plan keeps the same focused record, stack, and filters.
+- A reference cycle in the subgraph does not blank the canvas.
+- `npm run lint` is clean.

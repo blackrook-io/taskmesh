@@ -43,6 +43,10 @@ export type GraphNode = {
   lastComment: LastActivity["lastComment"];
   projectId: number | null;
   href: string | null;
+  /** Task phase. Null for every other record type, and for a task with no phase. */
+  phaseId: number | null;
+  phaseName: string | null;
+  phaseSort: number | null;
 };
 
 type Ref = { type: string; id: number };
@@ -935,6 +939,9 @@ type NodeRow = {
   priority: string | null;
   dueDate: string | null;
   createdAt: Date | null;
+  phaseId: number | null;
+  phaseName: string | null;
+  phaseSort: number | null;
 };
 
 function iso(value: Date | null | undefined): string | null {
@@ -953,6 +960,9 @@ function asRow(
     priority?: string | null;
     dueDate?: string | null;
     createdAt?: Date | null;
+    phaseId?: number | null;
+    phaseName?: string | null;
+    phaseSort?: number | null;
   },
 ): NodeRow {
   return {
@@ -965,6 +975,9 @@ function asRow(
     priority: row.priority ?? null,
     dueDate: row.dueDate ?? null,
     createdAt: row.createdAt ?? null,
+    phaseId: row.phaseId ?? null,
+    phaseName: row.phaseName ?? null,
+    phaseSort: row.phaseSort ?? null,
   };
 }
 
@@ -991,6 +1004,9 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         lastComment: null,
         projectId: row.projectId,
         href: hrefFor(type, row.id, row.projectId),
+        phaseId: row.phaseId,
+        phaseName: row.phaseName,
+        phaseSort: row.phaseSort,
       });
     }
   };
@@ -1042,8 +1058,12 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         priority: schema.tasks.priority,
         dueDate: schema.tasks.dueDate,
         createdAt: schema.tasks.createdAt,
+        phaseId: schema.tasks.phaseId,
+        phaseName: schema.projectPhases.name,
+        phaseSort: schema.projectPhases.sortOrder,
       })
       .from(schema.tasks)
+      .leftJoin(schema.projectPhases, eq(schema.tasks.phaseId, schema.projectPhases.id))
       .where(and(inArray(schema.tasks.id, taskIds), ne(schema.tasks.state, "deleted")));
     await load(
       "task",
@@ -1104,6 +1124,9 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         lastComment: null,
         projectId: null,
         href: null,
+        phaseId: null,
+        phaseName: null,
+        phaseSort: null,
       });
     }
   }
