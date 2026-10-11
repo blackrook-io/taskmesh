@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.56.3 — 2026-10-11
+
+### Enhancements
+- Administrators can set how many signed-in sessions each user may keep. The default stays 1, so a new login still signs out every other session.
+- A higher limit keeps the newest sessions and drops the oldest. Expired sessions do not count. Password changes, MFA clears, and an admin lock, deactivate, or password reset still end every session.
+
 ## 0.56.2 — 2026-10-11
 
 ### New Functionality

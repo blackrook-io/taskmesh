@@ -1,0 +1,67 @@
+# T0176 — Configurable concurrent sessions per user
+
+**Task:** T0176 (id 191) — Allow a configurable number of concurrent sessions per user  
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)  
+**Branch (after approval):** `T0176-max-concurrent-sessions`  
+**Version on finish-up:** PATCH (no Drizzle migration)
+
+## Size / dependencies
+
+One settings key, one eviction change in `createSession`, admin field, docs, and unit tests. No split. No Depends-on. Not a child task.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Property | `max_concurrent_sessions` (API `maxConcurrentSessions`), integer, minimum **1**, maximum **20** |
+| 2 | Default | **1** — new installs and untouched hosts keep single-session behavior |
+| 3 | Eviction | On `createSession`, delete expired rows for that user first (they must not occupy a slot), then delete oldest remaining sessions by `created_at` until the live count, including the new session, is within the cap. The new session is never evicted |
+| 4 | Cap 1 | Matches today: a new login removes every other live session |
+| 5 | Full wipes | Unchanged: password change, MFA clear/disable, admin lock, deactivate, and admin password reset still destroy every session |
+| 6 | Timeout | Leave absolute `session_timeout_minutes` as it is. No idle/sliding refresh |
+| 7 | UI | Administration → system properties, next to Session timeout. No active-sessions list or per-session revoke |
+| 8 | This DEV host | After the running API accepts the new field, set the value to **2** so the browser and the worktask cookie jar can both stay valid. Production stays at the default until an administrator changes it |
+| 9 | Tests | Pure helper (this repo’s service tests do not open Postgres) plus the existing auth tests |
+
+No deferred scope.
+
+## Work items
+
+### 1. Eviction helper (`src/services/auth.ts`)
+
+- Add a pure function that, given existing rows, the kept session id, the cap, and `now`, returns ids to delete: every expired row, then oldest live rows over the cap.
+- `createSession` reads `maxConcurrentSessions` from system properties and deletes only those ids (replace the unconditional `destroyOtherSessionsForUser` call). Keep `destroyOtherSessionsForUser` / `destroyAllSessionsForUser` for the full-wipe callers.
+- Unit tests: cap 1 drops the previous session; cap 2 keeps one older live session and drops it when a third is created; an expired row is deleted and does not cause a live session to be dropped while under the cap.
+
+### 2. System property
+
+- `src/services/systemProperties.ts`: key, default `1`, get/patch.
+- `src/routes/v1/admin.ts`: strict PATCH field `z.number().int().min(1).max(20)`, empty-patch check, audit line `max_concurrent_sessions a→b`.
+- `client/src/components/admin/AdminSystemPropertiesPanel.tsx`: number input and short help (“How many signed-in sessions each user may keep. 1 signs out every other session on the next login.”). Send the field only when GET already includes it, same as session timeout, so an older API does not 400 on a strict body.
+
+### 3. Docs
+
+- `docs/database/platform.md` sessions row and `system_properties` key list.
+- `docs/database/glossary.md` key list.
+- `npm run docs:sync-schema` after the doc edit (no `schema.ts` change; the platform meaning of sessions changes).
+
+### 4. DEV data
+
+- Once `npm run dev` is serving the new field, `PATCH /api/v1/admin/system-properties` on this host to `{ "maxConcurrentSessions": 2 }`.
+
+## Out of scope
+
+- Active sessions UI.
+- Idle/sliding session timeout.
+- Changing `dev-login.sh` (it already reuses a valid jar; `createSession` enforces the cap).
+- `FEATURES.md` (admin setting, not a new public module).
+
+## QA checklist (draft)
+
+1. Limit **1**: sign in in browser A, then browser B (or dev-login with a stale jar). A is signed out; B works.
+2. Set the limit to **2**. Stay signed in, then run dev-login with a stale or missing jar. The browser still works and the new jar works.
+3. Limit **2** with two live sessions; create a third. Only the oldest is removed.
+4. Password change, MFA clear, or admin lock still removes every session for that user.
+5. Restarting the dev server does not drop unexpired sessions that are within the cap.
+6. Administration field rejects 0 and values above 20.
+7. `npm run lint` and the auth unit tests pass.

@@ -10,6 +10,7 @@ type SystemProperties = {
   apiRateLimitPerMinute: number;
   loginFailureThreshold: number;
   sessionTimeoutMinutes?: number;
+  maxConcurrentSessions?: number;
   defaultTheme: ThemeId;
   mfaEnforcement?: MfaEnforcement;
   mfaGraceDays?: number;
@@ -24,11 +25,18 @@ function hasSessionTimeoutMinutes(
   return typeof data?.sessionTimeoutMinutes === "number";
 }
 
+function hasMaxConcurrentSessions(
+  data: SystemProperties | undefined,
+): data is SystemProperties & { maxConcurrentSessions: number } {
+  return typeof data?.maxConcurrentSessions === "number";
+}
+
 export function AdminSystemPropertiesPanel() {
   const qc = useQueryClient();
   const [rate, setRate] = useState("60");
   const [threshold, setThreshold] = useState("3");
   const [sessionTimeout, setSessionTimeout] = useState("60");
+  const [maxConcurrentSessions, setMaxConcurrentSessions] = useState("1");
   const [defaultTheme, setDefaultTheme] = useState<ThemeId>("green");
   const [mfaEnforcement, setMfaEnforcement] = useState<MfaEnforcement>("none");
   const [mfaGraceDays, setMfaGraceDays] = useState("7");
@@ -56,6 +64,9 @@ export function AdminSystemPropertiesPanel() {
       if (hasSessionTimeoutMinutes(propsQuery.data)) {
         setSessionTimeout(String(propsQuery.data.sessionTimeoutMinutes));
       }
+      if (hasMaxConcurrentSessions(propsQuery.data)) {
+        setMaxConcurrentSessions(String(propsQuery.data.maxConcurrentSessions));
+      }
       if (isThemeId(propsQuery.data.defaultTheme)) {
         setDefaultTheme(propsQuery.data.defaultTheme);
       }
@@ -82,7 +93,9 @@ export function AdminSystemPropertiesPanel() {
       const apiRateLimitPerMinute = Number(rate);
       const loginFailureThreshold = Number(threshold);
       const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
+      const supportsMaxSessions = hasMaxConcurrentSessions(propsQuery.data);
       const sessionTimeoutMinutes = Number(sessionTimeout);
+      const maxSessions = Number(maxConcurrentSessions);
       const graceDays = Number(mfaGraceDays);
       const trustDays = Number(mfaTrustedDeviceDays);
       const trustMax = Number(mfaTrustedDeviceMax);
@@ -97,6 +110,12 @@ export function AdminSystemPropertiesPanel() {
         (!Number.isInteger(sessionTimeoutMinutes) || sessionTimeoutMinutes < 1)
       ) {
         throw new Error("Session timeout must be a positive integer (minutes)");
+      }
+      if (
+        supportsMaxSessions &&
+        (!Number.isInteger(maxSessions) || maxSessions < 1 || maxSessions > 20)
+      ) {
+        throw new Error("Max concurrent sessions must be an integer from 1 to 20");
       }
       if (!isThemeId(defaultTheme)) {
         throw new Error("Default theme is invalid");
@@ -115,6 +134,7 @@ export function AdminSystemPropertiesPanel() {
         loginFailureThreshold: number;
         defaultTheme: ThemeId;
         sessionTimeoutMinutes?: number;
+        maxConcurrentSessions?: number;
         mfaEnforcement: MfaEnforcement;
         mfaGraceDays: number;
         mfaTrustedDeviceDays: number;
@@ -130,6 +150,9 @@ export function AdminSystemPropertiesPanel() {
       };
       if (supportsSessionTimeout) {
         body.sessionTimeoutMinutes = sessionTimeoutMinutes;
+      }
+      if (supportsMaxSessions) {
+        body.maxConcurrentSessions = maxSessions;
       }
       const res = await apiJson<{ data: SystemProperties }>(
         "/api/v1/admin/system-properties",
@@ -150,6 +173,7 @@ export function AdminSystemPropertiesPanel() {
   });
 
   const supportsSessionTimeout = hasSessionTimeoutMinutes(propsQuery.data);
+  const supportsMaxSessions = hasMaxConcurrentSessions(propsQuery.data);
 
   return (
     <div className="settings-panel admin-panel">
@@ -195,16 +219,33 @@ export function AdminSystemPropertiesPanel() {
       </label>
 
       {supportsSessionTimeout ? (
+        <label className="field">
+          <span>Session timeout (minutes)</span>
+          <input
+            type="number"
+            min={1}
+            value={sessionTimeout}
+            onChange={(e) => setSessionTimeout(e.target.value)}
+          />
+        </label>
+      ) : null}
+
+      {supportsMaxSessions ? (
         <>
           <label className="field">
-            <span>Session timeout (minutes)</span>
+            <span>Max concurrent sessions per user</span>
             <input
               type="number"
               min={1}
-              value={sessionTimeout}
-              onChange={(e) => setSessionTimeout(e.target.value)}
+              max={20}
+              value={maxConcurrentSessions}
+              onChange={(e) => setMaxConcurrentSessions(e.target.value)}
             />
           </label>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            How many signed-in sessions each user may keep. 1 signs out every other session on
+            the next login.
+          </p>
         </>
       ) : null}
 
