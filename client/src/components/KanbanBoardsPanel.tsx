@@ -38,6 +38,7 @@ import type {
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ElementShell } from "./shared/ElementShell";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
+import { EntityLinksPanel } from "./shared/EntityLinksPanel";
 import { TagInput } from "./shared/TagInput";
 import { TaskEditorFields } from "./TaskBoard";
 import { KanbanBoardCarousel } from "./KanbanBoardCarousel";
@@ -1243,6 +1244,7 @@ export function KanbanBoardsPanel({
                 />
               </div>
               <TagInput entityType="idea" entityId={openIdeaQuery.data.id} />
+              <EntityLinksPanel entityType="idea" entityId={openIdeaQuery.data.id} />
             </div>
           ) : (
             <p className="muted">Idea not found.</p>

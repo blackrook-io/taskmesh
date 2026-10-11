@@ -1,0 +1,44 @@
+# T0162 — Backlinks panel on record drawers
+
+**Task:** T0162 (id `175`) — Mesh: Backlinks panel on record drawers
+**Parent:** T0159 (id `172`) — Mesh: relationship graph, backlinks and focus view (epic)
+**Depends on:** T0160 complete (`GET/POST/DELETE /api/v1/links`)
+**Required by:** T0168 (suggested links) — do not start that work here
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0162-backlinks-panel`
+
+A shared panel lists a record’s `entity_links` and lets the user add or remove a manual link. No new SQL file. Mention rows from T0161 show up; they are not created or deleted here.
+
+## Decisions
+
+1. **Two lists.** `incoming` is **Linked from**. `outgoing` is **Links to**. Each list is grouped by entity type (Task, ToDo, Idea, Document, Project, and the other types). A row shows the display number (`T0031`), title, and relation. Click follows the API `href` with the app router.
+2. **Origin.** Manual and mention each get a small badge. Only a manual row has Remove. Remove uses the existing confirm dialog. The API already rejects deleting a mention.
+3. **Add link.** The open record is the source. The user picks a target and a relation (`relates_to`, `references`, `supports`, `part_of`), then the panel `POST`s `/api/v1/links`. A link to the same record is not offered. Repeating the same manual relation refreshes the list.
+4. **Picker.** A type select plus a query field calls `GET /api/v1/references/search` (same endpoint as the markdown `#` trigger). Results show `referenceId` and title. Users are not a target type. The TipTap suggest popup stays as it is.
+5. **Where it mounts.** One component, `client/src/components/shared/EntityLinksPanel.tsx`, placed after tags:
+   - `TaskEditorFields` — board expand, task modal, Tasks list modal, Overview task modal
+   - `TodoEditorFields` — ToDo modal and Overview ToDo modal
+   - Idea page, idea modal on a board, idea modal on a ToDo list
+   - Document editor, markdown and EPUB/PDF
+6. **Empty and cache.** Both lists empty still shows the heading, an empty line, and Add link. Query key `["entity-links", entityType, entityId]`. Add and remove invalidate that key and `["graph"]` so the Mesh tab stays current.
+7. **No schema change.** Finish-up is a PATCH bump. `FEATURES.md` gets one line: a record shows what it links to and what links to it. `RELEASE_NOTES.md` gets an Enhancements bullet.
+
+## Scope
+
+1. Shared panel, styles in the existing client CSS, dark grey / light green.
+2. Mount it on the four record types above.
+3. `npm run lint` clean.
+
+## Out
+
+- Suggested links (T0168).
+- Mesh canvas, layouts, and filters.
+- Creating or editing mention rows.
+- New drawers for types that do not already have one (project, board, canvas, wiki, image board, to-do list). Those types can still appear as link targets and as rows.
+
+## Acceptance
+
+- Opening a Task, ToDo, Idea, or Document shows Linked from and Links to, grouped by type, or an empty state.
+- Adding a manual link shows it under Links to after the request. Removing it, after confirm, drops that row. A mention row has no Remove control.
+- The same panel appears in each existing card, modal, and page editor for those four types.
+- `npm run lint` is clean.

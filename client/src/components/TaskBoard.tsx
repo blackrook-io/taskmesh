@@ -73,6 +73,7 @@ import {
 import { hiddenDescendantCount } from "../lib/hiddenDescendantCount";
 import { useListViewColumns } from "../lib/useListViewColumns";
 import { useTaskListViewState } from "../lib/useTaskListViewState";
+import { EntityLinksPanel } from "./shared/EntityLinksPanel";
 import { TagInput } from "./shared/TagInput";
 import { TaskDescriptionTemplatesMenu } from "./shared/TaskDescriptionTemplatesMenu";
 import {
@@ -859,6 +860,7 @@ export function TaskEditorFields({
       <div className="field field--tags-below">
         <TagInput entityType="task" entityId={task.id} />
       </div>
+      <EntityLinksPanel entityType="task" entityId={task.id} />
       <TaskDependencyLists taskId={task.id} onOpenTask={onOpenTask} />
       <TaskHistory taskId={task.id} />
       {children.length > 0 ? (

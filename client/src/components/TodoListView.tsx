@@ -60,6 +60,7 @@ import { TodoListFilterBar } from "./TodoListFilterBar";
 import { TaskEditorFields } from "./TaskBoard";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
+import { EntityLinksPanel } from "./shared/EntityLinksPanel";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { ListViewHeaderMenu, type ListViewHeaderMenuState } from "./shared/ListViewHeaderMenu";
 import { ListViewPersonalizeModal } from "./shared/ListViewPersonalizeModal";
@@ -588,6 +589,7 @@ export function TodoEditorFields({
       <div className="field field--tags-below">
         <TagInput entityType="todo" entityId={todo.id} />
       </div>
+      <EntityLinksPanel entityType="todo" entityId={todo.id} />
       {saveError ? (
         <p role="alert" className="tag-input__error">
           {saveError}
@@ -1257,6 +1259,7 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
                 <div className="field field--tags-below">
                   <TagInput entityType="idea" entityId={openIdeaQuery.data.id} />
                 </div>
+                <EntityLinksPanel entityType="idea" entityId={openIdeaQuery.data.id} />
               </div>
             ) : (
               <p className="muted">Idea not found.</p>

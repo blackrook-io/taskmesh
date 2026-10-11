@@ -8,6 +8,7 @@ import { PdfReader } from "../components/PdfReader";
 import { MarkdownEditor } from "../components/shared/MarkdownEditor";
 import { DocumentKindIcon } from "../components/shared/DocumentKindIcon";
 import { PencilIcon } from "../components/shared/PencilIcon";
+import { EntityLinksPanel } from "../components/shared/EntityLinksPanel";
 import { TagInput } from "../components/shared/TagInput";
 import { PhaseManager } from "../components/PhaseManager";
 import { ProjectUsersPanel } from "../components/ProjectUsersPanel";
@@ -1369,6 +1370,7 @@ function DocumentEditor({
         <div className="field field--tags-below">
           <TagInput entityType="document" entityId={doc.id} />
         </div>
+        <EntityLinksPanel entityType="document" entityId={doc.id} />
       </div>
     );
   }
@@ -1403,6 +1405,7 @@ function DocumentEditor({
       <div className="field field--tags-below">
         <TagInput entityType="document" entityId={doc.id} />
       </div>
+      <EntityLinksPanel entityType="document" entityId={doc.id} />
     </div>
   );
 }
