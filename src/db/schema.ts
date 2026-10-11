@@ -676,6 +676,35 @@ export const userListViewPrefs = pgTable(
   ],
 );
 
+/**
+ * Per-user Task List open/closed state (T0191).
+ * One row per user. Missing row means every group and parent is expanded.
+ * Arrays store collapsed ids only.
+ */
+export const userTaskListState = pgTable("user_task_list_state", {
+  userId: integer("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** Task Group ids the user has collapsed. */
+  collapsedGroupIds: jsonb("collapsed_group_ids")
+    .$type<number[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  /** Project ids whose Unassigned section is collapsed. */
+  collapsedUngroupedProjectIds: jsonb("collapsed_ungrouped_project_ids")
+    .$type<number[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  /** Parent task ids the user has collapsed (project list and All Tasks). */
+  collapsedParentIds: jsonb("collapsed_parent_ids")
+    .$type<number[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type OverviewPanelPref = {
   limit: 5 | 10 | 20;
   /** Days window for date-based panels (recently completed, upcoming). */
@@ -1595,6 +1624,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   passwordHistory: many(passwordHistory),
   identities: many(userIdentities),
   listViewPrefs: many(userListViewPrefs),
+  taskListState: many(userTaskListState),
   overviewPrefs: many(userProjectOverviewPrefs),
 }));
 
@@ -1653,6 +1683,13 @@ export const oauthLoginStatesRelations = relations(oauthLoginStates, ({ one }) =
 export const userListViewPrefsRelations = relations(userListViewPrefs, ({ one }) => ({
   user: one(users, {
     fields: [userListViewPrefs.userId],
+    references: [users.id],
+  }),
+}));
+
+export const userTaskListStateRelations = relations(userTaskListState, ({ one }) => ({
+  user: one(users, {
+    fields: [userTaskListState.userId],
     references: [users.id],
   }),
 }));

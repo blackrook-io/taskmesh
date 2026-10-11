@@ -1,0 +1,79 @@
+---
+description: "T0191 — Persist per-user Task List collapse (groups + parent tasks) in the database"
+todos:
+  - id: schema
+    content: Add user_task_list_state (one row per user, collapsed-id arrays) + docs/database
+  - id: api
+    content: GET + delta PATCH /api/v1/users/me/task-list-state
+  - id: client
+    content: Hook replaces in-memory collapse on project TaskBoard and global Tasks list
+  - id: qa
+    content: Manual QA checklist (refresh, second browser, both list surfaces)
+---
+
+# T0191 — Persist List View collapse state
+
+**Task:** T0191 · id `206` · Ready · project 4 (TaskMesh) · priority none  
+**Branch (after approval):** `T0191-persist-list-view-state`
+
+## Goal
+
+Keep Task List open/closed state for the signed-in user across refresh, browsers, and machines, with a small extra request that does not reload the task list.
+
+## What already persists
+
+**Task Group order** is already stored on `task_groups.sort_order`. Dragging a group calls `PATCH /api/v1/projects/:id/groups/reorder`, and the list sorts by that column after refresh. That order is **project-wide** (every user of the project sees the same order). The implicit **Unassigned** section is always last and is not part of that order.
+
+This Task does **not** add a second, per-user group order. If reorder still resets for you, that is a bug to fix in the existing path rather than a new preference.
+
+Column sort and the list Filter stay in `localStorage` (this browser only). Column Personalize already lives in `user_list_view_prefs`. Neither is in this Task.
+
+## Decisions
+
+| # | Decision |
+|---|----------|
+| 1 | **Per user**, not shared. Collapsing a group or parent changes only the signed-in user’s lists. |
+| 2 | **Database**, one row per user. Not `localStorage`. |
+| 3 | **Parents are one set.** Collapsing a parent on a project Tasks list also collapses it on All Tasks and Unassigned, and the reverse. Applies on the grouped board and on a Task Group nav sub-list. |
+| 4 | **Groups** collapse by group id. The **Unassigned** section collapses per project id (it has no group row). |
+| 5 | **Default stays open.** Store only collapsed ids. A new group or parent starts open. Ids for deleted groups/tasks are ignored and left in the arrays (no cleanup job). |
+| 6 | **Lightweight I/O.** One cached GET when a task list mounts (parallel with the existing task query). Each toggle sends a one-id PATCH and updates the cache immediately. The task list itself is not refetched. |
+| 7 | **Surfaces:** project `TaskBoard` and global `TasksListPage` only. Ideas, ToDos, wiki, and document folders are out of scope. |
+
+## Schema
+
+Non-main table `user_task_list_state` (same class as `user_list_view_prefs`):
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `user_id` | integer PK | FK → `users` · CASCADE |
+| `collapsed_group_ids` | jsonb | integer array, default `[]` |
+| `collapsed_ungrouped_project_ids` | jsonb | project ids whose Unassigned section is collapsed, default `[]` |
+| `collapsed_parent_ids` | jsonb | task ids, default `[]` |
+| `updated_at` | timestamptz | default now |
+
+Missing row means everything expanded. Update `docs/database/platform.md` and `overview.md`, then `npm run docs:sync-schema`.
+
+## API
+
+On the users router, session user only:
+
+- `GET /api/v1/users/me/task-list-state` → the three arrays (empty when no row).
+- `PATCH /api/v1/users/me/task-list-state` body `{ "kind": "group" \| "ungrouped" \| "parent", "id": number, "collapsed": boolean }`.
+
+Upsert the row and add or remove that single id. Reject non-integers. Do not check that the group, project, or task still exists.
+
+## Client
+
+`useTaskListViewState()` (React Query key `["task-list-state"]`):
+
+- Replace `useState` collapse sets in `TaskBoard` and `TasksListPage`.
+- Optimistic cache update on toggle; revert the cache if the PATCH fails.
+- While the GET is in flight, render expanded (same as today) so the list is not blocked. Apply saved collapse when the response arrives.
+
+## Out of scope
+
+- Per-user Task Group order, or making Unassigned draggable among groups.
+- Moving column sort or list Filter from `localStorage` into the database.
+- Shared collapse for every user on a project.
+- Ideas, ToDos, wiki, document tree.

@@ -29,6 +29,11 @@ import { clearSessionCookie } from "../../lib/sessionCookie.js";
 import { clearMfaChallengeCookie } from "../../lib/mfaChallengeCookie.js";
 import { attachRolesToProfile } from "../../services/roles.js";
 import {
+  getTaskListState,
+  patchTaskListState,
+  TASK_LIST_STATE_KINDS,
+} from "../../services/taskListState.js";
+import {
   assertDisplayNameAvailable,
   getCurrentUser,
   setCurrentUserPassword,
@@ -47,6 +52,14 @@ const patchBody = z
     displayName: optionalPlainTitle(200),
     email: emailSchema.optional(),
     avatarUploadId: z.union([z.number().int().positive(), z.null()]).optional(),
+  })
+  .strict();
+
+const taskListStatePatchBody = z
+  .object({
+    kind: z.enum(TASK_LIST_STATE_KINDS),
+    id: z.number().int().positive(),
+    collapsed: z.boolean(),
   })
   .strict();
 
@@ -97,6 +110,26 @@ usersRouter.get("/me", async (_req, res) => {
   try {
     const user = await getCurrentUser(db);
     res.json({ data: await profilePayload(user) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.get("/me/task-list-state", async (_req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    res.json({ data: await getTaskListState(db, user.id) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+usersRouter.patch("/me/task-list-state", async (req, res) => {
+  try {
+    const user = await getCurrentUser(db);
+    const body = taskListStatePatchBody.parse(req.body);
+    const data = await patchTaskListState(db, user.id, body.kind, body.id, body.collapsed);
+    res.json({ data });
   } catch (err) {
     handleRouteError(res, err);
   }
