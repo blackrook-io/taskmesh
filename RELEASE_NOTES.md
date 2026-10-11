@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.57.0 — 2026-10-11
+
+### Enhancements
+- ToDos, projects, and documents share the task activity timeline. A state or progress change, a project status change, and a document edit are recorded, and a to-do list's last update is the newest change among its items.
+- Mesh's stale clock follows that update. A comment or a title edit does not reset it. A record with no such update yet counts from the day it was created.
+
 ## 0.56.4 — 2026-10-11
 
 ### Enhancements

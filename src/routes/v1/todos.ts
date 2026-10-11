@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
@@ -31,6 +32,7 @@ import {
   isRejectedDerivedProgress,
   resolveDerivedParent,
 } from "../../lib/todoHierarchy.js";
+import { recordTodoFieldChanges } from "../../services/entityActivity.js";
 import { syncTodoMembershipChecked } from "../../services/todoProgress.js";
 import {
   assertTodoParent,
@@ -238,7 +240,7 @@ todosRouter.post("/", async (req, res) => {
       await syncTodoMembershipChecked(db, row.id, initial.membershipChecked);
     }
     if (parentId != null) {
-      await recomputeAncestorChain(db, parentId, actorId);
+      await recomputeAncestorChain(db, parentId, actorId, activitySourceFromRequest(req));
     }
     res.status(201).json({ data: await presentTodo(await attachAssignee(db, row), false) });
   } catch (err) {
@@ -387,11 +389,22 @@ todosRouter.patch("/:id", async (req, res) => {
     if (progressUpdate?.membershipChecked != null) {
       await syncTodoMembershipChecked(db, id, progressUpdate.membershipChecked);
     }
+    if (progressUpdate) {
+      await recordTodoFieldChanges(
+        db,
+        id,
+        { state: existing.state, progress: existing.progress },
+        { state: progressUpdate.state, progress: progressUpdate.progress },
+        actorId,
+        activitySourceFromRequest(req),
+      );
+    }
+    const source = activitySourceFromRequest(req);
     if (parsed.parentId !== undefined && nextParentId !== existing.parentId) {
-      await recomputeAncestorChain(db, nextParentId, actorId);
-      await recomputeAncestorChain(db, existing.parentId, actorId);
+      await recomputeAncestorChain(db, nextParentId, actorId, source);
+      await recomputeAncestorChain(db, existing.parentId, actorId, source);
     } else if (progressUpdate) {
-      await recomputeAncestorChain(db, existing.parentId, actorId);
+      await recomputeAncestorChain(db, existing.parentId, actorId, source);
     }
     res.json({ data: row ? await presentTodo(await attachAssignee(db, row), true) : row });
   } catch (err) {
@@ -422,7 +435,15 @@ todosRouter.delete("/:id", async (req, res) => {
       })
       .where(eq(schema.todos.id, id))
       .returning();
-    await recomputeAncestorChain(db, existing.parentId, actorId);
+    await recordTodoFieldChanges(
+      db,
+      id,
+      { state: existing.state, progress: existing.progress },
+      { state: "deleted", progress: existing.progress },
+      actorId,
+      activitySourceFromRequest(req),
+    );
+    await recomputeAncestorChain(db, existing.parentId, actorId, activitySourceFromRequest(req));
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);

@@ -894,34 +894,54 @@ export const taskDescriptionTemplates = pgTable("task_description_templates", {
     .defaultNow(),
 });
 
-/** Task history timeline: user comments + auto-recorded field changes. */
-export const taskActivity = pgTable("task_activity", {
-  id: serial("id").primaryKey(),
-  taskId: integer("task_id")
-    .notNull()
-    .references(() => tasks.id, { onDelete: "cascade" }),
-  /** comment | change */
-  kind: text("kind").notNull(),
-  /** Comment rows: Markdown body and last-edit timestamp. */
-  body: text("body"),
-  editedAt: timestamp("edited_at", { withTimezone: true }),
-  /**
-   * Change rows: which field and its before/after display values.
-   * Session summaries use field=`summary` with the concise text in `body`.
-   */
-  field: text("field"),
-  oldValue: text("old_value"),
-  newValue: text("new_value"),
-  /** Actor who authored the comment / change (nullable for legacy rows). */
-  createdById: integer("created_by_id").references(() => users.id, {
-    onDelete: "set null",
+/**
+ * History timeline for any record: user comments and auto-recorded field changes.
+ * Keyed by `(entity_type, entity_id)`. `task_id` is set only for tasks so task
+ * deletes still cascade. Other record deletes purge rows via database triggers.
+ */
+export const taskActivity = pgTable(
+  "task_activity",
+  {
+    id: serial("id").primaryKey(),
+    /** Set when `entity_type` is `task`; null for every other type. */
+    taskId: integer("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    /** comment | change */
+    kind: text("kind").notNull(),
+    /** Comment rows: Markdown body and last-edit timestamp. */
+    body: text("body"),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    /**
+     * Change rows: which field and its before/after display values.
+     * Session summaries use field=`summary` with the concise text in `body`.
+     * Document body edits use field=`body` and leave old/new null.
+     */
+    field: text("field"),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    /** Actor who authored the comment / change (nullable for legacy rows). */
+    createdById: integer("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** `ui` = SPA (`X-TaskMesh-Client: ui`); otherwise `api`. */
+    source: text("source").notNull().default("api"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    entityIdx: index("task_activity_entity_idx").on(t.entityType, t.entityId, t.createdAt),
+    entityTypeCheck: check(
+      "task_activity_entity_type_chk",
+      sql`${t.entityType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board')`,
+    ),
+    taskLinkCheck: check(
+      "task_activity_task_link_chk",
+      sql`(${t.entityType} = 'task' and ${t.taskId} = ${t.entityId}) or (${t.entityType} <> 'task' and ${t.taskId} is null)`,
+    ),
   }),
-  /** `ui` = SPA (`X-TaskMesh-Client: ui`); otherwise `api`. */
-  source: text("source").notNull().default("api"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+);
 
 /**
  * Directed blocking edges: `taskId` Depends on `dependsOnTaskId`.

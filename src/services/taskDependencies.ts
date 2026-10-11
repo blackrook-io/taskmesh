@@ -103,6 +103,8 @@ async function recordDepChange(
 ): Promise<void> {
   await db.insert(schema.taskActivity).values({
     taskId: args.taskId,
+    entityType: "task",
+    entityId: args.taskId,
     kind: "change",
     field: args.field,
     oldValue: args.oldValue ?? "none",

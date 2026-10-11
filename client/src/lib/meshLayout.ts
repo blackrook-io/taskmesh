@@ -28,6 +28,17 @@ export type MeshGraphNode = {
   dueDate?: string | null;
   createdAt?: string | null;
   signalAt?: string | null;
+  lastUpdate?: {
+    at: string;
+    field: string;
+    oldValue: string | null;
+    newValue: string | null;
+  } | null;
+  lastComment?: {
+    at: string;
+    excerpt: string;
+    withUpdate: boolean;
+  } | null;
 };
 
 export type MeshGraphEdge = {

@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
@@ -549,7 +550,7 @@ todoListsRouter.post("/:id/items/create", async (req, res) => {
         return;
       }
       if (parentId != null) {
-        await recomputeAncestorChain(db, parentId, actorId);
+        await recomputeAncestorChain(db, parentId, actorId, activitySourceFromRequest(req));
       }
       entityId = todo.id;
     } else {
@@ -686,7 +687,13 @@ todoListsRouter.patch("/:id/items/:itemId", async (req, res) => {
     }
     let skipCheckedWrite = false;
     if (parsed.checked !== undefined && existing.entityType === "todo") {
-      skipCheckedWrite = await applyTodoListCheck(db, existing.entityId, parsed.checked, actorId);
+      skipCheckedWrite = await applyTodoListCheck(
+        db,
+        existing.entityId,
+        parsed.checked,
+        actorId,
+        activitySourceFromRequest(req),
+      );
     }
     const [row] = await db
       .update(schema.todoListItems)

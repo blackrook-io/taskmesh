@@ -138,6 +138,8 @@ taskActivityRouter.post("/:taskId/activity", async (req, res) => {
       .insert(schema.taskActivity)
       .values({
         taskId,
+        entityType: "task",
+        entityId: taskId,
         kind: "comment",
         body: parsed.body,
         createdById: actorId,

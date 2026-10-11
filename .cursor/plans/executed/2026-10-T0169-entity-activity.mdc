@@ -1,0 +1,36 @@
+# T0169 — Activity history for Mesh records
+
+**Task:** T0169 (id `184`) — Mesh: activity history for ToDos, Lists, Projects and Documents
+**Parent:** T0159 (id `172`) — Mesh epic. Staleness is days since the last state or progress change. A comment does not reset it. A comment posted with an update is shown with that update.
+**Depends on:** none
+**Required by:** T0170 (comments on ToDos and Lists), T0173 (hover cards)
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0169-entity-activity`
+
+## Decisions
+
+1. **Extend `task_activity`.** Add `entity_type` and `entity_id`, backfill existing rows to `task` / `task_id`, and make `task_id` nullable. A check keeps task rows consistent (`entity_type = 'task'` and `task_id = entity_id`) and requires `task_id` null for every other type. Index `(entity_type, entity_id, created_at)`. Task deletes still cascade through `task_id`. Other deletes use the same trigger style as `purge_entity_links`. A new `entity_activity` table would copy every row and rewrite every writer for the same shape. The table name stays, so Task History routes stay `/api/v1/tasks/:id/activity`.
+2. **Structured change rows for the fields Mesh reads.** One row per changed field, with `field`, `old_value`, and `new_value`. Tracked fields:
+   - ToDo: `state`, `progress`
+   - Project: `status`
+   - Document: `body` only when the markdown body actually changes. `old_value` and `new_value` stay null (no diff). Binary documents are skipped.
+   - Task: `state` only, as its own row. Other tracked task fields stay one summary line, as they are today, so History does not become a field-by-field log. A state change therefore adds a second History line (`State changed from … to …`) beside the existing summary. Dependency rows (`dependsOn`, `requiredBy`) are unchanged.
+3. **`getLastActivity(refs)`** returns, per ref:
+   - `lastUpdate`: latest change whose field is `state`, `progress`, `status`, or `body`. Shape `{ at, field, oldValue, newValue }`.
+   - `lastComment`: latest `kind = 'comment'` row. Shape `{ at, excerpt, withUpdate }`. Excerpt is the body collapsed to one line and cut at 160 characters. `withUpdate` is true when that comment and the last update share an actor and their timestamps are within 120 seconds. A null actor never pairs.
+   - Comments do not become `lastUpdate`.
+4. **ToDo Lists are derived.** No list row is stored. A list's `lastUpdate` is the newest item update among its `todo` and `task` members. `lastComment` stays null until T0170.
+5. **Graph nodes gain `lastUpdate` and `lastComment`.** `signalAt` becomes the stale clock: the last `state`, `progress`, or `status` change, or a document `body` edit. If none exists, `signalAt` is `createdAt` (tags stay null). It is no longer `updatedAt`, so a title edit or a comment does not refresh the clock. The client keeps `isStale` and `--mesh-stale-days`. This task does not add a server stale boolean or the "N overdue / N stale" child counts. Those counts are T0173, from nodes already in the neighbourhood.
+6. **Out of scope.** Comment UI on ToDos and Lists (T0170). Hover cards (T0173). Activity for ideas, boards, canvases, wiki nodes, and image boards. Parsing old task summary text into state rows.
+
+## Scope
+
+1. Migration on `task_activity`: columns, backfill, check, index, purge triggers for the non-task types that can own rows (`todo`, `project`, `document`). Update `docs/database/` (`tasks.md`, glossary if the kind/field list changes) and run `npm run docs:sync-schema`.
+2. `recordEntityChange` plus call sites on ToDo state/progress, Project status, and Document body updates. Task state writes the extra `state` row from `recordTaskChanges` without dropping the summary.
+3. `getLastActivity`. ToDo List derivation via `todo_list_items`.
+4. `hydrateNodes` fills `lastUpdate`, `lastComment`, and the new `signalAt` for every node type the graph already returns.
+5. Unit tests (no database): which fields count as an update, the 120-second same-actor pairing, excerpt cutoff, list derivation from item activity, and the graph node mapping. `npm run lint` clean.
+
+## Finish-up note
+
+This adds a Drizzle migration, so the version bump is MINOR. Not done until finish-up.

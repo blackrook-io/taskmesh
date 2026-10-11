@@ -1,11 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import type { db as Db } from "../db/client.js";
 import * as schema from "../db/schema.js";
+import type { ActivitySource } from "../lib/activityRequest.js";
 import {
   resolveTodoCheckToggle,
   type TodoProgressResult,
   type TodoProgressSnapshot,
 } from "../lib/todoProgress.js";
+import { recordTodoFieldChanges } from "./entityActivity.js";
 
 type Database = typeof Db;
 
@@ -27,7 +29,12 @@ export async function applyTodoProgressResult(
   todoId: number,
   actorId: number,
   result: TodoProgressResult,
+  source: ActivitySource = "api",
 ): Promise<void> {
+  const [before] = await database
+    .select({ state: schema.todos.state, progress: schema.todos.progress })
+    .from(schema.todos)
+    .where(eq(schema.todos.id, todoId));
   await database
     .update(schema.todos)
     .set({
@@ -37,6 +44,9 @@ export async function applyTodoProgressResult(
       updatedAt: new Date(),
     })
     .where(eq(schema.todos.id, todoId));
+  if (before) {
+    await recordTodoFieldChanges(database, todoId, before, result, actorId, source);
+  }
   if (result.membershipChecked != null) {
     await syncTodoMembershipChecked(database, todoId, result.membershipChecked);
   }

@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import type { db as DbClient } from "../db/client.js";
 import * as schema from "../db/schema.js";
+import type { ActivitySource } from "../lib/activityRequest.js";
 import {
   resolveDerivedParent,
   resolveParentAfterChildChange,
@@ -124,6 +125,7 @@ export async function applyTodoListCheck(
   todoId: number,
   checked: boolean,
   actorId: number,
+  source: ActivitySource = "api",
 ): Promise<boolean> {
   const [todo] = await db.select().from(schema.todos).where(eq(schema.todos.id, todoId));
   if (!todo || todo.state === "deleted") return false;
@@ -137,8 +139,8 @@ export async function applyTodoListCheck(
         : null
     : resolveTodoCheckToggle(checked, current);
   if (!next) return false;
-  await applyTodoProgressResult(db, todoId, actorId, next);
-  await recomputeAncestorChain(db, todo.parentId, actorId);
+  await applyTodoProgressResult(db, todoId, actorId, next, source);
+  await recomputeAncestorChain(db, todo.parentId, actorId, source);
   return next.membershipChecked != null;
 }
 
@@ -147,6 +149,7 @@ export async function recomputeAncestorChain(
   db: Db,
   startParentId: number | null,
   actorId: number,
+  source: ActivitySource = "api",
 ): Promise<void> {
   let parentId = startParentId;
   const seen = new Set<number>();
@@ -162,7 +165,7 @@ export async function recomputeAncestorChain(
     );
     if (!next) break;
     const stateChanged = next.state !== row.state;
-    await applyTodoProgressResult(db, row.id, actorId, next);
+    await applyTodoProgressResult(db, row.id, actorId, next, source);
     if (!stateChanged) break;
     parentId = nextParentId;
   }

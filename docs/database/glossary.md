@@ -89,6 +89,8 @@ Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the 
 - **`comment`** — user Markdown in `body`; may set `edited_at`
 - **`change`** — field change with `field` / `old_value` / `new_value`; session summaries use `field = summary` with text in `body`
 
+Every row also has `entity_type` and `entity_id`. `task_id` is set only for tasks. Mesh last-update fields are `state`, `progress`, `status`, and document `body` (no diff stored). A comment is separate from that update.
+
 `source`: `ui` when the SPA identifies itself; otherwise `api`.
 
 ## Project role lists (T0127 / T0128)

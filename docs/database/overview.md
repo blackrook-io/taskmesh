@@ -26,7 +26,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 ## Conceptual model
 
-At a high level, a **Project** is the hub. An **Idea** can become a project or a **ToDo**. **ToDos** (display **D####**) are first-class scheduled items lighter than Tasks. Projects own task groups, project phases, role lists (managers / members / viewers — access enforced in T0128), tasks, todos, documents, module toggles, boards, wiki nodes, and canvases. Tasks and ToDos may also exist outside a project. **To Do lists** hold ToDo and Task memberships (legacy Idea rows may remain). Tags attach via polymorphic `(entity_type, entity_id)` pairs. **`entity_links`** stores directed links between any two records (manual, and later mentions) without copying the structural relations already on other tables. Users and API keys support authorship and future auth; they are not the focus of product modeling.
+At a high level, a **Project** is the hub. An **Idea** can become a project or a **ToDo**. **ToDos** (display **D####**) are first-class scheduled items lighter than Tasks. Projects own task groups, project phases, role lists (managers / members / viewers — access enforced in T0128), tasks, todos, documents, module toggles, boards, wiki nodes, and canvases. Tasks and ToDos may also exist outside a project. **To Do lists** hold ToDo and Task memberships (legacy Idea rows may remain). Tags attach via polymorphic `(entity_type, entity_id)` pairs. **`entity_links`** stores directed links between any two records (manual, and later mentions) without copying the structural relations already on other tables. **`task_activity`** is the shared timeline for those records: task rows still cascade with the task, and ToDo, Project, and Document changes use the same `(entity_type, entity_id)` key. Users and API keys support authorship and future auth; they are not the focus of product modeling.
 
 ```mermaid
 erDiagram
@@ -52,7 +52,7 @@ erDiagram
 
   tasks ||--o{ tasks : "parent"
   todos ||--o{ todos : "parent"
-  tasks ||--o{ task_activity : has
+  tasks ||--o{ task_activity : "task rows"
   tasks ||--o{ task_dependencies : "depends on / required by"
 
   boards ||--o{ board_columns : has

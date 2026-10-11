@@ -1,8 +1,9 @@
-import { and, eq, inArray, isNotNull, max, ne, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, or, type SQL } from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { formatEntityRef } from "../lib/entityRef.js";
+import { activityForGraphNode, type LastActivity } from "../lib/entityActivity.js";
 import { isEntityType, type EntityType } from "../lib/entityType.js";
 import { LINK_RELATIONS } from "../lib/entityLinkRules.js";
 import {
@@ -11,6 +12,7 @@ import {
   type GraphEdge,
   type GraphNeighbour,
 } from "../lib/graphWalk.js";
+import { getLastActivity } from "./entityActivity.js";
 import { loadVisibleEnds, type LinkActor } from "./entityLinks.js";
 import { hrefFor } from "./references.js";
 
@@ -32,8 +34,13 @@ export type GraphNode = {
   /** Date-only due date (YYYY-MM-DD). */
   dueDate: string | null;
   createdAt: string | null;
-  /** Latest state change for a task; otherwise the record's updatedAt. */
+  /**
+   * Stale clock: last state, progress, status, or document-body change.
+   * Created time when none is recorded. Comments do not move it.
+   */
   signalAt: string | null;
+  lastUpdate: LastActivity["lastUpdate"];
+  lastComment: LastActivity["lastComment"];
   projectId: number | null;
   href: string | null;
 };
@@ -928,8 +935,6 @@ type NodeRow = {
   priority: string | null;
   dueDate: string | null;
   createdAt: Date | null;
-  updatedAt: Date | null;
-  signalAt: Date | null;
 };
 
 function iso(value: Date | null | undefined): string | null {
@@ -948,8 +953,6 @@ function asRow(
     priority?: string | null;
     dueDate?: string | null;
     createdAt?: Date | null;
-    updatedAt?: Date | null;
-    signalAt?: Date | null;
   },
 ): NodeRow {
   return {
@@ -962,26 +965,7 @@ function asRow(
     priority: row.priority ?? null,
     dueDate: row.dueDate ?? null,
     createdAt: row.createdAt ?? null,
-    updatedAt: row.updatedAt ?? null,
-    signalAt: row.signalAt ?? row.updatedAt ?? null,
   };
-}
-
-async function taskSignalTimes(db: Db, taskIds: number[]): Promise<Map<number, Date>> {
-  const times = new Map<number, Date>();
-  if (taskIds.length === 0) return times;
-  const rows = await db
-    .select({
-      taskId: schema.taskActivity.taskId,
-      at: max(schema.taskActivity.createdAt),
-    })
-    .from(schema.taskActivity)
-    .where(and(inArray(schema.taskActivity.taskId, taskIds), eq(schema.taskActivity.field, "state")))
-    .groupBy(schema.taskActivity.taskId);
-  for (const row of rows) {
-    if (row.at) times.set(row.taskId, row.at);
-  }
-  return times;
 }
 
 async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
@@ -1002,7 +986,9 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         priority: row.priority,
         dueDate: row.dueDate,
         createdAt: iso(row.createdAt),
-        signalAt: iso(row.signalAt),
+        signalAt: null,
+        lastUpdate: null,
+        lastComment: null,
         projectId: row.projectId,
         href: hrefFor(type, row.id, row.projectId),
       });
@@ -1017,7 +1003,6 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         number: schema.ideas.number,
         title: schema.ideas.title,
         createdAt: schema.ideas.createdAt,
-        updatedAt: schema.ideas.updatedAt,
       })
       .from(schema.ideas)
       .where(inArray(schema.ideas.id, ideaIds));
@@ -1036,7 +1021,6 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         title: schema.projects.name,
         state: schema.projects.status,
         createdAt: schema.projects.createdAt,
-        updatedAt: schema.projects.updatedAt,
       })
       .from(schema.projects)
       .where(inArray(schema.projects.id, projectIds));
@@ -1058,14 +1042,12 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         priority: schema.tasks.priority,
         dueDate: schema.tasks.dueDate,
         createdAt: schema.tasks.createdAt,
-        updatedAt: schema.tasks.updatedAt,
       })
       .from(schema.tasks)
       .where(and(inArray(schema.tasks.id, taskIds), ne(schema.tasks.state, "deleted")));
-    const signals = await taskSignalTimes(db, taskIds);
     await load(
       "task",
-      rows.map((row) => asRow({ ...row, signalAt: signals.get(row.id) ?? row.updatedAt })),
+      rows.map((row) => asRow(row)),
     );
   }
 
@@ -1082,7 +1064,6 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         priority: schema.todos.priority,
         dueDate: schema.todos.dueDate,
         createdAt: schema.todos.createdAt,
-        updatedAt: schema.todos.updatedAt,
       })
       .from(schema.todos)
       .where(and(inArray(schema.todos.id, todoIds), ne(schema.todos.state, "deleted")));
@@ -1119,10 +1100,24 @@ async function hydrateNodes(db: Db, keys: string[]): Promise<GraphNode[]> {
         dueDate: null,
         createdAt: null,
         signalAt: null,
+        lastUpdate: null,
+        lastComment: null,
         projectId: null,
         href: null,
       });
     }
+  }
+
+  const activityRefs = [...byKey.values()].flatMap((node) =>
+    isEntityType(node.type) ? [{ type: node.type, id: node.id }] : [],
+  );
+  const activity = await getLastActivity(db, activityRefs);
+  for (const node of byKey.values()) {
+    if (!isEntityType(node.type)) continue;
+    const fields = activityForGraphNode(activity.get(`${node.type}:${node.id}`), node.createdAt);
+    node.lastUpdate = fields.lastUpdate;
+    node.lastComment = fields.lastComment;
+    node.signalAt = fields.signalAt;
   }
 
   return keys.flatMap((key) => {
@@ -1151,7 +1146,6 @@ async function loadPlain(
       title: table.title,
       projectId: table.projectId,
       createdAt: table.createdAt,
-      updatedAt: table.updatedAt,
     })
     .from(table)
     .where(inArray(table.id, ids));
@@ -1175,7 +1169,6 @@ async function loadNamed(
       title: schema.boards.name,
       projectId: schema.boards.projectId,
       createdAt: schema.boards.createdAt,
-      updatedAt: schema.boards.updatedAt,
     })
     .from(schema.boards)
     .where(inArray(schema.boards.id, ids));
