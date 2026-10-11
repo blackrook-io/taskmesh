@@ -20,6 +20,7 @@ import { ensureInboxList } from "../../services/todoLists.js";
 import { applyTodoListCheck, hierarchyByTodoId, recomputeAncestorChain, assertTodoParent } from "../../services/todoHierarchy.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { copyTaggings } from "../../services/copyTaggings.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
 
 const listBody = z.object({
   title: plainTitle(500),
@@ -836,6 +837,12 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       { entityType: sourceType, entityId: sourceId },
       { entityType: "task", entityId: task.id },
     );
+    await syncMentionLinks(db, {
+      srcType: "task",
+      srcId: task.id,
+      markdown: task.description,
+      actorUserId: actorId,
+    });
     await db
       .update(schema.todoListItems)
       .set({
@@ -911,6 +918,12 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
       { entityType: "idea", entityId: idea.id },
       { entityType: "todo", entityId: todo.id },
     );
+    await syncMentionLinks(db, {
+      srcType: "todo",
+      srcId: todo.id,
+      markdown: todo.description,
+      actorUserId: actorId,
+    });
     await db
       .update(schema.todoListItems)
       .set({

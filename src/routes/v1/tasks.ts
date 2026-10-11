@@ -16,6 +16,7 @@ import {
   selectableTaskStateSchema,
   taskPrioritySchema,
 } from "../../lib/taskFields.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
 import {
   afterTaskHierarchyChange,
   resolvePersistedState,
@@ -181,6 +182,12 @@ tasksRouter.post("/", async (req, res) => {
       actorId,
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),
+    });
+    await syncMentionLinks(db, {
+      srcType: "task",
+      srcId: row.id,
+      markdown: row.description,
+      actorUserId: actorId,
     });
     await applyTaskGroupAutoTags(db, { projectId, taskId: row.id });
     res.status(201).json({ data: await attachTaskActor(db, row) });
@@ -399,6 +406,14 @@ tasksRouter.patch("/:taskId", async (req, res) => {
     if (row) {
       await recordTaskChanges(db, taskId, existing, row, activityOpts);
       await afterTaskHierarchyChange(db, taskId, previousParentId, activityOpts);
+      if (parsed.description !== undefined) {
+        await syncMentionLinks(db, {
+          srcType: "task",
+          srcId: row.id,
+          markdown: row.description,
+          actorUserId: actorId,
+        });
+      }
       await applyTaskGroupAutoTags(db, { projectId, taskId });
     }
 

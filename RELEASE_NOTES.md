@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.3 — 2026-10-11
+
+### Enhancements
+- A mention such as `#T0042` or the editor’s `[T0042]` label in a task, to-do, idea, or document is stored as a link. Removing the mention removes that link. A manual link to the same record stays.
+
 ## 0.58.2 — 2026-10-11
 
 ### Enhancements

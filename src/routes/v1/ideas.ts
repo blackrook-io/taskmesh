@@ -7,6 +7,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateIdeaNumber, allocateProjectNumber } from "../../services/entityNumbers.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
 import {
   assertCanAccessOwned,
   ownerScope,
@@ -75,6 +76,12 @@ ideasRouter.post("/", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create idea");
       return;
     }
+    await syncMentionLinks(db, {
+      srcType: "idea",
+      srcId: row.id,
+      markdown: row.body,
+      actorUserId: ownerId,
+    });
     res.status(201).json({ data: await attachAssignee(db, row) });
   } catch (err) {
     handleRouteError(res, err);
@@ -160,6 +167,14 @@ ideasRouter.patch("/:id", async (req, res) => {
       })
       .where(eq(schema.ideas.id, id))
       .returning();
+    if (row && parsed.body !== undefined) {
+      await syncMentionLinks(db, {
+        srcType: "idea",
+        srcId: row.id,
+        markdown: row.body,
+        actorUserId: actorId,
+      });
+    }
     res.json({ data: row ? await attachAssignee(db, row) : row });
   } catch (err) {
     handleRouteError(res, err);

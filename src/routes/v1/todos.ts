@@ -15,6 +15,7 @@ import {
   taskStateSchema,
 } from "../../lib/taskFields.js";
 import { allocateTodoNumber } from "../../services/entityNumbers.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
 import {
   assertCanAccessDualScoped,
   assertCanAccessOwned,
@@ -236,6 +237,12 @@ todosRouter.post("/", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create ToDo");
       return;
     }
+    await syncMentionLinks(db, {
+      srcType: "todo",
+      srcId: row.id,
+      markdown: row.description,
+      actorUserId: actorId,
+    });
     if (initial.membershipChecked != null) {
       await syncTodoMembershipChecked(db, row.id, initial.membershipChecked);
     }
@@ -406,6 +413,14 @@ todosRouter.patch("/:id", async (req, res) => {
     } else if (progressUpdate) {
       await recomputeAncestorChain(db, existing.parentId, actorId, source);
     }
+    if (row && parsed.description !== undefined) {
+      await syncMentionLinks(db, {
+        srcType: "todo",
+        srcId: row.id,
+        markdown: row.description,
+        actorUserId: actorId,
+      });
+    }
     res.json({ data: row ? await presentTodo(await attachAssignee(db, row), true) : row });
   } catch (err) {
     handleRouteError(res, err);
@@ -502,6 +517,12 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
       { entityType: "idea", entityId: idea.id },
       { entityType: "todo", entityId: todo.id },
     );
+    await syncMentionLinks(db, {
+      srcType: "todo",
+      srcId: todo.id,
+      markdown: todo.description,
+      actorUserId: actorId,
+    });
     res.status(201).json({ data: await attachAssignee(db, todo) });
   } catch (err) {
     handleRouteError(res, err);
@@ -567,6 +588,12 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
       { entityType: "todo", entityId: todo.id },
       { entityType: "task", entityId: task.id },
     );
+    await syncMentionLinks(db, {
+      srcType: "task",
+      srcId: task.id,
+      markdown: task.description,
+      actorUserId: actorId,
+    });
     res.status(201).json({ data: await attachTaskActor(db, task) });
   } catch (err) {
     handleRouteError(res, err);
