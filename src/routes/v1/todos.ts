@@ -34,6 +34,7 @@ import {
   resolveDerivedParent,
 } from "../../lib/todoHierarchy.js";
 import { recordTodoFieldChanges } from "../../services/entityActivity.js";
+import { registerCommentRoutes } from "./entityActivityRoutes.js";
 import { syncTodoMembershipChecked } from "../../services/todoProgress.js";
 import {
   assertTodoParent,
@@ -599,3 +600,5 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
     handleRouteError(res, err);
   }
 });
+
+registerCommentRoutes(todosRouter, "todo", "id");

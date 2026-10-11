@@ -3237,6 +3237,12 @@ textarea.raw-md {
   font-size: 0.78rem;
 }
 
+.task-history__meta-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
 .task-history__edited {
   font-size: 0.72rem;
   font-style: italic;

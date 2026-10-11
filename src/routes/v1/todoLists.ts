@@ -21,6 +21,7 @@ import { applyTodoListCheck, hierarchyByTodoId, recomputeAncestorChain, assertTo
 import { getCurrentUserId } from "../../services/users.js";
 import { copyTaggings } from "../../services/copyTaggings.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
+import { registerCommentRoutes } from "./entityActivityRoutes.js";
 
 const listBody = z.object({
   title: plainTitle(500),
@@ -938,3 +939,5 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-todo", async (req, res) => {
     handleRouteError(res, err);
   }
 });
+
+registerCommentRoutes(todoListsRouter, "todo_list", "id");

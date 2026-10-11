@@ -106,7 +106,7 @@ export type Task = {
 
 export type TaskActivityEntry = {
   id: number;
-  taskId: number;
+  taskId: number | null;
   kind: "comment" | "change";
   /** Comment rows; also session summary text when field === "summary" */
   body: string | null;

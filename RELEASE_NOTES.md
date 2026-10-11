@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.59.0 — 2026-10-11
+
+### New Functionality
+- A To Do and a To Do list have the same comment thread as a Task. The latest comment appears on the Mesh card, and it stays with the latest update when the same person posted both within two minutes.
+- An Administrator can delete a comment on a Task, To Do, or To Do list after confirming. Anyone else who can write to the record can edit a comment, and cannot delete one.
+
 ## 0.58.12 — 2026-10-11
 
 ### New Functionality

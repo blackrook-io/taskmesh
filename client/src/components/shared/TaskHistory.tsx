@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "../../api/client";
+import { useAuth } from "../../lib/auth";
+import { userIsAdministrator } from "../../lib/roles";
 import {
   compareTaskHistoryEntries,
   loadTaskHistoryShowChanges,
@@ -10,7 +12,16 @@ import {
   type TaskHistorySortDir,
 } from "../../lib/taskHistorySort";
 import type { TaskActivityEntry } from "../../types";
+import { ConfirmDialog } from "../ConfirmDialog";
 import { MarkdownEditor } from "./MarkdownEditor";
+
+type HistoryEntityType = "task" | "todo" | "todo_list";
+
+function activityPath(entityType: HistoryEntityType, entityId: number): string {
+  if (entityType === "task") return `/api/v1/tasks/${entityId}/activity`;
+  if (entityType === "todo") return `/api/v1/todos/${entityId}/activity`;
+  return `/api/v1/todo-lists/${entityId}/activity`;
+}
 
 const FIELD_LABELS: Record<string, string> = {
   title: "Title",
@@ -67,12 +78,29 @@ function HistoryMeta({ entry }: { entry: TaskActivityEntry }) {
 }
 
 export function TaskHistory({ taskId }: { taskId: number }) {
+  return <RecordHistory entityType="task" entityId={taskId} />;
+}
+
+export function RecordHistory({
+  entityType,
+  entityId,
+}: {
+  entityType: HistoryEntityType;
+  entityId: number;
+}) {
   const qc = useQueryClient();
-  const key = ["task-activity", taskId] as const;
+  const { user } = useAuth();
+  const isAdmin = userIsAdministrator(user);
+  const path = activityPath(entityType, entityId);
+  const key =
+    entityType === "task"
+      ? (["task-activity", entityId] as const)
+      : (["entity-activity", entityType, entityId] as const);
   const [draft, setDraft] = useState("");
   const [composerKey, setComposerKey] = useState(0);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<TaskHistorySortDir>(() => loadTaskHistorySortDir());
   const [showChanges, setShowChanges] = useState(() => loadTaskHistoryShowChanges());
@@ -80,19 +108,17 @@ export function TaskHistory({ taskId }: { taskId: number }) {
   const activityQuery = useQuery({
     queryKey: key,
     queryFn: async () => {
-      const res = await apiJson<{ data: TaskActivityEntry[] }>(
-        `/api/v1/tasks/${taskId}/activity`,
-      );
+      const res = await apiJson<{ data: TaskActivityEntry[] }>(path);
       return res.data;
     },
   });
 
   const add = useMutation({
     mutationFn: async (body: string) => {
-      const res = await apiJson<{ data: TaskActivityEntry }>(
-        `/api/v1/tasks/${taskId}/activity`,
-        { method: "POST", body: JSON.stringify({ body }) },
-      );
+      const res = await apiJson<{ data: TaskActivityEntry }>(path, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -100,16 +126,17 @@ export function TaskHistory({ taskId }: { taskId: number }) {
       setComposerKey((k) => k + 1);
       setError(null);
       void qc.invalidateQueries({ queryKey: key });
+      void qc.invalidateQueries({ queryKey: ["graph"] });
     },
     onError: (err: Error) => setError(err.message),
   });
 
   const edit = useMutation({
     mutationFn: async ({ id, body }: { id: number; body: string }) => {
-      const res = await apiJson<{ data: TaskActivityEntry }>(
-        `/api/v1/tasks/${taskId}/activity/${id}`,
-        { method: "PATCH", body: JSON.stringify({ body }) },
-      );
+      const res = await apiJson<{ data: TaskActivityEntry }>(`${path}/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ body }),
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -117,6 +144,21 @@ export function TaskHistory({ taskId }: { taskId: number }) {
       setEditDraft("");
       setError(null);
       void qc.invalidateQueries({ queryKey: key });
+      void qc.invalidateQueries({ queryKey: ["graph"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: number) => {
+      await apiJson(`${path}/${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => {
+      setPendingDeleteId(null);
+      setEditingId(null);
+      setError(null);
+      void qc.invalidateQueries({ queryKey: key });
+      void qc.invalidateQueries({ queryKey: ["graph"] });
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -186,16 +228,27 @@ export function TaskHistory({ taskId }: { taskId: number }) {
                 <div className="task-history__meta">
                   <HistoryMeta entry={entry} />
                   {editingId === entry.id ? null : (
-                    <button
-                      type="button"
-                      className="btn small ghost"
-                      onClick={() => {
-                        setEditingId(entry.id);
-                        setEditDraft(entry.body ?? "");
-                      }}
-                    >
-                      Edit
-                    </button>
+                    <span className="task-history__meta-actions">
+                      <button
+                        type="button"
+                        className="btn small ghost"
+                        onClick={() => {
+                          setEditingId(entry.id);
+                          setEditDraft(entry.body ?? "");
+                        }}
+                      >
+                        Edit
+                      </button>
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          className="btn small ghost"
+                          onClick={() => setPendingDeleteId(entry.id)}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
+                    </span>
                   )}
                 </div>
                 {editingId === entry.id ? (
@@ -276,6 +329,17 @@ export function TaskHistory({ taskId }: { taskId: number }) {
           {error}
         </p>
       ) : null}
+      <ConfirmDialog
+        open={pendingDeleteId != null}
+        title="Delete comment?"
+        message="This comment will be removed. This cannot be undone."
+        confirmLabel="Delete"
+        confirmDisabled={remove.isPending}
+        onCancel={() => setPendingDeleteId(null)}
+        onConfirm={() => {
+          if (pendingDeleteId != null) remove.mutate(pendingDeleteId);
+        }}
+      />
     </div>
   );
 }

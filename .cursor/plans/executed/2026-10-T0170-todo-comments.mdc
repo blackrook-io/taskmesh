@@ -1,0 +1,29 @@
+# T0170 — Comments on ToDos and ToDo Lists
+
+**Task:** T0170 (id `185`) — Mesh: comments on ToDos and ToDo Lists
+**Parent:** T0159 (id `172`) — Mesh epic. A comment does not reset staleness. A comment posted with an update is shown with that update.
+**Depends on:** T0169 (id `184`) complete — activity rows already use `(entity_type, entity_id)`; ToDo state/progress changes are stored; list `lastComment` is still forced null.
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch (after approval):** `T0170-todo-comments`
+
+## Decisions
+
+1. **Same thread as Tasks.** Comments are `task_activity` rows with `kind = 'comment'`, `entity_type` of `todo` or `todo_list`, and `task_id` null. No new table. ToDo state and progress rows from T0169 stay in the same list.
+2. **Edit for writers. Delete for Administrators only.** Any project owner, manager, or member (write access), or the owner of an unsorted record, may post and edit any comment on that record. Edit is not limited to the author. A viewer is read-only; the API returns 403, and the composer stays visible, as it does on Tasks. Delete is a moderation action: only a system Administrator sees the control, and the API rejects everyone else with `not_administrator`. Deleting asks for confirmation. The same rule applies to Task comments, because History is one panel and spam moderation is not limited to ToDos.
+3. **Reuse the History panel.** Generalize `TaskHistory` so Tasks, ToDos, and Lists share one component. Tasks keep `/api/v1/tasks/:id/activity`. ToDos and Lists get the same GET / POST / PATCH shape on their own routers. The panel still offers the change-log checkbox and sort. A List has no stored change rows, so the log is empty until someone comments.
+4. **Where it appears.** Under the links panel in `TodoEditorFields` (list item modal and the project overview ToDo editor). On a ToDo List page, under "Add existing". Task items opened from a list already show Task History.
+5. **List comments are the list's own thread.** They are not rolled up from member ToDos or Tasks. `getLastActivity` reads them and fills `lastComment` on `todo_list` graph nodes. Pairing uses the existing rule: same actor, within 120 seconds of the list's derived last update (newest member state or progress change). A comment still does not move `signalAt`.
+6. **Deleting a list removes its comments.** Add the same `purge_entity_activity` trigger T0169 uses for ToDos, Projects, and Documents. ToDo deletes already purge. This is a new Drizzle SQL file, so finish-up bumps MINOR.
+
+## Scope
+
+1. Shared comment read/create/update/delete used by the task, todo, and todo-list activity routes. Read requires access to the record. Create and edit require write access. Delete requires the Administrator role after that access check. Only `kind = 'comment'` rows can be edited or deleted.
+2. `GET/POST /api/v1/todos/:id/activity`, `PATCH` and `DELETE …/activity/:entryId`. Same for `/api/v1/todo-lists/:id/activity`. Tasks gain `DELETE /api/v1/tasks/:id/activity/:entryId` for Administrators.
+3. `getLastActivity` includes `todo_list` ids in the comment query and stops returning a null list comment.
+4. History panel on the ToDo editor and the ToDo List page.
+5. Migration: `todo_lists` purge trigger. Update `docs/database/tasks.md` (lists now store comments) and run `npm run docs:sync-schema`.
+6. Unit coverage for list `lastComment` packing stays in the pure helpers already tested (excerpt, 120-second pairing). `npm run lint` clean.
+
+## Out of scope
+
+Comment threads on Projects, Documents, Ideas, boards, canvases, wiki nodes, or image boards. Restricting edit to the author. Hover-card layout (T0173 already renders `lastComment` when the graph sends it).

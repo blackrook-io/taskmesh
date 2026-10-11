@@ -107,7 +107,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 
 Append-style timeline for any record: user **comments** and auto-recorded **field changes**. Rows are keyed by `(entity_type, entity_id)`, the same polymorphic pair used by `entity_links`.
 
-Task History still reads and writes this table. A task row keeps `task_id` equal to `entity_id` so deleting a task cascades its timeline. ToDo, Project, and Document rows leave `task_id` null. Deleting those records runs a database trigger that removes their activity. ToDo Lists do not store a row: a list's last update is the newest state or progress change among its ToDo and Task members.
+Task History still reads and writes this table. A task row keeps `task_id` equal to `entity_id` so deleting a task cascades its timeline. ToDo, Project, Document, and ToDo List rows leave `task_id` null. Deleting those records runs a database trigger that removes their activity. A ToDo List stores its own comments. Its last update is still the newest state or progress change among its ToDo and Task members, not a row on the list. Writers may post and edit comments. Only an Administrator may delete a comment.
 
 Mesh reads the latest `state`, `progress`, `status`, or `body` change as **last update**, and the latest comment separately. A comment does not count as the update. Document `body` changes store the field name only, not the old or new markdown.
 
@@ -137,7 +137,7 @@ Mesh reads the latest `state`, `progress`, `status`, or `body` change as **last 
 - **CHECK:** task rows have `task_id = entity_id`; every other type has `task_id` null — `task_activity_task_link_chk`
 - **FK:** `task_id` → `tasks.id` · **ON DELETE CASCADE**
 - **FK:** `created_by_id` → `users.id` · **ON DELETE SET NULL**
-- **TRIGGER:** after delete on `todos`, `projects`, and `project_documents`, `purge_entity_activity` removes matching rows
+- **TRIGGER:** after delete on `todos`, `projects`, `project_documents`, and `todo_lists`, `purge_entity_activity` removes matching rows
 
 ---
 
