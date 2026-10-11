@@ -7,6 +7,7 @@ import {
   ReactFlow,
   ViewportPortal,
   useReactFlow,
+  useStore,
   type EdgeProps,
   type Node,
   type NodeProps,
@@ -34,7 +35,10 @@ import { filterMeshGraph } from "../lib/meshFilters";
 import { formatEntityRef } from "../lib/entityRef";
 import {
   layoutMesh,
+  meshCorridorPoints,
   meshOrthogonalPath,
+  meshRoundedPolyline,
+  type MeshCorridor,
   type MeshGraphEdge,
   type MeshGraphNode,
   type MeshLayoutNode,
@@ -287,18 +291,34 @@ function MeshEdge({
   style,
   data,
 }: EdgeProps) {
-  const info = data as { sourceOffset?: number; targetOffset?: number; laneX?: number } | undefined;
-  const path = meshOrthogonalPath(
-    sourceX,
-    sourceY + (info?.sourceOffset ?? 0),
-    targetX,
-    targetY + (info?.targetOffset ?? 0),
-    info?.laneX ?? sourceX + 20,
-  );
+  const info = data as
+    | {
+        sourceOffset?: number;
+        targetOffset?: number;
+        laneX?: number;
+        corridor?: MeshCorridor | null;
+        trunkCount?: number | null;
+        trunkPath?: { x: number; y: number }[] | null;
+      }
+    | undefined;
+  const sy = sourceY + (info?.sourceOffset ?? 0);
+  const ty = targetY + (info?.targetOffset ?? 0);
+  const path = info?.trunkPath
+    ? meshRoundedPolyline(info.trunkPath)
+    : info?.corridor
+      ? meshRoundedPolyline(meshCorridorPoints(sourceX, sy, targetX, ty, info.corridor))
+      : meshOrthogonalPath(sourceX, sy, targetX, ty, info?.laneX ?? sourceX + 20);
+  const badge = info?.trunkCount && info.trunkPath ? info.trunkPath[info.trunkPath.length - 1] : null;
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
-      <g data-source={source} data-target={target} />
+      {badge && info?.trunkCount ? (
+        <g className="mesh-trunk-badge" transform={`translate(${badge.x - 18}, ${badge.y})`}>
+          <circle r="9" />
+          <text>{info.trunkCount}</text>
+        </g>
+      ) : null}
+      <g data-source={info?.trunkCount ? "" : source} data-target={target} />
     </>
   );
 }
@@ -666,24 +686,35 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
 
 const nodeTypes = { mesh: MeshRecordNode };
 const edgeTypes = { mesh: MeshEdge };
+/** Gap from the canvas top to the highest record when a focus opens. */
+const MESH_FRAME_TOP = 36;
 
 function FrameFocus({
   focusKey,
   x,
-  y,
+  top,
 }: {
   focusKey: string;
   x: number;
-  y: number;
+  top: number;
 }) {
   const { setCenter } = useReactFlow();
+  const height = useStore((state) => state.height);
+  const framedFor = useRef("");
   useLayoutEffect(() => {
+    if (height <= 0) return;
+    const token = `${focusKey}:${Math.round(x)}:${Math.round(top)}`;
+    if (framedFor.current === token) return;
+    framedFor.current = token;
     const reduce = prefersReducedMotion();
     const frame = requestAnimationFrame(() => {
-      void setCenter(x + 80, y, { zoom: 1, duration: reduce ? 0 : 500 });
+      void setCenter(x + 80, top + height / 2 - MESH_FRAME_TOP, {
+        zoom: 1,
+        duration: reduce ? 0 : 500,
+      });
     });
     return () => cancelAnimationFrame(frame);
-  }, [focusKey, setCenter, x, y]);
+  }, [focusKey, height, setCenter, top, x]);
   return null;
 }
 
@@ -898,6 +929,11 @@ export function MeshPanel({
     focusRecord != null && focusRecord.projectId != null && focusRecord.projectId !== projectId;
 
   const focusNode = layout?.nodes.find((node) => node.role === "focus");
+  const frameTop = useMemo(() => {
+    if (!layout) return 0;
+    const ys = [...layout.nodes.map((node) => node.y), ...layout.headings.map((heading) => heading.y)];
+    return ys.length > 0 ? Math.min(...ys) : 0;
+  }, [layout]);
   const chrome = meshChrome();
   const graphByKey = useMemo(() => {
     const map = new Map<string, MeshGraphNode>();
@@ -1163,6 +1199,9 @@ export function MeshPanel({
           sourceOffset: edge.sourceOffset,
           targetOffset: edge.targetOffset,
           laneX: edge.laneX,
+          corridor: edge.corridor,
+          trunkCount: edge.trunkCount,
+          trunkPath: edge.trunkPath,
         },
         className: [
           "mesh-edge",
@@ -1173,7 +1212,10 @@ export function MeshPanel({
                 ? "mesh-edge--blocking"
                 : "mesh-edge--dep"
               : "mesh-edge--ref",
+          edge.bundled ? "mesh-edge--bundled" : "",
+          edge.trunkCount ? "mesh-edge--trunk" : "",
         ]
+          .filter(Boolean)
           .join(" "),
         markerEnd:
           edge.kind === "depends"
@@ -1364,14 +1406,14 @@ export function MeshPanel({
             maxZoom={1.75}
             onMove={placeCard}
             onMoveEnd={placeCard}
-            defaultViewport={{ x: 48, y: 120, zoom: 1 }}
+            defaultViewport={{ x: 48, y: 0, zoom: 1 }}
             proOptions={{ hideAttribution: false }}
             colorMode="dark"
           >
             <FrameFocus
               focusKey={focusKey}
               x={focusNode?.centerX ?? 0}
-              y={focusNode?.centerY ?? 0}
+              top={frameTop}
             />
             <ViewportPortal>
               <svg className="mesh-tree" width="12000" height="12000">
