@@ -926,7 +926,9 @@ export const taskDescriptionTemplates = pgTable("task_description_templates", {
 /**
  * History timeline for any record: user comments and auto-recorded field changes.
  * Keyed by `(entity_type, entity_id)`. `task_id` is set only for tasks so task
- * deletes still cascade. Other record deletes purge rows via database triggers.
+ * deletes still cascade. ToDo, Project, Document, and ToDo List deletes purge
+ * their rows via database triggers. List comments live on the list. A list's
+ * last update is still derived from its member ToDos and Tasks.
  */
 export const taskActivity = pgTable(
   "task_activity",

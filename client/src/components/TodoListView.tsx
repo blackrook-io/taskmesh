@@ -61,6 +61,7 @@ import { TaskEditorFields } from "./TaskBoard";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { EntityLinksPanel } from "./shared/EntityLinksPanel";
+import { RecordHistory } from "./shared/TaskHistory";
 import { MarkdownEditor } from "./shared/MarkdownEditor";
 import { ListViewHeaderMenu, type ListViewHeaderMenuState } from "./shared/ListViewHeaderMenu";
 import { ListViewPersonalizeModal } from "./shared/ListViewPersonalizeModal";
@@ -590,6 +591,7 @@ export function TodoEditorFields({
         <TagInput entityType="todo" entityId={todo.id} />
       </div>
       <EntityLinksPanel entityType="todo" entityId={todo.id} />
+      <RecordHistory entityType="todo" entityId={todo.id} />
       {saveError ? (
         <p role="alert" className="tag-input__error">
           {saveError}
@@ -1128,6 +1130,8 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           ) : null}
         </div>
       ) : null}
+
+      <RecordHistory entityType="todo_list" entityId={list.id} />
 
       {openItem ? (
         <ElementShell

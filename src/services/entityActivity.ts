@@ -182,7 +182,7 @@ function toUpdate(row: ActivitySqlRow): UpdateHit {
 /**
  * Latest state/progress/status/body change and latest comment for each ref.
  * ToDo List updates are the newest change among member ToDos and Tasks.
- * List comments stay empty until lists have their own thread.
+ * A list's own comments are its last comment, paired with that derived update.
  */
 export async function getLastActivity(
   db: Db,
@@ -199,7 +199,10 @@ export async function getLastActivity(
     if (ref.type === "todo_list") listIds.push(ref.id);
     else direct.push(ref);
   }
-  const commentRefs = [...direct];
+  const commentRefs: ActivityRef[] = [
+    ...direct,
+    ...listIds.map((id) => ({ type: "todo_list" as const, id })),
+  ];
 
   const membersByList = new Map<number, ActivityRef[]>();
   if (listIds.length > 0) {
@@ -279,12 +282,10 @@ export async function getLastActivity(
 
   for (const listId of listIds) {
     const members = membersByList.get(listId) ?? [];
-    const lastUpdate = publicUpdate(
-      deriveListLastUpdate(
-        members.map((member) => updates.get(refKey(member.type, member.id)) ?? null),
-      ),
+    const derived = deriveListLastUpdate(
+      members.map((member) => updates.get(refKey(member.type, member.id)) ?? null),
     );
-    out.set(refKey("todo_list", listId), { lastUpdate, lastComment: null });
+    out.set(refKey("todo_list", listId), pack("todo_list", listId, derived, true));
   }
 
   return out;

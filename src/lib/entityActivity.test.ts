@@ -103,6 +103,11 @@ describe("list derivation and graph fields", () => {
     assert.equal(deriveListLastUpdate([null, null]), null);
   });
 
+  it("keeps the actor on the chosen item update", () => {
+    const chosen = { ...update("2026-10-01T00:00:00.000Z", "state"), actorId: 4 };
+    assert.equal(deriveListLastUpdate([null, chosen])?.actorId, 4);
+  });
+
   it("keeps the later item when timestamps match", () => {
     const first = update("2026-10-01T00:00:00.000Z", "state");
     const second = { ...update("2026-10-01T00:00:00.000Z", "progress"), oldValue: "10", newValue: "20" };

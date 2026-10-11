@@ -108,8 +108,8 @@ export function commentPairsWithUpdate(
 }
 
 /** Newest item update. Equal timestamps keep the later entry in the list. */
-export function deriveListLastUpdate(updates: readonly (LastUpdate | null)[]): LastUpdate | null {
-  let best: LastUpdate | null = null;
+export function deriveListLastUpdate<T extends LastUpdate>(updates: readonly (T | null)[]): T | null {
+  let best: T | null = null;
   for (const update of updates) {
     if (!update) continue;
     if (!best || update.at >= best.at) best = update;
