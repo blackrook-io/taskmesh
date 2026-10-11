@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.9 — 2026-10-11
+
+### Enhancements
+- Where a Mesh line crosses another line or the containment bus, a background-colored understroke opens a small gap so one stroke reads as passing over the other.
+
 ## 0.58.8 — 2026-10-11
 
 ### Enhancements

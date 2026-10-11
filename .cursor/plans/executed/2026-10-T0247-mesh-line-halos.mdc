@@ -1,0 +1,38 @@
+# T0247 — Mesh lines: halos where lines cross
+
+**Task:** T0247 (id `262`) — Mesh lines: halos or hops where lines cross
+**Parent:** T0244 (id `259`, Pending) — ports and gutter lanes; own work is done
+**Depends on:** T0244 Pending (does not block)
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch (after approval):** `T0247-mesh-line-halos`
+
+A depends or reference line can still cross the containment bus or another line. At the crossing it is unclear which stroke continues.
+
+## Decisions
+
+1. **Halo, not a computed hop.** Each relationship line is drawn twice: a solid understroke about 4px wide in the mesh surface color (`--bg`), then the existing colored stroke on top. A later line’s understroke covers whatever is already painted, so the crossing reads as a small gap. No crossing search and no semicircle geometry.
+2. **Surface color.** The mesh canvas is `var(--bg)` with a dot grid, so the understroke uses `--bg`. That tracks light, dark, and the other themes. The dots under the halo are covered; that is the gap.
+3. **Bus underneath.** The containment bus stays in the viewport portal. Relationship edges paint above it (`z-index: 1` on `.react-flow__edges`). Rail headings stay above the lines so a halo does not erase a label. React Flow sets each record’s z-index inline, so records use `z-index: 2 !important` and stay above the lines.
+4. **Which lines.** References, depends, blocking depends, suggestions, and trunks get the halo. The bus does not. Which relationship line wins a mutual crossing is paint order. A hovered line already lifts its SVG, so its halo cuts the others.
+5. **Dashes and arrows.** The halo is solid, so a dashed reference does not let the line below show through the gaps. The arrow stays on the colored path only.
+6. **Hops stay off unless QA says the gap is hard to read.** That fallback stays on T0247. No separate Task unless review asks to split it.
+7. **No schema.** Finish-up is a PATCH bump. `FEATURES.md` already lists the Mesh tab. `RELEASE_NOTES.md` gets an Enhancements bullet on finish-up.
+
+## Scope
+
+1. `MeshEdge` in `client/src/components/MeshPanel.tsx` draws a `mesh-edge__halo` path with the same `d` as the colored edge, before `BaseEdge`, with no marker.
+2. CSS in `client/src/index.css`: halo stroke `var(--bg)`, width 4px; hot lines use a slightly wider halo so the 2.6px accent stroke still has a visible gap. Edges sit above `.mesh-tree`; rail headings sit above edges.
+3. `npm run lint` clean. No new layout math, so no `meshLayout` test changes.
+
+## Out
+
+- Semicircle hops computed from intersection points, unless the halo gap is not clear in QA.
+- Changing lane or port layout from T0244 / T0245.
+- Redrawing `docs/design/mesh-view.html`.
+
+## Acceptance
+
+- Where a relationship line crosses the bus or another line, one stroke clearly passes over the other, in light and dark themes.
+- The bus never paints over a relationship line.
+- Hover, focus dimming, bundled trunks, and arrows still behave as they do now.
+- Opening the largest project mesh (TaskMesh) does not feel slower.
