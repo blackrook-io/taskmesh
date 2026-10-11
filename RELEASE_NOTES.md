@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.58.5 — 2026-10-11
+
+### Enhancements
+- Hovering or focusing a Mesh record fades unrelated lines, the containment bus, and records that are not that record or a line neighbour. The hover card stays fully visible, and the cascade does not move.
+
 ## 0.58.4 — 2026-10-11
 
 ### Fixes

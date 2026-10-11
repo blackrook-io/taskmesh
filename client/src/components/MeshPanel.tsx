@@ -81,6 +81,7 @@ type MeshNodeData = {
   onPointerLeave: () => void;
   onFocusNode: (key: string) => void;
   onBlurNode: () => void;
+  onHot: (key: string | null) => void;
   armTouch: (key: string) => void;
   consumeTouch: (key: string) => boolean;
 };
@@ -228,11 +229,18 @@ const MESH_HOT_MARKER = "url('#mesh-hot-arrow')";
 function paintMeshHot(from: Element, key: string | null) {
   const canvas = from.closest(".mesh-canvas");
   if (!canvas) return;
+  canvas.classList.toggle("mesh-canvas--focusing", key != null);
+  const keep = new Set<string>();
+  if (key) keep.add(key);
   canvas.querySelectorAll(".react-flow__edge").forEach((edge) => {
     const mark = edge.querySelector("[data-source]");
     const source = mark?.getAttribute("data-source");
     const target = mark?.getAttribute("data-target");
     const hot = key != null && (source === key || target === key);
+    if (hot) {
+      if (source) keep.add(source);
+      if (target) keep.add(target);
+    }
     edge.classList.toggle("mesh-edge--hot", hot);
     const svg = edge.parentElement;
     if (svg instanceof SVGSVGElement) svg.style.zIndex = hot ? "1" : "0";
@@ -251,6 +259,10 @@ function paintMeshHot(from: Element, key: string | null) {
         path.removeAttribute("data-marker-end");
       }
     }
+  });
+  canvas.querySelectorAll(".react-flow__node").forEach((node) => {
+    const id = node.querySelector("[data-mesh-key]")?.getAttribute("data-mesh-key");
+    node.classList.toggle("mesh-node--keep", id != null && keep.has(id));
   });
 }
 
@@ -544,18 +556,45 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         }}
         onMouseEnter={(event) => {
           paintMeshHot(event.currentTarget, id);
+          data.onHot(id);
           data.onPointerEnter(id);
         }}
         onMouseLeave={(event) => {
-          paintMeshHot(event.currentTarget, null);
+          const next = event.relatedTarget;
+          const ontoCard = next instanceof Element && next.closest(".mesh-card") != null;
+          const active = document.activeElement;
+          const focused =
+            active instanceof HTMLElement
+              ? (active.closest(".mesh-node")?.getAttribute("data-mesh-key") ?? null)
+              : null;
+          const canvas = event.currentTarget.closest(".mesh-canvas");
+          const keepFocused = focused && active instanceof Node && canvas?.contains(active) ? focused : null;
+          const keep = ontoCard ? id : keepFocused;
+          paintMeshHot(event.currentTarget, keep);
+          data.onHot(keep);
           data.onPointerLeave();
         }}
         onFocus={(event) => {
           paintMeshHot(event.currentTarget, id);
+          data.onHot(id);
           data.onFocusNode(id);
         }}
         onBlur={(event) => {
-          paintMeshHot(event.currentTarget, null);
+          const next = event.relatedTarget;
+          const nextKey =
+            next instanceof Element
+              ? (next.closest(".mesh-node")?.getAttribute("data-mesh-key") ?? null)
+              : null;
+          if (nextKey) {
+            paintMeshHot(event.currentTarget, nextKey);
+            data.onHot(nextKey);
+          } else if (event.currentTarget.matches(":hover")) {
+            paintMeshHot(event.currentTarget, id);
+            data.onHot(id);
+          } else {
+            paintMeshHot(event.currentTarget, null);
+            data.onHot(null);
+          }
           data.onBlurNode();
         }}
       >
@@ -696,6 +735,24 @@ export function MeshPanel({
   const cardKeyRef = useRef<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const hotKeyRef = useRef<string | null>(null);
+  const rememberHot = useCallback((key: string | null) => {
+    hotKeyRef.current = key;
+  }, []);
+  const releaseHotToPointer = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const hovered = canvas.querySelector(".mesh-node:hover");
+    const hoveredKey = hovered?.getAttribute("data-mesh-key") ?? null;
+    const active = document.activeElement;
+    const focused =
+      active instanceof HTMLElement && canvas.contains(active)
+        ? (active.closest(".mesh-node")?.getAttribute("data-mesh-key") ?? null)
+        : null;
+    const keep = hoveredKey ?? focused;
+    hotKeyRef.current = keep;
+    paintMeshHot(canvas, keep);
+  }, []);
   const showTimer = useRef<number | null>(null);
   const hideTimer = useRef<number | null>(null);
   const touchArmed = useRef<string | null>(null);
@@ -798,6 +855,11 @@ export function MeshPanel({
     relations.references,
     shownSuggestions,
   ]);
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    paintMeshHot(canvas, hotKeyRef.current);
+  }, [layout, cardKey]);
   useLayoutEffect(() => {
     placeCard();
     const viewport = canvasRef.current?.querySelector(".react-flow__viewport");
@@ -1038,6 +1100,7 @@ export function MeshPanel({
             onPointerLeave: scheduleHide,
             onFocusNode: showCardNow,
             onBlurNode: scheduleHide,
+            onHot: rememberHot,
             armTouch,
             consumeTouch,
           },
@@ -1063,7 +1126,8 @@ export function MeshPanel({
                 ? "mesh-edge--blocking"
                 : "mesh-edge--dep"
               : "mesh-edge--ref",
-        ].join(" "),
+        ]
+          .join(" "),
         markerEnd:
           edge.kind === "depends"
             ? {
@@ -1285,7 +1349,10 @@ export function MeshPanel({
                 clearShow();
                 clearHide();
               }}
-              onPointerLeave={scheduleHide}
+              onPointerLeave={() => {
+                scheduleHide();
+                releaseHotToPointer();
+              }}
             />
           ) : null}
           {suggestionCard && cardKey ? (
@@ -1313,7 +1380,10 @@ export function MeshPanel({
                 clearShow();
                 clearHide();
               }}
-              onPointerLeave={scheduleHide}
+              onPointerLeave={() => {
+                scheduleHide();
+                releaseHotToPointer();
+              }}
             />
           ) : null}
         </div>
