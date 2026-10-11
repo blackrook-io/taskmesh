@@ -75,6 +75,7 @@ type MeshNodeData = {
   enterFrom: { x: number; y: number } | null;
   reduceMotion: boolean;
   cardText: string;
+  cardOpen: boolean;
   onOpen: (key: string) => void;
   onPointerEnter: (key: string) => void;
   onPointerLeave: () => void;
@@ -456,7 +457,24 @@ function MeshSuggestionCard({
 
 function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
   const played = useRef(false);
+  useLayoutEffect(() => {
+    const button = buttonRef.current;
+    const titleEl = titleRef.current;
+    if (!button || !titleEl) return;
+    const apply = () => {
+      const truncated =
+        titleEl.scrollHeight > titleEl.clientHeight + 1 ||
+        titleEl.scrollWidth > titleEl.clientWidth + 1;
+      if (!data.cardOpen && truncated) button.setAttribute("title", data.title);
+      else button.removeAttribute("title");
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(titleEl);
+    return () => observer.disconnect();
+  }, [data.cardOpen, data.title]);
   useLayoutEffect(() => {
     if (played.current || data.reduceMotion || !data.enterFrom) return;
     const host = buttonRef.current?.closest(".react-flow__node");
@@ -501,7 +519,6 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         data-mesh-key={id}
         aria-label={label}
         aria-describedby={cardDescId(id)}
-        title={data.title}
         onPointerDown={(event) => {
           if (event.pointerType === "touch") data.armTouch(id);
         }}
@@ -581,7 +598,7 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
           ) : null}
         </span>
         <span className="mesh-copy">
-          <span className="mesh-title">{data.title}</span>
+          <span ref={titleRef} className="mesh-title">{data.title}</span>
           {data.referenceId || data.projectLabel ? (
             <span className="mesh-ref">
               {data.referenceId}
@@ -1015,6 +1032,7 @@ export function MeshPanel({
               (node.role === "suggestion"
                 ? suggestionCards.get(node.key)?.description
                 : cards.get(node.key)?.description) ?? node.title,
+            cardOpen: cardKey === node.key,
             onOpen: openNode,
             onPointerEnter: scheduleShow,
             onPointerLeave: scheduleHide,
