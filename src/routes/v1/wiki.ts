@@ -20,6 +20,7 @@ import {
   wouldCreateCycle,
 } from "../../services/wiki.js";
 import { attachDocumentActor } from "../../services/documents.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const entityType = z.enum(["document", "canvas"]);
@@ -137,6 +138,12 @@ wikiRouter.post("/pages", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create wiki node");
       return;
     }
+    await syncMentionLinks(db, {
+      srcType: "document",
+      srcId: doc.id,
+      markdown: doc.body,
+      actorUserId: actorId,
+    });
     res.status(201).json({ data: { node, document: await attachDocumentActor(db, doc) } });
   } catch (err) {
     handleRouteError(res, err);

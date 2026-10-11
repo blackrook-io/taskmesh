@@ -1,0 +1,41 @@
+# T0161 — Persist Markdown mentions as links
+
+**Task:** T0161 (id `174`) — Mesh: persist #T#### mentions from markdown as links
+**Parent:** T0159 (id `172`) — Mesh epic
+**Depends on:** T0160 complete (`entity_links`, origin `mention` already allowed)
+**Required by:** none
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0161-mention-links`
+
+Saving a Markdown field turns record mentions into `entity_links` rows so the graph and backlinks can see them. No new SQL file.
+
+## Decisions
+
+1. **Tokens.** A mention is `#` plus a prefix from `ENTITY_REF_PREFIXES` plus digits (`#T31`, `#T0031`, `#t0031`), or the editor’s saved label `[T0031]` / `[T31]`. Letter case does not matter. Leading zeros do not matter. A bare `T0031` with no `#` or brackets is not a mention. Every prefix is included, not only tasks.
+2. **Code is ignored.** Fenced code blocks and inline code are not scanned. A token in a paragraph still counts.
+3. **Resolve by display number.** Look up the number on that type’s table. Unknown numbers are skipped. A mention of the record being saved is skipped.
+4. **Visibility.** A target the saving user cannot read is skipped (`assertCanAccessEntity` at read). The link is not created.
+5. **Sync, not a second manual link.** Rows are `relation='references'` and `origin='mention'`. On each save of the field, add the missing mention rows and delete mention rows from this source that the text no longer justifies. A manual link to the same pair stays.
+6. **Fields.** Task description, to-do description, idea body, and document body (Markdown documents only). Wiki pages are documents, so saving a wiki page body is the same hook. Canvas text is T0248.
+7. **Backfill.** `src/scripts/` script, idempotent. `--dry-run` prints how many mention rows it would add and remove, and writes nothing. Live run uses the record owner as the reader (the project owner for a document).
+8. **No schema change.** Finish-up is a PATCH bump. `FEATURES.md` gains one line: a mention in a description or document becomes a link. `RELEASE_NOTES.md` gets an Enhancements bullet.
+
+## Scope
+
+1. `src/lib/` parser plus unit tests: code ignored, case, `#T31` and `#T0031` are the same number, bracket labels count, other prefixes count.
+2. A sync function that writes and deletes mention rows for one source. Call it when those four fields are created or updated.
+3. Backfill script with dry-run counts.
+4. `npm run lint` clean.
+
+## Out
+
+- Canvas scene text (T0248, Draft, depends on this task).
+- Comment bodies, project descriptions, and task-description templates.
+- Changing how the editor inserts a mention.
+
+## Acceptance
+
+- Parser tests cover code blocks, inline code, case, and `#T31` / `#T0031`.
+- Adding `#T0042` (or the editor’s `[T0042]` label) to a task description creates a mention link. Removing it on the next save deletes that mention link. A manual link on the same pair remains.
+- A self-mention and a mention of a record the author cannot read create no link.
+- `dry-run` prints counts and does not write.

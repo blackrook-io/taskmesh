@@ -20,6 +20,7 @@ import {
   projectAccessListFilter,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { getCurrentUserId } from "../../services/users.js";
 import {
   objectsToCsv,
@@ -578,6 +579,12 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
         });
         continue;
       }
+      await syncMentionLinks(db, {
+        srcType: "task",
+        srcId: row.id,
+        markdown: row.description,
+        actorUserId: actorId,
+      });
       created += 1;
     } catch (err) {
       discarded.push({

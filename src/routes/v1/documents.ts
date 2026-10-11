@@ -17,6 +17,7 @@ import {
   deleteUploadById,
 } from "../../services/documents.js";
 import { recordDocumentBodyChange } from "../../services/entityActivity.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { assertCanAccessOwned } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
@@ -148,6 +149,14 @@ documentsRouter.post("/", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create document");
       return;
     }
+    if (row.kind === "markdown") {
+      await syncMentionLinks(db, {
+        srcType: "document",
+        srcId: row.id,
+        markdown: row.body,
+        actorUserId: actorId,
+      });
+    }
     res.status(201).json({ data: await attachDocumentActor(db, row) });
   } catch (err) {
     handleRouteError(res, err);
@@ -249,6 +258,14 @@ documentsRouter.patch("/:docId", async (req, res) => {
       .where(eq(schema.projectDocuments.id, docId))
       .returning();
 
+    if (row && existing.kind === "markdown" && parsed.body !== undefined) {
+      await syncMentionLinks(db, {
+        srcType: "document",
+        srcId: row.id,
+        markdown: row.body,
+        actorUserId: actorId,
+      });
+    }
     if (existing.kind === "markdown" && parsed.body !== undefined) {
       await recordDocumentBodyChange(
         db,
