@@ -7747,6 +7747,15 @@ a:focus-visible {
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
+.mesh-reset {
+  margin-left: auto;
+}
+.mesh-canvas .react-flow__node {
+  cursor: grab;
+}
+.mesh-canvas .react-flow__node:active {
+  cursor: grabbing;
+}
 .mesh-crumbs {
   display: flex;
   flex-wrap: wrap;

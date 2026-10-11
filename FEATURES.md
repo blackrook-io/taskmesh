@@ -8,6 +8,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, Mesh, and Image Boards
 - Open Mesh to see the focused record centered over its contents, with its own links beside it and links from inside on a rail
 - Switch Mesh to Plan view to read dependencies and parent/child links left to right, one row per phase, and see which Ready work is next or still blocked
+- Drag a Mesh node to pin it; the position and the canvas pan and zoom return for that record and view, and Reset layout clears them
 - Color Mesh by type, state, or priority, and see overdue, at-risk, stale, and depends-on signals on the cascade
 - Hover a Mesh record to read its state, due date, last change, contents, blockers, and links without leaving the cascade
 - Administrators set Mesh colors and readability for everyone: record colors, suggestion and signal colors, line weight, size, label halo, overdue pulse, and how soon a quiet record counts as stale

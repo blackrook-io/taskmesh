@@ -267,12 +267,23 @@ export type MeshAncestor = {
   referenceId: string | null;
 };
 
+/** Which node centers a bus or plan path should follow after a pin moves them. */
+export type MeshTreeTie = {
+  pathIndex: number;
+  /** Node at the start of the path. Null keeps the computed start (the bus). */
+  fromKey: string | null;
+  /** Node at the end of the path. Null keeps the computed end (the bus). */
+  toKey: string | null;
+};
+
 export type MeshLayout = {
   nodes: MeshLayoutNode[];
   edges: MeshLayoutEdge[];
   ancestors: MeshAncestor[];
   /** Containment bus, in glyph-center coordinates. */
   tree: string[];
+  /** Parallel to `tree` paths that should follow a node. Paths with no tie stay put. */
+  treeTies: MeshTreeTie[];
   headings: MeshHeading[];
 };
 
@@ -678,7 +689,7 @@ export function layoutMesh(input: {
   const suggestions = input.suggestions ?? [];
   const byKey = new Map(input.nodes.map((node) => [node.key, node]));
   const focus = byKey.get(input.focusKey);
-  if (!focus) return { nodes: [], edges: [], ancestors: [], tree: [], headings: [] };
+  if (!focus) return { nodes: [], edges: [], ancestors: [], tree: [], treeTies: [], headings: [] };
 
   const childrenOf = new Map<string, MeshGraphNode[]>();
   for (const node of input.nodes) {
@@ -828,6 +839,11 @@ export function layoutMesh(input: {
   const focusR = MESH_FOCUS_GLYPH / 2;
   const glyphR = MESH_GLYPH / 2;
   const tree: string[] = [];
+  const treeTies: MeshTreeTie[] = [];
+  const tie = (fromKey: string | null, toKey: string | null, d: string) => {
+    treeTies.push({ pathIndex: tree.length, fromKey, toKey });
+    tree.push(d);
+  };
   const headings: MeshHeading[] = [];
   const placed: MeshLayoutNode[] = [];
   let maxX =
@@ -838,18 +854,18 @@ export function layoutMesh(input: {
   if (columns.length > 0) {
     const rowY = fy + 150;
     const busY = fy + 70;
-    tree.push(`M${cx},${fy + focusR + 10} V${busY}`);
+    tie(focus.key, null, `M${cx},${fy + focusR + 10} V${busY}`);
     if (columns.length > 1) tree.push(`M${colX(0)},${busY} H${colX(columns.length - 1)}`);
     columns.forEach((column, index) => {
       const x = colX(index);
       if (column.head) {
         placed.push(placedNode(column.head, x, rowY, "child", input.meshProjectId, refs));
-        tree.push(`M${x},${busY} V${rowY - 30}`);
+        tie(null, column.head.key, `M${x},${busY} V${rowY - 30}`);
         const top = rowY + 40;
         column.members.forEach((member, memberIndex) => {
           const y = top + 30 + memberIndex * MESH_ROW_PITCH;
           placed.push(placedNode(member, x + MESH_STUB, y, "grandchild", input.meshProjectId, refs));
-          tree.push(`M${x},${y} H${x + MESH_STUB - glyphR - 4}`);
+          tie(null, member.key, `M${x},${y} H${x + MESH_STUB - glyphR - 4}`);
         });
         const last = top + 30 + (column.members.length - 1) * MESH_ROW_PITCH;
         tree.push(`M${x},${rowY + 30} V${last}`);
@@ -858,7 +874,7 @@ export function layoutMesh(input: {
         column.members.forEach((member, memberIndex) => {
           const y = top + 30 + memberIndex * MESH_ROW_PITCH;
           placed.push(placedNode(member, x + MESH_STUB, y, "child", input.meshProjectId, refs));
-          tree.push(`M${x},${y} H${x + MESH_STUB - glyphR - 4}`);
+          tie(null, member.key, `M${x},${y} H${x + MESH_STUB - glyphR - 4}`);
         });
         const last = top + 30 + (column.members.length - 1) * MESH_ROW_PITCH;
         tree.push(`M${x},${busY} V${last}`);
@@ -870,7 +886,7 @@ export function layoutMesh(input: {
   if (parent) {
     const parentY = 50;
     placed.push(placedNode(parent, cx, parentY, "parent", input.meshProjectId, refs));
-    tree.push(`M${cx},${parentY + glyphR + 4} V${fy - focusR - 6}`);
+    tie(parent.key, focus.key, `M${cx},${parentY + glyphR + 4} V${fy - focusR - 6}`);
   }
   const bandCount = linkNodes.length + bandSuggestions.length;
   if (bandCount > 0) {
@@ -1028,7 +1044,7 @@ export function layoutMesh(input: {
     return a.x - b.x;
   });
 
-  return { nodes: reading, edges, ancestors, tree, headings };
+  return { nodes: reading, edges, ancestors, tree, treeTies, headings };
 }
 
 export function meshNodesOverlap(nodes: readonly MeshLayoutNode[]): boolean {
