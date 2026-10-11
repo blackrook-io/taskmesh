@@ -11,6 +11,7 @@ export const PROJECT_MODULE_KEYS = [
   "boards",
   "wiki",
   "canvases",
+  "mesh",
 ] as const;
 
 export type ProjectModuleKey = (typeof PROJECT_MODULE_KEYS)[number];
@@ -27,6 +28,7 @@ const DEFAULT_MODULES: { key: ProjectModuleKey; enabled: boolean; sortOrder: num
   { key: "boards", enabled: false, sortOrder: 3 },
   { key: "wiki", enabled: false, sortOrder: 4 },
   { key: "canvases", enabled: false, sortOrder: 5 },
+  { key: "mesh", enabled: false, sortOrder: 6 },
 ];
 
 /** Ensure every known module row exists for a project; insert missing with defaults. */

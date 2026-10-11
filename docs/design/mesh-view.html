@@ -1,0 +1,649 @@
+<title>TaskMesh Mesh View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: toolbar + breadcrumb over a dotted "plotting table" canvas; cascade tree under the focused node, side rail for cross-project links and AI suggestions; legend below. */
+:root {
+  --bg: #EEF1F4; --surface: #FFFFFF; --ink: #17202B; --muted: #5C6977; --line: #B8C2CD; --grid: #D3DAE2; --ring-track: #DCE2E9;
+  --danger: #D23A33; --warn: #D99A12; --ai: #B8327A; --focus: #2E62C9;
+  --t-project: #24467A; --t-todo_list: #4A5FCC; --t-task: #23877A; --t-todo: #C8701F; --t-document: #66788C; --t-idea: #A88518;
+  --s-new: #98A4B2; --s-ready: #3B76D2; --s-in_progress: #1E9884; --s-pending: #8668CC; --s-complete: #4C9436; --s-on_hold: #9C8761; --s-canceled: #B4B4B4;
+  --u-none: #B6C0CB; --u-low: #7AACD6; --u-medium: #3B76D2; --u-high: #DE8526; --u-urgent: #D23A33;
+  --rel-ref: #6F7F92; --rel-dep: #2B3644;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --radius: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F141B; --surface: #18202A; --ink: #E4EAF1; --muted: #93A1B0; --line: #3C4A5B; --grid: #1E2833; --ring-track: #2A3542;
+  --danger: #F0605A; --warn: #F0B53C; --ai: #E86AAE; --focus: #7FA6F0;
+  --t-project: #8CB0E6; --t-todo_list: #95A5F3; --t-task: #5CC6B6; --t-todo: #F0A562; --t-document: #A8B7C7; --t-idea: #E0C158;
+  --s-new: #7D8999; --s-ready: #6E9EEA; --s-in_progress: #4CC2AC; --s-pending: #AE95EC; --s-complete: #7CC266; --s-on_hold: #C2AE86; --s-canceled: #6C727A;
+  --u-none: #5C6876; --u-low: #79A9D4; --u-medium: #6E9EEA; --u-high: #F0A050; --u-urgent: #F0605A;
+  --rel-ref: #8A99AB; --rel-dep: #C9D3DE; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0F141B; --surface: #18202A; --ink: #E4EAF1; --muted: #93A1B0; --line: #3C4A5B; --grid: #1E2833; --ring-track: #2A3542;
+  --danger: #F0605A; --warn: #F0B53C; --ai: #E86AAE; --focus: #7FA6F0;
+  --t-project: #8CB0E6; --t-todo_list: #95A5F3; --t-task: #5CC6B6; --t-todo: #F0A562; --t-document: #A8B7C7; --t-idea: #E0C158;
+  --s-new: #7D8999; --s-ready: #6E9EEA; --s-in_progress: #4CC2AC; --s-pending: #AE95EC; --s-complete: #7CC266; --s-on_hold: #C2AE86; --s-canceled: #6C727A;
+  --u-none: #5C6876; --u-low: #79A9D4; --u-medium: #6E9EEA; --u-high: #F0A050; --u-urgent: #F0605A;
+  --rel-ref: #8A99AB; --rel-dep: #C9D3DE; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font-family: var(--font-display); font-size: 14px; padding-inline: 16px; padding-block: 18px 32px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 14px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 .ref { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+.sub { color: var(--muted); font-size: 13px; margin: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; justify-content: space-between; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.crumbs button { font: inherit; font-size: 13px; background: none; border: 0; color: var(--muted); padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.crumbs button:hover { color: var(--ink); background: var(--surface); }
+.crumbs button[aria-current="true"] { color: var(--ink); font-weight: 600; cursor: default; background: none; }
+.crumbs .sep { color: var(--line); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.seg span { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); padding: 7px 8px 7px 10px; align-self: center; }
+.seg button { font: inherit; font-size: 13px; border: 0; border-left: 1px solid var(--line); background: none; color: var(--ink); padding: 6px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.chip { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 10px; border-radius: 999px; cursor: pointer; }
+.chip[aria-pressed="false"] { color: var(--muted); background: transparent; }
+.chip svg { flex: none; }
+.chip.ai[aria-pressed="true"] { border-color: var(--ai); color: var(--ai); }
+button:focus-visible, .node:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.stage { position: relative; background: var(--bg); background-image: radial-gradient(var(--grid) 1.2px, transparent 1.3px); background-size: 22px 22px; border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; overflow-y: hidden; }
+.stage svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.node { cursor: pointer; outline: none; }
+.node text { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.node .lbl-title { font-family: var(--font-display); font-size: 12.5px; fill: var(--ink); font-weight: 500; }
+.node.focus .lbl-title { font-size: 15px; font-weight: 700; }
+.node .lbl-ref { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); }
+.node .halo { fill: var(--surface); }
+.node:hover .shape, .node:focus-visible .shape { stroke: var(--ink); stroke-width: 2; }
+.node.ghost .shape { fill: var(--surface); stroke: var(--ai); stroke-dasharray: 3 3; stroke-width: 1.6; }
+.node.ghost .lbl-title { fill: var(--ai); }
+.rail-head { font-family: var(--font-display); font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; fill: var(--muted); font-weight: 600; }
+.rail-head.ai { fill: var(--ai); }
+.tree { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.edge { fill: none; stroke-width: 1.3; transition: stroke-width .15s; }
+.edge.ref { stroke: var(--rel-ref); stroke-dasharray: 5 4; }
+.edge.dep { stroke: var(--rel-dep); }
+.edge.dep.blocking { stroke: var(--danger); }
+.edge.sug { stroke: var(--ai); stroke-dasharray: 1 5; stroke-linecap: round; stroke-width: 1.8; }
+.edge.hot { stroke-width: 2.6; }
+.pulse { fill: none; stroke: var(--danger); stroke-width: 2; transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .pulse { animation: throb 1.7s ease-out infinite; }
+  @keyframes throb { 0% { transform: scale(.82); opacity: .95 } 100% { transform: scale(1.55); opacity: 0 } }
+}
+
+.card { position: absolute; z-index: 5; width: 280px; max-width: calc(100% - 24px); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 10px 28px rgba(15, 25, 40, .16); font-size: 13px; display: grid; gap: 8px; }
+.card[hidden] { display: none; }
+.card .eyebrow { display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.card .eyebrow .type { font-family: var(--font-display); text-transform: uppercase; letter-spacing: .08em; font-size: 10.5px; font-weight: 600; }
+.card .eyebrow .ai-tag { color: var(--ai); }
+.card h3 { margin: 0; font-size: 15.5px; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; font-weight: 600; }
+.bar { height: 6px; border-radius: 3px; background: var(--ring-track); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--ink); border-radius: 3px; }
+.bar.ai > i { background: var(--ai); }
+.card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; }
+.card dt { color: var(--muted); font-size: 12px; }
+.card dd { margin: 0; font-variant-numeric: tabular-nums; min-width: 0; }
+.card dd.quote { grid-column: 1 / -1; border-left: 2px solid var(--line); border-radius: 0; padding: 2px 0 2px 10px; color: var(--ink); font-size: 12.5px; line-height: 1.45; }
+.bad { color: var(--danger); font-weight: 600; }
+.risk { color: var(--warn); font-weight: 600; }
+.card .hint { color: var(--muted); font-size: 12px; border-top: 1px solid var(--ring-track); padding-top: 8px; }
+.card .actions { display: flex; gap: 8px; }
+.card .actions button { font: inherit; font-size: 13px; border-radius: var(--radius); padding: 6px 10px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.card .actions button.primary { background: var(--ai); border-color: var(--ai); color: var(--surface); font-weight: 600; }
+
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.legend h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.legend li { display: flex; align-items: center; gap: 10px; font-size: 13px; min-width: 0; }
+.legend li svg { flex: none; }
+.legend .note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.sample { font-size: 12px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1 id="pageTitle">Training<span class="ref">P0012</span></h1>
+    <p class="sub">Mesh view prototype · sample data as of Sun 11 Oct 2026 · hover a node for context, click to cascade it</p>
+  </header>
+
+  <div class="toolbar">
+    <nav class="crumbs" id="crumbs" aria-label="Focus path"></nav>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Color nodes by">
+        <span>Color</span>
+        <button type="button" id="cm-type" data-mode="type" aria-pressed="true">Type</button>
+        <button type="button" id="cm-state" data-mode="state" aria-pressed="false">State</button>
+        <button type="button" id="cm-urgency" data-mode="urgency" aria-pressed="false">Urgency</button>
+      </div>
+      <button type="button" class="chip" id="tg-ref" aria-pressed="true"><svg width="22" height="8" aria-hidden="true"><line x1="1" y1="4" x2="21" y2="4" stroke="var(--rel-ref)" stroke-width="1.5" stroke-dasharray="5 4"/></svg>References</button>
+      <button type="button" class="chip" id="tg-dep" aria-pressed="true"><svg width="22" height="8" aria-hidden="true"><line x1="1" y1="4" x2="21" y2="4" stroke="var(--rel-dep)" stroke-width="1.5"/></svg>Depends on</button>
+      <button type="button" class="chip ai" id="tg-ai" aria-pressed="true"><svg width="22" height="8" aria-hidden="true"><line x1="2" y1="4" x2="21" y2="4" stroke="var(--ai)" stroke-width="2" stroke-dasharray="1 5" stroke-linecap="round"/></svg>AI suggestions</button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg id="svg" role="img" aria-label="Relationship graph of the focused record" viewBox="0 0 1000 600">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+      <g id="gTree"></g><g id="gEdges"></g><g id="gHeads"></g><g id="gNodes"></g>
+    </svg>
+    <div class="card" id="card" hidden></div>
+  </div>
+
+  <section class="legend" aria-label="Legend">
+    <div><h2>Shape = record type</h2><ul id="lg-shapes"></ul></div>
+    <div><h2 id="lg-color-h">Color = type</h2><ul id="lg-colors"></ul></div>
+    <div><h2>Lines = relationship</h2><ul id="lg-lines"></ul></div>
+    <div><h2>Signals</h2><ul id="lg-signals"></ul>
+      <p class="note">Signals bubble up: a collapsed parent shows a red count when something overdue sits inside it.</p></div>
+  </section>
+  <p class="sample">All records are example data for the prototype, not read from your TaskMesh instance.</p>
+</div>
+
+<script>
+(() => {
+const TODAY = new Date('2026-10-11T12:00:00');
+const NS = 'http://www.w3.org/2000/svg';
+const TYPES = {
+  project:   { label: 'Project',  r: 24, shape: 'hex' },
+  todo_list: { label: 'ToDo List', r: 19, shape: 'diamond' },
+  task:      { label: 'Task',     r: 15, shape: 'circle' },
+  todo:      { label: 'ToDo',     r: 13, shape: 'square' },
+  document:  { label: 'Document', r: 14, shape: 'page' },
+  idea:      { label: 'Idea',     r: 14, shape: 'tri' },
+};
+const STATES = { new: 'Draft', ready: 'Ready', in_progress: 'In Progress', pending: 'Pending', complete: 'Complete', on_hold: 'On Hold', canceled: 'Canceled' };
+const PRIOS = { none: 'None', low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' };
+
+const N = [
+  { id: 'P0012', type: 'project', title: 'Training', state: 'in_progress', priority: 'medium', upd: [9, 'State → In Progress'], cmt: [1, 'Pushed the SAA exam to November; ITOM labs take priority this month.'] },
+  { id: 'L0021', type: 'todo_list', title: 'AWS SAA re-certification', state: 'in_progress', priority: 'high', progress: 45, start: '2026-08-01', due: '2026-12-15', upd: [2, 'Progress 40% → 45%'], cmt: [2, 'Networking module nearly done. Booking the exam waits on practice scores.', true], parent: 'P0012' },
+  { id: 'T0201', type: 'task', title: 'Video course: VPC and networking', state: 'in_progress', priority: 'high', progress: 70, start: '2026-08-10', due: '2026-10-05', upd: [6, 'Progress 60% → 70%'], cmt: [14, 'Transit Gateway section is dense, slowing down to lab it properly.'], parent: 'L0021' },
+  { id: 'T0202', type: 'task', title: 'Practice exam set 1', state: 'ready', priority: 'medium', due: '2026-10-25', upd: [9, 'State Draft → Ready'], parent: 'L0021' },
+  { id: 'T0203', type: 'task', title: 'Multi-AZ lab in study account', state: 'new', priority: 'medium', due: '2026-11-15', upd: [12, 'Created'], parent: 'L0021' },
+  { id: 'D0310', type: 'todo', title: 'Book the exam slot', state: 'new', priority: 'urgent', due: '2026-10-20', upd: [15, 'Created'], parent: 'L0021' },
+  { id: 'L0022', type: 'todo_list', title: 'ITOM team enablement', state: 'in_progress', priority: 'medium', progress: 30, start: '2026-07-15', due: '2026-11-30', upd: [3, 'Progress 25% → 30%'], parent: 'P0012' },
+  { id: 'T0210', type: 'task', title: 'Discovery fundamentals module', state: 'complete', priority: 'medium', progress: 100, upd: [20, 'State → Complete'], cmt: [20, 'Recorded session uploaded to the team share.', true], parent: 'L0022' },
+  { id: 'T0211', type: 'task', title: 'Event Management lab guide', state: 'in_progress', priority: 'high', progress: 25, start: '2026-09-01', due: '2026-10-18', upd: [2, 'Progress 15% → 25%'], cmt: [2, 'Lab 3 (alert correlation) drafted. Need a test instance.', true], parent: 'L0022' },
+  { id: 'T0212', type: 'task', title: 'Service Mapping deep dive', state: 'new', priority: 'low', due: '2026-11-20', upd: [18, 'Created'], parent: 'L0022' },
+  { id: 'T0213', type: 'task', title: 'CMDB health and CSDM session', state: 'on_hold', priority: 'medium', upd: [41, 'State → On Hold'], cmt: [41, 'Paused until the client CSDM workshop wraps.', true], parent: 'L0022' },
+  { id: 'L0023', type: 'todo_list', title: 'AI and agents track', state: 'in_progress', priority: 'medium', progress: 15, start: '2026-09-01', due: '2027-01-31', upd: [4, 'Progress 10% → 15%'], parent: 'P0012' },
+  { id: 'T0220', type: 'task', title: 'Local model setup on the homelab', state: 'in_progress', priority: 'medium', progress: 60, start: '2026-09-20', due: '2026-10-30', upd: [1, 'Progress 45% → 60%'], cmt: [3, 'GPU passthrough working. Model download next.'], parent: 'L0023' },
+  { id: 'T0221', type: 'task', title: 'Agent tool-use patterns write-up', state: 'new', priority: 'low', upd: [4, 'Created'], parent: 'L0023' },
+  { id: 'N0040', type: 'document', title: 'Training plan 2026', state: 'in_progress', priority: 'none', upd: [3, 'Content edited'], parent: 'P0012' },
+  { id: 'N0041', type: 'document', title: 'SAA-C03 exam guide notes', state: 'in_progress', priority: 'none', upd: [8, 'Content edited'], parent: 'P0012' },
+  { id: 'N0042', type: 'document', title: 'Event Management runbook draft', state: 'in_progress', priority: 'none', upd: [2, 'Content edited'], cmt: [1, 'Add the escalation matrix from the client runbook.'], parent: 'P0012' },
+  { id: 'I0015', type: 'idea', title: 'ITOM labs as a blog series', state: 'new', priority: 'low', upd: [25, 'Created'], parent: 'P0012' },
+  { id: 'P0005', type: 'project', title: 'ITOM practice', state: 'in_progress', priority: 'medium', upd: [2, 'State → In Progress'], ext: 'Other project' },
+  { id: 'N0057', type: 'document', title: 'Ollama and GPU passthrough notes', state: 'in_progress', priority: 'none', upd: [5, 'Content edited'], ext: 'P0009 Homelab' },
+  { id: 'T0188', type: 'task', title: 'Post: alert correlation patterns', state: 'in_progress', priority: 'medium', progress: 40, start: '2026-09-28', due: '2026-10-24', upd: [3, 'Progress 20% → 40%'], ext: 'P0007 Blog' },
+  { id: 'N0033', type: 'document', title: 'CSDM workshop notes', state: 'complete', priority: 'none', upd: [30, 'State → Complete'], ext: 'P0011 Client advisory' },
+];
+let E = [
+  { s: 'N0040', t: 'L0021', rel: 'ref' }, { s: 'N0040', t: 'L0022', rel: 'ref' }, { s: 'N0040', t: 'L0023', rel: 'ref' },
+  { s: 'N0041', t: 'T0201', rel: 'ref' }, { s: 'I0015', t: 'L0022', rel: 'ref' }, { s: 'T0211', t: 'N0042', rel: 'ref' },
+  { s: 'T0221', t: 'T0220', rel: 'ref' }, { s: 'P0012', t: 'P0005', rel: 'ref' },
+  { s: 'T0202', t: 'T0201', rel: 'dep' }, { s: 'T0203', t: 'T0201', rel: 'dep' }, { s: 'D0310', t: 'T0202', rel: 'dep' },
+];
+let S = [
+  { s: 'N0057', t: 'T0220', conf: 86, why: 'Shares the tags ollama and gpu, and both describe local model serving.' },
+  { s: 'T0188', t: 'I0015', conf: 74, why: 'Same topic cluster: Event Management write-ups intended for the blog.' },
+  { s: 'T0188', t: 'T0211', conf: 62, why: 'Both cover alert correlation; the lab guide could cite the post.' },
+  { s: 'N0033', t: 'T0213', conf: 68, why: 'Covers CSDM in depth, and T0213 has no sources linked yet.' },
+  { s: 'N0042', t: 'T0212', conf: 58, why: 'The runbook draft mentions service maps four times.' },
+];
+
+N.forEach(n => { n.touched = n.upd[0]; });
+const byId = Object.fromEntries(N.map(n => [n.id, n]));
+const kids = id => N.filter(n => n.parent === id);
+const ancestors = id => { const out = []; let p = byId[id].parent; while (p) { out.unshift(p); p = byId[p].parent; } return out; };
+const descendants = id => kids(id).flatMap(k => [k, ...descendants(k.id)]);
+const daysBetween = (a, b) => Math.round((b - a) / 864e5);
+const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+function schedule(n) {
+  if (!n.due || n.state === 'complete' || n.state === 'canceled') return { k: 'none' };
+  const due = new Date(n.due + 'T12:00:00');
+  const left = daysBetween(TODAY, due);
+  if (left < 0) return { k: 'overdue', days: -left };
+  if (n.start && n.progress != null) {
+    const s = new Date(n.start + 'T12:00:00');
+    const frac = (TODAY - s) / (due - s);
+    if (frac - n.progress / 100 > 0.25) return { k: 'risk', days: left, used: Math.round(frac * 100) };
+  }
+  return { k: 'ok', days: left };
+}
+const stale = n => n.touched >= 30 && n.state !== 'complete';
+const blockers = n => E.filter(e => e.rel === 'dep' && e.s === n.id && byId[e.t].state !== 'complete').map(e => byId[e.t]);
+
+const st = { focus: 'P0012', color: 'type', ref: true, dep: true, ai: true };
+try { const m = localStorage.getItem('mesh-color'); if (m) st.color = m; } catch (e) {}
+
+function colorFor(n) {
+  if (st.color === 'state') return `var(--s-${n.state})`;
+  if (st.color === 'urgency') return `var(--u-${n.priority})`;
+  return `var(--t-${n.type})`;
+}
+
+function el(tag, attrs = {}, parent) {
+  const x = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) x.setAttribute(k, v);
+  if (parent) parent.appendChild(x);
+  return x;
+}
+function shapeEl(kind, r, parent, attrs = {}) {
+  const a = { class: 'shape', ...attrs };
+  if (kind === 'circle') return el('circle', { r, ...a }, parent);
+  if (kind === 'square') { const s = r * 0.86; return el('rect', { x: -s, y: -s, width: s * 2, height: s * 2, rx: 4, ...a }, parent); }
+  if (kind === 'hex') { const p = [0, 1, 2, 3, 4, 5].map(i => { const t = Math.PI / 3 * i; return `${(r * Math.cos(t)).toFixed(1)},${(r * Math.sin(t)).toFixed(1)}`; }).join(' '); return el('polygon', { points: p, 'stroke-linejoin': 'round', ...a }, parent); }
+  if (kind === 'diamond') { const q = r * 1.12; return el('polygon', { points: `0,${-q} ${q},0 0,${q} ${-q},0`, 'stroke-linejoin': 'round', ...a }, parent); }
+  if (kind === 'tri') return el('polygon', { points: `0,${-r * 1.1} ${r},${r * 0.75} ${-r},${r * 0.75}`, 'stroke-linejoin': 'round', ...a }, parent);
+  if (kind === 'page') { const w = r * 0.8, h = r; return el('path', { d: `M${-w},${-h} L${w * 0.35},${-h} L${w},${-h * 0.5} L${w},${h} L${-w},${h} Z`, 'stroke-linejoin': 'round', ...a }, parent); }
+}
+function wrap(text, max) {
+  const words = text.split(' '); const lines = [''];
+  for (const w of words) { const cur = lines[lines.length - 1]; if ((cur + ' ' + w).trim().length <= max) lines[lines.length - 1] = (cur + ' ' + w).trim(); else lines.push(w); }
+  if (lines.length > 2) { lines.length = 2; lines[1] = lines[1].replace(/.{0,2}$/, '') + '…'; }
+  return lines;
+}
+
+/* ---------- layout ---------- */
+const COLW = 240, STEP = 58;
+function computeLayout() {
+  const F = byId[st.focus];
+  const pos = new Map(); const tree = []; const heads = [];
+  const place = (id, x, y, role, side) => pos.set(id, { x, y, role, side });
+  const ch = kids(F.id);
+  const par = F.parent ? byId[F.parent] : null;
+  const own = neighbours(F.id).filter(id => id !== F.parent && byId[id].parent !== F.id);
+  const ownGhosts = st.ai ? [...new Set(S.filter(x => x.t === F.id && !own.includes(x.s)).map(x => x.s))] : [];
+  const fy = (par || own.length || ownGhosts.length) ? 170 : 60;
+  let cx = 0, maxX = 0, maxY = fy;
+
+  if (ch.length) {
+    const cols = ch.filter(k => kids(k.id).length).map(k => ({ head: k, items: kids(k.id) }));
+    const leaves = ch.filter(k => !kids(k.id).length);
+    if (leaves.length) cols.push({ head: null, items: leaves });
+    const rowY = fy + 150, busY = fy + 70;
+    const colX = i => 60 + i * COLW;
+    cx = colX(0) + (cols.length - 1) * COLW / 2;
+    tree.push(`M${cx},${fy + TYPES[F.type].r * 1.25 + 10} V${busY}`);
+    if (cols.length > 1) tree.push(`M${colX(0)},${busY} H${colX(cols.length - 1)}`);
+    cols.forEach((c, i) => {
+      const x = colX(i);
+      let top;
+      if (c.head) {
+        place(c.head.id, x, rowY, 'head', 'right');
+        tree.push(`M${x},${busY} V${rowY - 30}`);
+        top = rowY + 40;
+        c.items.forEach((it, j) => place(it.id, x + 30, top + 30 + j * STEP, 'item', 'right'));
+        const last = top + 30 + (c.items.length - 1) * STEP;
+        tree.push(`M${x},${rowY + 30} V${last}`);
+        c.items.forEach((it, j) => tree.push(`M${x},${top + 30 + j * STEP} H${x + 30 - TYPES[it.type].r - 4}`));
+        maxY = Math.max(maxY, last + 30);
+      } else {
+        top = rowY - 30;
+        c.items.forEach((it, j) => place(it.id, x + 30, top + 30 + j * STEP, 'item', 'right'));
+        const last = top + 30 + (c.items.length - 1) * STEP;
+        tree.push(`M${x},${busY} V${last}`);
+        c.items.forEach((it, j) => tree.push(`M${x},${top + 30 + j * STEP} H${x + 30 - TYPES[it.type].r - 4}`));
+        maxY = Math.max(maxY, last + 30);
+      }
+      maxX = Math.max(maxX, x + 30 + 190);
+    });
+  } else {
+    cx = 60;
+    maxX = Math.max(maxX, cx + 260);
+  }
+  place(F.id, cx, fy, 'focus', 'right');
+  if (par) { place(par.id, cx, 50, 'parent', 'right'); tree.push(`M${cx},${50 + TYPES[par.type].r + 4} V${fy - TYPES[F.type].r * 1.25 - 6}`); }
+  if (own.length || ownGhosts.length) {
+    const bx = cx + 280;
+    heads.push({ x: bx - 14, y: 16, text: 'Linked to this', cls: '' });
+    own.forEach((id, i) => place(id, bx + i * 240, 56, 'own', 'right'));
+    ownGhosts.forEach((id, i) => place(id, bx + (own.length + i) * 240, 56, 'ghost', 'right'));
+    maxX = Math.max(maxX, bx + (own.length + ownGhosts.length - 1) * 240 + 200);
+  }
+
+  // rail: linked elsewhere + AI suggestions
+  const visible = new Set(pos.keys());
+  const inside = new Set([...pos].filter(([, p]) => p.role === 'head' || p.role === 'item').map(([id]) => id));
+  const linked = [];
+  for (const e of E) {
+    if (!relOn(e.rel)) continue;
+    if (inside.has(e.s) && !visible.has(e.t) && !linked.includes(e.t)) linked.push(e.t);
+    if (inside.has(e.t) && !visible.has(e.s) && !linked.includes(e.s)) linked.push(e.s);
+  }
+  const ghosts = [];
+  if (st.ai) for (const s of S) if (inside.has(s.t) && !visible.has(s.s) && !linked.includes(s.s) && !ghosts.includes(s.s)) ghosts.push(s.s);
+  const railX = Math.max(maxX + 40, cx + 280);
+  let ry = fy + 40;
+  if (linked.length) { heads.push({ x: railX - 14, y: ry, text: 'Linked from inside', cls: '' }); ry += 34; linked.forEach(id => { place(id, railX, ry, 'rail', 'right'); ry += STEP; }); ry += 14; }
+  if (ghosts.length) { heads.push({ x: railX - 14, y: ry, text: 'Suggested by AI', cls: 'ai' }); ry += 34; ghosts.forEach(id => { place(id, railX, ry, 'ghost', 'right'); ry += STEP; }); }
+  if (linked.length || ghosts.length) maxX = railX + 190;
+  maxY = Math.max(maxY, ry);
+
+  // edges between visible nodes
+  const edges = [];
+  for (const e of E) if (relOn(e.rel) && pos.has(e.s) && pos.has(e.t)) edges.push({ ...e, cls: e.rel === 'dep' ? (byId[e.t].state !== 'complete' ? 'dep blocking' : 'dep') : 'ref' });
+  if (st.ai) for (const s of S) if (pos.has(s.s) && pos.has(s.t)) edges.push({ s: s.s, t: s.t, rel: 'sug', cls: 'sug' });
+
+  return { pos, tree, heads, edges, box: { x: 0, y: 0, w: Math.max(maxX + 20, 1180), h: Math.max(maxY + 40, 440) } };
+}
+function relOn(rel) { return rel === 'ref' ? st.ref : rel === 'dep' ? st.dep : true; }
+function neighbours(id) {
+  const out = [];
+  for (const e of E) if (relOn(e.rel)) { if (e.s === id) out.push(e.t); else if (e.t === id) out.push(e.s); }
+  return [...new Set(out)];
+}
+
+/* ---------- render + tween ---------- */
+const svg = document.getElementById('svg');
+const gTree = document.getElementById('gTree'), gEdges = document.getElementById('gEdges'), gNodes = document.getElementById('gNodes'), gHeads = document.getElementById('gHeads');
+const nodeEls = new Map(); const cur = new Map();
+let L = null, view = { x: 0, y: 0, w: 1000, h: 600 }, anim = null;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function buildNode(id, role, side) {
+  const n = byId[id];
+  let g = nodeEls.get(id);
+  if (!g) { g = el('g', { tabindex: 0, role: 'button' }, gNodes); g.dataset.id = id; nodeEls.set(id, g); wireNode(g); }
+  g.replaceChildren();
+  const ghost = role === 'ghost';
+  g.setAttribute('class', 'node' + (role === 'focus' ? ' focus' : '') + (ghost ? ' ghost' : ''));
+  g.setAttribute('aria-label', `${n.id} ${TYPES[n.type].label}: ${n.title}${ghost ? ' (AI suggestion)' : ''}`);
+  const T = TYPES[n.type]; const r = role === 'focus' ? T.r * 1.25 : T.r;
+  const sch = schedule(n);
+  if (!ghost && sch.k === 'overdue') { el('circle', { r: r + 9, class: 'pulse' }, g); el('circle', { r: r + 9, fill: 'none', stroke: 'var(--danger)', 'stroke-width': 1.5 }, g); }
+  if (!ghost && sch.k === 'risk') el('circle', { r: r + 9, fill: 'none', stroke: 'var(--warn)', 'stroke-width': 1.6, 'stroke-dasharray': '3 3' }, g);
+  if (!ghost && n.progress != null && n.type !== 'project') {
+    const R = r + 5, C = 2 * Math.PI * R;
+    el('circle', { r: R, fill: 'none', stroke: 'var(--ring-track)', 'stroke-width': 3 }, g);
+    el('circle', { r: R, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 3, 'stroke-dasharray': `${(C * n.progress / 100).toFixed(1)} ${C.toFixed(1)}`, transform: 'rotate(-90)', 'stroke-linecap': 'round' }, g);
+  }
+  shapeEl(T.shape, r, g, ghost ? {} : { fill: colorFor(n), stroke: 'var(--surface)', 'stroke-width': 1.5 });
+  if (n.type === 'document' && !ghost) el('path', { d: `M${r * 0.28},${-r} V${-r * 0.5} H${r * 0.8}`, fill: 'none', stroke: 'var(--surface)', 'stroke-width': 1.2 }, g);
+  if (!ghost && (n.priority === 'urgent' || n.priority === 'high')) {
+    const b = el('g', { transform: `translate(${r * 0.82},${-r * 0.82})` }, g);
+    el('circle', { r: 6.5, fill: `var(--u-${n.priority})`, stroke: 'var(--surface)', 'stroke-width': 1.5 }, b);
+    el('text', { y: 3.5, 'text-anchor': 'middle', 'font-size': 9.5, 'font-weight': 700, fill: 'var(--surface)', 'font-family': 'var(--font-display)' }, b).textContent = n.priority === 'urgent' ? '!!' : '!';
+  }
+  if (!ghost && stale(n)) {
+    const b = el('g', { transform: `translate(${-r * 0.82},${r * 0.82})` }, g);
+    el('circle', { r: 6.5, fill: 'var(--surface)', stroke: 'var(--warn)', 'stroke-width': 1.4 }, b);
+    el('path', { d: 'M0,-3.2 V0 L2.4,1.6', fill: 'none', stroke: 'var(--warn)', 'stroke-width': 1.3, 'stroke-linecap': 'round' }, b);
+  }
+  const hiddenOver = descendants(id).filter(d => !L.pos.has(d.id) && schedule(d).k === 'overdue').length;
+  if (!ghost && hiddenOver) {
+    const b = el('g', { transform: `translate(${-r * 0.85},${-r * 0.85})` }, g);
+    el('circle', { r: 7, fill: 'var(--danger)', stroke: 'var(--surface)', 'stroke-width': 1.5 }, b);
+    el('text', { y: 3.5, 'text-anchor': 'middle', 'font-size': 9.5, 'font-weight': 700, fill: 'var(--surface)', 'font-family': 'var(--font-display)' }, b).textContent = hiddenOver;
+  }
+  const lines = wrap(n.title, role === 'focus' ? 24 : 22);
+  if (side === 'right') {
+    const tx = r + (n.progress != null || schedule(n).k !== 'none' ? 16 : 12); const ty = lines.length > 1 ? -8 : -1;
+    const lh = role === 'focus' ? 18 : 15;
+    const t = el('text', { x: tx, y: ty, class: 'lbl-title' }, g);
+    lines.forEach((ln, i) => { const s = el('tspan', { x: tx, dy: i ? lh : 0 }, t); s.textContent = ln; });
+    el('text', { x: tx, y: ty + lines.length * lh, class: 'lbl-ref' }, g).textContent = n.ext && n.type !== 'project' ? `${n.id} · ${n.ext.split(' ')[0]}` : n.id;
+  } else {
+    const ty = r + (role === 'focus' ? 30 : 24);
+    const t = el('text', { y: ty, 'text-anchor': 'middle', class: 'lbl-title' }, g);
+    lines.forEach((ln, i) => { const s = el('tspan', { x: 0, dy: i ? 15 : 0 }, t); s.textContent = ln; });
+    el('text', { y: ty + lines.length * 15, 'text-anchor': 'middle', class: 'lbl-ref' }, g).textContent = n.id;
+  }
+  return g;
+}
+
+function curve(a, b, cls) {
+  if (cls.startsWith('dep') || cls === 'sug' || cls === 'ref') {
+    const rA = TYPES[byId[a.id].type].r + 6, rB = TYPES[byId[b.id].type].r + 8;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const sx = a.x + ux * rA, sy = a.y + uy * rA, ex = b.x - ux * rB, ey = b.y - uy * rB;
+    let mx, my;
+    if (Math.abs(dx) < 40) { mx = Math.min(sx, ex) - 44; my = (sy + ey) / 2; }
+    else if (Math.abs(dy) < Math.abs(dx) * 0.35) { mx = (sx + ex) / 2; my = Math.min(sy, ey) - Math.min(150, len * 0.24); }
+    else { const bend = Math.min(60, len * 0.16); mx = (sx + ex) / 2 - uy * bend; my = (sy + ey) / 2 + ux * bend; }
+    return `M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`;
+  }
+}
+
+function drawFrame() {
+  for (const [id, p] of cur) { const g = nodeEls.get(id); if (g) { g.setAttribute('transform', `translate(${p.x.toFixed(1)},${p.y.toFixed(1)})`); g.style.opacity = p.o; } }
+  gEdges.replaceChildren();
+  for (const e of L.edges) {
+    const a = cur.get(e.s), b = cur.get(e.t); if (!a || !b) continue;
+    const d = curve({ id: e.s, ...a }, { id: e.t, ...b }, e.cls);
+    const p = el('path', { d, class: 'edge ' + e.cls, 'marker-end': e.rel === 'dep' ? 'url(#arr)' : null }, gEdges);
+    p.style.opacity = Math.min(a.o, b.o);
+    p.dataset.s = e.s; p.dataset.t = e.t;
+    if (hoverId && (e.s === hoverId || e.t === hoverId)) p.classList.add('hot');
+  }
+  svg.setAttribute('viewBox', `${view.x.toFixed(1)} ${view.y.toFixed(1)} ${view.w.toFixed(1)} ${view.h.toFixed(1)}`);
+}
+
+function render() {
+  const prevFocusPos = cur.get(st.focus);
+  L = computeLayout();
+  const origin = prevFocusPos || { x: L.pos.get(st.focus).x, y: L.pos.get(st.focus).y };
+  const from = new Map([...cur].map(([k, v]) => [k, { ...v }]));
+  for (const [id, p] of L.pos) { buildNode(id, p.role, p.side); if (!from.has(id)) from.set(id, { x: origin.x, y: origin.y, o: 0 }); }
+  for (const [id] of from) if (!L.pos.has(id)) { const g = nodeEls.get(id); if (g) { g.style.pointerEvents = 'none'; } }
+  gTree.replaceChildren(); gHeads.replaceChildren();
+  const fromView = { ...view }, toView = { ...L.box };
+  const t0 = performance.now(), dur = reduce || !cur.size ? 0 : 520;
+  if (anim) cancelAnimationFrame(anim);
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  const step = now => {
+    const k = dur ? ease(Math.min(1, (now - t0) / dur)) : 1;
+    cur.clear();
+    for (const [id, f] of from) {
+      const tgt = L.pos.get(id);
+      const to = tgt ? { x: tgt.x, y: tgt.y, o: 1 } : { x: f.x, y: f.y, o: 0 };
+      cur.set(id, { x: f.x + (to.x - f.x) * k, y: f.y + (to.y - f.y) * k, o: f.o + (to.o - f.o) * k });
+    }
+    for (const key of ['x', 'y', 'w', 'h']) view[key] = fromView[key] + (toView[key] - fromView[key]) * k;
+    drawFrame();
+    if (k < 1) anim = requestAnimationFrame(step);
+    else {
+      for (const id of [...cur.keys()]) if (!L.pos.has(id)) { cur.delete(id); nodeEls.get(id)?.remove(); nodeEls.delete(id); }
+      for (const d of L.tree) el('path', { d, class: 'tree' }, gTree);
+      for (const h of L.heads) el('text', { x: h.x, y: h.y, class: 'rail-head ' + h.cls }, gHeads).textContent = h.text;
+      drawFrame();
+    }
+  };
+  anim = requestAnimationFrame(step);
+  renderCrumbs(); renderLegend();
+  document.getElementById('pageTitle').firstChild.nodeValue = byId[st.focus].title;
+  document.querySelector('#pageTitle .ref').textContent = st.focus;
+}
+
+/* ---------- crumbs ---------- */
+function renderCrumbs() {
+  const c = document.getElementById('crumbs'); c.replaceChildren();
+  const path = [...ancestors(st.focus), st.focus];
+  path.forEach((id, i) => {
+    if (i) { const s = document.createElement('span'); s.className = 'sep'; s.textContent = '›'; s.setAttribute('aria-hidden', 'true'); c.append(s); }
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = byId[id].title;
+    if (id === st.focus) b.setAttribute('aria-current', 'true'); else b.addEventListener('click', () => setFocus(id));
+    c.append(b);
+  });
+  if (byId[st.focus].ext) {
+    const s = document.createElement('span'); s.className = 'sep'; s.textContent = '·'; c.append(s);
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Back to Training'; b.addEventListener('click', () => setFocus('P0012')); c.append(b);
+  }
+}
+
+/* ---------- hover card ---------- */
+const stage = document.getElementById('stage'), card = document.getElementById('card');
+let hoverId = null, hideTimer = null, cardFor = null;
+function wireNode(g) {
+  const id = () => g.dataset.id;
+  g.addEventListener('mouseenter', () => showCard(id()));
+  g.addEventListener('mouseleave', scheduleHide);
+  g.addEventListener('focus', () => showCard(id()));
+  g.addEventListener('blur', scheduleHide);
+  g.addEventListener('pointerup', ev => {
+    if (ev.pointerType === 'touch' && cardFor !== id()) { showCard(id()); return; }
+    activate(id());
+  });
+  g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); activate(id()); } });
+}
+function activate(id) {
+  if (L.pos.get(id)?.role === 'ghost') { showCard(id); return; }
+  if (id !== st.focus) setFocus(id);
+}
+card.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+card.addEventListener('mouseleave', scheduleHide);
+function scheduleHide() { clearTimeout(hideTimer); hideTimer = setTimeout(hideCard, 180); }
+function hideCard() { card.hidden = true; cardFor = null; hoverId = null; markHot(); }
+function markHot() { gEdges.querySelectorAll('.edge').forEach(p => p.classList.toggle('hot', !!hoverId && (p.dataset.s === hoverId || p.dataset.t === hoverId))); }
+
+function showCard(id) {
+  clearTimeout(hideTimer);
+  const n = byId[id]; const role = L.pos.get(id)?.role;
+  hoverId = id; cardFor = id; markHot();
+  card.replaceChildren();
+  const add = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; card.append(x); return x; };
+  const eb = add('div', 'eyebrow');
+  const ref = document.createElement('span'); ref.textContent = n.id; eb.append(ref);
+  const ty = document.createElement('span'); ty.className = 'type'; ty.textContent = TYPES[n.type].label; ty.style.color = `var(--t-${n.type})`; eb.append(ty);
+  if (role === 'ghost') { const a = document.createElement('span'); a.className = 'type ai-tag'; a.textContent = 'AI suggestion'; eb.append(a); }
+  add('h3', null, n.title);
+  if (role === 'ghost') return ghostCard(n, add);
+
+  const pills = add('div', 'pills');
+  const sp = document.createElement('span'); sp.className = 'pill'; sp.textContent = STATES[n.state]; sp.style.color = `var(--s-${n.state})`; pills.append(sp);
+  if (n.priority !== 'none') { const pp = document.createElement('span'); pp.className = 'pill'; pp.textContent = PRIOS[n.priority] + ' priority'; pp.style.color = `var(--u-${n.priority})`; pills.append(pp); }
+  if (n.progress != null) { const b = add('div', 'bar'); const i = document.createElement('i'); i.style.width = n.progress + '%'; b.append(i); b.setAttribute('aria-label', n.progress + '% complete'); }
+
+  const dl = add('dl');
+  const row = (k, v, cls) => { const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; if (cls) dd.className = cls; dl.append(dt, dd); };
+  if (n.ext && n.type !== 'project') row('Project', n.ext);
+  const sch = schedule(n);
+  if (n.progress != null) row('Progress', n.progress + '% complete');
+  if (n.due) {
+    if (sch.k === 'overdue') row('Due', `${fmtDate(n.due)} · ${sch.days} days overdue`, 'bad');
+    else if (sch.k === 'risk') row('Due', `${fmtDate(n.due)} · at risk, ${sch.used}% of time used`, 'risk');
+    else if (sch.k === 'ok') row('Due', `${fmtDate(n.due)} · ${sch.days} days left`);
+    else row('Due', fmtDate(n.due));
+  }
+  const ago = d => d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+  row('Last update', `${ago(n.upd[0])} · ${n.upd[1]}${stale(n) ? ' · stale' : ''}`, stale(n) ? 'risk' : null);
+  if (n.cmt) {
+    if (!n.cmt[2]) row('Last comment', ago(n.cmt[0]));
+    const q = document.createElement('dd'); q.className = 'quote'; q.textContent = n.cmt[1]; dl.append(q);
+  }
+  const ks = kids(id);
+  if (ks.length) {
+    const all = descendants(id);
+    const done = ks.filter(k => k.state === 'complete').length;
+    const over = all.filter(d => schedule(d).k === 'overdue').length, risk = all.filter(d => schedule(d).k === 'risk').length, stl = all.filter(stale).length;
+    const bits = [`${done} of ${ks.length} done`]; if (over) bits.push(`${over} overdue`); if (risk) bits.push(`${risk} at risk`); if (stl) bits.push(`${stl} stale`);
+    row('Inside', bits.join(' · '), over ? 'bad' : risk ? 'risk' : null);
+  }
+  const bl = blockers(n);
+  if (bl.length) row('Blocked by', bl.map(b => `${b.id} ${b.title}`).join(', '), 'bad');
+  const refs = E.filter(e => e.rel === 'ref' && (e.s === id || e.t === id)).length;
+  const deps = E.filter(e => e.rel === 'dep' && (e.s === id || e.t === id)).length;
+  const sugs = S.filter(s => s.s === id || s.t === id).length;
+  const lk = []; if (refs) lk.push(`${refs} reference${refs > 1 ? 's' : ''}`); if (deps) lk.push(`${deps} dependenc${deps > 1 ? 'ies' : 'y'}`); if (sugs) lk.push(`${sugs} suggested`);
+  if (lk.length) row('Links', lk.join(' · '));
+  add('div', 'hint', id === st.focus ? 'This is the focused record.' : ks.length ? 'Click to cascade its contents underneath.' : 'Click to focus and see its links.');
+  placeCard(id);
+}
+function ghostCard(n, add) {
+  const sugg = S.filter(s => s.s === n.id && L.pos.has(s.t));
+  add('div', null, n.ext ? `From ${n.ext}` : 'Already in this project').style.color = 'var(--muted)';
+  for (const s of sugg) {
+    const t = byId[s.t];
+    const box = add('div');
+    box.style.display = 'grid'; box.style.gap = '6px';
+    const lab = document.createElement('div'); lab.innerHTML = ''; lab.textContent = `Link to ${t.id} ${t.title}`; lab.style.fontWeight = '600';
+    const bar = document.createElement('div'); bar.className = 'bar ai'; const i = document.createElement('i'); i.style.width = s.conf + '%'; bar.append(i);
+    const meta = document.createElement('div'); meta.style.color = 'var(--muted)'; meta.style.fontSize = '12px'; meta.textContent = `${s.conf}% match · ${s.why}`;
+    const acts = document.createElement('div'); acts.className = 'actions';
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'primary'; ok.textContent = 'Accept link';
+    ok.addEventListener('click', () => { E.push({ s: s.s, t: s.t, rel: 'ref' }); S = S.filter(x => x !== s); hideCard(); render(); });
+    const no = document.createElement('button'); no.type = 'button'; no.textContent = 'Dismiss';
+    no.addEventListener('click', () => { S = S.filter(x => x !== s); hideCard(); render(); });
+    acts.append(ok, no);
+    box.append(lab, bar, meta, acts);
+  }
+  add('div', 'hint', 'Suggestions stay dotted until you accept them. Accepted links become ordinary references.');
+  placeCard(n.id);
+}
+function placeCard(id) {
+  card.hidden = false;
+  const g = nodeEls.get(id); if (!g) return;
+  const nb = g.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+  const cw = card.offsetWidth, chh = card.offsetHeight;
+  let x = nb.right - sr.left + stage.scrollLeft + 12;
+  if (x + cw > stage.scrollLeft + stage.clientWidth - 8) x = nb.left - sr.left + stage.scrollLeft - cw - 12;
+  x = Math.max(stage.scrollLeft + 8, x);
+  const y = Math.max(8, Math.min(nb.top - sr.top - 8, stage.clientHeight - chh - 8));
+  card.style.left = x + 'px'; card.style.top = y + 'px';
+}
+function setFocus(id) { hideCard(); st.focus = id; render(); }
+
+/* ---------- controls ---------- */
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  st.color = b.dataset.mode;
+  try { localStorage.setItem('mesh-color', st.color); } catch (e) {}
+  syncControls(); render();
+}));
+for (const [btn, key] of [['tg-ref', 'ref'], ['tg-dep', 'dep'], ['tg-ai', 'ai']]) {
+  document.getElementById(btn).addEventListener('click', () => { st[key] = !st[key]; syncControls(); hideCard(); render(); });
+}
+function syncControls() {
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === st.color)));
+  document.getElementById('tg-ref').setAttribute('aria-pressed', String(st.ref));
+  document.getElementById('tg-dep').setAttribute('aria-pressed', String(st.dep));
+  document.getElementById('tg-ai').setAttribute('aria-pressed', String(st.ai));
+}
+
+/* ---------- legend ---------- */
+function mini(w, h, build) { const s = el('svg', { width: w, height: h, viewBox: `${-w / 2} ${-h / 2} ${w} ${h}`, 'aria-hidden': 'true' }); build(s); return s; }
+function li(list, svgEl, text) { const l = document.createElement('li'); if (svgEl) l.append(svgEl); l.append(document.createTextNode(text)); list.append(l); }
+function renderLegend() {
+  const sh = document.getElementById('lg-shapes'); sh.replaceChildren();
+  for (const [k, t] of Object.entries(TYPES)) li(sh, mini(28, 28, s => shapeEl(t.shape, 10, s, { fill: `var(--t-${k})` })), t.label);
+  const col = document.getElementById('lg-colors'); col.replaceChildren();
+  const h = document.getElementById('lg-color-h');
+  const swatch = v => mini(28, 18, s => el('circle', { r: 7, fill: v }, s));
+  if (st.color === 'type') { h.textContent = 'Color = type'; for (const [k, t] of Object.entries(TYPES)) li(col, swatch(`var(--t-${k})`), t.label); }
+  if (st.color === 'state') { h.textContent = 'Color = state'; for (const [k, v] of Object.entries(STATES)) li(col, swatch(`var(--s-${k})`), v); }
+  if (st.color === 'urgency') { h.textContent = 'Color = priority'; for (const [k, v] of Object.entries(PRIOS)) li(col, swatch(`var(--u-${k})`), v); }
+  const ln = document.getElementById('lg-lines'); ln.replaceChildren();
+  const line = attrs => mini(40, 14, s => el('line', { x1: -18, y1: 0, x2: 16, y2: 0, 'stroke-width': 1.6, ...attrs }, s));
+  li(ln, line({ stroke: 'var(--line)' }), 'Contains (cascade)');
+  li(ln, line({ stroke: 'var(--rel-ref)', 'stroke-dasharray': '5 4' }), 'References');
+  li(ln, line({ stroke: 'var(--rel-dep)', 'marker-end': 'url(#arr)' }), 'Depends on (done)');
+  li(ln, line({ stroke: 'var(--danger)', 'marker-end': 'url(#arr)' }), 'Depends on (still blocking)');
+  li(ln, line({ stroke: 'var(--ai)', 'stroke-dasharray': '1 5', 'stroke-linecap': 'round', 'stroke-width': 2 }), 'Suggested by AI');
+  const sg = document.getElementById('lg-signals'); sg.replaceChildren();
+  li(sg, mini(30, 30, s => { el('circle', { r: 8, fill: 'none', stroke: 'var(--ring-track)', 'stroke-width': 3 }, s); el('circle', { r: 8, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 3, 'stroke-dasharray': '30 60', transform: 'rotate(-90)', 'stroke-linecap': 'round' }, s); }), 'Progress ring (% complete)');
+  li(sg, mini(30, 30, s => { el('circle', { r: 12, fill: 'none', stroke: 'var(--danger)', 'stroke-width': 1.5 }, s); el('circle', { r: 12, class: 'pulse' }, s); el('circle', { r: 6, fill: 'var(--t-task)' }, s); }), 'Throbs when overdue');
+  li(sg, mini(30, 30, s => { el('circle', { r: 12, fill: 'none', stroke: 'var(--warn)', 'stroke-width': 1.6, 'stroke-dasharray': '3 3' }, s); el('circle', { r: 6, fill: 'var(--t-task)' }, s); }), 'At risk: behind its own pace');
+  li(sg, mini(30, 30, s => { el('circle', { r: 6.5, fill: 'var(--u-urgent)' }, s); el('text', { y: 3.5, 'text-anchor': 'middle', 'font-size': 9.5, 'font-weight': 700, fill: 'var(--surface)' }, s).textContent = '!!'; }), 'High (!) or urgent (!!) priority');
+  li(sg, mini(30, 30, s => { el('circle', { r: 6.5, fill: 'var(--surface)', stroke: 'var(--warn)', 'stroke-width': 1.4 }, s); el('path', { d: 'M0,-3.2 V0 L2.4,1.6', fill: 'none', stroke: 'var(--warn)', 'stroke-width': 1.3 }, s); }), 'Stale: no state or progress change in 30+ days');
+}
+
+window.addEventListener('resize', () => { if (cardFor) placeCard(cardFor); });
+stage.addEventListener('scroll', () => { if (cardFor) placeCard(cardFor); });
+syncControls();
+render();
+})();
+</script>

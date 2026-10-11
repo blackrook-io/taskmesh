@@ -7484,3 +7484,206 @@ a:focus-visible {
 .admin-oauth-help__hint {
   margin: 0 0 0.75rem;
 }
+
+.mesh-panel {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 8.5rem);
+  min-height: 24rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.mesh-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.mesh-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+}
+.mesh-crumbs__sep {
+  color: var(--border);
+}
+.mesh-crumb {
+  font: inherit;
+  font-size: 0.85rem;
+  background: none;
+  border: 0;
+  color: var(--text);
+  opacity: 0.75;
+  padding: 0.25rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.mesh-crumb:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--bg);
+}
+.mesh-crumb:disabled,
+.mesh-crumb[aria-current="true"] {
+  opacity: 1;
+  font-weight: 600;
+  cursor: default;
+  background: none;
+}
+.mesh-note,
+.mesh-status {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.mesh-status {
+  padding: 0.8rem 0.9rem;
+}
+.mesh-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  background-color: var(--bg);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--border) 80%, var(--bg)) 1.2px,
+    transparent 1.3px
+  );
+  background-size: 22px 22px;
+}
+.mesh-canvas .react-flow {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+.mesh-canvas .react-flow__pane {
+  background: transparent;
+}
+.mesh-canvas .react-flow__node {
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+  pointer-events: all !important;
+  transition: transform 500ms ease-out;
+  z-index: 2;
+}
+.mesh-canvas .react-flow__handle {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  border: none;
+  background: transparent;
+  pointer-events: none;
+}
+.mesh-canvas .react-flow__edge-path {
+  stroke: var(--border);
+  stroke-width: 1.3;
+  stroke-dasharray: 5 4;
+}
+.mesh-tree {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.mesh-tree__path {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.4;
+}
+.mesh-rail-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.65;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.mesh-node {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 13.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  pointer-events: all !important;
+}
+.mesh-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 0.35rem;
+}
+.mesh-glyph {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  background: var(--accent);
+}
+.mesh-node--focus .mesh-glyph {
+  width: 28px;
+  height: 28px;
+}
+.mesh-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mesh-title,
+.mesh-ref {
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  border-radius: 0.2rem;
+  padding: 0 0.15rem;
+}
+.mesh-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  max-width: 10.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--text);
+}
+.mesh-node--focus .mesh-title {
+  max-width: 12rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.mesh-ref {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--text);
+  opacity: 0.75;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mesh-canvas .react-flow__node {
+    transition: none;
+  }
+}

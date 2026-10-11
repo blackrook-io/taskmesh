@@ -5,7 +5,8 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 - Turn Ideas into structured projects with Markdown overviews, tags, and status
 - Project Overview dashboard with a pinned description (Owners and Managers can edit it) and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including My Tasks Today); click a panel row to open that Task or To Do
-- Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, and Image Boards
+- Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, Mesh, and Image Boards
+- Open Mesh to see the focused record centered over its contents, with its own links beside it and links from inside on a rail
 - Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
 - Assign users to Managers, Members, and Viewers per project — Managers and Owners get Settings; Members write; Viewers read-only
