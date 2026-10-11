@@ -1,0 +1,58 @@
+# T0160 — entity_links table, service, and CRUD API
+
+**Task:** T0160 (id `173`) — Mesh: entity_links table, service and CRUD API
+**Parent epic:** T0159 (id `172`) — stays Ready; this slice does not mark the epic In Progress
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0160-entity-links`
+
+## Context
+
+T0159 is the Mesh epic. T0160 is the only unblocked child. T0161–T0168 are now Ready and still Depend on earlier slices, so they stay closed until this lands.
+
+`EntityType` already covers 10 types. `entityExists()` in `src/services/entities.ts` covers idea, project, task, todo, document, and image_board. Missing: `todo_list`, `board`, `canvas`, `wiki_node`. `hrefFor()` in `src/services/references.ts` already covers all 10 types but is private. Visibility helpers in `src/services/ownership.ts` cover taggable types, dual-scope rows (task, todo, list, image board), and project-nested rows (document, board, canvas, wiki).
+
+CI runs `npm test` with a dummy `DATABASE_URL` and no Postgres. Tests in this task stay pure (no live queries). HTTP and trigger behavior are checked against the DEV API.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Directed edges.** A link is `src → dst`. The reverse is a separate row. No automatic mirror.
+2. **Relations.** Text with a check constraint: `relates_to` (POST default), `references`, `supports`, `part_of`. Not a Postgres enum, so later tasks can add values with a migration.
+3. **Origin.** `manual` | `mention`. This task’s POST and DELETE touch `manual` only. `mention` rows are T0161. The unique key includes `origin`, so the same pair and relation can exist once as a mention and once as a manual link.
+4. **Who may write.** Create and delete require **write** on the source and **read** on the destination. The destination owner cannot delete someone else’s outgoing link; they can add their own edge from their record.
+5. **Who may read.** `GET` requires read access to the queried entity (404 if missing, 403 if denied). A link is omitted when the actor cannot see the other end. The list itself still returns.
+6. **Duplicates.** A second POST of the same unique key returns the existing row with **200**. Self-links are **400**.
+7. **Delete cleanup.** `AFTER DELETE` triggers on all 10 entity tables purge links whose source or destination was that row. That covers project cascades. Soft-deleted tasks and todos (`state = deleted`) keep their link rows; `GET` treats those ends as invisible so a restore brings the link back.
+8. **No UI** in this task. Backlinks panel is T0162.
+
+## Goal
+
+Persist manual links between any two records, list them with display numbers and hrefs, and drop them when a record is hard-deleted.
+
+## Scope
+
+**In scope**
+
+1. **Schema** — `entity_links`: `id`, `src_type`, `src_id`, `dst_type`, `dst_id`, `relation`, `origin`, `created_by_id` → `users` (`onDelete: restrict`), `created_at`. Unique `(src_type, src_id, dst_type, dst_id, relation, origin)`. Indexes on `(src_type, src_id)` and `(dst_type, dst_id)`. Check constraints for `EntityType`, the four relations, and the two origins. Drizzle migration plus the purge triggers.
+2. **`entityExists()`** — the four missing types.
+3. **`assertCanAccessEntity()`** — all 10 types, read or write, reusing `assertCanAccessOwned`, `assertCanAccessProject`, and `assertCanAccessDualScoped`. Boards use `name` as the display title.
+4. **`src/services/entityLinks.ts`** — create (idempotent), delete manual, list outgoing and incoming. Resolved end: `entityType`, `id`, `referenceId`, `title`, `href`, `projectId`. Export `hrefFor` from `references.ts`.
+5. **API** — `GET /api/v1/links?entityType=&entityId=` → `{ outgoing, incoming }`. `POST /api/v1/links` with `{ srcType, srcId, dstType, dstId, relation? }` forces `origin: "manual"`. `DELETE /api/v1/links/:id` refuses non-manual rows.
+6. **Docs** — `docs/database/` (overview inventory + diagram, physical table on the content page, glossary relation/origin values), then `npm run docs:sync-schema`.
+7. **Unit tests** — relation/origin validation, self-link rejection, both-ends filter (drop a link when either end is invisible, including soft-deleted task/todo), duplicate identity key.
+
+**Out of scope**
+
+- Mention sync, backfill, backlinks UI, graph neighbourhood (T0161–T0163).
+- Structural edges (`in_project`, `depends_on`, tags, list/board/wiki membership).
+- Postgres in CI. Finish-up version bump (MINOR, because of the migration) waits for “finish up”.
+
+## Acceptance
+
+- Create, duplicate POST, and delete of a manual link behave as above.
+- A viewer who can see only one end does not receive the link; a viewer who cannot see the queried record gets 403/404.
+- Hard-deleting either end removes the row (trigger). Soft-delete hides it from `GET` only.
+- `npm test` passes. Schema docs synced to the TaskMesh project Documents.
+
+## Versioning note
+
+New `drizzle/*.sql` → **MINOR** bump on finish-up (`0.55.1` → `0.56.0`).

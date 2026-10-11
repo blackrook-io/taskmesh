@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull, or, type SQL } from "drizzle-orm";
+import type { EntityType } from "../lib/entityType.js";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import * as schema from "../db/schema.js";
@@ -316,6 +317,120 @@ export async function assertCanAccessTaggableEntity(
       throw new NotFoundError(`Unsupported entity type: ${_exhaustive}`);
     }
   }
+}
+
+/**
+ * Assert the actor may access any `EntityType` record.
+ * Missing or soft-deleted task/todo → 404. Insufficient role → 403.
+ */
+export async function assertCanAccessEntity(
+  db: Db,
+  actorUserId: number,
+  entityType: EntityType,
+  entityId: number,
+  level: ProjectAccessLevel = "read",
+): Promise<void> {
+  switch (entityType) {
+    case "idea":
+    case "project":
+    case "document":
+      await assertCanAccessTaggableEntity(db, actorUserId, entityType, entityId, level);
+      return;
+    case "task":
+    case "todo":
+      await assertLiveTaskOrTodo(db, entityType, entityId);
+      await assertCanAccessTaggableEntity(db, actorUserId, entityType, entityId, level);
+      return;
+    case "board":
+    case "canvas":
+    case "wiki_node": {
+      const projectId = await projectIdForNestedEntity(db, entityType, entityId);
+      await assertCanAccessProject(db, actorUserId, projectId, level);
+      return;
+    }
+    case "todo_list":
+    case "image_board": {
+      const row = await dualScopedRow(db, entityType, entityId);
+      await assertCanAccessDualScoped(db, actorUserId, row, level);
+      return;
+    }
+    default: {
+      const _exhaustive: never = entityType;
+      throw new NotFoundError(`Unsupported entity type: ${_exhaustive}`);
+    }
+  }
+}
+
+/** Soft-deleted tasks and todos are invisible to link APIs. */
+async function assertLiveTaskOrTodo(
+  db: Db,
+  entityType: "task" | "todo",
+  entityId: number,
+): Promise<void> {
+  const table = entityType === "task" ? schema.tasks : schema.todos;
+  const [row] = await db
+    .select({ state: table.state })
+    .from(table)
+    .where(eq(table.id, entityId));
+  if (!row || row.state === "deleted") {
+    throw new NotFoundError("Entity not found");
+  }
+}
+
+async function projectIdForNestedEntity(
+  db: Db,
+  entityType: "board" | "canvas" | "wiki_node",
+  entityId: number,
+): Promise<number> {
+  if (entityType === "board") {
+    const [row] = await db
+      .select({ projectId: schema.boards.projectId })
+      .from(schema.boards)
+      .where(eq(schema.boards.id, entityId));
+    if (!row) throw new NotFoundError("Entity not found");
+    return row.projectId;
+  }
+  if (entityType === "canvas") {
+    const [row] = await db
+      .select({ projectId: schema.canvases.projectId })
+      .from(schema.canvases)
+      .where(eq(schema.canvases.id, entityId));
+    if (!row) throw new NotFoundError("Entity not found");
+    return row.projectId;
+  }
+  const [row] = await db
+    .select({ projectId: schema.wikiNodes.projectId })
+    .from(schema.wikiNodes)
+    .where(eq(schema.wikiNodes.id, entityId));
+  if (!row) throw new NotFoundError("Entity not found");
+  return row.projectId;
+}
+
+async function dualScopedRow(
+  db: Db,
+  entityType: "todo_list" | "image_board",
+  entityId: number,
+): Promise<{ projectId: number | null; ownerId: number }> {
+  if (entityType === "todo_list") {
+    const [row] = await db
+      .select({
+        projectId: schema.todoLists.projectId,
+        ownerId: schema.todoLists.ownerId,
+      })
+      .from(schema.todoLists)
+      .where(eq(schema.todoLists.id, entityId));
+    if (!row) throw new NotFoundError("Entity not found");
+    return row;
+  }
+  const [row] = await db
+    .select({
+      projectId: schema.imageBoards.projectId,
+      ownerId: schema.imageBoards.ownerId,
+    })
+    .from(schema.imageBoards)
+    .where(eq(schema.imageBoards.id, entityId));
+  if (!row) throw new NotFoundError("Entity not found");
+  return row;
 }
 
 /**

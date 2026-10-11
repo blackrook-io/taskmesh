@@ -365,6 +365,13 @@
       "when": 1790560925171,
       "tag": "0051_loose_spirit",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791727584962,
+      "tag": "0052_superb_inhumans",
+      "breakpoints": true
     }
   ]
 }

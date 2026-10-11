@@ -54,6 +54,34 @@ export async function entityExists(
         .where(eq(schema.projectDocuments.id, entityId));
       return Boolean(row);
     }
+    case "todo_list": {
+      const [row] = await database
+        .select({ id: schema.todoLists.id })
+        .from(schema.todoLists)
+        .where(eq(schema.todoLists.id, entityId));
+      return Boolean(row);
+    }
+    case "board": {
+      const [row] = await database
+        .select({ id: schema.boards.id })
+        .from(schema.boards)
+        .where(eq(schema.boards.id, entityId));
+      return Boolean(row);
+    }
+    case "canvas": {
+      const [row] = await database
+        .select({ id: schema.canvases.id })
+        .from(schema.canvases)
+        .where(eq(schema.canvases.id, entityId));
+      return Boolean(row);
+    }
+    case "wiki_node": {
+      const [row] = await database
+        .select({ id: schema.wikiNodes.id })
+        .from(schema.wikiNodes)
+        .where(eq(schema.wikiNodes.id, entityId));
+      return Boolean(row);
+    }
     case "image_board": {
       const [row] = await database
         .select({ id: schema.imageBoards.id })
@@ -61,7 +89,9 @@ export async function entityExists(
         .where(eq(schema.imageBoards.id, entityId));
       return Boolean(row);
     }
-    default:
-      return false;
+    default: {
+      const _exhaustive: never = entityType;
+      return Boolean(_exhaustive);
+    }
   }
 }

@@ -197,6 +197,34 @@ Per-user tag catalog (T0112) plus polymorphic attachments.
 
 ---
 
+## `entity_links`
+
+Directed links between any two records (T0160). Ends are polymorphic `(type, id)` pairs, so there is no foreign key to the target row. Structural relations (project membership, task dependencies, tags, list and board membership) stay on their own tables. `AFTER DELETE` triggers on each entity table remove links when a row is hard-deleted, including cascade deletes from a project.
+
+### Columns
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `src_type` | text | no | — | Source `EntityType` |
+| `src_id` | integer | no | — | Source row id (no DB FK) |
+| `dst_type` | text | no | — | Destination `EntityType` |
+| `dst_id` | integer | no | — | Destination row id (no DB FK) |
+| `relation` | text | no | `'relates_to'` | `relates_to` · `references` · `supports` · `part_of` |
+| `origin` | text | no | `'manual'` | `manual` · `mention` |
+| `created_by_id` | integer | no | — | FK → `users.id` |
+| `created_at` | timestamptz | no | `now()` | |
+
+**Constraints:**
+
+- **PK:** `id`
+- **UNIQUE:** `(src_type, src_id, dst_type, dst_id, relation, origin)` — `entity_links_pair_uidx`
+- **INDEX:** `(src_type, src_id)` — `entity_links_src_idx`; `(dst_type, dst_id)` — `entity_links_dst_idx`
+- **CHECK:** both types are canonical `EntityType` values; relation and origin are the lists above; source and destination are not the same row
+- **FK:** `created_by_id` → `users.id` · **ON DELETE RESTRICT**
+
+---
+
 ## `todos`
 
 First-class **ToDo** records (UI label “ToDo”). Display number → **D####**. Lighter than Task: due date, priority, Task-parity state, `action_by` datetime, and a stored `progress` percent (0–100). Optional `project_id` and `source_idea_id` (when converted from an Idea). Soft-delete via `state = 'deleted'`.
