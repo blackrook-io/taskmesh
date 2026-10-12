@@ -1,0 +1,89 @@
+# T0185 — AI permission tiers and change plans
+
+**Task:** T0185 (id 200) — AI: permission tiers and change plans
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0192 Guardrails and governance (group); design decisions in epic T0177
+**Depends on:** T0178 (complete)
+**Branch (after approval):** `T0185-permission-tiers`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`; settings live in the existing `system_properties` table)
+
+## Size / dependencies
+
+One classifier, one system-property document, and a stamp on the assistant turn. Depends-on T0178 is complete. Required-by tasks already exist and stay out of this pass: T0186 (Undo journal), T0187 (confirm / review UX), T0189 (Administrator settings panel), T0190 (user matrix and Tier 1 opt-in UI), T0184 (project AI access). No split and no new deferred Task.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Who sets the tier | The server. Tool arguments and proposal bodies may include a `tier` field; the classifier ignores it. A test feeds `tier: 0` on a Tier 3 operation and asserts the result stays 3 |
+| 2 | Default matrix | Code defaults, overridable by system property `ai_permission_tiers`. Missing or invalid JSON falls back to the defaults. T0189 will edit this key; this task only reads it and seeds the default row the same way `ai_web_fetch` is seeded |
+| 3 | Default tiers | `read` and `web_fetch` → 0. `link`, `tag`, `comment` → 1. `propose_create`, `propose_update`, `apply` → 2. `propose_delete` and `bulk` → 3. Keyed by action, with an optional entity-type override (`action` or `action:entityType`). An unknown action is Tier 3 |
+| 4 | Progress notes | Classified as `comment` (Tier 1 before the opt-in rule). There is no progress-note record or audit action today. Adding `progress_note` to `ai_audit_log`'s check constraint waits until a writer exists |
+| 5 | Tier 1 opt-in | Administrator flag `tier1Enabled` defaults to **true** (the ceiling allows auto-apply). User flag `tier1OptIn` defaults to **false**. When the admin ceiling is Tier 1 but the user has not opted in, the effective tier is **2**. When `tier1Enabled` is false, Tier 1 cells stay at 2 even if the user opts in. T0190 owns the opt-in control; this task accepts the flag on the classifier input |
+| 6 | Users raise, never lower | Effective tier is `max(adminTier, userTier)` after the Tier 1 opt-in rule. A user matrix entry below the admin tier is ignored. No user-matrix storage in this task (T0190); the function takes an optional user override map |
+| 7 | Floor | Unchanged from T0178. Floor resources and `ownerId` still deny at Tier 3 before any matrix lookup. Reassignment is `assigneeId` (or `assignee`) in fields: allowed as a proposal, escalated to Tier 3, not a floor deny |
+| 8 | Deletes | `propose_delete` classifies as allow + Tier 3. No delete tool is added. The apply route denies any proposal whose method is DELETE or whose action is delete, after a deny audit. A human deletes in the normal UI |
+| 9 | Other users' records | When `targetOwnerId` is set and differs from `actorUserId`, the operation is Tier 3 |
+| 10 | Cross-project move | When `fields.projectId` is set and differs from the operation's current `projectId`, the operation is Tier 3 |
+| 11 | Change plan | Pure function over a list of operations. Plan tier is the max of the operations' effective tiers. No plan table and no review screen (T0187) |
+| 12 | Blast radius | Counts distinct `entityType:entityId` (operations with no id count as their own record) and distinct `projectId`. Defaults: **5 records**, **2 projects**. Crossing either threshold sets the plan tier to 3 and records an escalation reason. Thresholds are read from `ai_permission_tiers` |
+| 13 | Assistant wiring | After a chat turn collects proposals, classify them as one plan and attach `planTier` and `planEscalations` on the assistant result. Each proposal keeps its own operation tier. The panel does not change how confirm works (still one-click apply). Tier 0 stays silent |
+| 14 | Prompt | `describeAllowedPolicy` gains one sentence: the server assigns the tier; the model cannot set it; deletes are proposals only |
+
+## Work items
+
+### 1. Classifier
+
+`src/services/assistant/aiTiers.ts` (imported by `aiPolicy.ts`; `tierForAction` becomes a wrapper around the default matrix so existing callers keep working).
+
+- `classifyOperation(input, settings) → { decision, tier, reason, escalations }`
+- `classifyChangePlan(operations, settings) → { tier, escalations, operations }`
+- Settings type: admin matrix, `tier1Enabled`, `tier1OptIn`, `maxRecords`, `maxProjects`, optional user overrides
+- `check` uses `classifyOperation` for the tier it returns. Allow/deny stays with the existing floor and instance/project/user layers. A layer's returned tier is not trusted; the classifier overwrites it
+
+### 2. Stored defaults
+
+- Add `ai_permission_tiers` to `SYSTEM_PROPERTY_KEYS` and seed JSON with the default matrix, `tier1Enabled: true`, `maxRecords: 5`, `maxProjects: 2`.
+- `loadAiPermissionSettings()` reads the row, validates with Zod, and returns defaults on failure.
+- User opt-in is **not** stored here. Callers pass `tier1OptIn: false` until T0190.
+
+### 3. Apply route
+
+In `assistantApply.ts`, after the existing `check`: if the proposal is a delete, audit deny and return 403. Ignore a client-supplied `tier`.
+
+### 4. Turn stamp
+
+Where the assistant route finishes a turn, run `classifyChangePlan` on the proposals emitted in that turn and include `planTier` and `planEscalations` in the JSON the client already receives. Do not change confirm / reject behavior.
+
+### 5. Tests
+
+`src/services/assistant/aiTiers.test.ts` (no Postgres):
+
+- Each default action lands on its tier (0, 1, 2, 3).
+- A supplied `tier` field does not change the result.
+- Tier 1 without opt-in → 2; with opt-in and `tier1Enabled` → 1; opt-in with `tier1Enabled: false` → 2.
+- User override 3 on a Tier 2 action → 3. User override 0 on a Tier 2 action stays 2.
+- Floor deny still wins and reports tier 3.
+- `ownerId` denies; `assigneeId` allows at tier 3.
+- `targetOwnerId !== actor` → tier 3. Same owner stays at the action tier.
+- Cross-project `projectId` change → tier 3.
+- Plan tier is the max of its operations.
+- 6 records with threshold 5 → plan tier 3. 2 projects with threshold 1 → plan tier 3. Under both thresholds keeps the operation max.
+- `propose_delete` is tier 3 and allow at the classifier; the apply-route delete branch is covered by a unit test of the deny predicate (route-level Postgres test only if one already exists for apply).
+
+## Out of scope
+
+- Undo journal and toasts (T0186).
+- Review screen, per-item checkboxes, proposal expiry UX (T0187).
+- Administrator panel (T0189).
+- User settings page and stored user matrix (T0190).
+- Project `ai_access` (T0184).
+- A delete proposal tool. The model can be told deletes are human-only; it cannot call a delete tool.
+- New audit action values (no migration).
+
+## QA checklist (after implementation)
+
+1. Chat still proposes an idea or task, and confirming it still saves the record.
+2. The assistant response JSON for that turn includes `planTier` (2 for a single create).
+3. `POST /api/v1/assistant/proposals/apply` with a DELETE-shaped proposal returns 403.
+4. `npm test` covers each tier and each escalation rule in the list above.

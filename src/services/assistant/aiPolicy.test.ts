@@ -83,7 +83,7 @@ describe("aiPolicy.check", () => {
     assert.equal(userPolicyLayer(base({ action: "link", entityType: "task" })).decision, "allow");
     const decision = check(base({ action: "link", entityType: "task" }));
     assert.equal(decision.decision, "deny");
-    assert.equal(decision.tier, 1);
+    assert.equal(decision.tier, 2);
     assert.match(decision.reason, /instance/i);
   });
 
@@ -118,6 +118,8 @@ describe("describeAllowedPolicy", () => {
   it("names the floor and says the server enforces the rules", () => {
     const text = describeAllowedPolicy("assistant");
     assert.match(text, /server enforces/i);
+    assert.match(text, /model cannot set it/i);
+    assert.match(text, /Deletes are proposals only/);
     assert.match(text, /API keys/);
     assert.match(text, /users/);
     assert.doesNotMatch(text, /fetch public web pages/);

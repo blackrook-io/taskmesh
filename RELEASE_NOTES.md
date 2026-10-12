@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.62.4 — 2026-10-12
+
+### Enhancements
+- The assistant assigns a permission tier on the server for every operation. A multi-step request is one change plan at the highest tier, and that plan rises to full review when it touches more than five records or two projects, reassigns a record, moves it to another project, or targets another person's record.
+- The assistant cannot delete a record. A delete-shaped proposal is refused, and a person deletes the record in the app.
+
 ## 0.62.3 — 2026-10-12
 
 ### Enhancements

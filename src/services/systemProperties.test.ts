@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { MESH_APPEARANCE_DEFAULTS } from "../lib/meshAppearance.js";
+import { defaultStoredAiPermissionTiers } from "./assistant/aiTiers.js";
 import {
   invalidateSystemPropertiesCache,
   readSystemPropertiesCache,
@@ -26,6 +27,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     meshAppearance: MESH_APPEARANCE_DEFAULTS,
     aiProviders: {},
     aiWebFetch: false,
+    aiPermissionTiers: defaultStoredAiPermissionTiers(),
     updatedAt: null,
     ...overrides,
   };
