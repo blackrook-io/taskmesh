@@ -1,0 +1,65 @@
+# T0187 — AI confirmation and review UX for Tier 2 and Tier 3
+
+**Task:** T0187 (id 202) — AI: confirmation and review UX for Tier 2 and Tier 3
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0192 Guardrails and governance (group); design decisions in epic T0177
+**Depends on:** T0185 (complete). T0186 (Undo) is already on `main` and stays as-is for Tier 1.
+**Branch (after approval):** `T0187-review-ux`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`; proposals stay client-side)
+
+## Size / dependencies
+
+One review surface plus a shared confirm card. Depends-on T0185 is complete. Required-by tasks stay out of this pass: T0200 duplicate detection, T0215 quick-capture UI, T0235 MCP multi-round-trip confirmations. No split and no new deferred Task.
+
+## What exists
+
+- Chat proposals render as one-click Apply / Dismiss cards in `AssistantPanel`. The client ignores `planTier`.
+- The server classifies a turn as one change plan (max tier, blast-radius escalation) and stamps `tier` on each proposal SSE event. Tier 1 plans auto-apply (T0186). Tier 2 and Tier 3 both become the same cards.
+- Apply is `POST /api/v1/assistant/proposals/apply`. Deletes are denied. Nothing checks whether the target changed after the proposal was made.
+- Mesh suggestions are a separate one-click “Accept link” / “Dismiss” on the canvas card. They post `/api/v1/links`, not assistant proposals.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Which tier drives the UI | The **plan** tier. Tier 1 keeps auto-apply. Tier 2 keeps one-click cards. Tier 3 opens one review dialog for every operation in that turn. A mixed turn does not show both |
+| 2 | Tier 2 card | Shared `AiProposalCard`: heading, summary, field diff, Apply, Dismiss. Assistant uses it for Tier 2. Mesh suggestion rows use the same card in a compact variant (confidence bar stays in the mesh shell; Apply / Dismiss replace Accept link / Dismiss). Mesh still posts `/api/v1/links` |
+| 3 | Tier 3 dialog | Modal `role="dialog"` with a focus trap. Operations grouped by project (creates with no project under “No project”). Each row: checkbox, summary, diff. Checkboxes start **unchecked**. **Approve selected** applies only checked rows and leaves the rest in the dialog. **Reject all** dismisses every remaining row. Escape and the backdrop close the dialog without applying; a “Review changes” control reopens it |
+| 4 | Diff | Updates include a server `before` snapshot of the proposed keys. The row shows `before → after`. Creates show proposed fields as additions. Deletes, if one ever appears, render disabled with “A person deletes this in the app” and are omitted from Approve selected |
+| 5 | Expiry | Update proposals carry `baseUpdatedAt` from the target row at proposal time. Apply returns **409** when the row’s `updatedAt` differs or the row is gone. The card and the review row show **Expired**, the checkbox is disabled, and Apply is refused. Creates do not expire this way. No proposals table |
+| 6 | Client plan stamp | `streamAssistantChat` returns `planTier` and `planEscalations` from the `done` event. The panel stores them with that turn’s proposals |
+| 7 | Keyboard | Real buttons and checkboxes, visible focus, dialog labelled, no mouse-only control. `npm run lint` stays at zero warnings |
+| 8 | Out of scope | Persisting proposals across reload, admin tier editor (T0189), user matrix (T0190), MCP confirmations (T0235), changing Tier 1 auto-apply / Undo |
+
+## Work items
+
+### 1. Proposal snapshot
+
+When the assistant emits an update proposal, load the target’s `updatedAt` and the current values of the keys in `fields`. Attach `before` and `baseUpdatedAt` on the SSE `proposal` payload. Creates omit both.
+
+### 2. Apply guard
+
+In the apply route, after the existing policy check: if `baseUpdatedAt` is present, compare it to the live row. Mismatch or missing row → 409 and no write. Ignore a client-supplied tier. Deletes stay 403.
+
+### 3. Shared card
+
+`client/src/components/shared/AiProposalCard.tsx` (compact and full). Assistant Tier 2 list uses it. Mesh suggestion items use the compact variant for the action row and summary; the link request stays on the existing mutation.
+
+### 4. Review dialog
+
+`client/src/components/shared/AiReviewDialog.tsx`. Open when a turn’s `planTier` is 3 and proposals remain. Group by project. Approve selected calls the existing apply endpoint per checked row, skips expired and delete rows, and reports a per-row error without clearing the others. Reject all uses the existing dismiss feedback when `auditId` is set.
+
+### 5. Tests
+
+- Apply helper: matching `baseUpdatedAt` proceeds to the current write path; a newer `updatedAt` returns the 409 predicate; a missing row does too. No new Postgres suite if the predicate can be unit-tested the way the delete deny is.
+- Client: a small pure helper groups proposals by project and marks a row expired when `baseUpdatedAt` is set and a check function says the target moved (the UI receives expiry from a failed apply or from a `stale: true` flag if we add a lightweight recheck — prefer marking stale only after a 409, plus disabling Apply when the user already saw 409).
+
+## QA checklist (after implementation)
+
+1. A Tier 2 chat proposal (single create or update) still shows a card. Apply writes the record. Dismiss removes the card.
+2. A Tier 3 turn (delete-shaped, cross-project, other user’s record, or a plan over the blast-radius thresholds) opens the review dialog. Nothing is written until a checkbox is checked and Approve selected is used.
+3. Unchecked rows stay after Approve selected. Reject all clears the plan. Escape closes without writing.
+4. Edit the target in another view, then Apply: the proposal shows Expired and the server returns 409.
+5. A Mesh suggestion still creates a link on Apply and hides on Dismiss, with the shared card actions.
+6. Keyboard: tab through the dialog, toggle a checkbox, activate Approve selected and Reject all.
+7. `npm run lint` is clean.

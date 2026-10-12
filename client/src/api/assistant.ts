@@ -50,6 +50,13 @@ export type AssistantProposal = {
   path: string;
   tier?: number;
   auditId?: number;
+  before?: Record<string, unknown>;
+  baseUpdatedAt?: string;
+  targetMissing?: boolean;
+  /** Set by the panel from the turn's done event. */
+  planTier?: number;
+  planEscalations?: string[];
+  stale?: boolean;
 };
 
 export async function fetchAssistantStatus(): Promise<AssistantStatus> {
@@ -77,7 +84,7 @@ export async function streamAssistantChat(args: {
   onProposal?: (proposal: AssistantProposal) => void;
   onApplied?: (applied: { journalId: number; summary: string }) => void;
   onApplyFailed?: (failed: { summary: string; message: string }) => void;
-}): Promise<{ auditId: number | null }> {
+}): Promise<{ auditId: number | null; planTier: number | null; planEscalations: string[] }> {
   const headers = new Headers({
     "Content-Type": "application/json",
     Accept: "text/event-stream",
@@ -120,6 +127,8 @@ export async function streamAssistantChat(args: {
   let buffer = "";
   let eventName = "message";
   let auditId: number | null = null;
+  let planTier: number | null = null;
+  let planEscalations: string[] = [];
 
   while (true) {
     const { done, value } = await reader.read();
@@ -165,15 +174,20 @@ export async function streamAssistantChat(args: {
         } else if (eventName === "error") {
           throw new Error((data as { message?: string }).message ?? "Assistant error");
         } else if (eventName === "done") {
-          const id = (data as { auditId?: unknown }).auditId;
+          const payload = data as { auditId?: unknown; planTier?: unknown; planEscalations?: unknown };
+          const id = payload.auditId;
           auditId = typeof id === "number" ? id : null;
-          return { auditId };
+          planTier = typeof payload.planTier === "number" ? payload.planTier : null;
+          planEscalations = Array.isArray(payload.planEscalations)
+            ? payload.planEscalations.filter((line): line is string => typeof line === "string")
+            : [];
+          return { auditId, planTier, planEscalations };
         }
         eventName = "message";
       }
     }
   }
-  return { auditId };
+  return { auditId, planTier, planEscalations };
 }
 
 export async function putAssistantFeedback(input: {

@@ -79,6 +79,12 @@ export type AssistantProposal = {
   path: string;
   /** Audit row for this tool call, so Apply / Dismiss can attach a quality signal. */
   auditId?: number;
+  /** Current values of the proposed keys. Present on updates. */
+  before?: Record<string, unknown>;
+  /** Target `updatedAt` when the proposal was made. */
+  baseUpdatedAt?: string;
+  /** The update target was already gone when the proposal was made. */
+  targetMissing?: boolean;
 };
 
 export type ToolHandlers = {

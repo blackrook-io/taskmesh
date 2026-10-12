@@ -4,6 +4,16 @@ import { isLoginCredentialRequest, notifySessionExpired } from "./sessionExpired
 export const SPA_CLIENT_HEADER = "X-TaskMesh-Client";
 export const SPA_CLIENT_VALUE = "ui";
 
+export class ApiRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
 export function applySpaClientHeaders(headers: Headers): void {
   if (!headers.has(SPA_CLIENT_HEADER)) {
     headers.set(SPA_CLIENT_HEADER, SPA_CLIENT_VALUE);
@@ -54,7 +64,8 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     maybeNotifySessionExpired(path, res.status);
     const err = json as ApiErrorBody;
-    throw new Error(err.error?.message ?? res.statusText);
+    const error = new ApiRequestError(err.error?.message ?? res.statusText, res.status);
+    throw error;
   }
   return json as T;
 }

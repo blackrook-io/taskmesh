@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.70.1 — 2026-10-12
+
+### New Functionality
+- Ordinary assistant edits stay on one-click cards with a before-and-after diff. A riskier turn opens a review list grouped by project. Each change has a checkbox, and nothing is saved until you approve the ones you checked. An update expires if that record changed after it was proposed. Mesh suggestions use the same Apply and Dismiss actions.
+
 ## 0.70.0 — 2026-10-12
 
 ### New Functionality

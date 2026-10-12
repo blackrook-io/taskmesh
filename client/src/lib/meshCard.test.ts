@@ -229,7 +229,7 @@ describe("mesh hover card", () => {
     assert.equal(card?.items[0]?.targetLabel, "T0001 Focus");
     assert.equal(card?.items[0]?.confidence, 64);
     assert.equal(card?.items[0]?.reason, "shared tags");
-    assert.match(card?.description ?? "", /Accept link/);
+    assert.match(card?.description ?? "", /Apply/);
     assert.match(card?.description ?? "", /Dismiss/);
     assert.match(card?.description ?? "", /64% match/);
   });

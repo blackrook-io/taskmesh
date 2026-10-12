@@ -7,6 +7,12 @@ import { AiFeedbackError, recordAiFeedback } from "../../services/assistant/aiFe
 import { check, tierForAction, type AiAction, type PolicyDecision } from "../../services/assistant/aiPolicy.js";
 import { attachProjectAiAccess } from "../../services/assistant/projectAiAccess.js";
 import { AI_DELETE_DENY_REASON, isAiDeleteProposal } from "../../services/assistant/aiTiers.js";
+import {
+  PROPOSAL_STALE_CHANGED,
+  PROPOSAL_STALE_MISSING,
+  loadEntityRow,
+  revisionConflict,
+} from "../../services/assistant/proposalRevision.js";
 import { createDocumentForActor, updateDocumentForActor } from "./documents.js";
 import { createIdeaForActor, updateIdeaForActor } from "./ideas.js";
 import { createProjectTask, patchProjectTask } from "./tasks.js";
@@ -36,12 +42,16 @@ const proposalBody = z.object({
   fields: z.record(z.string(), z.unknown()),
   method: z.enum(["POST", "PATCH"]),
   path: z.string().min(1).max(500),
+  before: z.record(z.string(), z.unknown()).optional(),
+  baseUpdatedAt: z.string().datetime().optional(),
+  targetMissing: z.boolean().optional(),
 });
 
 export type AssistantProposalInput = z.infer<typeof proposalBody>;
 
 export type ApplyOutcome =
   | { kind: "denied"; decision: PolicyDecision }
+  | { kind: "stale"; message: string }
   | { kind: "result"; result: MutationResult; auditId: number | null };
 
 type ApplyTarget =
@@ -229,6 +239,40 @@ async function runTarget(
   }
 }
 
+function updateEntityId(target: ApplyTarget): number | null {
+  switch (target.kind) {
+    case "idea-update":
+      return target.id;
+    case "document-update":
+      return target.docId;
+    case "task-update":
+      return target.taskId;
+    case "todo-update":
+    case "todo-list-update":
+      return target.id;
+    default:
+      return null;
+  }
+}
+
+async function staleProposalMessage(
+  proposal: AssistantProposalInput,
+  target: ApplyTarget,
+): Promise<string | null> {
+  const entityId = updateEntityId(target);
+  if (entityId == null) return null;
+  if (proposal.targetMissing) return PROPOSAL_STALE_MISSING;
+  if (!proposal.baseUpdatedAt) return null;
+  const row = await loadEntityRow(db, proposal.entityType, entityId);
+  const live = row?.updatedAt;
+  const liveUpdatedAt =
+    live instanceof Date || typeof live === "string" || live == null ? (live ?? null) : null;
+  const conflict = revisionConflict(proposal.baseUpdatedAt, liveUpdatedAt);
+  if (conflict === "missing") return PROPOSAL_STALE_MISSING;
+  if (conflict === "changed") return PROPOSAL_STALE_CHANGED;
+  return null;
+}
+
 function optionalText(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -322,6 +366,17 @@ export async function applyAssistantProposal(args: {
       latencyMs: Date.now() - started,
     });
     return { kind: "denied", decision: denied };
+  }
+
+  const staleMessage = await staleProposalMessage(proposal, target);
+  if (staleMessage) {
+    await writeAiAudit({
+      ...auditBase,
+      decision: "deny",
+      reason: staleMessage,
+      latencyMs: Date.now() - started,
+    });
+    return { kind: "stale", message: staleMessage };
   }
 
   try {
