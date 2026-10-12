@@ -13,6 +13,21 @@ const MAX_BYTES = 500_000;
 const TIMEOUT_MS = 12_000;
 const MAX_TEXT = 12_000;
 const MAX_REDIRECTS = 2;
+export const MAX_URL_QUERY_LENGTH = 256;
+
+/** Truncate the query string. The host, path, and private-network decision stay put. */
+export function capUrlQuery(urlStr: string): string {
+  let url: URL;
+  try {
+    url = new URL(urlStr);
+  } catch {
+    return urlStr;
+  }
+  const query = url.search.startsWith("?") ? url.search.slice(1) : "";
+  if (query.length <= MAX_URL_QUERY_LENGTH) return url.toString();
+  url.search = query.slice(0, MAX_URL_QUERY_LENGTH);
+  return url.toString();
+}
 
 export class FetchUrlBlockedError extends Error {
   constructor(message: string) {
@@ -176,6 +191,7 @@ export async function fetchUrlForAssistant(
     let res: HopResponse | null = null;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const pin = await assertUrlAllowed(current);
+      current = new URL(capUrlQuery(current.toString()));
       res = await requestOnce(current, pin, combined);
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.location;

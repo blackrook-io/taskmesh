@@ -1,0 +1,91 @@
+# T0179 — AI data minimization, redaction, and web-access switch
+
+**Task:** T0179 (id 194) — AI: data minimization, redaction and web-access switch
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0192 Guardrails and governance (group); design decisions in epic T0177
+**Depends on:** T0178 (complete). Required later by T0168, T0201, T0209, T0229
+**Branch (after approval):** `T0179-ai-data-minimization`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`; the switch is a `system_properties` key)
+
+## Size / dependencies
+
+One choke point in front of the provider, an allowlist on the four record tools that already exist, secret redaction, and an Administrator switch that turns chat `web_fetch` off until enabled. Background AI features do not exist yet; they inherit a deny. No split. Structured page-context assembly stays on T0209. The policy matrix UI stays on T0189.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Allowlist | Tool JSON for idea, project, document, and task may include only identifiers the tools need (`id`, `projectId`, `type`) plus title (project: `name`), a body/description excerpt, `state` or project `status`, `priority`, `dueDate`, display `number`, and tag **names**. Drop `color`, `phaseId`, and `parentId` from `get_entity` |
+| 2 | Excerpt | One cap, **2,000** characters, applied after redaction, with the existing `…` truncation marker |
+| 3 | Tags | `get_entity` adds tag names for that record. No tag ids, colors, or owners |
+| 4 | Search / list | Stay title-level. Tasks in search and `list_project_context` also return display `number` |
+| 5 | Secrets | `redactSecrets` runs on every string about to be sent to a plugin: user text, history, page context, and tool results. Patterns: provider key shapes (`sk-`, `sk-ant-`, `AIza`), `Bearer` tokens, PEM private keys, `postgres://` / `mysql://` / `mongodb://` / `mongodb+srv://` connection strings, and `password=`, `pwd=`, `api_key=`, `apikey=`, `token=` assignments. Replacement is `[redacted]` |
+| 6 | Choke point | `runWithTools` redacts message content immediately before each `plugin.chat` call, so a later tool cannot bypass the allowlist. Page-context **shape** is unchanged here; T0209 owns assembly. This task only redacts and keeps the existing length cap |
+| 7 | Web fetch default | **Off.** `web_fetch` is allowed only when `feature === "assistant"` and `system_properties.ai_web_fetch` is true. Any other feature is denied. Missing key means false |
+| 8 | Switch UI | Boolean on Administration → System properties, next to AI providers: “Allow assistant chat to fetch public web pages.” When off, `fetch_url` is omitted from the tool list and from the system-prompt research sentence |
+| 9 | Fetch hygiene | Keep the private-network guard, DNS pin, and redirect checks. Cap the query string at **256** characters before the request (truncate, do not drop the fetch). Log the capped URL on the allow audit row’s `reason` (`Fetched <url>`), including when the HTTP fetch then fails. No new audit column and no prompt/argument storage |
+| 10 | Policy | `check` stays synchronous. Callers pass `webFetchEnabled`. Omitted means deny. Instance layer no longer allows `web_fetch` unconditionally |
+
+## Work items
+
+### 1. Minimizer and redactor
+
+`src/services/assistant/aiMinimize.ts`
+
+- `minimizeEntity(type, row)` returns the allowlisted object.
+- `redactSecrets(text)` is total over the patterns above and safe on overlapping matches.
+- `prepareProviderText(text)` is redact-then-excerpt for record bodies; `prepareProviderMessages` redacts chat message contents without the 2,000 excerpt cap (page context keeps its current 12,000 server cap).
+
+### 2. Tool outputs
+
+`src/services/assistant/tools.ts`
+
+- `get_entity`, `search_records`, and `list_project_context` return minimized objects only.
+- `executeAssistantTool` runs `redactSecrets` on the JSON string it returns.
+- `fetch_url` still maps to `web_fetch`. The instance check denies it unless the handler was given `webFetchEnabled` and the feature is `assistant`.
+- After an allow, the audit `reason` is `Fetched` plus the capped URL.
+
+### 3. Fetch URL
+
+`src/services/assistant/fetchUrl.ts`
+
+- Truncate `search` to 256 characters after private-network checks and before the socket.
+- Returned `url` is the capped URL (post-redirect URL still passed through the same cap).
+
+### 4. Provider boundary
+
+`src/services/assistant/runWithTools.ts` and `index.ts`
+
+- Redact every message string before `plugin.chat`.
+- Pass `webFetchEnabled` from `getSystemProperties`.
+- `assistantToolDefinitions({ webFetchEnabled })` hides `fetch_url` when the switch is off.
+- `buildMessages` redacts history, the user message, and page context. The fetch_url prompt lines appear only when the switch is on.
+
+### 5. Administrator switch
+
+- `system_properties` key `ai_web_fetch`, jsonb boolean, default false in `systemProperties.ts` (same pattern as `ai_providers`, no migration).
+- Admin GET/PATCH already round-trips system properties; extend the schema and `AdminSystemPropertiesPanel` (or the AI providers section) with the checkbox.
+- Cache invalidation already runs on admin save.
+
+### 6. Tests
+
+- Allowlist: a fixture task/idea/document/project with extra columns serializes only the allowed keys; body longer than 2,000 is clipped.
+- Redaction: each pattern becomes `[redacted]`; a normal sentence is unchanged.
+- Stub plugin: `runAssistantWithTools` with a plugin that records `chat` messages. Seed a user message and a tool result containing `sk-test-secret-key-0123456789abcdef`. Assert the plugin never observes that string.
+- Policy: `web_fetch` denies when the flag is omitted or false, denies for `feature: "mesh"`, allows for `assistant` when the flag is true.
+- Fetch helper: a URL whose query exceeds 256 characters is requested with a truncated query (unit-test the cap function; do not hit the network).
+
+## Out of scope
+
+- Project AI access (T0184), permission-tier UX (T0185), policy matrix and audit viewer (T0189), user policy (T0190).
+- Rebuilding page context into typed fields (T0209). Untrusted-content framing (T0201).
+- Embeddings, Mesh suggestions (T0168), MCP read tools (T0229).
+
+## QA checklist (after implementation)
+
+1. With the new switch off (the default), chat has no `fetch_url` tool and a public URL request is not fetched.
+2. An Administrator turns the switch on; a later chat can fetch a public URL; a private or link-local URL is still blocked.
+3. The allow audit row for that fetch includes the URL, with a long query string cut to 256 characters.
+4. `get_entity` on a task returns title, excerpt, state, priority, due date, number, and tag names, and does not return color, phase, or parent id.
+5. A record body or chat message containing a fake `sk-` key is stored as-is in TaskMesh; the provider payload in tests does not contain the raw key.
+6. `npm test` covers the allowlist, redaction patterns, stub-plugin leak check, and the web-fetch flag.

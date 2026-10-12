@@ -47,6 +47,8 @@ export type PolicyCheckInput = {
   entityId?: number | null;
   projectId?: number | null;
   fields?: Record<string, unknown> | null;
+  /** Chat web fetch is allowed only when the Administrator has turned it on. */
+  webFetchEnabled?: boolean;
 };
 
 export type PolicyLayerFns = {
@@ -102,7 +104,11 @@ function floorDecision(input: PolicyCheckInput): PolicyDecision | null {
 function instanceAllows(input: PolicyCheckInput): boolean {
   if (input.resource) return false;
   if (input.action === "web_fetch") {
-    return input.entityType == null;
+    return (
+      input.feature === "assistant" &&
+      input.webFetchEnabled === true &&
+      input.entityType == null
+    );
   }
   if (input.action === "read") {
     if (input.entityType == null) return true;
@@ -179,10 +185,16 @@ export function check(
 }
 
 /** Informational summary for the system prompt. Enforcement stays in `check`. */
-export function describeAllowedPolicy(feature: string): string {
+export function describeAllowedPolicy(
+  feature: string,
+  options?: { webFetchEnabled?: boolean },
+): string {
+  const actions = options?.webFetchEnabled
+    ? "read ideas, projects, tasks, and documents; propose and apply creates and updates of ideas, documents, and tasks; fetch public web pages. "
+    : "read ideas, projects, tasks, and documents; propose and apply creates and updates of ideas, documents, and tasks. ";
   return (
     `Allowed for the ${feature} feature (informational only; the server enforces these rules): ` +
-    "read ideas, projects, tasks, and documents; propose and apply creates and updates of ideas, documents, and tasks; fetch public web pages. " +
+    actions +
     "Not allowed: link, tag, comment, propose delete, bulk, and any other record type. " +
     "Never allowed: users, roles, groups, API keys, AI credentials, backups, ownership transfer, system properties, and AI policy."
   );

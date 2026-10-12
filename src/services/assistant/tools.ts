@@ -15,7 +15,14 @@ import {
   type PolicyDecision,
   type PolicyLayerFns,
 } from "./aiPolicy.js";
-import { fetchUrlForAssistant } from "./fetchUrl.js";
+import { capUrlQuery, fetchUrlForAssistant } from "./fetchUrl.js";
+import {
+  minimizeDocument,
+  minimizeIdea,
+  minimizeProject,
+  minimizeTask,
+  redactSecrets,
+} from "./aiMinimize.js";
 import { isEntityType, type EntityType } from "../../lib/entityType.js";
 import {
   assertCanAccessDualScoped,
@@ -57,6 +64,8 @@ export type ToolHandlers = {
   /** Test seam. Production uses `check` and `writeAiAudit`. */
   checkPolicy?: (input: PolicyCheckInput, layers?: Partial<PolicyLayerFns>) => PolicyDecision;
   recordAudit?: AiAuditSink;
+  /** Administrator switch. Omitted or false denies `web_fetch`. */
+  webFetchEnabled?: boolean;
 };
 
 type ToolPolicyTarget = {
@@ -252,16 +261,17 @@ export const OPENAI_TOOLS = [
   },
 ];
 
-export function assistantToolDefinitions(): AiToolDefinition[] {
-  return OPENAI_TOOLS.map((tool) => ({
+export function assistantToolDefinitions(options?: {
+  webFetchEnabled?: boolean;
+}): AiToolDefinition[] {
+  const tools = options?.webFetchEnabled
+    ? OPENAI_TOOLS
+    : OPENAI_TOOLS.filter((tool) => tool.function.name !== "fetch_url");
+  return tools.map((tool) => ({
     name: tool.function.name,
     description: tool.function.description,
     parameters: tool.function.parameters as Record<string, unknown>,
   }));
-}
-
-function clip(s: string, max = 4000): string {
-  return s.length <= max ? s : `${s.slice(0, max)}…`;
 }
 
 
@@ -363,6 +373,7 @@ async function auditTool(
   target: ToolPolicyTarget,
   decision: PolicyDecision,
   startedAt: number,
+  reasonOverride?: string,
 ): Promise<void> {
   await writeAiAudit(
     {
@@ -376,7 +387,7 @@ async function auditTool(
       entityId: target.entityId ?? null,
       projectId: target.projectId ?? null,
       decision: decision.decision,
-      reason: decision.reason,
+      reason: reasonOverride ?? decision.reason,
       tier: decision.tier,
       tokensIn: handlers.tokensIn ?? null,
       tokensOut: handlers.tokensOut ?? null,
@@ -454,6 +465,7 @@ export async function executeAssistantTool(
     entityId: target.entityId,
     projectId: target.projectId,
     fields: ownerFields(args),
+    webFetchEnabled: handlers.webFetchEnabled === true,
   });
 
   if (decision.decision === "deny") {
@@ -461,16 +473,29 @@ export async function executeAssistantTool(
     return denialPayload(target.action, decision);
   }
 
+  const fetched =
+    decision.decision === "allow" && target.action === "web_fetch"
+      ? fetchedUrlReason(args)
+      : undefined;
   try {
-    const result = await dispatchTool(name, args, handlers);
-    await auditTool(handlers, name, target, decision, started);
+    const result = redactSecrets(await dispatchTool(name, args, handlers));
+    await auditTool(handlers, name, target, decision, started, fetched);
     return result;
   } catch (err) {
-    await auditTool(handlers, name, target, decision, started);
-    return JSON.stringify({
-      error: err instanceof Error ? err.message : "Tool failed",
-    });
+    await auditTool(handlers, name, target, decision, started, fetched);
+    return redactSecrets(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Tool failed",
+      }),
+    );
   }
+}
+
+function fetchedUrlReason(args: unknown): string {
+  const raw = args && typeof args === "object" ? (args as { url?: unknown }).url : null;
+  const capped = typeof raw === "string" ? capUrlQuery(raw) : "";
+  const line = `Fetched ${capped}`;
+  return line.length > 500 ? `${line.slice(0, 500)}…` : line;
 }
 
 async function toolFetchUrl(args: unknown, signal?: AbortSignal): Promise<string> {
@@ -531,6 +556,7 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
         id: schema.tasks.id,
         title: schema.tasks.title,
         projectId: schema.tasks.projectId,
+        number: schema.tasks.number,
       })
       .from(schema.tasks)
       .where(
@@ -561,7 +587,31 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
       .orderBy(desc(schema.projectDocuments.updatedAt))
       .limit(8),
   ]);
-  return JSON.stringify({ ideas, projects, tasks, documents });
+  return JSON.stringify({
+    ideas: ideas.map((row) => ({ id: row.id, title: row.title })),
+    projects: projects.map((row) => ({ id: row.id, name: row.name })),
+    tasks: tasks.map((row) => ({
+      id: row.id,
+      title: row.title,
+      number: row.number,
+      projectId: row.projectId,
+    })),
+    documents: documents.map((row) => ({
+      id: row.id,
+      title: row.title,
+      projectId: row.projectId,
+    })),
+  });
+}
+
+async function tagNames(entityType: EntityType, entityId: number): Promise<string[]> {
+  const rows = await db
+    .select({ name: schema.tags.name })
+    .from(schema.taggings)
+    .innerJoin(schema.tags, eq(schema.tags.id, schema.taggings.tagId))
+    .where(and(eq(schema.taggings.entityType, entityType), eq(schema.taggings.entityId, entityId)))
+    .orderBy(asc(schema.tags.name));
+  return rows.map((row) => row.name);
 }
 
 async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<string> {
@@ -578,22 +628,15 @@ async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<str
       const [row] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, parsed.entityId));
       if (!row) return JSON.stringify({ error: "Idea not found" });
       await assertCanAccessOwned(db, actorUserId, row.ownerId);
-      return JSON.stringify({
-        type: "idea",
-        id: row.id,
-        title: row.title,
-        body: clip(row.body ?? "", 8000),
-      });
+      return JSON.stringify(
+        minimizeIdea({ ...row, tags: await tagNames("idea", row.id) }),
+      );
     }
     if (parsed.entityType === "project") {
       const row = await assertCanAccessProject(db, actorUserId, parsed.entityId);
-      return JSON.stringify({
-        type: "project",
-        id: row.id,
-        name: row.name,
-        description: clip(row.description ?? "", 4000),
-        status: row.status,
-      });
+      return JSON.stringify(
+        minimizeProject({ ...row, tags: await tagNames("project", row.id) }),
+      );
     }
     if (parsed.entityType === "document") {
       const [row] = await db
@@ -602,31 +645,16 @@ async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<str
         .where(eq(schema.projectDocuments.id, parsed.entityId));
       if (!row) return JSON.stringify({ error: "Document not found" });
       await assertCanAccessProject(db, actorUserId, row.projectId);
-      return JSON.stringify({
-        type: "document",
-        id: row.id,
-        projectId: row.projectId,
-        title: row.title,
-        body: clip(row.body ?? "", 8000),
-      });
+      return JSON.stringify(
+        minimizeDocument({ ...row, tags: await tagNames("document", row.id) }),
+      );
     }
     const [row] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parsed.entityId));
     if (!row) return JSON.stringify({ error: "Task not found" });
     await assertCanAccessDualScoped(db, actorUserId, row);
-    return JSON.stringify({
-      type: "task",
-      id: row.id,
-      projectId: row.projectId,
-      title: row.title,
-      description: clip(row.description ?? "", 4000),
-      dueDate: row.dueDate ?? null,
-      number: row.number,
-      state: row.state,
-      priority: row.priority,
-      parentId: row.parentId,
-      color: row.color,
-      phaseId: row.phaseId,
-    });
+    return JSON.stringify(
+      minimizeTask({ ...row, tags: await tagNames("task", row.id) }),
+    );
   } catch (err) {
     if (err instanceof OwnershipAccessError) return accessDeniedMessage();
     throw err;
@@ -646,7 +674,7 @@ async function toolListProject(args: unknown, handlers: ToolHandlers): Promise<s
         .orderBy(schema.projectDocuments.position)
         .limit(40),
       db
-        .select({ id: schema.tasks.id, title: schema.tasks.title })
+        .select({ id: schema.tasks.id, title: schema.tasks.title, number: schema.tasks.number })
         .from(schema.tasks)
         .where(eq(schema.tasks.projectId, projectId))
         .orderBy(schema.tasks.sortOrder)
@@ -654,8 +682,8 @@ async function toolListProject(args: unknown, handlers: ToolHandlers): Promise<s
     ]);
     return JSON.stringify({
       project: { id: proj.id, name: proj.name, status: proj.status },
-      documents: docs,
-      tasks,
+      documents: docs.map((row) => ({ id: row.id, title: row.title })),
+      tasks: tasks.map((row) => ({ id: row.id, title: row.title, number: row.number })),
     });
   } catch (err) {
     if (err instanceof OwnershipAccessError) return accessDeniedMessage();

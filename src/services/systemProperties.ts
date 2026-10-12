@@ -50,6 +50,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "mfa_trusted_device_max",
   "mesh_appearance",
   "ai_providers",
+  "ai_web_fetch",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -68,6 +69,8 @@ export type SystemProperties = {
   mfaTrustedDeviceMax: number;
   meshAppearance: MeshAppearance;
   aiProviders: AiProvidersFile;
+  /** When true, assistant chat may call `web_fetch`. Default false. */
+  aiWebFetch: boolean;
   updatedAt: string | null;
 };
 
@@ -96,6 +99,7 @@ const DEFAULTS: {
   mfa_trusted_device_days: number;
   mfa_trusted_device_max: number;
   mesh_appearance: MeshAppearance;
+  ai_web_fetch: boolean;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -109,6 +113,7 @@ const DEFAULTS: {
   mfa_trusted_device_days: 15,
   mfa_trusted_device_max: 5,
   mesh_appearance: MESH_APPEARANCE_DEFAULTS,
+  ai_web_fetch: false,
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -127,6 +132,11 @@ function asIntInRange(value: unknown, fallback: number, min: number, max: number
 
 function asThemeId(value: unknown, fallback: ThemeId): ThemeId {
   if (isThemeId(value)) return value;
+  return fallback;
+}
+
+function asBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") return value;
   return fallback;
 }
 
@@ -246,6 +256,7 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
     ),
     meshAppearance: normalizeMeshAppearance(map.get("mesh_appearance")?.value),
     aiProviders: normalizeAiProviders(map.get("ai_providers")?.value),
+    aiWebFetch: asBoolean(map.get("ai_web_fetch")?.value, DEFAULTS.ai_web_fetch),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);
@@ -279,6 +290,7 @@ export async function patchSystemProperties(
     mfaTrustedDeviceDays?: number;
     mfaTrustedDeviceMax?: number;
     meshAppearance?: MeshAppearance;
+    aiWebFetch?: boolean;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -438,6 +450,19 @@ export async function patchSystemProperties(
         set: { value: patch.meshAppearance, updatedAt: now },
       });
   }
+  if (patch.aiWebFetch !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "ai_web_fetch",
+        value: patch.aiWebFetch,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.aiWebFetch, updatedAt: now },
+      });
+  }
   invalidateSystemPropertiesCache();
   return getSystemProperties(db);
 }
@@ -466,5 +491,6 @@ export const systemPropertiesPatchSchema = z
     mfaTrustedDeviceDays: z.number().int().min(0).max(365).optional(),
     mfaTrustedDeviceMax: z.number().int().min(1).max(50).optional(),
     meshAppearance: meshAppearanceSchema.optional(),
+    aiWebFetch: z.boolean().optional(),
   })
   .strict();

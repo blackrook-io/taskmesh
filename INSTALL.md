@@ -518,7 +518,7 @@ ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini
 
 If the OpenAI plugin is disabled or the key is unset, the assistant panel shows as not configured.
 
-The assistant can also **fetch public http(s) URLs** for research (`fetch_url`). That requires outbound access from this host to the target sites (not only OpenAI). Private/LAN addresses are blocked.
+The assistant can also **fetch public http(s) URLs** for research (`fetch_url`) when an Administrator turns on **Allow assistant chat to fetch public web pages** under Administration → System properties. That switch is off by default. Fetching requires outbound access from this host to the target sites (not only the provider). Private/LAN addresses are blocked, and query strings are capped.
 
 ---
 
