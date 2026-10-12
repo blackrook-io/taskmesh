@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.64.1 — 2026-10-12
+
+### New Functionality
+- Administrators can enable Anthropic for assistant chat and set its public https address and default model. Chat uses Anthropic when OpenAI is not the selected provider. The server environment key is read when a request is sent and is not stored.
+
 ## 0.64.0 — 2026-10-12
 
 ### New Functionality

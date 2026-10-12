@@ -39,9 +39,15 @@ export function openAiPluginSeed(env: NodeJS.ProcessEnv): AiProvidersFile | null
   };
 }
 
+const ENV_KEY_BY_PLUGIN: Record<string, string> = {
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+};
+
 export function resolvePluginApiKey(pluginId: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  if (pluginId !== "openai") return null;
-  const key = env.OPENAI_API_KEY?.trim();
+  const name = ENV_KEY_BY_PLUGIN[pluginId];
+  if (!name) return null;
+  const key = env[name]?.trim();
   return key || null;
 }
 
