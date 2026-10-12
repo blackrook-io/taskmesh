@@ -842,6 +842,46 @@ export const apiRequestLogs = pgTable(
   (t) => [index("api_request_logs_created_at_idx").on(t.createdAt)],
 );
 
+/**
+ * Append-only log of assistant tool calls, replies, and proposal applies (T0178).
+ * Stores the decision and token counts, not prompts, arguments, or record text.
+ */
+export const aiAuditLog = pgTable(
+  "ai_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+    feature: text("feature").notNull(),
+    provider: text("provider"),
+    model: text("model"),
+    tool: text("tool"),
+    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond */
+    action: text("action").notNull(),
+    entityType: text("entity_type"),
+    entityId: integer("entity_id"),
+    projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+    /** allow | deny */
+    decision: text("decision").notNull(),
+    reason: text("reason"),
+    tier: integer("tier").notNull(),
+    tokensIn: integer("tokens_in"),
+    tokensOut: integer("tokens_out"),
+    latencyMs: integer("latency_ms"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    createdIdx: index("ai_audit_log_created_at_idx").on(t.createdAt),
+    decisionCheck: check(
+      "ai_audit_log_decision_chk",
+      sql`${t.decision} in ('allow', 'deny')`,
+    ),
+    actionCheck: check(
+      "ai_audit_log_action_chk",
+      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond')`,
+    ),
+  }),
+);
+
 /** Periodic Postgres gauges for Administration → Database charts. */
 export const dbStatsSnapshots = pgTable(
   "db_stats_snapshots",
@@ -996,7 +1036,7 @@ export const taskActivity = pgTable(
     createdById: integer("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    /** `ui` = SPA (`X-TaskMesh-Client: ui`); otherwise `api`. */
+    /** `ui` = SPA; `api` = other clients; `ai` = an applied assistant proposal. */
     source: text("source").notNull().default("api"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1011,6 +1051,10 @@ export const taskActivity = pgTable(
     taskLinkCheck: check(
       "task_activity_task_link_chk",
       sql`(${t.entityType} = 'task' and ${t.taskId} = ${t.entityId}) or (${t.entityType} <> 'task' and ${t.taskId} is null)`,
+    ),
+    sourceCheck: check(
+      "task_activity_source_chk",
+      sql`${t.source} in ('ui', 'api', 'ai')`,
     ),
   }),
 );
@@ -1799,6 +1843,17 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   user: one(users, {
     fields: [apiKeys.userId],
     references: [users.id],
+  }),
+}));
+
+export const aiAuditLogRelations = relations(aiAuditLog, ({ one }) => ({
+  user: one(users, {
+    fields: [aiAuditLog.userId],
+    references: [users.id],
+  }),
+  project: one(projects, {
+    fields: [aiAuditLog.projectId],
+    references: [projects.id],
   }),
 }));
 

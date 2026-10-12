@@ -1,3 +1,4 @@
+import { writeAiAudit } from "./aiAudit.js";
 import type { ChatMessage } from "./types.js";
 import { getAssistantConfig } from "./types.js";
 import { executeAssistantTool, OPENAI_TOOLS, type AssistantProposal, type ToolHandlers } from "./tools.js";
@@ -17,6 +18,7 @@ type ChatCompletionResponse = {
     message?: OpenAiMessage;
     finish_reason?: string | null;
   }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
   error?: { message?: string };
 };
 
@@ -59,6 +61,7 @@ export async function runAssistantWithTools(args: {
         return;
       }
 
+      const roundStarted = Date.now();
       const completion = await requestCompletion({
         apiKey,
         model,
@@ -66,6 +69,9 @@ export async function runAssistantWithTools(args: {
         tools: OPENAI_TOOLS,
         signal: args.signal,
       });
+      const roundLatency = Date.now() - roundStarted;
+      const tokensIn = completion.usage?.prompt_tokens ?? null;
+      const tokensOut = completion.usage?.completion_tokens ?? null;
 
       const choice = completion.choices?.[0];
       const msg = choice?.message;
@@ -91,6 +97,11 @@ export async function runAssistantWithTools(args: {
               signal: args.signal,
               actorUserId: args.actorUserId,
               isAdministrator: args.isAdministrator,
+              feature: "assistant",
+              provider: "openai",
+              model,
+              tokensIn,
+              tokensOut,
             },
           );
           messages.push({
@@ -101,6 +112,21 @@ export async function runAssistantWithTools(args: {
         }
         continue;
       }
+
+      await writeAiAudit({
+        userId: args.actorUserId,
+        feature: "assistant",
+        provider: "openai",
+        model,
+        tool: null,
+        action: "respond",
+        decision: "allow",
+        reason: "Assistant reply",
+        tier: 0,
+        tokensIn,
+        tokensOut,
+        latencyMs: roundLatency,
+      });
 
       const text = ((msg.content ?? "") as string).trim() || "Done.";
       // Emit in small chunks so the UI still feels like a stream

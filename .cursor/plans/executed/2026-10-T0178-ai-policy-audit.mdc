@@ -1,0 +1,95 @@
+# T0178 — AI policy engine and audit log
+
+**Task:** T0178 (id 193) — AI: policy engine and audit log around the existing assistant
+**State at plan:** marked `ready` this session (was Draft) · Priority: high · Project: TaskMesh (4)
+**Parent:** T0192 Guardrails and governance (group); design decisions in epic T0177
+**Branch (after approval):** `T0178-ai-policy-audit`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for `ai_audit_log` and `task_activity.source` check)
+
+## Size / dependencies
+
+One engine, one table, a gate on the existing assistant tools, and one apply route. Depends-on is empty. Later tasks already exist for project access (T0184), tiers and change plans (T0185), review UX (T0187), budgets (T0188), the admin policy matrix and audit viewer (T0189), user policy (T0190), minimization and the web-access switch (T0179). No split and no new deferred Task.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Layers | `check` evaluates floor, then instance ∩ project ∩ user. Any deny wins. Project and user layers are functions that return allow-all, with comments naming T0184 and T0190 |
+| 2 | Instance rules | Code constants, not a settings UI (T0189 owns the matrix). Allow only what the assistant does today: `read` on idea, project, task, document; `propose_create` and `propose_update` and `apply` on idea, document, task; `web_fetch` with no record. Deny `link`, `tag`, `comment`, `propose_delete`, `bulk`, and every other entity type |
+| 3 | `web_fetch` | Stays allowed for feature `assistant` so current chat research keeps working. T0179 adds the Administrator switch and the background-feature default |
+| 4 | Floor | Always deny, no toggle: `user`, `role`, `group`, `api_key`, `ai_credential`, `backup`, `ownership`, `system_property`, `ai_policy`. Also deny a proposal whose fields include `ownerId` |
+| 5 | Tiers | Returned on every decision, not enforced as UX. Defaults from the epic: read and web_fetch → 0; propose_create, propose_update, apply → 2; link, tag, comment → 1; propose_delete and bulk → 3. Floor denies report tier 3. T0185 replaces this classifier |
+| 6 | Denials | A denied tool returns JSON `{ denied: true, decision: "deny", action, reason, tier }` to the model. It does not throw, so the tool loop cannot turn it into a retryable exception |
+| 7 | Apply | New `POST /api/v1/assistant/proposals/apply`. The SPA stops calling the proposal's raw REST path. The route re-checks `action: apply`, then runs the same idea / document / task create and update services with `source: "ai"`. A client header cannot stamp `ai` on ordinary routes |
+| 8 | Audit | Append-only `ai_audit_log`. One row per tool invocation, per chat completion that uses no tools, and per apply. No prompt, tool arguments, or record text (T0179). No viewer and no retention job (T0189, T0188) |
+| 9 | Tokens | Read `usage` from the OpenAI completion when present. Tool rows in a round store that round's token counts (repeated when one completion calls several tools) and the tool's own latency. A no-tool reply stores tokens on its `respond` row |
+| 10 | Prompt | `buildMessages` appends a short summary generated from the same allow matrix. The text says enforcement is server-side |
+
+## Work items
+
+### 1. Policy module
+
+`src/services/assistant/aiPolicy.ts`
+
+- Actions: `read`, `propose_create`, `propose_update`, `link`, `tag`, `comment`, `apply`, `propose_delete`, `web_fetch`, `bulk`.
+- `check({ actorUserId, feature, action, entityType, resource, entityId, projectId })` → `{ decision: "allow" \| "deny", tier, reason }`.
+- Floor resources are not `EntityType` values. Domain tools pass `entityType`; floor coverage is the `resource` field plus the `ownerId` field check on apply.
+- `describeAllowedPolicy(feature)` builds the system-prompt paragraph from the instance matrix.
+
+### 2. Audit table and writer
+
+- Drizzle table `ai_audit_log`: `user_id` (FK users, ON DELETE SET NULL), `feature`, `provider`, `model`, `tool`, `action`, `entity_type`, `entity_id`, `project_id`, `decision`, `reason`, `tier`, `tokens_in`, `tokens_out`, `latency_ms`, `created_at`.
+- Check constraints for `decision` (`allow` \| `deny`) and `action` (the taxonomy plus `respond`).
+- `src/services/assistant/aiAudit.ts` inserts one row. Tests pass a collector instead of opening Postgres.
+- `task_activity.source` gains value `ai`. Extend `ActivitySource` in `src/lib/activityRequest.ts` and the client type. `activitySourceFromRequest` still returns only `ui` \| `api`. Migration adds a check that `source` is `ui`, `api`, or `ai`.
+- Update `docs/database/platform.md` (inventory row for `ai_audit_log`) and `docs/database/glossary.md` (`source` includes `ai` when an assistant proposal is applied). Run `npm run docs:sync-schema`.
+
+### 3. Tool gate
+
+In `executeAssistantTool` (`src/services/assistant/tools.ts`), before each tool body:
+
+| Tool | Action | Target |
+|------|--------|--------|
+| `search_records` | `read` | no single type (check read with no entity type, which the instance layer allows) |
+| `get_entity` | `read` | the requested entity type |
+| `list_project_context` | `read` | `project` |
+| `fetch_url` | `web_fetch` | none |
+| `propose_*_create` | `propose_create` | idea, document, or task |
+| `propose_*_update` | `propose_update` | idea, document, or task |
+
+On deny, write the audit row and return the structured denial without reading or proposing. On allow, do today's work, then audit `allow`. Invalid JSON arguments are an audited denial, still returned as JSON.
+
+`runWithTools.ts` reads completion `usage` and passes provider, model, token counts, and a per-tool timer into the handlers.
+
+### 4. Apply route
+
+`POST /api/v1/assistant/proposals/apply` on the assistant router. Body is the existing proposal shape (action create \| update, entity type, ids, fields, summary, method, path).
+
+- Whitelist the six paths the tools already emit (idea create/update, document create/update, task create/update). Reject anything else after a deny audit.
+- `check` with `action: "apply"`. Deny → 403 JSON using the same decision fields, no write.
+- Allow → existing create/update services, activity `source: "ai"`.
+- `AssistantPanel` posts here instead of `apiJson(proposal.path)`.
+
+### 5. System prompt
+
+`buildMessages` appends `describeAllowedPolicy("assistant")` after the current instructions.
+
+### 6. Tests (no Postgres)
+
+- Floor resource and `ownerId` always deny, including when a test layer would allow them.
+- Project and user stubs allow; intersection denies when the instance layer denies.
+- A tool invocation whose `check` returns deny yields `{ denied: true, ... }` and one audit row, and does not throw.
+- An allowed mapping still reaches the tool body (search with empty query fails validation only after the allow audit path is armed — assert the denial helper is not used).
+- `describeAllowedPolicy` mentions the floor and that the server enforces the rules.
+
+## Out of scope
+
+- Admin or user policy UI, stored policy matrix, project `ai_access`, tier UX, Undo, change plans, redaction, web-access switch, budgets, audit viewer, MCP.
+
+## QA checklist (after implementation)
+
+1. Chat still searches and proposes an idea or task; confirming the proposal saves it.
+2. The new activity row on that record has source `ai` (API or History if the UI shows source; otherwise the activity payload).
+3. A direct `POST /api/v1/assistant/proposals/apply` with `ownerId` in fields returns 403 and writes a deny audit row.
+4. `fetch_url` still runs for a public URL.
+5. `npm test` covers floor deny, structured tool denial, and one audit row per denied call.

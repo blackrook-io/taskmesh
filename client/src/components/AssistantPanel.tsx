@@ -109,9 +109,9 @@ export function AssistantPanel({ open, onClose }: Props) {
         throw new Error("Invalid proposal (missing path/method). Restart TaskMesh and try again.");
       }
       setApplyingId(p.id);
-      await apiJson(p.path, {
-        method: p.method,
-        body: JSON.stringify(p.fields),
+      await apiJson("/api/v1/assistant/proposals/apply", {
+        method: "POST",
+        body: JSON.stringify(p),
       });
       return p;
     },

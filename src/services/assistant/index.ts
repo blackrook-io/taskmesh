@@ -1,3 +1,4 @@
+import { describeAllowedPolicy } from "./aiPolicy.js";
 import { createOpenAiProvider } from "./openaiProvider.js";
 import { runAssistantWithTools } from "./runWithTools.js";
 import type { LlmProvider } from "./types.js";
@@ -36,7 +37,7 @@ export function buildMessages(args: {
   pageContext?: string | null;
 }): import("./types.js").ChatMessage[] {
   const messages: import("./types.js").ChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: `${SYSTEM_PROMPT}\n\n${describeAllowedPolicy("assistant")}` },
   ];
   if (args.pageContext?.trim()) {
     messages.push({

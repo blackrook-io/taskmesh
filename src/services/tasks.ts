@@ -1,5 +1,6 @@
 import { and, asc, eq, isNull, max } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { ActivitySource } from "../lib/activityRequest.js";
 import * as schema from "../db/schema.js";
 import { stateLabel } from "../lib/entityActivity.js";
 import { formatTaskNumber } from "../lib/taskFields.js";
@@ -154,7 +155,7 @@ export type TaskLike = Pick<typeof schema.tasks.$inferSelect, TrackedField>;
 
 export type RecordTaskChangesOpts = {
   actorId?: number | null;
-  source?: "ui" | "api";
+  source?: ActivitySource;
   /** When false, persist nothing to History (modal autosave defer). */
   recordHistory?: boolean;
 };

@@ -73,6 +73,11 @@ function HistoryMeta({ entry }: { entry: TaskActivityEntry }) {
           API
         </span>
       ) : null}
+      {entry.source === "ai" ? (
+        <span className="task-history__api-flag" title="Changed by the assistant">
+          AI
+        </span>
+      ) : null}
     </span>
   );
 }
