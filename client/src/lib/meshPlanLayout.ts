@@ -72,6 +72,7 @@ function place(
     type: node.type,
     projectLabel: projectLabel(node, meshProjectId, projectRefs),
     planMark,
+    group: null,
   };
 }
 

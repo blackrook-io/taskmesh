@@ -1,0 +1,52 @@
+# T0242 — Mesh: collapse a busy type into one group node
+
+**Task:** T0242 (id `257`) — Mesh: collapse a busy type into one group node
+**Parent:** T0159 (id `172`) — Mesh: relationship graph, backlinks and focus view (epic)
+**Depends on:** T0164 complete
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0242-mesh-group-nodes`
+
+Deferred from T0164. Depth, Hide done, and type chips already drop records before cascade layout. This task replaces a crowd that remains with one expandable group node.
+
+## Decisions
+
+1. **Threshold is 12, fixed.** More than 12 records of one entity type in one band collapse. Twelve stay as themselves. The label is the live count plus the plural type name (`13 tasks`, `14 documents`). No Admin setting.
+2. **Bands are the focus-view stacks.** Grouping runs inside `layoutMesh` after `filterMeshGraph`, on:
+   - each cascade column’s member stack (grandchildren under a head, or the leaf-child column)
+   - the “Linked to this” row
+   - the “Linked from inside” rail
+   Column heads, the parent, the focus, and AI suggestion glyphs stay individual. A column head is the column, not part of the stack count.
+3. **The focused record is never inside a group.** If it appears in a band list it is excluded from the count and from the group.
+4. **Expand is a click on the group, for this focus only.** Collapsed, the band shows one node. Expanded, that node stays at the head of the stack as the collapse control (`13 tasks`) and the members lay out after it in the usual pitch. Clicking the head collapses. Expansion lives in Mesh panel state, keyed by focus, and clears when the focus changes. It is not stored in the browser and not written to a saved layout.
+5. **Lines follow the visible nodes.** A collapsed group gets one tree stub. A link or depends-on line that touched a hidden member is redrawn to the group. Lines whose other end is in the same group are dropped. Distinct outside ends stay distinct. Expanding restores member lines. Suggestion lines are unchanged because suggestion nodes are not grouped.
+6. **The group is not a record.** It uses the type color, has no reference id, does not open a hover card, and does not push the focus stack. Dragging it does not save a pin. Member pins still apply when the group is expanded.
+7. **Filters compose.** Depth, Hide done, and type chips run first. Grouping counts only what those filters left. Hiding tasks, or hiding done records, can shrink a stack to 12 or fewer and the group disappears.
+8. **Plan view is unchanged.** Its rows are phases, not these bands.
+9. **No schema.** Finish-up is a PATCH bump. Mesh is already on `FEATURES.md`; this refines it. `RELEASE_NOTES.md` gets an Enhancements bullet on finish-up.
+
+## Scope
+
+1. Pure grouping in the focus layout (`client/src/lib/meshLayout.ts`), with a group marker on the layout node (count, type, band id, expanded).
+2. Mesh panel: click toggles that band, skip hover cards and saved pins for group keys, render the count label.
+3. Unit tests: 12 stay, 13 of one type collapse, a second type in the same band is judged on its own, focus stays out, an expanded band places members plus the collapse head, edges remap onto the group, and a pre-filtered graph (hide done / hidden type) is what gets counted.
+4. `npm run lint` clean.
+
+## Out
+
+- Plan view grouping.
+- A configurable threshold.
+- Persisting which groups are open.
+- Grouping AI suggestion glyphs.
+- Server graph changes.
+
+## QA follow-ups
+
+- A group node draws a light shaded box around the glyph and count label so a collapsed stack reads as a group. The title chip is clear so the box is one fill. Expanded and collapsed both keep the box on the group node only.
+
+## Acceptance
+
+- On a project Mesh with more than 12 tasks in one cascade column, link row, or rail, those tasks are one node labeled with the count. Other types in that band stay themselves unless they also pass 12.
+- Clicking the group shows the records, with the group node still there to collapse them. The focused record is never one of the hidden members.
+- Depth, Hide done, and a type chip still change the neighbourhood first. A stack that drops to 12 or fewer after a filter is not grouped.
+- Plan view, hover cards on real records, and saved pins on real records behave as they do now.
+- `npm run lint` is clean.
