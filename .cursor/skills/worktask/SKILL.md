@@ -26,7 +26,7 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 1b. **Authenticate before task I/O** — the DEV API `/api/v1/*` requires a session (or API key). Run step **0. Auth** first every `/worktask` session (see [reference.md](reference.md) § Auth). Never invent credentials; never commit secrets; never put passwords in plans or comments.
 2. Prefer the **HTTP API** on the DEV server (see [reference.md](reference.md)). Do not use raw SQL for task updates (auth session mint fallback in reference is the only DB exception).
 3. Do **not** change `dueDate` (including on Complete).
-4. State values: `new` (UI: Draft) | `ready` (UI: Ready) | `in_progress` | `pending` (UI: Pending — own work done, waiting on children) | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`.
+4. State values: `new` (UI: Draft) | `blocked` (UI: Blocked — system-only; waiting on unfinished Depends-on; not a start state) | `ready` (UI: Ready) | `in_progress` | `pending` (UI: Pending — own work done, waiting on children) | `complete` | `canceled` | `on_hold` (UI: Complete, not “Completed”). Fresh `/worktask` starts expect `ready`. `blocked` is an open Depends-on blocker.
 5. Follow repo plan + git + finish-up rules; this skill **adds** task bookkeeping and **replaces** `phase-N-*` branch naming with `T####-*` for this workstream.
 6. **Never** update git config (`user.name` / `user.email`). If commit fails for missing identity, set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` for that command only (see [reference.md](reference.md)).
 7. **App version + release notes + features list** — on finish-up, bump SemVer per [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) in the merge commit (MINOR if this Task added a Drizzle migration, otherwise PATCH). In the **same commit**, update repo-root [`RELEASE_NOTES.md`](../../../RELEASE_NOTES.md) (recreate the stub header if the file is missing/empty after a GitHub release clear; prepend newest `## x.y.z — YYYY-MM-DD` with only non-empty Fixes / Enhancements / New Functionality / Breaking Changes / Deprecated Functionality). When this Task adds **major user-facing functionality**, also update [`FEATURES.md`](../../../FEATURES.md) with website-ready single-line bullets (skip for bugfixes-only or internal/agent-workflow work). Mention the new version in the completion comment. Do not skip the bump or the release-notes update.
@@ -95,7 +95,7 @@ If the work looks too large for one session (many unrelated surfaces, multi-day 
 After load (and as part of the sizing assessment):
 
 1. Inspect `dependsOn` from `GET /api/v1/tasks/{id}/dependencies`.
-2. If **any** Depends-on task has `state` other than `complete`, `canceled`, or `pending`:
+2. If **any** Depends-on task has `state` other than `complete`, `canceled`, or `pending` (`blocked` is an open blocker):
    - **Alert** the user with the open blockers (`T####`, title, state).
    - **Stop** the workflow — do not interview/plan further, do not create a branch, do not mark In Progress.
    - No cleanup is needed if nothing was started; if this gate is hit mid-flight somehow, do not leave the task In Progress from this skill.

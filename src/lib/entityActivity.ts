@@ -28,6 +28,7 @@ export const COMMENT_EXCERPT_LENGTH = 160;
 
 const STATE_LABELS: Record<string, string> = {
   new: "Draft",
+  blocked: "Blocked",
   ready: "Ready",
   in_progress: "In Progress",
   pending: "Pending",

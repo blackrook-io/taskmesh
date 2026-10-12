@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const TASK_STATES = [
   "new",
+  "blocked",
   "ready",
   "in_progress",
   "pending",

@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { isFinishedChildState } from "../lib/taskFields.js";
+import { coerceReadyToBlocked } from "./taskBlocked.js";
+import { openDependsOnBlockers } from "./taskDependencies.js";
 import { recordTaskChanges, type RecordTaskChangesOpts } from "./tasks.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -33,11 +35,17 @@ export async function hasUnfinishedDirectChildren(db: Db, taskId: number): Promi
 export async function resolvePersistedState(
   db: Db,
   taskId: number,
+  fromState: string,
   requested: string | undefined,
 ): Promise<string | undefined> {
   if (requested === undefined) return undefined;
   const unfinished = await hasUnfinishedDirectChildren(db, taskId);
-  return coerceCompleteIfUnfinishedChildren(requested, unfinished);
+  const afterChildren = coerceCompleteIfUnfinishedChildren(requested, unfinished);
+  if (fromState === "new" && afterChildren === "ready") {
+    const blockers = await openDependsOnBlockers(db, taskId);
+    return coerceReadyToBlocked(fromState, afterChildren, blockers.length > 0);
+  }
+  return afterChildren;
 }
 
 async function promotePendingParentChain(

@@ -22,6 +22,10 @@ import {
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { assertCanAccessProject } from "../../services/ownership.js";
 import {
+  promoteBlockedDependents,
+  shouldPromoteBlockedDependents,
+} from "../../services/taskBlocked.js";
+import {
   afterTaskHierarchyChange,
   resolvePersistedState,
 } from "../../services/taskPending.js";
@@ -413,7 +417,7 @@ export async function patchProjectTask(args: {
     return { ok: false, status: 400, code: "dependency_incomplete", message: completeGate.message };
   }
 
-  const persistedState = await resolvePersistedState(db, args.taskId, parsed.state);
+  const persistedState = await resolvePersistedState(db, args.taskId, existing.state, parsed.state);
   const previousParentId = existing.parentId;
   const stateComment = parsed.stateComment?.trim() ?? "";
 
@@ -464,6 +468,9 @@ export async function patchProjectTask(args: {
   if (row) {
     await recordTaskChanges(db, args.taskId, existing, row, activityOpts);
     await afterTaskHierarchyChange(db, args.taskId, previousParentId, activityOpts);
+    if (shouldPromoteBlockedDependents(existing.state, row.state)) {
+      await promoteBlockedDependents(db, args.taskId, activityOpts);
+    }
     if (parsed.description !== undefined) {
       await syncMentionLinks(db, {
         srcType: "task",
@@ -546,11 +553,15 @@ tasksRouter.delete("/:taskId", async (req, res) => {
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),
     });
-    await afterTaskHierarchyChange(db, taskId, existing.parentId, {
+    const activityOpts = {
       actorId,
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),
-    });
+    };
+    await afterTaskHierarchyChange(db, taskId, existing.parentId, activityOpts);
+    if (shouldPromoteBlockedDependents(existing.state, row.state)) {
+      await promoteBlockedDependents(db, taskId, activityOpts);
+    }
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);

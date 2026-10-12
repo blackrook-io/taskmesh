@@ -15,6 +15,7 @@ import {
   removeDependency,
   searchTasksForDependency,
 } from "../../services/taskDependencies.js";
+import { promoteBlockedTaskIfClear } from "../../services/taskBlocked.js";
 import { assertCanAccessDualScoped } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -152,6 +153,10 @@ taskDependenciesRouter.delete(
         sendError(res, status, result.code, result.message);
         return;
       }
+      await promoteBlockedTaskIfClear(db, taskId, {
+        actorId,
+        source: activitySourceFromRequest(req),
+      });
       res.json({ data: { dependsOn: result.dependsOn, requiredBy: result.requiredBy } });
     } catch (err) {
       handleRouteError(res, err);
@@ -173,7 +178,8 @@ export async function rejectCompleteIfBlocked(
 export async function rejectDeleteIfBlocked(
   taskId: number,
 ): Promise<{ blocked: true; message: string } | { blocked: false }> {
-  const blockers = await openRequiredByBlockers(db, taskId);
+  // Blocked dependents are released when this task is deleted, so they do not block delete.
+  const blockers = (await openRequiredByBlockers(db, taskId)).filter((row) => row.state !== "blocked");
   if (blockers.length === 0) return { blocked: false };
   return { blocked: true, message: formatBlockersMessage("delete", blockers) };
 }

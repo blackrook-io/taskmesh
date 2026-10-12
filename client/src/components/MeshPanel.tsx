@@ -206,6 +206,7 @@ function legendColors(mode: MeshColorMode): { color: string; label: string; holl
   if (mode === "state") {
     return [
       { color: "var(--task-state-draft)", label: "Draft" },
+      { color: "var(--task-state-blocked)", label: "Blocked" },
       { color: "var(--task-state-ready)", label: "Ready" },
       { color: "var(--task-state-progress)", label: "In Progress", hollow: true },
       { color: "var(--task-state-pending)", label: "Pending" },

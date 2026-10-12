@@ -5,6 +5,7 @@ import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { StateReasonDialog } from "../components/StateReasonDialog";
 import { CHILD_TITLE_INDENT_PX, StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
+import { maybeNotifyBlockedReady } from "../lib/blockedStateNotice";
 import {
   TaskListContextMenu,
   ctxFieldFromEventTarget,
@@ -300,6 +301,7 @@ export function TasksListPage() {
         body: JSON.stringify(patch),
         headers: deferHistory ? { "X-TaskMesh-History": "defer" } : undefined,
       });
+      maybeNotifyBlockedReady(patch.state, res.data.state);
       return res.data;
     },
     onSuccess: (row) => {

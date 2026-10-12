@@ -75,6 +75,7 @@ export const OVERVIEW_DEFAULT_PANEL_TYPES: readonly OverviewPanelType[] = [
 
 const ACTIVE_TASK_STATES = new Set([
   "new",
+  "blocked",
   "ready",
   "in_progress",
   "pending",

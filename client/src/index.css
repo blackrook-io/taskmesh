@@ -24,6 +24,7 @@
   --space-6: 0.8rem;
   --space-7: 1rem;
   --task-state-draft: #4ea1ff;
+  --task-state-blocked: #d4849a;
   --task-state-ready: #3ecf8e;
   --task-state-progress: #4ea1ff;
   --task-state-pending: #c9b458;
@@ -2175,6 +2176,11 @@ textarea.raw-md {
   border-color: var(--task-state-draft);
 }
 
+.task-state-cb--blocked {
+  color: var(--task-state-blocked);
+  border-color: var(--task-state-blocked);
+}
+
 .task-state-cb--ready {
   color: var(--task-state-ready);
   border-color: var(--task-state-ready);
@@ -2217,6 +2223,10 @@ textarea.raw-md {
 
 .task-list-row__state--draft {
   color: var(--task-state-draft);
+}
+
+.task-list-row__state--blocked {
+  color: var(--task-state-blocked);
 }
 
 .task-list-row__state--ready {
@@ -2459,6 +2469,10 @@ textarea.raw-md {
 .task-timeline__tone--draft,
 .task-timeline__seg--draft {
   color: var(--task-state-draft);
+}
+.task-timeline__tone--blocked,
+.task-timeline__seg--blocked {
+  color: var(--task-state-blocked);
 }
 .task-timeline__tone--ready,
 .task-timeline__seg--ready {
@@ -2918,6 +2932,10 @@ textarea.raw-md {
 .task-dep-list__state {
   font-size: 0.75rem;
   white-space: nowrap;
+}
+
+.task-dep-list__state--blocked {
+  color: var(--task-state-blocked);
 }
 
 .task-dep-list__state--pending {

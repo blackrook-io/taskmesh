@@ -1,4 +1,5 @@
 import { apiJson } from "../api/client";
+import { maybeNotifyBlockedReady } from "./blockedStateNotice";
 import type { Task } from "../types";
 
 export type PatchTaskOptions = {
@@ -29,5 +30,6 @@ export async function patchTaskRecord(
     body: JSON.stringify(patch),
     headers,
   });
+  maybeNotifyBlockedReady(patch.state, res.data.state);
   return res.data;
 }
