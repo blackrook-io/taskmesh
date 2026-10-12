@@ -43,7 +43,17 @@ const ENV_KEY_BY_PLUGIN: Record<string, string> = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   gemini: "GEMINI_API_KEY",
+  "azure-openai": "AZURE_OPENAI_API_KEY",
 };
+
+/** Chat model from plugin config. Azure stores the deployment as `chatDeployment`. */
+export function configuredChatModel(config: unknown): string | null {
+  if (!config || typeof config !== "object") return null;
+  const rec = config as { defaultModel?: unknown; chatDeployment?: unknown };
+  if (typeof rec.defaultModel === "string" && rec.defaultModel.trim()) return rec.defaultModel.trim();
+  if (typeof rec.chatDeployment === "string" && rec.chatDeployment.trim()) return rec.chatDeployment.trim();
+  return null;
+}
 
 export function resolvePluginApiKey(pluginId: string, env: NodeJS.ProcessEnv = process.env): string | null {
   const name = ENV_KEY_BY_PLUGIN[pluginId];

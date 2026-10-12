@@ -1,6 +1,7 @@
 import type { AiChatMessage, AiProviderPlugin, AiToolCall } from "@taskmesh/ai-provider-contract";
 import { AiProviderError } from "@taskmesh/ai-provider-contract";
 import { writeAiAudit } from "./aiAudit.js";
+import { configuredChatModel } from "./aiProviderConfig.js";
 import { redactSecrets } from "./aiMinimize.js";
 import type { ChatMessage } from "./types.js";
 import {
@@ -139,11 +140,7 @@ function sanitizeProviderMessages(messages: AiChatMessage[]): AiChatMessage[] {
 }
 
 function readDefaultModel(config: unknown): string {
-  if (config && typeof config === "object" && "defaultModel" in config) {
-    const model = (config as { defaultModel?: unknown }).defaultModel;
-    if (typeof model === "string" && model.trim()) return model.trim();
-  }
-  return "gpt-4.1-mini";
+  return configuredChatModel(config) ?? "gpt-4.1-mini";
 }
 
 async function readRound(

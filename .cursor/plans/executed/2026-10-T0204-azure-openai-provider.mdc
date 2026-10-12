@@ -1,0 +1,55 @@
+# T0204 — Azure OpenAI provider plugin
+
+**Task:** T0204 (id 219) — AI: Azure OpenAI provider plugin
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Depends on:** T0180 (complete). No open blockers.
+**Branch (after approval):** `T0204-azure-openai-provider`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`).
+
+## Size
+
+One plugin package, an Azure branch in the shared contract-kit mock, and a small admin-form extension so endpoint, deployment names, and API version can be saved. No schema, no routing change (T0205), no instance-key store (T0182), no embeddings product pipeline (T0208). Fits one session.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Package | `plugins/ai-providers/azure-openai/`, npm name `@taskmesh/ai-provider-azure-openai`, export `plugin` with `id: "azure-openai"`. `"taskmesh": { "role": "provider" }`. Workspace glob already covers it. Add the package to `plugins/ai-providers/tsconfig.json` project references. |
+| 2 | Wire | Classic Azure OpenAI data plane via `fetch` inside this package. No official SDK and no Microsoft Entra ID. Header `api-key`. Endpoint is the Administrator base URL (resource host only, for example `https://my-resource.openai.azure.com`). Chat: `POST {base}/openai/deployments/{chatDeployment}/chat/completions?api-version={apiVersion}`. Embeddings: `POST {base}/openai/deployments/{embeddingsDeployment}/embeddings?api-version={apiVersion}`. List and verify: `GET {base}/openai/deployments?api-version={apiVersion}`. Deployment names are path-encoded. Redirects are not followed. |
+| 3 | Config | Zod schema: `baseUrl` (public https, no default — the resource host is per tenant), `chatDeployment` (required, 1–120), `embeddingsDeployment` (optional, empty string allowed), `apiVersion` (default `2024-10-21`, shape `YYYY-MM-DD`). Same public-https helper as OpenAI. The dated deployment API is what this task asks for; the newer `/openai/v1` path (no deployment path, no dated version) stays out. |
+| 4 | Capabilities | `chat`, `streaming`, `tools`, and `embeddings` true. `local` false. |
+| 5 | Chat | Request body matches the OpenAI chat-completions shape already used by `openaiWire` (messages, tools, `tool_choice: "auto"`). `model` in the body is the deployment name. When `tools` is an array (the contract kit and the assistant), send one JSON body and emit `delta` or `tool_calls`, then `usage`, then `done`. When `tools` is omitted, stream SSE (`data:` chunks, `[DONE]`, usage from `prompt_tokens` / `completion_tokens`). Deployment used: `args.model` when the caller passes one, otherwise `chatDeployment`. |
+| 6 | Assistant model | `sessionFrom` currently reads `defaultModel` and otherwise sends `gpt-4.1-mini`. Also accept `chatDeployment` so an Azure session uses the configured chat deployment. OpenAI, Anthropic, Gemini, and OpenAI-compatible keep using `defaultModel`. OpenAI still wins `selectChatPlugin` when it is ready. |
+| 7 | Models and verify | `listModels` returns deployment `id`s from `data[]`. `verifyKey` is that list. Missing key is `auth`. |
+| 8 | Embeddings | `embed(texts)` requires a non-empty `embeddingsDeployment`; otherwise `invalid_config`. Response vectors come from `data[].embedding`. Usage is `{ inputTokens, outputTokens: 0 }` when `usage.prompt_tokens` is present, otherwise omitted. This does not index records; T0208 still owns that pipeline. |
+| 9 | Errors and usage | Reuse `mapProviderHttpError`: 401/403 `auth`, 404 `model_not_found`, 429 with quota/billing/credit wording `quota`, other 429 `rate_limit`, network `network`. Chat usage is `{ inputTokens, outputTokens }` from `prompt_tokens` / `completion_tokens`. |
+| 10 | Contract kit | Extend `contractMockFetch` only. Read the `api-key` header (distinct from Anthropic `x-api-key` and Gemini `x-goog-api-key`) for the existing suffixes (`bad`, `rate`, `quota`, `missing-model`, `offline`). A deployments list URL returns `{ data: [{ id: "gpt-test" }] }` and applies the `bad` key the same way `/models` does. Chat JSON stays the OpenAI choices shape. Embed URLs return `{ data: [{ embedding: [0.1, 0.2] }] }`. Assertions in `assertProviderContract` do not change. |
+| 11 | Admin form | Other plugins keep Base URL and Default model. Azure OpenAI shows Endpoint, Chat deployment, Embeddings deployment, and API version. The admin list/patch API round-trips those four strings for this plugin and still returns `baseUrl` and `defaultModel` for the others. Saving `http://…` or a private host is rejected by the existing public-https check. |
+| 12 | Key until T0182 | Read `AZURE_OPENAI_API_KEY` at call time in `resolvePluginApiKey`. Do not store it, do not first-boot seed `ai_providers`, and do not log a deprecation line. |
+| 13 | Tests and docs | `plugins/ai-providers/azure-openai/src/contract.test.ts`: shared kit, rejected base URLs, one SSE fixture (asserts `api-key`, deployment path, and `api-version`), one embed fixture. Add that file to the root `npm test` explicit list. Note `AZURE_OPENAI_API_KEY` in `README.md`, `INSTALL.md`, `SECURITY.md`, `.env.example`, and `.env.docker.example` as optional and not stored. |
+
+## Work items
+
+1. **Mock** — Azure branch in `plugins/ai-providers/contract/src/kit.ts` as in decision 10.
+2. **Plugin** — `index.ts` implementing list, verify, JSON chat, SSE chat, and embeddings. Azure client stays in this package and reuses `mapProviderHttpError`.
+3. **Session model** — `sessionFrom` uses `chatDeployment` when `defaultModel` is absent.
+4. **Admin** — API public config and `AdminAiProvidersSection` fields for this plugin only.
+5. **Key resolver** — `AZURE_OPENAI_API_KEY` for id `azure-openai` only. Update `aiProviderConfig` tests so OpenAI still wins when Azure is also ready.
+6. **Build graph** — tsconfig project reference so `npm run build:plugins` emits `dist/index.js`.
+7. **Docs** — env-var notes only.
+
+## Out of scope
+
+- Encrypted instance keys, key modes, billing-risk acknowledgement (T0182).
+- Provider preference or fallback beyond the existing OpenAI-first rule (T0205).
+- Record indexing or suggestion embeddings (T0208).
+- Microsoft Entra ID, `/openai/v1`, the Responses API, vision, audio, and content filters as admin fields.
+- Ollama (T0181).
+
+## QA checklist (after implementation)
+
+1. `npm test` includes the Azure OpenAI contract file and it passes with the shared kit, including a non-empty embedding vector.
+2. Restart the DEV API after `npm run build:plugins`. Administration → System properties lists **Azure OpenAI** with Endpoint, Chat deployment, Embeddings deployment, and API version `2024-10-21`. Other providers still show Base URL and Default model. Saving `http://…` or a private host is rejected.
+3. With `OPENAI_API_KEY` set and OpenAI enabled, chat still uses OpenAI even if `AZURE_OPENAI_API_KEY` is also set and Azure OpenAI is enabled with a valid endpoint and chat deployment.
+4. Disable OpenAI (and any other ready chat plugin), enable Azure OpenAI, set endpoint, chat deployment, and `AZURE_OPENAI_API_KEY`, restart, and confirm a short assistant reply returns. Unset the key, restart, and confirm Azure OpenAI shows as not configured.

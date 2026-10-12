@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.64.3 — 2026-10-12
+
+### New Functionality
+- Administrators can enable Azure OpenAI and set the resource endpoint, chat deployment, embeddings deployment, and API version. Chat and embeddings use those deployments. An enabled OpenAI plugin still handles chat. The server environment key is read when a request is sent and is not stored.
+
 ## 0.64.2 — 2026-10-12
 
 ### New Functionality
