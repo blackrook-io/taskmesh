@@ -32,6 +32,13 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     aiUndoWindowDays: 7,
     aiKeyMode: "instance_only",
     aiFeatureRoutes: { features: {}, profiles: [] },
+    aiBudgets: {
+      tokensPerUserPerDay: null,
+      instanceSpendUsdPerDay: null,
+      toolCallsPerRun: null,
+      writesPerRun: null,
+    },
+    aiInstanceUsdPerMillionTokens: 1,
     updatedAt: null,
     ...overrides,
   };

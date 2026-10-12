@@ -8,6 +8,7 @@ import {
   type ChatTurn,
 } from "../api/assistant";
 import { apiJson, ApiRequestError } from "../api/client";
+import { fetchUserAiUsage } from "../api/aiUsage";
 import { useAssistantAttachTarget } from "../lib/assistantAttach";
 import { isDeleteProposal, proposalExpired, proposalHeading } from "../lib/aiReview";
 import { showAiAppliedToast, showAiApplyFailedToast } from "../lib/aiApplyToast";
@@ -106,6 +107,12 @@ export function AssistantPanel({ open, onClose }: Props) {
     queryFn: fetchAssistantStatus,
     enabled: open,
     staleTime: 30_000,
+  });
+  const usageQuery = useQuery({
+    queryKey: ["ai-usage"],
+    queryFn: fetchUserAiUsage,
+    enabled: open,
+    staleTime: 15_000,
   });
 
   useEffect(() => {
@@ -351,6 +358,7 @@ export function AssistantPanel({ open, onClose }: Props) {
       } finally {
         setBusy(false);
         abortRef.current = null;
+        void qc.invalidateQueries({ queryKey: ["ai-usage"] });
       }
     },
     onError: (e: Error) => {
@@ -370,6 +378,8 @@ export function AssistantPanel({ open, onClose }: Props) {
   if (!open) return null;
 
   const enabled = statusQuery.data?.enabled ?? false;
+  const budgetBlocked = usageQuery.data?.blocked === true;
+  const budgetWarning = usageQuery.data?.warning === true && !budgetBlocked;
   const tier3 = proposals.filter((proposal) => (proposal.planTier ?? 2) >= 3);
   const tier2 = proposals.filter((proposal) => (proposal.planTier ?? 2) < 3);
 
@@ -421,6 +431,16 @@ export function AssistantPanel({ open, onClose }: Props) {
             </button>
           </div>
         </header>
+
+        {budgetBlocked ? (
+          <p className="assistant-panel__banner" role="alert">
+            You have reached the AI usage budget.
+          </p>
+        ) : budgetWarning ? (
+          <p className="assistant-panel__banner" role="status">
+            You have used 80% of today’s AI budget.
+          </p>
+        ) : null}
 
         {!enabled && !statusQuery.isLoading ? (
           <p className="assistant-panel__banner">
@@ -585,7 +605,7 @@ export function AssistantPanel({ open, onClose }: Props) {
           onSubmit={(e) => {
             e.preventDefault();
             const msg = input.trim();
-            if (!msg || busy || !enabled) return;
+            if (!msg || busy || !enabled || budgetBlocked) return;
             setInput("");
             send.mutate(msg);
           }}
@@ -593,14 +613,14 @@ export function AssistantPanel({ open, onClose }: Props) {
           <textarea
             rows={3}
             value={input}
-            disabled={!enabled || busy}
+            disabled={!enabled || busy || budgetBlocked}
             placeholder={enabled ? "Message the assistant…" : "Configure OpenAI first"}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 const msg = input.trim();
-                if (!msg || busy || !enabled) return;
+                if (!msg || busy || !enabled || budgetBlocked) return;
                 setInput("");
                 send.mutate(msg);
               }

@@ -470,6 +470,13 @@
       "when": 1791823770836,
       "tag": "0066_omniscient_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791828730733,
+      "tag": "0067_loud_ben_urich",
+      "breakpoints": true
     }
   ]
 }

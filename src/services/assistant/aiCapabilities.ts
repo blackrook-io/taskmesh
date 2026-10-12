@@ -5,6 +5,8 @@ import { resolveAssistantSession } from "./index.js";
 import { resolveEffectiveAiAccess } from "./projectAiAccess.js";
 import { getSystemProperties } from "../systemProperties.js";
 import { loadedAiProviders } from "./providerLoader.js";
+import { pluginBudgetReason, sumDayUsage, usageWarning, utcDayStart, type AiKeySource } from "./aiBudgets.js";
+import { resolveFeatureRoute } from "./aiRouting.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -25,7 +27,7 @@ export type AiCapability = {
 
 /**
  * Whether this user can use each AI feature.
- * `budget_reached` is reserved for T0188 and is not returned yet.
+ * `budget_reached` means the next plugin call is already over a daily cap.
  */
 export async function listAiCapabilities(
   db: Db,
@@ -41,8 +43,54 @@ export async function listAiCapabilities(
     }
   }
   const session = await resolveAssistantSession(db, args.userId, args.env);
-  if (session) return [{ id: "assistant", available: true, reason: null }];
-  return [{ id: "assistant", available: false, reason: await unavailableReason(db) }];
+  if (!session) return [{ id: "assistant", available: false, reason: await unavailableReason(db) }];
+  const props = await getSystemProperties(db);
+  const route = await resolveFeatureRoute(db, { userId: args.userId, env: args.env });
+  const keySource = route.attempts[0]?.keySource ?? null;
+  const totals = await sumDayUsage(db, { userId: args.userId });
+  if (pluginBudgetReason(props.aiBudgets, totals, keySource)) {
+    return [{ id: "assistant", available: false, reason: "budget_reached" }];
+  }
+  return [{ id: "assistant", available: true, reason: null }];
+}
+
+export type UserAiUsage = {
+  dayStart: string;
+  tokensUsed: number;
+  tokenLimit: number | null;
+  /** Set when the next call would spend the instance key. */
+  instanceSpendMicroUsd: number | null;
+  instanceSpendLimitMicroUsd: number | null;
+  keySource: AiKeySource | null;
+  warning: boolean;
+  blocked: boolean;
+};
+
+export async function readUserAiUsage(
+  db: Db,
+  userId: number,
+  env?: NodeJS.ProcessEnv,
+): Promise<UserAiUsage> {
+  const props = await getSystemProperties(db);
+  const route = await resolveFeatureRoute(db, { userId, env });
+  const keySource = route.attempts[0]?.keySource ?? null;
+  const totals = await sumDayUsage(db, { userId });
+  const spendsInstance = keySource === "instance";
+  const spendCap =
+    props.aiBudgets.instanceSpendUsdPerDay == null
+      ? null
+      : props.aiBudgets.instanceSpendUsdPerDay * 1_000_000;
+  const blocked = pluginBudgetReason(props.aiBudgets, totals, keySource) != null;
+  return {
+    dayStart: utcDayStart(new Date()).toISOString(),
+    tokensUsed: totals.tokens,
+    tokenLimit: props.aiBudgets.tokensPerUserPerDay,
+    instanceSpendMicroUsd: spendsInstance ? totals.instanceSpendMicroUsd : null,
+    instanceSpendLimitMicroUsd: spendsInstance ? spendCap : null,
+    keySource,
+    warning: usageWarning(props.aiBudgets, totals, keySource),
+    blocked,
+  };
 }
 
 async function unavailableReason(db: Db): Promise<Exclude<AiCapabilityReason, "project_excluded" | "budget_reached">> {

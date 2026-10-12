@@ -16,6 +16,7 @@ import { runAssistantWithTools } from "./runWithTools.js";
 import { auditRouteSkips, resolveFeatureRoute } from "./aiRouting.js";
 import { followRouteAttempts } from "./aiFeatureRoutes.js";
 import { writeAiAudit } from "./aiAudit.js";
+import { sumDayUsage, type AiUsageMeter } from "./aiBudgets.js";
 import type { ChatMessage } from "./types.js";
 
 export type { ChatMessage } from "./types.js";
@@ -180,6 +181,7 @@ export async function runConfiguredAssistant(args: {
   localOnly?: boolean;
 }): Promise<boolean> {
   const props = await getSystemProperties(args.db);
+  const totals = await sumDayUsage(args.db, { userId: args.actorUserId });
   const route = await resolveFeatureRoute(args.db, {
     userId: args.actorUserId,
     localOnly: args.localOnly,
@@ -228,6 +230,16 @@ export async function runConfiguredAssistant(args: {
           webFetchEnabled: props.aiWebFetch,
           rethrowFirstProviderError: true,
           routeReason: attempt.reason,
+          meter: {
+            keySource: attempt.keySource,
+            usdPerMillionTokens: props.aiInstanceUsdPerMillionTokens,
+            limits: props.aiBudgets,
+            totals,
+            feature: "assistant",
+            provider: attempt.plugin.id,
+            model: attempt.model,
+            userId: args.actorUserId,
+          } satisfies AiUsageMeter,
         });
       },
     });

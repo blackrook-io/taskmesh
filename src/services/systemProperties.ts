@@ -27,6 +27,12 @@ import {
 } from "./assistant/aiTiers.js";
 import { isAiAccess, type AiAccess } from "./assistant/aiAccess.js";
 import { parseAiKeyMode, type AiKeyMode } from "./assistant/aiKeyMode.js";
+import {
+  EMPTY_AI_BUDGETS,
+  normalizeAiBudgets,
+  normalizeUsdPerMillionTokens,
+  type AiBudgets,
+} from "./assistant/aiBudgets.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -67,6 +73,8 @@ export const SYSTEM_PROPERTY_KEYS = [
   "ai_project_access_default",
   "ai_key_mode",
   "ai_feature_routes",
+  "ai_budgets",
+  "ai_instance_usd_per_million_tokens",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -95,6 +103,10 @@ export type SystemProperties = {
   aiUndoWindowDays: number;
   /** Who may spend an instance provider key. Changed only through the billing-risk route. */
   aiKeyMode: AiKeyMode;
+  /** Daily and per-run AI limits. A null field means that limit is off. */
+  aiBudgets: AiBudgets;
+  /** Estimated USD charged per million tokens on instance-key calls. */
+  aiInstanceUsdPerMillionTokens: number;
   /** Per-feature model defaults, fallbacks, and model-profile overrides (T0205). */
   aiFeatureRoutes: AiFeatureRoutesFile;
   updatedAt: string | null;
@@ -131,6 +143,8 @@ const DEFAULTS: {
   ai_project_access_default: AiAccess;
   ai_key_mode: AiKeyMode;
   ai_feature_routes: AiFeatureRoutesFile;
+  ai_budgets: AiBudgets;
+  ai_instance_usd_per_million_tokens: number;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -150,6 +164,8 @@ const DEFAULTS: {
   ai_project_access_default: "full",
   ai_key_mode: "instance_only",
   ai_feature_routes: { features: {}, profiles: [] },
+  ai_budgets: EMPTY_AI_BUDGETS,
+  ai_instance_usd_per_million_tokens: 1,
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -315,6 +331,11 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
     aiFeatureRoutes: normalizeAiFeatureRoutes(
       map.get("ai_feature_routes")?.value ?? DEFAULTS.ai_feature_routes,
     ),
+    aiBudgets: normalizeAiBudgets(map.get("ai_budgets")?.value ?? DEFAULTS.ai_budgets),
+    aiInstanceUsdPerMillionTokens: normalizeUsdPerMillionTokens(
+      map.get("ai_instance_usd_per_million_tokens")?.value ??
+        DEFAULTS.ai_instance_usd_per_million_tokens,
+    ),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);
@@ -350,6 +371,8 @@ export async function patchSystemProperties(
     meshAppearance?: MeshAppearance;
     aiWebFetch?: boolean;
     aiProjectAccessDefault?: AiAccess;
+    aiBudgets?: AiBudgets;
+    aiInstanceUsdPerMillionTokens?: number;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -535,6 +558,32 @@ export async function patchSystemProperties(
         set: { value: patch.aiProjectAccessDefault, updatedAt: now },
       });
   }
+  if (patch.aiBudgets !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "ai_budgets",
+        value: patch.aiBudgets,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.aiBudgets, updatedAt: now },
+      });
+  }
+  if (patch.aiInstanceUsdPerMillionTokens !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "ai_instance_usd_per_million_tokens",
+        value: patch.aiInstanceUsdPerMillionTokens,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.aiInstanceUsdPerMillionTokens, updatedAt: now },
+      });
+  }
   invalidateSystemPropertiesCache();
   return getSystemProperties(db);
 }
@@ -565,5 +614,14 @@ export const systemPropertiesPatchSchema = z
     meshAppearance: meshAppearanceSchema.optional(),
     aiWebFetch: z.boolean().optional(),
     aiProjectAccessDefault: z.enum(["full", "read_only", "excluded"]).optional(),
+    aiBudgets: z
+      .object({
+        tokensPerUserPerDay: z.number().int().positive().max(1_000_000_000).nullable(),
+        instanceSpendUsdPerDay: z.number().int().positive().max(1_000_000_000).nullable(),
+        toolCallsPerRun: z.number().int().positive().max(1_000_000_000).nullable(),
+        writesPerRun: z.number().int().positive().max(1_000_000_000).nullable(),
+      })
+      .optional(),
+    aiInstanceUsdPerMillionTokens: z.number().nonnegative().max(1_000_000).optional(),
   })
   .strict();

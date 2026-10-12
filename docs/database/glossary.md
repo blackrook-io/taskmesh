@@ -161,6 +161,8 @@ Exact FK lists are on the domain pages.
   - `ai_undo_window_days` — number of days (default **7**, range **1**–**90**, T0186) that an automatic Tier 1 change can be undone. Missing or invalid values fall back to **7**.
   - `ai_project_access_default` — `full` \| `read_only` \| `excluded` (default `full`, T0184). Instance ceiling for `projects.ai_access`. Projects can only narrow it. Missing or invalid values fall back to `full`.
   - `ai_feature_routes` — jsonb (T0205): `features` maps a feature id to an optional `{ pluginId, model }` default and an ordered `fallbacks` list; `profiles` is a list of per-model overrides (`tools`, `embeddings`, `longContext`, `size`). Missing or invalid JSON is treated as empty. API keys are not stored here.
+  - `ai_budgets` — jsonb (T0188): `tokensPerUserPerDay`, `instanceSpendUsdPerDay`, `toolCallsPerRun`, and `writesPerRun`. Each is a positive integer or null. Null means that limit is off. The spend cap is whole USD per UTC day and counts only instance-key calls.
+  - `ai_instance_usd_per_million_tokens` — number (default **1**, T0188). Estimated price used to turn instance-key tokens into spend. Missing or invalid values fall back to **1**.
 - **`mesh_layouts.positions`** — pinned Mesh node key → `{ x, y }` (T0165). **`mesh_layouts.viewport`** — `{ x, y, zoom }` or empty. `view` is `focus` \| `plan`.
 
 ## Uploads vs database

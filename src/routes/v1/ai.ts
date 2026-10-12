@@ -4,7 +4,7 @@ import { db } from "../../db/client.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { redactSecret } from "../../services/assistant/aiKeyMode.js";
 import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
-import { listAiCapabilities } from "../../services/assistant/aiCapabilities.js";
+import { listAiCapabilities, readUserAiUsage } from "../../services/assistant/aiCapabilities.js";
 import { listUserCredentials, removeUserKey, replaceUserKey } from "../../services/assistant/aiUserKeys.js";
 import { AiRoutingError, listAiRouting, setUserRoutePreference } from "../../services/assistant/aiRouting.js";
 import { getSystemProperties } from "../../services/systemProperties.js";
@@ -86,6 +86,15 @@ aiRouter.delete("/credentials/:pluginId", async (req, res) => {
     res.json({ data: row });
   } catch (err) {
     sendCredentialsError(res, err);
+  }
+});
+
+aiRouter.get("/usage", async (_req, res) => {
+  try {
+    const userId = await getCurrentUserId(db);
+    res.json({ data: await readUserAiUsage(db, userId) });
+  } catch (err) {
+    handleRouteError(res, err);
   }
 });
 

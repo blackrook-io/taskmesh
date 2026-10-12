@@ -36,6 +36,7 @@ type ProvidersPayload = {
   plugins: AiProviderRow[];
   keyMode: AiKeyMode;
   activeUserCount: number;
+  instanceSpendUsdPerDay?: number | null;
 };
 
 type Draft = {
@@ -473,8 +474,10 @@ export function AdminAiProvidersSection() {
               including background features run for them.
             </p>
             <p>
-              Active users: <strong>{activeUserCount}</strong>. No instance-key spend cap is
-              configured yet.
+              Active users: <strong>{activeUserCount}</strong>.{" "}
+              {query.data?.instanceSpendUsdPerDay == null
+                ? "No instance-key spend cap is configured yet."
+                : `Instance-key spend cap: $${Number(query.data.instanceSpendUsdPerDay).toFixed(2)} per UTC day (estimated).`}
             </p>
             <label className="field">
               <span>

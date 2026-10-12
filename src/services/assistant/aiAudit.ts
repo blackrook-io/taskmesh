@@ -2,7 +2,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import type { AiAction } from "./aiPolicy.js";
 
-export type AiAuditAction = AiAction | "respond" | "key_mode" | "route" | "undo";
+export type AiAuditAction = AiAction | "respond" | "key_mode" | "route" | "undo" | "usage";
 
 export type AiAuditInput = {
   userId?: number | null;
@@ -25,6 +25,10 @@ export type AiAuditInput = {
   promptVersion?: number | null;
   /** Composed ref such as `assistant@1` or `assistant@1+assistant_web_fetch@1`. */
   promptRef?: string | null;
+  /** user | instance | local. Set on usage rows. */
+  keySource?: "user" | "instance" | "local" | null;
+  /** Estimated instance-key cost in micro-USD. */
+  costMicrousd?: number | null;
 };
 
 export type AiAuditSink = (row: AiAuditInput) => Promise<number | void>;
@@ -54,6 +58,8 @@ export async function writeAiAudit(row: AiAuditInput, sink?: AiAuditSink): Promi
     promptId: row.promptId ?? null,
     promptVersion: row.promptVersion ?? null,
     promptRef: row.promptRef ?? null,
+    keySource: row.keySource ?? null,
+    costMicrousd: row.costMicrousd ?? null,
   }).returning({ id: schema.aiAuditLog.id });
   return inserted?.id ?? null;
 }

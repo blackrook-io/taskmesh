@@ -114,6 +114,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Opt in so the assistant applies tags, links, comments, and task dependencies immediately, then undo them from a toast or the AI activity page for 7 days
 - Ask the assistant about todos, lists, links, tags, comments, task dependencies, and the records around one item. Proposed adds still wait for your confirmation
 - Rate an assistant reply with thumbs up or down and an optional note. Administrators see accept, dismiss, and thumb rates by feature and model
+- See today's AI token use, and estimated instance-key spend when a call uses that key. Administrators set daily token and spend caps plus how many tool calls or writes one reply may make. At 80% you get a warning; at the cap the assistant stops
 
 
 

@@ -3,7 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { z } from "zod";
 import type { AiProviderPlugin } from "@taskmesh/ai-provider-contract";
 import * as schema from "../../db/schema.js";
-import { invalidateSystemPropertiesCache } from "../systemProperties.js";
+import { getSystemProperties, invalidateSystemPropertiesCache } from "../systemProperties.js";
 import type { AiKeyMode } from "./aiKeyMode.js";
 import {
   countActiveUsers,
@@ -52,6 +52,8 @@ export type AiProviderAdminPayload = {
   plugins: AiProviderAdminRow[];
   keyMode: AiKeyMode;
   activeUserCount: number;
+  /** Null when no daily instance-key spend cap is set. */
+  instanceSpendUsdPerDay: number | null;
 };
 
 async function readFile(db: Db): Promise<AiProvidersFile> {
@@ -110,10 +112,12 @@ export async function listAiProvidersForAdmin(db: Db): Promise<AiProviderAdminPa
         keyVerifiedAt: key?.keyVerifiedAt ?? null,
       };
     });
+  const props = await getSystemProperties(db);
   return {
     plugins,
     keyMode: await readAiKeyMode(db),
     activeUserCount: await countActiveUsers(db),
+    instanceSpendUsdPerDay: props.aiBudgets.instanceSpendUsdPerDay,
   };
 }
 

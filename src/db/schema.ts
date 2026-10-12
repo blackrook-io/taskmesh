@@ -975,7 +975,7 @@ export const aiAuditLog = pgTable(
     provider: text("provider"),
     model: text("model"),
     tool: text("tool"),
-    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode | route | undo */
+    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode | route | undo | usage */
     action: text("action").notNull(),
     entityType: text("entity_type"),
     entityId: integer("entity_id"),
@@ -993,17 +993,30 @@ export const aiAuditLog = pgTable(
     promptVersion: integer("prompt_version"),
     /** Full composition, e.g. assistant@1 or assistant@1+assistant_web_fetch@1. No prompt text. */
     promptRef: text("prompt_ref"),
+    /** user | instance | local. Set on usage rows (T0188). */
+    keySource: text("key_source"),
+    /** Estimated instance-key cost in micro-USD. Zero for user and local keys. */
+    costMicrousd: integer("cost_microusd"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     createdIdx: index("ai_audit_log_created_at_idx").on(t.createdAt),
+    usageUserIdx: index("ai_audit_log_usage_user_idx").on(t.userId, t.createdAt),
     decisionCheck: check(
       "ai_audit_log_decision_chk",
       sql`${t.decision} in ('allow', 'deny')`,
     ),
     actionCheck: check(
       "ai_audit_log_action_chk",
-      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route', 'undo')`,
+      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route', 'undo', 'usage')`,
+    ),
+    keySourceCheck: check(
+      "ai_audit_log_key_source_chk",
+      sql`${t.keySource} is null or ${t.keySource} in ('user', 'instance', 'local')`,
+    ),
+    costCheck: check(
+      "ai_audit_log_cost_microusd_chk",
+      sql`${t.costMicrousd} is null or ${t.costMicrousd} >= 0`,
     ),
     promptIdCheck: check(
       "ai_audit_log_prompt_id_chk",
