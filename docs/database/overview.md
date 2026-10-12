@@ -22,7 +22,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Non-main** (inventory + minimal on diagrams):
 
-`users`, `sessions`, `mfa_login_challenges`, `mfa_trusted_devices`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `db_stats_snapshots`
+`users`, `sessions`, `mfa_login_challenges`, `mfa_trusted_devices`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `ai_output_feedback`, `db_stats_snapshots`
 
 ## Conceptual model
 
@@ -75,6 +75,7 @@ erDiagram
   api_keys ||--o{ api_request_logs : "optional"
   users ||--o{ api_request_logs : "optional"
   users ||--o{ ai_audit_log : "assistant calls"
+  ai_audit_log ||--o{ ai_output_feedback : "quality signals"
   users }o--o| uploads : avatar
   system_properties }|..|{ system_properties : "key-value"
   users ||--o{ user_list_view_prefs : "list columns"
@@ -109,9 +110,12 @@ erDiagram
   ai_audit_log {
     string action
   }
+  ai_output_feedback {
+    string kind
+  }
 ```
 
-Non-main entities (`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
+Non-main entities (`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `ai_output_feedback`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
 
 ## Domain pages
 

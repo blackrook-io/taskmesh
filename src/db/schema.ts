@@ -893,6 +893,44 @@ export const aiAuditLog = pgTable(
   }),
 );
 
+/**
+ * Quality signals for one AI audit row (T0211).
+ * The audit log stays append-only; thumbs and outcomes live here.
+ * A note is optional and only used with thumbs (max 500 characters).
+ */
+export const aiOutputFeedback = pgTable(
+  "ai_output_feedback",
+  {
+    id: serial("id").primaryKey(),
+    auditId: integer("audit_id")
+      .notNull()
+      .references(() => aiAuditLog.id, { onDelete: "cascade" }),
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+    /** thumb_up | thumb_down | accept | dismiss | undo */
+    kind: text("kind").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    auditIdx: index("ai_output_feedback_audit_id_idx").on(t.auditId),
+    createdIdx: index("ai_output_feedback_created_at_idx").on(t.createdAt),
+    kindCheck: check(
+      "ai_output_feedback_kind_chk",
+      sql`${t.kind} in ('thumb_up', 'thumb_down', 'accept', 'dismiss', 'undo')`,
+    ),
+    noteCheck: check(
+      "ai_output_feedback_note_chk",
+      sql`${t.note} is null or char_length(${t.note}) <= 500`,
+    ),
+    thumbUidx: uniqueIndex("ai_output_feedback_thumb_uidx")
+      .on(t.auditId, t.userId)
+      .where(sql`${t.kind} in ('thumb_up', 'thumb_down')`),
+    outcomeUidx: uniqueIndex("ai_output_feedback_outcome_uidx")
+      .on(t.auditId, t.kind)
+      .where(sql`${t.kind} in ('accept', 'dismiss', 'undo')`),
+  }),
+);
+
 /** Periodic Postgres gauges for Administration → Database charts. */
 export const dbStatsSnapshots = pgTable(
   "db_stats_snapshots",
@@ -1857,7 +1895,7 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   }),
 }));
 
-export const aiAuditLogRelations = relations(aiAuditLog, ({ one }) => ({
+export const aiAuditLogRelations = relations(aiAuditLog, ({ one, many }) => ({
   user: one(users, {
     fields: [aiAuditLog.userId],
     references: [users.id],
@@ -1865,6 +1903,18 @@ export const aiAuditLogRelations = relations(aiAuditLog, ({ one }) => ({
   project: one(projects, {
     fields: [aiAuditLog.projectId],
     references: [projects.id],
+  }),
+  feedback: many(aiOutputFeedback),
+}));
+
+export const aiOutputFeedbackRelations = relations(aiOutputFeedback, ({ one }) => ({
+  audit: one(aiAuditLog, {
+    fields: [aiOutputFeedback.auditId],
+    references: [aiAuditLog.id],
+  }),
+  user: one(users, {
+    fields: [aiOutputFeedback.userId],
+    references: [users.id],
   }),
 }));
 

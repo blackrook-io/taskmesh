@@ -1,0 +1,9 @@
+[
+  {
+    "id": "assistant-reply",
+    "feature": "assistant",
+    "messages": [{ "role": "user", "content": "Hello" }],
+    "stub": { "includes": "Hello from plugin" },
+    "live": { "minChars": 1 }
+  }
+]

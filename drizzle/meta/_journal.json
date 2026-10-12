@@ -421,6 +421,13 @@
       "when": 1791803996167,
       "tag": "0059_project_ai_access",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791807038416,
+      "tag": "0060_common_sunspot",
+      "breakpoints": true
     }
   ]
 }

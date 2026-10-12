@@ -3,6 +3,7 @@ import { db } from "../../db/client.js";
 import type { ActivitySource } from "../../lib/activityRequest.js";
 import type { MutationResult } from "../../lib/mutationResult.js";
 import { writeAiAudit } from "../../services/assistant/aiAudit.js";
+import { AiFeedbackError, recordAiFeedback } from "../../services/assistant/aiFeedback.js";
 import { check, tierForAction, type AiAction, type PolicyDecision } from "../../services/assistant/aiPolicy.js";
 import { attachProjectAiAccess } from "../../services/assistant/projectAiAccess.js";
 import { AI_DELETE_DENY_REASON, isAiDeleteProposal } from "../../services/assistant/aiTiers.js";
@@ -30,6 +31,8 @@ const proposalBody = z.object({
   entityId: z.number().int().positive().optional(),
   projectId: z.number().int().positive().optional(),
   summary: z.string().max(500).optional(),
+  /** Tool-call audit row. When set, a successful apply records an accept signal. */
+  auditId: z.number().int().positive().optional(),
   fields: z.record(z.string(), z.unknown()),
   method: z.enum(["POST", "PATCH"]),
   path: z.string().min(1).max(500),
@@ -329,6 +332,18 @@ export async function applyAssistantProposal(args: {
       reason: decision.reason,
       latencyMs: Date.now() - started,
     });
+    if (proposal.auditId != null) {
+      try {
+        await recordAiFeedback(db, {
+          auditId: proposal.auditId,
+          actorUserId: args.actorId,
+          isAdministrator: false,
+          kind: "accept",
+        });
+      } catch (err) {
+        if (!(err instanceof AiFeedbackError)) throw err;
+      }
+    }
     return { kind: "result", result };
   } catch (err) {
     await writeAiAudit({

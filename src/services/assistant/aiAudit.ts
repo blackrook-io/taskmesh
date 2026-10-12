@@ -22,14 +22,15 @@ export type AiAuditInput = {
   latencyMs?: number | null;
 };
 
-export type AiAuditSink = (row: AiAuditInput) => Promise<void>;
+export type AiAuditSink = (row: AiAuditInput) => Promise<number | void>;
 
-export async function writeAiAudit(row: AiAuditInput, sink?: AiAuditSink): Promise<void> {
+/** Inserts one audit row and returns its id. A test sink may return an id or nothing. */
+export async function writeAiAudit(row: AiAuditInput, sink?: AiAuditSink): Promise<number | null> {
   if (sink) {
-    await sink(row);
-    return;
+    const id = await sink(row);
+    return typeof id === "number" ? id : null;
   }
-  await db.insert(schema.aiAuditLog).values({
+  const [inserted] = await db.insert(schema.aiAuditLog).values({
     userId: row.userId ?? null,
     feature: row.feature,
     provider: row.provider ?? null,
@@ -45,5 +46,6 @@ export async function writeAiAudit(row: AiAuditInput, sink?: AiAuditSink): Promi
     tokensIn: row.tokensIn ?? null,
     tokensOut: row.tokensOut ?? null,
     latencyMs: row.latencyMs ?? null,
-  });
+  }).returning({ id: schema.aiAuditLog.id });
+  return inserted?.id ?? null;
 }

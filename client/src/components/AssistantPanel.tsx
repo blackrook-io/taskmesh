@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import {
   fetchAssistantStatus,
+  putAssistantFeedback,
   streamAssistantChat,
   type AssistantProposal,
   type ChatTurn,
@@ -30,6 +31,13 @@ function loadTranscript(): ChatTurn[] {
           (t.role === "user" || t.role === "assistant") &&
           typeof t.content === "string",
       )
+      .map((t) => ({
+        role: t.role,
+        content: t.content,
+        ...(typeof t.auditId === "number" ? { auditId: t.auditId } : {}),
+        ...(t.feedback === "thumb_up" || t.feedback === "thumb_down" ? { feedback: t.feedback } : {}),
+        ...(typeof t.feedbackNote === "string" ? { feedbackNote: t.feedbackNote } : {}),
+      }))
       .slice(-40);
   } catch {
     return [];
@@ -52,6 +60,27 @@ function proposalHeading(p: AssistantProposal): string {
   }
   const verb = p.action === "create" ? "Create" : "Update";
   return `${verb} ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}${p.projectId != null ? ` · project #${p.projectId}` : ""}`;
+}
+
+function ThumbIcon({ down = false }: { down?: boolean }) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      focusable="false"
+      style={down ? { transform: "scaleY(-1)" } : undefined}
+    >
+      <path d="M7 10v12" />
+      <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
+    </svg>
+  );
 }
 
 function previewFields(fields: Record<string, unknown>): string {
@@ -81,6 +110,7 @@ export function AssistantPanel({ open, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [proposals, setProposals] = useState<AssistantProposal[]>([]);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -165,6 +195,58 @@ export function AssistantPanel({ open, onClose }: Props) {
     },
   });
 
+  async function rateTurn(index: number, kind: "thumb_up" | "thumb_down") {
+    const turn = turns[index];
+    if (!turn || turn.auditId == null) return;
+    const previous = turns;
+    const note = turn.feedbackNote ?? "";
+    setTurns((list) =>
+      list.map((item, i) => (i === index ? { ...item, feedback: kind } : item)),
+    );
+    try {
+      await putAssistantFeedback({
+        auditId: turn.auditId,
+        kind,
+        note: note.trim() ? note : null,
+      });
+    } catch (e) {
+      setTurns(previous);
+      setError(e instanceof Error ? e.message : "Could not save feedback");
+    }
+  }
+
+  async function saveTurnNote(index: number, note: string) {
+    const turn = turns[index];
+    if (!turn || turn.auditId == null || !turn.feedback) return;
+    setTurns((list) =>
+      list.map((item, i) => (i === index ? { ...item, feedbackNote: note } : item)),
+    );
+    try {
+      await putAssistantFeedback({
+        auditId: turn.auditId,
+        kind: turn.feedback,
+        note: note.trim() ? note : null,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save feedback");
+    }
+  }
+
+  async function dismissProposal(proposal: AssistantProposal) {
+    setDismissingId(proposal.id);
+    setError(null);
+    try {
+      if (proposal.auditId != null) {
+        await putAssistantFeedback({ auditId: proposal.auditId, kind: "dismiss" });
+      }
+      setProposals((list) => list.filter((item) => item.id !== proposal.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not dismiss");
+    } finally {
+      setDismissingId(null);
+    }
+  }
+
   const send = useMutation({
     mutationFn: async (message: string) => {
       setError(null);
@@ -179,7 +261,7 @@ export function AssistantPanel({ open, onClose }: Props) {
       try {
         const pageContext =
           attachEnabled && attachTarget ? attachTarget.getContext().slice(0, 16_000) : null;
-        await streamAssistantChat({
+        const done = await streamAssistantChat({
           message,
           history,
           pageContext,
@@ -201,7 +283,11 @@ export function AssistantPanel({ open, onClose }: Props) {
         if (!ac.signal.aborted) {
           setTurns((t) => [
             ...t,
-            { role: "assistant", content: full.trim() || "(empty reply)" },
+            {
+              role: "assistant",
+              content: full.trim() || "(empty reply)",
+              ...(done.auditId != null ? { auditId: done.auditId } : {}),
+            },
           ]);
         }
         setStreaming("");
@@ -339,7 +425,52 @@ export function AssistantPanel({ open, onClose }: Props) {
               className={`assistant-bubble assistant-bubble--${t.role}`}
             >
               <div className="assistant-bubble__role">{t.role === "user" ? "You" : "Assistant"}</div>
-              <div className="assistant-bubble__body">{t.content}</div>
+              <div className="assistant-bubble__body">
+                {t.content}
+                {t.role === "assistant" && t.auditId != null ? (
+                  <div className="assistant-feedback">
+                    <button
+                      type="button"
+                      className={`assistant-feedback__thumb${t.feedback === "thumb_up" ? " is-on" : ""}`}
+                      aria-pressed={t.feedback === "thumb_up"}
+                      aria-label="Thumbs up"
+                      onClick={() => void rateTurn(i, "thumb_up")}
+                    >
+                      <ThumbIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className={`assistant-feedback__thumb${t.feedback === "thumb_down" ? " is-on" : ""}`}
+                      aria-pressed={t.feedback === "thumb_down"}
+                      aria-label="Thumbs down"
+                      onClick={() => void rateTurn(i, "thumb_down")}
+                    >
+                      <ThumbIcon down />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {t.role === "assistant" && t.auditId != null && t.feedback ? (
+                <input
+                  className="assistant-feedback__note"
+                  type="text"
+                  maxLength={500}
+                  placeholder="Optional note"
+                  aria-label="Optional note"
+                  value={t.feedbackNote ?? ""}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setTurns((list) =>
+                      list.map((item, idx) =>
+                        idx === i ? { ...item, feedbackNote: next } : item,
+                      ),
+                    );
+                  }}
+                  onBlur={(e) => {
+                    void saveTurnNote(i, e.target.value);
+                  }}
+                />
+              ) : null}
             </div>
           ))}
           {toolNote && busy ? <p className="muted assistant-tool-note">{toolNote}</p> : null}
@@ -367,10 +498,10 @@ export function AssistantPanel({ open, onClose }: Props) {
                     <button
                       type="button"
                       className="btn small ghost"
-                      disabled={applyingId === p.id}
-                      onClick={() => setProposals((list) => list.filter((x) => x.id !== p.id))}
+                      disabled={applyingId === p.id || dismissingId === p.id}
+                      onClick={() => void dismissProposal(p)}
                     >
-                      Dismiss
+                      {dismissingId === p.id ? "Dismissing…" : "Dismiss"}
                     </button>
                     <button
                       type="button"

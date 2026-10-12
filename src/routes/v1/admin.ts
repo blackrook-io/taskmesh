@@ -60,6 +60,7 @@ import {
   type ApiLogOutcome,
 } from "../../services/apiRequestLogs.js";
 import { getDatabaseStatsSummary } from "../../services/dbStats.js";
+import { getAiQualitySummary } from "../../services/assistant/aiFeedback.js";
 import { meshAppearanceEqual } from "../../lib/meshAppearance.js";
 import { isUsageRange } from "../../lib/usageRange.js";
 import { registerAiProviderAdminRoutes } from "./adminAiProviders.js";
@@ -761,6 +762,20 @@ adminRouter.patch("/system-properties", async (req, res) => {
 });
 
 // ── API usage + logs ───────────────────────────────────────────────────────
+
+adminRouter.get("/ai-quality", async (req, res) => {
+  try {
+    const raw = Number(req.query.days ?? 30);
+    const days = Number.isInteger(raw) ? raw : NaN;
+    if (!Number.isInteger(days) || days < 1 || days > 90) {
+      sendError(res, 400, "invalid_range", "days must be an integer from 1 to 90");
+      return;
+    }
+    res.json({ data: await getAiQualitySummary(db, days) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
 
 adminRouter.get("/api-usage/summary", async (req, res) => {
   try {

@@ -1,4 +1,4 @@
-import { applySpaClientHeaders, maybeNotifySessionExpired } from "./client";
+import { apiJson, applySpaClientHeaders, maybeNotifySessionExpired } from "./client";
 
 export type AssistantPluginStatus = {
   id: string;
@@ -23,9 +23,15 @@ export type AssistantStatus = {
   toolsEnabled?: boolean;
 };
 
+export type AiFeedbackKind = "thumb_up" | "thumb_down" | "accept" | "dismiss" | "undo";
+
 export type ChatTurn = {
   role: "user" | "assistant";
   content: string;
+  /** Present on assistant replies that were audited. */
+  auditId?: number;
+  feedback?: "thumb_up" | "thumb_down";
+  feedbackNote?: string;
 };
 
 export type AssistantProposal = {
@@ -39,6 +45,8 @@ export type AssistantProposal = {
   fields: Record<string, unknown>;
   method: "POST" | "PATCH";
   path: string;
+  tier?: number;
+  auditId?: number;
 };
 
 export async function fetchAssistantStatus(): Promise<AssistantStatus> {
@@ -64,7 +72,7 @@ export async function streamAssistantChat(args: {
   onMeta?: (meta: { provider: string; model: string }) => void;
   onTool?: (info: { name: string; args: unknown }) => void;
   onProposal?: (proposal: AssistantProposal) => void;
-}): Promise<void> {
+}): Promise<{ auditId: number | null }> {
   const headers = new Headers({
     "Content-Type": "application/json",
     Accept: "text/event-stream",
@@ -75,7 +83,7 @@ export async function streamAssistantChat(args: {
     headers,
     body: JSON.stringify({
       message: args.message,
-      history: args.history,
+      history: args.history.map((turn) => ({ role: turn.role, content: turn.content })),
       pageContext: args.pageContext ?? null,
     }),
     credentials: "include",
@@ -106,6 +114,7 @@ export async function streamAssistantChat(args: {
   const decoder = new TextDecoder();
   let buffer = "";
   let eventName = "message";
+  let auditId: number | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -140,10 +149,24 @@ export async function streamAssistantChat(args: {
         } else if (eventName === "error") {
           throw new Error((data as { message?: string }).message ?? "Assistant error");
         } else if (eventName === "done") {
-          return;
+          const id = (data as { auditId?: unknown }).auditId;
+          auditId = typeof id === "number" ? id : null;
+          return { auditId };
         }
         eventName = "message";
       }
     }
   }
+  return { auditId };
+}
+
+export async function putAssistantFeedback(input: {
+  auditId: number;
+  kind: AiFeedbackKind;
+  note?: string | null;
+}): Promise<void> {
+  await apiJson("/api/v1/assistant/feedback", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }

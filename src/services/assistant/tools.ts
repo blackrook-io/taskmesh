@@ -76,6 +76,8 @@ export type AssistantProposal = {
   fields: Record<string, unknown>;
   method: "POST" | "PATCH";
   path: string;
+  /** Audit row for this tool call, so Apply / Dismiss can attach a quality signal. */
+  auditId?: number;
 };
 
 export type ToolHandlers = {
@@ -634,8 +636,8 @@ async function auditTool(
   decision: PolicyDecision,
   startedAt: number,
   reasonOverride?: string,
-): Promise<void> {
-  await writeAiAudit(
+): Promise<number | null> {
+  return writeAiAudit(
     {
       userId: handlers.actorUserId ?? null,
       feature: handlers.feature ?? "assistant",
@@ -776,12 +778,27 @@ export async function executeAssistantTool(
     decision.decision === "allow" && target.action === "web_fetch"
       ? fetchedUrlReason(args)
       : undefined;
+  const pending: AssistantProposal[] = [];
+  const wrapped: ToolHandlers = {
+    ...handlers,
+    onProposal: (proposal) => {
+      pending.push(proposal);
+    },
+  };
+  const emitPending = (auditId: number | null) => {
+    for (const proposal of pending) {
+      handlers.onProposal?.({ ...proposal, auditId: auditId ?? undefined });
+    }
+  };
+
   try {
-    const result = redactSecrets(await dispatchTool(name, args, handlers));
-    await auditTool(handlers, name, resolvedTarget, decision, started, fetched);
+    const result = redactSecrets(await dispatchTool(name, args, wrapped));
+    const auditId = await auditTool(handlers, name, resolvedTarget, decision, started, fetched);
+    emitPending(auditId);
     return result;
   } catch (err) {
-    await auditTool(handlers, name, resolvedTarget, decision, started, fetched);
+    const auditId = await auditTool(handlers, name, resolvedTarget, decision, started, fetched);
+    emitPending(auditId);
     return redactSecrets(
       JSON.stringify({
         error: err instanceof Error ? err.message : "Tool failed",
