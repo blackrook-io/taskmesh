@@ -31,7 +31,7 @@ export function loadGoldenCases(): GoldenCase[] {
 
 export async function runGoldenCases(args: {
   plugin: AiProviderPlugin;
-  apiKey: string;
+  apiKey: string | null;
   config: unknown;
   assertBaseUrl: (url: string) => Promise<string>;
   mode: GoldenMode;

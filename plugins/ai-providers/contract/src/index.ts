@@ -14,7 +14,11 @@ export {
   type ProviderFetch,
 } from "./types.js";
 export {
+  inspectLocalProviderBaseUrl,
   inspectProviderBaseUrl,
+  isLinkLocalAddress,
+  localProviderBaseUrlSchema,
+  normalizeLocalProviderBaseUrl,
   normalizeProviderBaseUrl,
   publicHttpsBaseUrlSchema,
   registerProviderHostPolicy,

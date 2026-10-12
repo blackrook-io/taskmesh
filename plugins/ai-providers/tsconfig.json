@@ -7,6 +7,7 @@
     { "path": "./openai-compatible" },
     { "path": "./anthropic" },
     { "path": "./gemini" },
-    { "path": "./azure-openai" }
+    { "path": "./azure-openai" },
+    { "path": "./ollama" }
   ]
 }

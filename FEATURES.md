@@ -105,6 +105,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable Anthropic for assistant chat. An environment key remains the fallback when no instance key is stored
 - Enable Google Gemini for assistant chat and embeddings. An environment key remains the fallback when no instance key is stored
 - Enable Azure OpenAI for assistant chat and embeddings. Set the resource endpoint, deployment names, and API version. An environment key remains the fallback when no instance key is stored
+- Enable Ollama for local assistant chat and embeddings. Set a private or loopback address, a chat model, and an embedding model. No API key is required
 - Set a project to full, read-only, or excluded from AI. Owners and managers can only narrow the Administrator default, and an excluded project is never sent to a model
 - Propose creates and edits that apply only after you confirm
 - Ask the assistant about todos, lists, links, tags, comments, task dependencies, and the records around one item. Proposed adds still wait for your confirmation

@@ -186,6 +186,46 @@ describe("ai provider config", () => {
     );
   });
 
+  it("selects a local plugin without a key and still prefers OpenAI", () => {
+    const file = {
+      ollama: {
+        enabled: true,
+        config: { baseUrl: "http://127.0.0.1:11434", defaultModel: "llama3.2" },
+      },
+      openai: { enabled: true, config: { baseUrl: "https://api.openai.com/v1" } },
+    };
+    assert.equal(
+      selectChatPlugin({
+        plugins: [
+          { id: "ollama", chat: true, local: true },
+          { id: "openai", chat: true },
+        ],
+        file,
+        hasKey: (id) => id === "openai",
+        configValid: () => true,
+      }),
+      "openai",
+    );
+    assert.equal(
+      selectChatPlugin({
+        plugins: [{ id: "ollama", chat: true, local: true }],
+        file: { ollama: file.ollama },
+        hasKey: () => false,
+        configValid: () => true,
+      }),
+      "ollama",
+    );
+    assert.equal(
+      selectChatPlugin({
+        plugins: [{ id: "ollama", chat: true, local: true }],
+        file: { ollama: { enabled: true, config: {} } },
+        hasKey: () => false,
+        configValid: () => false,
+      }),
+      null,
+    );
+  });
+
   it("uses the Azure chat deployment when no default model is set", () => {
     assert.equal(configuredChatModel({ defaultModel: " gpt-4.1-mini " }), "gpt-4.1-mini");
     assert.equal(configuredChatModel({ chatDeployment: " my-deploy " }), "my-deploy");
