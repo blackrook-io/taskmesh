@@ -12,6 +12,7 @@ import {
 } from "../lib/paths.js";
 import { db } from "../db/client.js";
 import { recordSystemLog } from "./apiRequestLogs.js";
+import { notifyBackupScheduleWritten } from "./jobs/scheduleHook.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -90,8 +91,6 @@ const DEFAULT_SCHEDULE: BackupSchedule = {
 const FRESH_HOURS = 36;
 
 let runLock: Promise<unknown> | null = null;
-let lastScheduledKey: string | null = null;
-let schedulerTimer: ReturnType<typeof setInterval> | null = null;
 
 function withBackupLock<T>(fn: () => Promise<T>): Promise<T> {
   if (runLock) {
@@ -154,6 +153,7 @@ export function writeSchedule(next: BackupSchedule): BackupSchedule {
   const p = getBackupSchedulePath();
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
+  notifyBackupScheduleWritten(normalized);
   return normalized;
 }
 
@@ -582,41 +582,3 @@ async function runBackupUnlocked(): Promise<BackupManifest> {
   return manifest;
 }
 
-export function startBackupScheduler(): void {
-  if (schedulerTimer) return;
-  schedulerTimer = setInterval(() => {
-    void tickScheduler();
-  }, 30_000);
-  void tickScheduler();
-}
-
-export function stopBackupScheduler(): void {
-  if (schedulerTimer) {
-    clearInterval(schedulerTimer);
-    schedulerTimer = null;
-  }
-}
-
-async function tickScheduler() {
-  const schedule = readSchedule();
-  if (!schedule.enabled) return;
-  const now = new Date();
-  if (now.getHours() !== schedule.hour || now.getMinutes() !== schedule.minute) return;
-  const key = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${schedule.hour}-${schedule.minute}`;
-  if (lastScheduledKey === key) return;
-  lastScheduledKey = key;
-  try {
-    console.log("[backup] scheduled run starting…");
-    const m = await runBackup();
-    console.log(`[backup] scheduled run finished id=${m.id} ok=${m.pgDumpOk}`);
-  } catch (err) {
-    console.error("[backup] scheduled run failed", err);
-    const detail = err instanceof Error ? err.message : "scheduled backup failed";
-    recordSystemLog(db, {
-      outcome: "api_failure",
-      path: "/system/backup",
-      statusCode: 500,
-      message: `Backup failure (scheduler): ${detail}`,
-    });
-  }
-}

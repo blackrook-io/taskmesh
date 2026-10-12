@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.62.2 — 2026-10-12
+
+### New Functionality
+- Administrators open Jobs to see how many background jobs are waiting, running, or retrying, plus charts of completed and failed work. A job that uses up its retries appears in a dead-letter list. Retry runs it again, and Delete removes it after confirmation.
+- Scheduled backups, API log pruning, and database stats sampling are durable jobs on the existing Postgres database. Work that has not finished is still queued after an API restart.
+
 ## 0.62.1 — 2026-10-12
 
 ### Enhancements

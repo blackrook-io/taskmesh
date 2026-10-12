@@ -10,12 +10,7 @@ import { sendError } from "./lib/httpError.js";
 import { attachApiVersionMeta } from "./middleware/apiVersionMeta.js";
 import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
-import { startBackupScheduler, stopBackupScheduler } from "./services/backups.js";
-import { startDbStatsSampler, stopDbStatsSampler } from "./services/dbStats.js";
-import {
-  startApiRequestLogPruner,
-  stopApiRequestLogPruner,
-} from "./services/apiRequestLogPrune.js";
+import { startJobQueue, stopJobQueue } from "./services/jobs/queue.js";
 import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
 import { assertConfiguredEnvKeys } from "./lib/envKeys.js";
 import { parseTrustProxy } from "./lib/trustProxy.js";
@@ -121,16 +116,19 @@ const server = app.listen(port, host, () => {
   void getSystemProperties(db).catch((err) => {
     console.error("System property startup failed", err);
   });
-  startBackupScheduler();
-  startDbStatsSampler(db);
-  startApiRequestLogPruner(db);
+  void startJobQueue().catch((err) => {
+    console.error("[jobs] failed to start", err);
+  });
 });
 
 async function shutdown(signal: string) {
   console.log(`Received ${signal}, closing…`);
-  stopBackupScheduler();
-  stopDbStatsSampler();
-  stopApiRequestLogPruner();
+  await Promise.race([
+    stopJobQueue().catch((err) => {
+      console.error("[jobs] shutdown failed", err);
+    }),
+    new Promise((resolve) => setTimeout(resolve, 6000)),
+  ]);
   server.close();
   await pool.end();
   process.exit(0);
