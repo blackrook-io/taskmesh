@@ -10,6 +10,7 @@ import { sendError } from "./lib/httpError.js";
 import { attachApiVersionMeta } from "./middleware/apiVersionMeta.js";
 import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
+import { registerDocumentExtractJob, sweepDocumentExtractions } from "./services/documents/extractJob.js";
 import { startJobQueue, stopJobQueue } from "./services/jobs/queue.js";
 import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
 import { assertConfiguredEnvKeys } from "./lib/envKeys.js";
@@ -21,6 +22,7 @@ assertConfiguredEnvKeys();
 warnIfRateLimitDisableIgnored();
 ensureUploadDir();
 ensureBackupDir();
+registerDocumentExtractJob();
 
 const app = express();
 app.set("trust proxy", parseTrustProxy());
@@ -116,9 +118,17 @@ const server = app.listen(port, host, () => {
   void getSystemProperties(db).catch((err) => {
     console.error("System property startup failed", err);
   });
-  void startJobQueue().catch((err) => {
-    console.error("[jobs] failed to start", err);
-  });
+  void startJobQueue()
+    .then(async () => {
+      try {
+        await sweepDocumentExtractions();
+      } catch (err) {
+        console.error("[jobs] document extraction sweep failed", err);
+      }
+    })
+    .catch((err) => {
+      console.error("[jobs] failed to start", err);
+    });
 });
 
 async function shutdown(signal: string) {

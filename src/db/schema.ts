@@ -1260,6 +1260,62 @@ export const projectDocuments = pgTable("project_documents", {
     .defaultNow(),
 });
 
+/** One extraction run per document. Text lives in `document_text_spans`, not `body`. */
+export const documentExtractions = pgTable(
+  "document_extractions",
+  {
+    documentId: integer("document_id")
+      .primaryKey()
+      .references(() => projectDocuments.id, { onDelete: "cascade" }),
+    /** Upload this row describes. Stale when it differs from `project_documents.upload_id`. */
+    uploadId: integer("upload_id").references((): AnyPgColumn => uploads.id, {
+      onDelete: "set null",
+    }),
+    /** `pending` | `ready` | `empty` | `failed` */
+    status: text("status").notNull().default("pending"),
+    errorMessage: text("error_message"),
+    /** Page count (PDF) or chapter count (EPUB). */
+    unitCount: integer("unit_count").notNull().default(0),
+    charCount: integer("char_count").notNull().default(0),
+    truncated: boolean("truncated").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    statusCheck: check(
+      "document_extractions_status_chk",
+      sql`${t.status} in ('pending', 'ready', 'empty', 'failed')`,
+    ),
+  }),
+);
+
+/** One row per PDF page or EPUB spine item, in reading order. */
+export const documentTextSpans = pgTable(
+  "document_text_spans",
+  {
+    id: serial("id").primaryKey(),
+    documentId: integer("document_id")
+      .notNull()
+      .references(() => projectDocuments.id, { onDelete: "cascade" }),
+    ordinal: integer("ordinal").notNull(),
+    /** 1-based page number or spine index. */
+    locator: integer("locator").notNull(),
+    label: text("label").notNull(),
+    text: text("text").notNull(),
+  },
+  (t) => ({
+    documentOrdinalUniq: unique("document_text_spans_document_ordinal_uidx").on(
+      t.documentId,
+      t.ordinal,
+    ),
+    documentLocatorIdx: index("document_text_spans_document_locator_idx").on(
+      t.documentId,
+      t.locator,
+    ),
+  }),
+);
+
 export const uploads = pgTable("uploads", {
   id: serial("id").primaryKey(),
   /** Stored filename on disk (UUID + extension). */

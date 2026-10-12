@@ -11,11 +11,21 @@ type Db = NodePgDatabase<typeof schema>;
 
 export type DocumentKind = "markdown" | "epub" | "pdf";
 
+export type DocumentExtractionSummary = {
+  status: "pending" | "ready" | "empty" | "failed";
+  errorMessage: string | null;
+  unitCount: number;
+  charCount: number;
+  truncated: boolean;
+};
+
 export type ProjectDocumentWithActors = typeof schema.projectDocuments.$inferSelect & {
   updatedBy: UserRef | null;
   fileUrl: string | null;
   fileMimeType: string | null;
   fileOriginalName: string | null;
+  /** Null for Markdown. PDF and EPUB include the latest extraction status. */
+  extraction: DocumentExtractionSummary | null;
 };
 
 function fileUrlFor(storedName: string | null | undefined): string | null {
@@ -50,6 +60,10 @@ export async function attachDocumentActors(
       uploadById.set(u.id, u);
     }
   }
+  const extractionById = await loadExtractionSummaries(
+    db,
+    rows.map((row) => row.id),
+  );
   return rows.map((row) => {
     const upload = row.uploadId != null ? uploadById.get(row.uploadId) : undefined;
     return {
@@ -58,6 +72,7 @@ export async function attachDocumentActors(
       fileUrl: fileUrlFor(upload?.storedName),
       fileMimeType: upload?.mimeType ?? null,
       fileOriginalName: upload?.originalName ?? null,
+      extraction: row.kind === "markdown" ? null : (extractionById.get(row.id) ?? null),
     };
   });
 }
@@ -74,9 +89,47 @@ export async function attachDocumentActor(
       fileUrl: null,
       fileMimeType: null,
       fileOriginalName: null,
+      extraction: null,
     };
   }
   return withActors;
+}
+
+async function loadExtractionSummaries(
+  db: Db,
+  documentIds: number[],
+): Promise<Map<number, DocumentExtractionSummary>> {
+  const byId = new Map<number, DocumentExtractionSummary>();
+  if (documentIds.length === 0) return byId;
+  const rows = await db
+    .select({
+      documentId: schema.documentExtractions.documentId,
+      status: schema.documentExtractions.status,
+      errorMessage: schema.documentExtractions.errorMessage,
+      unitCount: schema.documentExtractions.unitCount,
+      charCount: schema.documentExtractions.charCount,
+      truncated: schema.documentExtractions.truncated,
+    })
+    .from(schema.documentExtractions)
+    .where(inArray(schema.documentExtractions.documentId, documentIds));
+  for (const row of rows) {
+    if (
+      row.status !== "pending" &&
+      row.status !== "ready" &&
+      row.status !== "empty" &&
+      row.status !== "failed"
+    ) {
+      continue;
+    }
+    byId.set(row.documentId, {
+      status: row.status,
+      errorMessage: row.errorMessage,
+      unitCount: row.unitCount,
+      charCount: row.charCount,
+      truncated: row.truncated,
+    });
+  }
+  return byId;
 }
 
 /** Delete upload row + on-disk file if present. Ignores missing files. */

@@ -34,6 +34,7 @@ import { useAuth } from "../lib/auth";
 import { userIsAdministrator } from "../lib/roles";
 import { patchTaskRecord } from "../lib/patchTask";
 import { formatEntityRef } from "../lib/entityRef";
+import { documentExtractionStatus } from "../lib/documentExtraction";
 import { resolveEpubDocumentTitle } from "../lib/epubMeta";
 import { resolvePdfDocumentTitle } from "../lib/pdfMeta";
 import { sanitizePlainText } from "../lib/plainText";
@@ -267,6 +268,8 @@ export function ProjectDetailPage() {
       const res = await apiJson<{ data: ProjectDocument[] }>(`/api/v1/projects/${projectId}/documents`);
       return res.data;
     },
+    refetchInterval: (query) =>
+      query.state.data?.some((doc) => doc.extraction?.status === "pending") ? 2000 : false,
   });
 
   const todoListsQuery = useQuery({
@@ -1351,6 +1354,7 @@ function DocumentEditor({
   if (kind === "epub" || kind === "pdf") {
     const headingTitle =
       title.replace(new RegExp(`\\${binaryExt}$`, "i"), "").trim() || title;
+    const extractionStatus = documentExtractionStatus(doc);
     return (
       <div className={`document-editor document-editor--${kind}`}>
         <div className="page-head document-editor__head">
@@ -1436,6 +1440,11 @@ function DocumentEditor({
         {replaceError ? (
           <p className="muted small" role="alert">
             {replaceError}
+          </p>
+        ) : null}
+        {extractionStatus ? (
+          <p className="muted small" role="status">
+            {extractionStatus}
           </p>
         ) : null}
         {doc.fileUrl ? (

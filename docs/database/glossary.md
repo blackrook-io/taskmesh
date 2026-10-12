@@ -37,6 +37,8 @@ Internal joins still use surrogate `id` primary keys. Display numbers are for hu
 **Note (T0097):** A ToDo may have a `parent_id`. Parents show a derived **x of y** completion rollup instead of a typed percent. Pending means the parent was marked complete while a sub-item was still open.
 
 **Note (T0091 / T0119):** `project_documents.kind` is `markdown` (default), `epub`, or `pdf` (binary file via `upload_id` → `uploads` on disk).
+
+**Note (T0207):** PDF and EPUB text is stored in `document_text_spans` (one row per page or chapter). `document_extractions.status` is `pending`, `ready`, `empty`, or `failed`. `empty` means the file had no text layer. OCR is not performed.
 ## Polymorphic entity links
 
 Several tables store **`entity_type`** (text) + **`entity_id`** (integer) instead of a typed foreign key:

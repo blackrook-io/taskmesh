@@ -17,6 +17,8 @@ erDiagram
   projects ||--o{ image_boards : "optional"
   users }o--o| uploads : avatar
   uploads ||--o| project_documents : "binary file"
+  project_documents ||--o| document_extractions : extraction
+  project_documents ||--o{ document_text_spans : "page or chapter"
   tags ||--o{ taggings : has
   todo_lists ||--o{ todo_list_items : has
   boards ||--o{ board_columns : has
@@ -30,6 +32,17 @@ erDiagram
     text title
     text kind
     int upload_id FK
+  }
+  document_extractions {
+    int document_id PK
+    text status
+    int upload_id FK
+  }
+  document_text_spans {
+    int id PK
+    int document_id FK
+    int locator
+    text text
   }
   uploads {
     int id PK
@@ -131,6 +144,58 @@ Kinds:
 - **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
 - **FK:** `upload_id` → `uploads.id` · **ON DELETE SET NULL**
 - **FK:** `updated_by_id` → `users.id` · **ON DELETE SET NULL**
+
+---
+
+## `document_extractions`
+
+One row per project document that has had text extraction queued. PDF and EPUB text is **not** stored in `project_documents.body`. Markdown documents do not use this table.
+
+`status`: `pending` (queued or running) · `ready` (text stored) · `empty` (file parsed, no text layer — scanned PDF or an EPUB with no chapter text; OCR is not run) · `failed`.
+
+### Columns
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `document_id` | integer | no | — | PK, FK → `project_documents.id` |
+| `upload_id` | integer | yes | — | FK → `uploads.id` — file this row describes |
+| `status` | text | no | `'pending'` | `pending` \| `ready` \| `empty` \| `failed` |
+| `error_message` | text | yes | — | Failure text, or the empty-file note |
+| `unit_count` | integer | no | `0` | PDF page count or EPUB chapter count |
+| `char_count` | integer | no | `0` | Stored characters |
+| `truncated` | boolean | no | `false` | Stopped at the page/chapter or character limit |
+| `updated_at` | timestamptz | no | `now()` | |
+
+### Constraints
+
+- **PK:** `document_id`
+- **FK:** `document_id` → `project_documents.id` · **ON DELETE CASCADE**
+- **FK:** `upload_id` → `uploads.id` · **ON DELETE SET NULL**
+- **CHECK:** `status` in `pending`, `ready`, `empty`, `failed`
+
+---
+
+## `document_text_spans`
+
+One row per PDF page or EPUB spine item that contained text, in reading order. `locator` is the 1-based page number or spine index used for citations.
+
+### Columns
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `document_id` | integer | no | — | FK → `project_documents.id` |
+| `ordinal` | integer | no | — | Reading order among stored spans |
+| `locator` | integer | no | — | 1-based page or chapter index |
+| `label` | text | no | — | `Page N` or the chapter title |
+| `text` | text | no | — | Extracted text for that locator |
+
+### Constraints
+
+- **PK:** `id`
+- **UNIQUE:** (`document_id`, `ordinal`)
+- **INDEX:** (`document_id`, `locator`)
+- **FK:** `document_id` → `project_documents.id` · **ON DELETE CASCADE**
 
 ---
 

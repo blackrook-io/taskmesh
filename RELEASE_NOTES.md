@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.68.0 — 2026-10-12
+
+### New Functionality
+- Uploading or replacing a PDF or EPUB extracts its text in the background, one span per page or chapter. The document shows when extraction is running, ready, empty, or failed. A scanned PDF with no text layer says OCR is not available. That text can be read by page or chapter for later search.
+
 ## 0.67.0 — 2026-10-12
 
 ### New Functionality

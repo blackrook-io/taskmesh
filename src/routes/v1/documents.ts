@@ -17,6 +17,7 @@ import {
   attachDocumentActors,
   deleteUploadById,
 } from "../../services/documents.js";
+import { queueDocumentExtraction } from "../../services/documents/extractJob.js";
 import { recordDocumentBodyChange } from "../../services/entityActivity.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { assertCanAccessOwned, assertCanAccessProject } from "../../services/ownership.js";
@@ -155,6 +156,9 @@ export async function createDocumentForActor(args: {
       actorUserId: args.actorId,
     });
   }
+  if ((row.kind === "pdf" || row.kind === "epub") && row.uploadId != null) {
+    await queueDocumentExtraction(row.id, row.uploadId);
+  }
   return { ok: true, status: 201, data: await attachDocumentActor(db, row) };
 }
 
@@ -163,6 +167,54 @@ documentsRouter.post("/", async (req, res) => {
     const projectId = parseRouteId(req, "projectId");
     const actorId = await getCurrentUserId(db);
     sendMutation(res, await createDocumentForActor({ projectId, body: req.body, actorId }));
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+documentsRouter.get("/:docId/text", async (req, res) => {
+  try {
+    const projectId = parseRouteId(req, "projectId");
+    const docId = parseRouteId(req, "docId");
+    const locator = Number(req.query.locator);
+    if (!Number.isInteger(locator) || locator < 1) {
+      sendError(res, 400, "invalid_locator", "locator must be a positive integer");
+      return;
+    }
+    const [row] = await db.select().from(schema.projectDocuments).where(eq(schema.projectDocuments.id, docId));
+    if (!row || row.projectId !== projectId) {
+      sendError(res, 404, "not_found", "Document not found");
+      return;
+    }
+    if (row.kind !== "pdf" && row.kind !== "epub") {
+      sendError(res, 400, "not_binary", "Markdown documents have no extracted text");
+      return;
+    }
+    const [extraction] = await db
+      .select({ status: schema.documentExtractions.status })
+      .from(schema.documentExtractions)
+      .where(eq(schema.documentExtractions.documentId, docId));
+    const spans = await db
+      .select({
+        ordinal: schema.documentTextSpans.ordinal,
+        label: schema.documentTextSpans.label,
+        text: schema.documentTextSpans.text,
+      })
+      .from(schema.documentTextSpans)
+      .where(
+        and(
+          eq(schema.documentTextSpans.documentId, docId),
+          eq(schema.documentTextSpans.locator, locator),
+        ),
+      )
+      .orderBy(asc(schema.documentTextSpans.ordinal));
+    res.json({
+      data: {
+        locator,
+        status: extraction?.status ?? null,
+        spans,
+      },
+    });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -283,6 +335,15 @@ export async function updateDocumentForActor(args: {
       args.actorId,
       args.source,
     );
+  }
+  const uploadReplaced =
+    binaryKind != null &&
+    row != null &&
+    parsed.uploadId !== undefined &&
+    row.uploadId != null &&
+    row.uploadId !== existing.uploadId;
+  if (uploadReplaced && row?.uploadId != null) {
+    await queueDocumentExtraction(row.id, row.uploadId);
   }
   if (oldUploadToDelete != null) {
     await deleteUploadById(db, oldUploadToDelete);
