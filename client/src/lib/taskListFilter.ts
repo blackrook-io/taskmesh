@@ -1,6 +1,10 @@
 /** Client-side compound filters for task list views. */
 
 import {
+  TASK_LIST_FILTER_COMBINATIONS,
+  isAllowedFilterCombination,
+} from "../../../src/lib/listFilterCombinations.ts";
+import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
   TASK_STATE_LABELS,
@@ -90,9 +94,7 @@ export function defaultOperatorForField(field: FilterField): FilterOperator {
 
 /** Tags use membership language; due date uses before/after; others keep text operators. */
 export function operatorsForField(field: FilterField): readonly FilterOperator[] {
-  if (field === "tags") return ["contains", "does_not_contain", "starts_with"];
-  if (field === "dueDate") return ["before", "after"];
-  return ["is", "is_not", "contains", "does_not_contain", "starts_with"];
+  return TASK_LIST_FILTER_COMBINATIONS[field];
 }
 
 export function filterFieldsForScope(includeProject: boolean): readonly FilterField[] {
@@ -539,6 +541,7 @@ function isValidClause(raw: unknown): raw is FilterClause {
     isFilterField(c.field) &&
     typeof c.operator === "string" &&
     isFilterOperator(c.operator) &&
+    isAllowedFilterCombination(TASK_LIST_FILTER_COMBINATIONS, c.field, c.operator) &&
     typeof c.value === "string"
   );
 }
