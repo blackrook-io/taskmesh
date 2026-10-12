@@ -19,8 +19,8 @@ import {
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
+  TASK_FILTER_STATES,
   TASK_STATE_LABELS,
-  SELECTABLE_TASK_STATES,
 } from "../lib/taskFields";
 import { usePhaseFilterOptions, type PhaseFilterOption } from "../lib/usePhaseFilterOptions";
 import { useTaskFilterLookups, type FilterTagOption } from "../lib/useTaskFilterLookups";
@@ -56,7 +56,7 @@ export function FilterClauseValueInput({
         value={clause.value}
         onChange={(e) => onChange(e.target.value)}
       >
-        {SELECTABLE_TASK_STATES.map((s) => (
+        {TASK_FILTER_STATES.map((s) => (
           <option key={s} value={s}>
             {TASK_STATE_LABELS[s]}
           </option>

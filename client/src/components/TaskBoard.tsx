@@ -341,7 +341,9 @@ export function StateCheckbox({
   canCycle?: boolean;
 }) {
   const glyph =
-    state === "ready"
+    state === "blocked"
+      ? "!"
+      : state === "ready"
       ? "○"
       : state === "in_progress"
         ? "/"
@@ -357,10 +359,14 @@ export function StateCheckbox({
   const hint = !canCycle
     ? state === "pending"
       ? `${TASK_STATE_LABELS[state]} — waiting on child tasks`
-      : `${TASK_STATE_LABELS[state]} — no further state change`
+      : state === "blocked"
+        ? `${TASK_STATE_LABELS[state]} — waiting on prerequisites`
+        : `${TASK_STATE_LABELS[state]} — no further state change`
     : state === "pending"
       ? `${TASK_STATE_LABELS[state]} — waiting on child tasks — click to cycle`
-      : `${TASK_STATE_LABELS[state]} — click to cycle`;
+      : state === "blocked"
+        ? `${TASK_STATE_LABELS[state]} — waiting on prerequisites — click to return to Draft`
+        : `${TASK_STATE_LABELS[state]} — click to cycle`;
   return (
     <button
       type="button"
@@ -485,6 +491,14 @@ export function TaskEditorFields({
   if (allowedKey !== syncedAllowedKey) {
     setSyncedAllowedKey(allowedKey);
     setAllowedNext(task.allowedNextStates ?? []);
+  }
+
+  const [syncedTaskState, setSyncedTaskState] = useState(task.state);
+  if (task.state !== syncedTaskState) {
+    setSyncedTaskState(task.state);
+    setState(task.state);
+    setAllowedNext(task.allowedNextStates ?? []);
+    setSyncedAllowedKey((task.allowedNextStates ?? []).join(","));
   }
 
   const [syncedProjectId, setSyncedProjectId] = useState(task.projectId);

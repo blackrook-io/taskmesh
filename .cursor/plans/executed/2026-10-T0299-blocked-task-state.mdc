@@ -1,0 +1,54 @@
+# T0299 — Blocked task state
+
+## Context
+
+- **Task:** T0299 (`id` 314) — *New Task State: Blocked* — Ready, priority none, project TaskMesh
+- **Parent:** none
+- **Depends on:** none
+- **Goal:** When a user tries to move a Draft task to Ready while it still depends on unfinished tasks, the system stores **Blocked** instead. Completing the chain promotes those Blocked dependents to Ready. Users cannot jump a Blocked task to Ready themselves.
+
+`tasks.state` is unconstrained text. This work does **not** add a Drizzle migration (finish-up is a PATCH bump). Todos keep the current selectable states; Blocked is task-only.
+
+## Decisions (confirmed 2026-10-12)
+
+| Topic | Proposal |
+|-------|----------|
+| API value / label | `blocked` / **Blocked** |
+| Who sets it | System only. Not in `SELECTABLE_TASK_STATES`. Create, import, and user PATCH cannot target `blocked`. |
+| When it is set | User (or API/assistant) requests `new` → `ready` and the task has at least one Depends-on whose state is still blocking. Saved state is `blocked`. Activity records Draft → Blocked. |
+| What still blocks | Same set as today’s dependency gate: anything other than `complete`, `canceled`, `deleted`, or `pending`. Pending prerequisites do **not** block. |
+| User exits | From Blocked, the user may set **Draft** or **Canceled** only. Cancel still requires a comment. Draft does not. |
+| System exit | Blocked → Ready only when **every** Depends-on is satisfied (not when a single prerequisite completes and others remain open). |
+| What triggers promotion | A prerequisite moving to `complete`, `canceled`, `deleted`, or `pending`, or a dependency link being removed, rechecks each Blocked dependent and promotes it when nothing blocking remains. |
+| What does not pull a task back | Adding a dependency to a Ready / In Progress / On Hold / Pending task does **not** move it to Blocked. Reopening Complete or Canceled still goes to Ready (existing comment + role rules). |
+| Lists | Blocked is an open working state (visible in default “not done” lists), same idea as Draft. |
+| Checkbox | On a Blocked task, the state checkbox goes to **Draft**. Canceled stays in the menu. |
+| Modal | After a Draft → Ready attempt lands on Blocked, an info dialog explains why, with **Don’t show again** and **OK**. Dismiss is `localStorage` on this device. The server still applies the rule when the dialog is suppressed. |
+| Tone | Distinct from Draft, Pending, and On Hold (muted red/rose on the dark theme). |
+| `/worktask` | `blocked` is an open Depends-on blocker. A Blocked task is not a fresh start (`ready` still required). |
+
+## Implementation
+
+1. **Shared state lists** — server and client `TASK_STATES`, labels, sort rank (Draft, Blocked, Ready, …), timeline/filter maps, glossary. Leave `SELECTABLE_TASK_STATES` unchanged so todos and manual dropdowns cannot pick Blocked.
+2. **Workflow** — `NEXT_STATES.blocked = ["new", "canceled"]`. Draft’s user-facing next states stay Ready and Canceled. Reject a direct user transition to `blocked`.
+3. **Coerce on Ready** — in task PATCH (project and standalone), if `new` → `ready` and open Depends-on exist, persist `blocked`.
+4. **Promote dependents** — after a state change into a satisfied dependency state, and after a dependency is removed, set each Blocked required-by task to `ready` when it has no remaining blockers. Record activity as Blocked → Ready, source matching the triggering request.
+5. **UI** — state tone CSS (checkbox, list, timeline, dependency chip). Info modal + localStorage flag on the Ready attempt paths (task page, task list). Filters can match Blocked. Assistant schemas stay on selectable states; the server coerce still applies if they request Ready.
+6. **Docs / skill** — `docs/database/glossary.md`, then `npm run docs:sync-schema`. Update `/worktask` skill + reference state lists (Blocked blocks; it is not a start state).
+
+## Out of scope
+
+- Retroactively marking existing Ready tasks Blocked.
+- Moving In Progress / On Hold tasks back to Blocked when a new dependency is added.
+- A per-account “don’t show again” stored in the database.
+- Todo records using Blocked.
+
+## QA
+
+- Draft task with an open Depends-on → set Ready → saved as Blocked, modal once, activity Draft → Blocked.
+- Don’t show again → later Ready attempts stay silent and still save Blocked.
+- Complete the only prerequisite → dependent becomes Ready. With two prerequisites, completing one leaves it Blocked; completing both makes it Ready.
+- Cancel or delete a prerequisite, or remove the link, also unblocks when nothing else is open. A Pending prerequisite does not block.
+- From Blocked, Draft and Canceled work; Ready / In Progress are rejected. Checkbox goes to Draft.
+- Reopen a Complete task still goes to Ready.
+- A Ready task that gains a new open dependency stays Ready.

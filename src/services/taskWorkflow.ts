@@ -11,6 +11,7 @@ export const TASK_TAG_CAP = 3;
 
 const STATE_LABELS: Record<string, string> = {
   new: "Draft",
+  blocked: "Blocked",
   ready: "Ready",
   in_progress: "In Progress",
   pending: "Pending",
@@ -23,6 +24,7 @@ const STATE_LABELS: Record<string, string> = {
 /** User-facing next states. Pending and Deleted are never included. */
 const NEXT_STATES: Record<string, readonly string[]> = {
   new: ["ready", "canceled"],
+  blocked: ["new", "canceled"],
   ready: ["in_progress", "canceled"],
   in_progress: ["on_hold", "complete"],
   on_hold: ["in_progress", "complete"],

@@ -2,6 +2,7 @@
 
 export const TASK_STATES = [
   "new",
+  "blocked",
   "ready",
   "in_progress",
   "pending",
@@ -38,6 +39,7 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export const TASK_STATE_LABELS: Record<TaskState, string> = {
   new: "Draft",
+  blocked: "Blocked",
   ready: "Ready",
   in_progress: "In Progress",
   pending: "Pending",
@@ -79,11 +81,24 @@ export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
 
 /** Preference when several next states are allowed. The API decides which are allowed. */
 export const TASK_NEXT_STATE_ORDER: TaskState[] = [
+  "new",
   "ready",
   "in_progress",
   "on_hold",
   "complete",
   "canceled",
+];
+
+/** Task list filter values. Includes Blocked, which users cannot set by hand. */
+export const TASK_FILTER_STATES: TaskState[] = [
+  "new",
+  "blocked",
+  "ready",
+  "in_progress",
+  "pending",
+  "complete",
+  "canceled",
+  "on_hold",
 ];
 
 export function isClosedTaskState(state: string): boolean {
@@ -111,6 +126,7 @@ export function formatTaskNumber(n: number): string {
 /** CSS modifier shared by StateCheckbox and list State labels. */
 export type TaskStateTone =
   | "draft"
+  | "blocked"
   | "ready"
   | "progress"
   | "pending"
@@ -121,6 +137,8 @@ export type TaskStateTone =
 
 export function taskStateTone(state: TaskState): TaskStateTone {
   switch (state) {
+    case "blocked":
+      return "blocked";
     case "ready":
       return "ready";
     case "in_progress":
@@ -151,13 +169,14 @@ export type TaskPriorityTone = "none" | "low" | "medium" | "high" | "urgent";
 
 export const TASK_STATE_SORT_RANK: Record<TaskState, number> = {
   new: 0,
-  ready: 1,
-  in_progress: 2,
-  pending: 3,
-  on_hold: 4,
-  complete: 5,
-  canceled: 6,
-  deleted: 7,
+  blocked: 1,
+  ready: 2,
+  in_progress: 3,
+  pending: 4,
+  on_hold: 5,
+  complete: 6,
+  canceled: 7,
+  deleted: 8,
 };
 
 export function taskPriorityTone(priority: TaskPriority): TaskPriorityTone {

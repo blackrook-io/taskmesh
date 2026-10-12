@@ -36,6 +36,10 @@ import {
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import {
+  promoteBlockedDependents,
+  shouldPromoteBlockedDependents,
+} from "../../services/taskBlocked.js";
+import {
   afterTaskHierarchyChange,
   resolvePersistedState,
 } from "../../services/taskPending.js";
@@ -336,7 +340,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       return;
     }
 
-    const persistedState = await resolvePersistedState(db, taskId, parsed.state);
+    const persistedState = await resolvePersistedState(db, taskId, existing.state, parsed.state);
     const previousParentId = existing.parentId;
     const stateComment = parsed.stateComment?.trim() ?? "";
     const activitySource = activitySourceFromRequest(req);
@@ -392,6 +396,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       }
       await recordTaskChanges(db, taskId, existing, row, activityOpts);
       await afterTaskHierarchyChange(db, taskId, previousParentId, activityOpts);
+      if (shouldPromoteBlockedDependents(existing.state, row.state)) {
+        await promoteBlockedDependents(db, taskId, activityOpts);
+      }
       if (parsed.description !== undefined) {
         await syncMentionLinks(db, {
           srcType: "task",
@@ -458,11 +465,15 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),
     });
-    await afterTaskHierarchyChange(db, taskId, existing.parentId, {
+    const activityOpts = {
       actorId,
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),
-    });
+    };
+    await afterTaskHierarchyChange(db, taskId, existing.parentId, activityOpts);
+    if (shouldPromoteBlockedDependents(existing.state, row.state)) {
+      await promoteBlockedDependents(db, taskId, activityOpts);
+    }
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);

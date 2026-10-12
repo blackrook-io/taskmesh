@@ -14,6 +14,7 @@ import {
 
 const STATES = [
   "new",
+  "blocked",
   "ready",
   "in_progress",
   "pending",

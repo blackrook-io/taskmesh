@@ -112,9 +112,11 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
       );
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setError(null);
       invalidate();
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["task-activity", variables.dependentId] });
     },
     onError: (err: Error) => setError(err.message),
   });

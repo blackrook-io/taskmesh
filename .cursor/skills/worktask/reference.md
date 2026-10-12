@@ -145,7 +145,7 @@ curl -fsS "${AUTH[@]}" \
   "$BASE/api/v1/tasks/dependency-search?q=T0042&excludeTaskId=${TASK_ID}"
 ```
 
-**Worktask Depends-on gate:** if any `dependsOn[].state` is not `complete`, `canceled`, or `pending`, alert and stop before planning/branch/In Progress. `pending` means the dependency’s own work is done (waiting on *its* children) and does not block.
+**Worktask Depends-on gate:** if any `dependsOn[].state` is not `complete`, `canceled`, or `pending`, alert and stop before planning/branch/In Progress. `pending` means the dependency’s own work is done (waiting on *its* children) and does not block. `blocked` means the dependency is waiting on its own prerequisites and does block.
 
 ### Add a dependency (relate tasks)
 
@@ -238,6 +238,7 @@ Post when implementing new functionality or corrections during QA (not only at C
 | API value | UI label |
 |-----------|----------|
 | `new` | Draft |
+| `blocked` | Blocked (system-only; open Depends-on blocker; not a start state) |
 | `ready` | Ready |
 | `in_progress` | In Progress |
 | `pending` | Pending |

@@ -32,6 +32,8 @@ export function stateAppearance(state: string | null | undefined): { color: stri
   switch (state) {
     case "new":
       return { color: "var(--task-state-draft)", hollow: false };
+    case "blocked":
+      return { color: "var(--task-state-blocked)", hollow: false };
     case "in_progress":
       return { color: "var(--task-state-progress)", hollow: true };
     case "ready":

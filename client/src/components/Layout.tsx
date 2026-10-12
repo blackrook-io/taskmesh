@@ -8,6 +8,7 @@ import { SettingsProvider } from "../lib/settings";
 import { AssistantAttachProvider } from "../lib/assistantAttach";
 import { useAssistantBlockedTitle } from "../lib/useAssistantAvailability";
 import { AssistantPanel } from "./AssistantPanel";
+import { BlockedStateNotice } from "./BlockedStateNotice";
 import { CommandPalette } from "./CommandPalette";
 import { AppShell } from "./shell/AppShell";
 import { AdministrationModal } from "./shell/AdministrationModal";
@@ -75,6 +76,7 @@ export function Layout() {
               />
             ) : null}
             <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+            <BlockedStateNotice />
           </AssistantAttachProvider>
         </AdministrationProvider>
       </SettingsProvider>

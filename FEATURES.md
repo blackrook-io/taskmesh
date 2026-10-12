@@ -28,6 +28,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Personalize List View columns from the header context menu — show, hide, and reorder fields with a server-saved layout shared across projects
 - Collapsed Task Groups and parent tasks stay closed across refreshes and browsers
 - Track progress along a fixed path from Draft to Complete, with a comment required to cancel or reopen, activity history, and a visual change timeline
+- Setting a Draft task to Ready while prerequisites are still open stores it as Blocked until every prerequisite is finished; you can return it to Draft or cancel it
 - Soft-delete with restore; move tasks between projects or keep them in a global Tasks view
 - Assign project Tasks (and ToDos) to Owners, Managers, or Members from the list context menu or edit form
 - Completed rows grey out so finished work is easier to scan past

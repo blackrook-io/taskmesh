@@ -20,6 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const STATE_LABELS: Record<string, string> = {
   new: "Draft",
+  blocked: "Blocked",
   ready: "Ready",
   in_progress: "In Progress",
   pending: "Pending",

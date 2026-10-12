@@ -17,6 +17,7 @@ export type OverviewAssigneeRecord = OverviewDueRecord & {
 
 const ACTIVE_STATES = new Set([
   "new",
+  "blocked",
   "ready",
   "in_progress",
   "pending",

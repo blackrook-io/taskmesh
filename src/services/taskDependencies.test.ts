@@ -14,6 +14,7 @@ describe("taskDependencies helpers", () => {
     assert.equal(isOpenTaskState("in_progress"), true);
     assert.equal(isOpenTaskState("pending"), true);
     assert.equal(isOpenTaskState("on_hold"), true);
+    assert.equal(isOpenTaskState("blocked"), true);
     assert.equal(isOpenTaskState("complete"), false);
     assert.equal(isOpenTaskState("canceled"), false);
     assert.equal(isOpenTaskState("deleted"), false);
@@ -24,6 +25,7 @@ describe("taskDependencies helpers", () => {
     assert.equal(isDependencyBlockingState("complete"), false);
     assert.equal(isDependencyBlockingState("in_progress"), true);
     assert.equal(isDependencyBlockingState("ready"), true);
+    assert.equal(isDependencyBlockingState("blocked"), true);
   });
 
   it("formats complete/delete blocker messages", () => {

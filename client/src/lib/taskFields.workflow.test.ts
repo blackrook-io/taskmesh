@@ -9,6 +9,7 @@ import {
 describe("allowed task states from the API", () => {
   it("cycles in the preference order", () => {
     assert.equal(nextAllowedTaskState(["canceled", "ready"]), "ready");
+    assert.equal(nextAllowedTaskState(["canceled", "new"]), "new");
     assert.equal(nextAllowedTaskState(["complete", "on_hold"]), "on_hold");
     assert.equal(nextAllowedTaskState([]), null);
     assert.equal(nextAllowedTaskState(undefined), null);
