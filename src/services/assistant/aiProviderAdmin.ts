@@ -4,6 +4,12 @@ import { z } from "zod";
 import type { AiProviderPlugin } from "@taskmesh/ai-provider-contract";
 import * as schema from "../../db/schema.js";
 import { invalidateSystemPropertiesCache } from "../systemProperties.js";
+import type { AiKeyMode } from "./aiKeyMode.js";
+import {
+  countActiveUsers,
+  listInstanceCredentialPublic,
+  readAiKeyMode,
+} from "./aiInstanceKeys.js";
 import { normalizeAiProviders, resolvePluginApiKey, type AiProvidersFile } from "./aiProviderConfig.js";
 import { assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
 import { loadedAiProviders } from "./providerLoader.js";
@@ -32,6 +38,14 @@ export type AiProviderAdminRow = {
   configured: boolean;
   capabilities: AiProviderPlugin["capabilities"];
   config: AiProviderPublicConfig;
+  keyHint: string | null;
+  keyVerifiedAt: string | null;
+};
+
+export type AiProviderAdminPayload = {
+  plugins: AiProviderAdminRow[];
+  keyMode: AiKeyMode;
+  activeUserCount: number;
 };
 
 async function readFile(db: Db): Promise<AiProvidersFile> {
@@ -63,23 +77,34 @@ function publicConfig(plugin: AiProviderPlugin, raw: Record<string, unknown> | u
   };
 }
 
-export async function listAiProvidersForAdmin(db: Db): Promise<AiProviderAdminRow[]> {
+export async function listAiProvidersForAdmin(db: Db): Promise<AiProviderAdminPayload> {
   const file = await readFile(db);
-  return loadedAiProviders()
+  const credentials = await listInstanceCredentialPublic(db);
+  const plugins = loadedAiProviders()
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((plugin) => {
       const entry = file[plugin.id];
+      const key = credentials.get(plugin.id);
       return {
         id: plugin.id,
         displayName: plugin.displayName,
         version: plugin.version,
         enabled: Boolean(entry?.enabled),
-        configured: Boolean(entry?.enabled && resolvePluginApiKey(plugin.id)),
+        configured: Boolean(
+          entry?.enabled && (key?.keyHint || resolvePluginApiKey(plugin.id)),
+        ),
         capabilities: plugin.capabilities,
         config: publicConfig(plugin, entry?.config),
+        keyHint: key?.keyHint ?? null,
+        keyVerifiedAt: key?.keyVerifiedAt ?? null,
       };
     });
+  return {
+    plugins,
+    keyMode: await readAiKeyMode(db),
+    activeUserCount: await countActiveUsers(db),
+  };
 }
 
 export async function patchAiProvider(
@@ -113,7 +138,7 @@ export async function patchAiProvider(
       set: { value: next, updatedAt: now },
     });
   invalidateSystemPropertiesCache();
-  const row = (await listAiProvidersForAdmin(db)).find((item) => item.id === plugin.id);
+  const row = (await listAiProvidersForAdmin(db)).plugins.find((item) => item.id === plugin.id);
   if (!row) throw new Error("Provider disappeared after save");
   return row;
 }

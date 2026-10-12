@@ -57,6 +57,6 @@ The app container runs migrations when it starts. Wait until `app` is healthy, t
 ## If the upgrade fails
 
 - Migration errors: confirm `DATABASE_URL` (bare metal) or `POSTGRES_PASSWORD` (Compose) still match the database you backed up. Do not point the new checkout at an empty database.
-- API will not start and the log mentions `MFA_TOTP_KEY` or `OAUTH_CREDENTIALS_KEY`: set each configured key to at least 32 characters, then restart.
+- API will not start and the log mentions `MFA_TOTP_KEY`, `OAUTH_CREDENTIALS_KEY`, or `AI_CREDENTIALS_KEY`: set each configured key to at least 32 characters, then restart.
 - Restore the backup you took in **Before you start**, then check out the previous tag or commit and start the app again.
 - More symptoms: [INSTALL.md §21](INSTALL.md#21-troubleshooting) and [INSTALL.md § A.6](INSTALL.md#a6-container-troubleshooting).

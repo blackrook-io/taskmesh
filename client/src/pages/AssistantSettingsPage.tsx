@@ -21,9 +21,10 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
         </div>
       )}
       <p className="muted" style={embedded ? { marginTop: 0 } : undefined}>
-        TaskMesh talks to an Administrator-enabled AI provider. The OpenAI plugin still uses{" "}
-        <code>OPENAI_API_KEY</code> in the server <code>.env</code> (deprecated). Keys are not
-        entered in the browser. The provider base URL must be public https.
+        TaskMesh talks to an Administrator-enabled AI provider. Administrators store an instance
+        key under Administration → System properties. <code>OPENAI_API_KEY</code> in the server{" "}
+        <code>.env</code> remains a deprecated fallback when no instance key is stored. The
+        provider base URL must be public https.
       </p>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
@@ -71,13 +72,15 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
               .
             </li>
             <li>
-              On the server, edit <code>/srv/taskmesh/.env</code>:
+              Set <code>AI_CREDENTIALS_KEY</code> in <code>/srv/taskmesh/.env</code> (at least 32
+              characters), restart the API, then store the provider key under Administration →
+              System properties. The deprecated fallback is still:
               <pre className="assistant-env-sample">{`OPENAI_API_KEY=sk-...
 ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini`}</pre>
             </li>
             <li>
-              Restart the API. On first boot with the key set, the OpenAI plugin is enabled.
-              Administrators can disable it under Administration → System properties.
+              On first boot with <code>OPENAI_API_KEY</code> set, the OpenAI plugin is enabled.
+              Administrators can change that under Administration → System properties.
             </li>
           </ol>
           <p className="muted" style={{ marginTop: "0.75rem" }}>

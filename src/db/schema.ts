@@ -853,6 +853,33 @@ export const apiRequestLogs = pgTable(
 );
 
 /**
+ * One encrypted provider key for the whole instance (T0182).
+ * Ciphertext is AES-256-GCM under `AI_CREDENTIALS_KEY`. `hint` is the last 4 characters only.
+ */
+export const aiInstanceCredentials = pgTable(
+  "ai_instance_credentials",
+  {
+    id: serial("id").primaryKey(),
+    pluginId: text("plugin_id").notNull().unique(),
+    secretEnc: text("secret_enc").notNull(),
+    hint: text("hint").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    updatedById: integer("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pluginCheck: check(
+      "ai_instance_credentials_plugin_chk",
+      sql`${t.pluginId} ~ '^[a-z0-9-]+$'`,
+    ),
+    hintCheck: check(
+      "ai_instance_credentials_hint_chk",
+      sql`char_length(${t.hint}) between 1 and 4`,
+    ),
+  }),
+);
+
+/**
  * Append-only log of assistant tool calls, replies, and proposal applies (T0178).
  * Stores the decision and token counts, not prompts, arguments, or record text.
  * A web_fetch allow row stores `Fetched` plus the capped URL in `reason`.
@@ -866,7 +893,7 @@ export const aiAuditLog = pgTable(
     provider: text("provider"),
     model: text("model"),
     tool: text("tool"),
-    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond */
+    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode */
     action: text("action").notNull(),
     entityType: text("entity_type"),
     entityId: integer("entity_id"),
@@ -888,7 +915,7 @@ export const aiAuditLog = pgTable(
     ),
     actionCheck: check(
       "ai_audit_log_action_chk",
-      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond')`,
+      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode')`,
     ),
   }),
 );
@@ -1891,6 +1918,13 @@ export const userRolesRelations = relations(userRoles, ({ one }) => ({
 export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   user: one(users, {
     fields: [apiKeys.userId],
+    references: [users.id],
+  }),
+}));
+
+export const aiInstanceCredentialsRelations = relations(aiInstanceCredentials, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [aiInstanceCredentials.updatedById],
     references: [users.id],
   }),
 }));

@@ -1,0 +1,55 @@
+# T0182 — Instance keys, key modes, billing-risk acknowledgement
+
+**Task:** T0182 (id 197) — AI: instance keys, key modes and billing-risk acknowledgement
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Depends on:** T0180 complete (provider plugin contract). Gate is clear.
+**Branch (after approval):** `T0182-instance-keys`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for the credentials table and the audit action check).
+
+## Size
+
+One feature: encrypt instance keys, store the key mode, enforce the billing-risk phrase, and add the controls to the existing Admin AI providers section. Per-user keys (T0183), budgets (T0188), the full Admin AI hub (T0189), and key rotation (T0213) stay in those tasks. No split.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Where keys live | New table `ai_instance_credentials`. One row per plugin id. Columns: `plugin_id` (unique), `secret_enc` (AES-256-GCM ciphertext), `hint` (last 4 characters only), `verified_at` (null until Verify succeeds), `updated_at`, `updated_by` (user id, ON DELETE SET NULL). Plaintext never stored. Not a column on `system_properties.ai_providers`. |
+| 2 | Encryption | New `src/lib/aiCredentialsCrypto.ts`, same construction as `oauthCrypto.ts` (AES-256-GCM, base64url `iv \|\| tag \|\| ciphertext`, SHA-256 of the env string). Env var `AI_CREDENTIALS_KEY`, separate from `OAUTH_CREDENTIALS_KEY`. Add it to `envKeys.ts`: if set and shorter than 32 characters, the process refuses to start. Unset is allowed; Replace/Verify then return a clear error. |
+| 3 | Key mode | System property `ai_key_mode`. Values: `instance_only` \| `user_only` \| `user_preferred_instance_fallback`. **Default `instance_only`** so today's `OPENAI_API_KEY` behavior is unchanged and no synthetic acknowledgement row is written for the implicit default. |
+| 4 | When the phrase is required | Target mode is `instance_only` or `user_preferred_instance_fallback`, **and** active users **> 1**, **and** the stored mode is different from the target (including a switch from one risky mode to the other). Phrase is exactly `I understand and accept` (case-sensitive, trimmed). `user_only`, a single active user, or re-saving the current mode: no phrase. Wrong or missing phrase: 400, mode unchanged, no acceptance row. |
+| 5 | Active users | Count of `users` where `deactivated_at` is null. Locked accounts still count. |
+| 6 | Audit | Extend `ai_audit_log.action` check with `key_mode` (not a model policy action). On accepted switch into a risky mode: `user_id` = administrator, `feature` = `key_mode`, `action` = `key_mode`, `decision` = `allow`, `tier` = 0, `reason` = `mode=<mode> activeUsers=<n>`. No key, hint, or typed phrase in the row. Single-user switches and switches to `user_only` are not acceptance rows. |
+| 7 | Write-only API | Administrator routes on the existing admin router. GET plugin rows gain `keyHint` (last 4 or null) and `keyVerifiedAt`. Responses never include the key. Replace stores ciphertext and clears `verified_at`. Remove deletes the row. Verify decrypts in memory, calls the plugin `verifyKey`, sets `verified_at` on success, and returns the provider error on failure without writing the key into the error or the audit log. Local plugins (`capabilities.local`) have no key controls. |
+| 8 | Runtime until T0183 | A stored instance key is preferred over the plugin env var (`OPENAI_API_KEY` and the matching vars for other plugins). If no row exists, the env var remains the fallback (T0180). **Key mode is stored and enforced for the acknowledgement only.** Per-request resolution (user key vs instance vs fallback, and refusing the instance key when the mode is `user_only`) is T0183. |
+| 9 | Budgets in the modal | T0188 is still Draft. The modal shows the active user count and the sentence “No instance-key spend cap is configured yet.” It does not invent budget storage. T0188 updates that sentence when caps exist. |
+| 10 | UI | On the existing Admin → System properties AI providers section (not a new hub; that is T0189). Per enabled non-local plugin: hint, Replace, Remove, Verify. Key mode control with the billing-risk modal. The modal lists the active user count, states that users without their own key and background features run for them spend the instance key, shows the budget sentence from decision 9, and requires the exact phrase before the PATCH is sent. The server still rejects a PATCH that omits it. |
+| 11 | Logging | Request log message for key routes names the plugin and the action (`replace` / `remove` / `verify`) and never the body. Key-mode log message names the new mode only. |
+| 12 | Tests | API tests: multi-user mode change without the phrase is rejected; exact phrase succeeds and writes one audit row whose text has no key; single-user change needs no phrase; a switch to `user_only` needs no phrase; GET/PATCH bodies and error strings do not contain the submitted key. Crypto round-trip unit test. |
+| 13 | Docs | `docs/database/platform.md` for the new table and the `key_mode` audit action. `.env.example`, `INSTALL.md`, and `UPGRADES.md` mention `AI_CREDENTIALS_KEY` (32+ characters when set). `npm run docs:sync-schema` after the doc edit. |
+
+## Out of scope (already tasked)
+
+- T0183 — per-user keys, `GET /api/v1/ai/capabilities`, and key-mode resolution on each request.
+- T0188 — token and instance-key spend caps; later copy in this modal.
+- T0189 — dedicated Administrator AI settings hub (this task’s controls can move there).
+- T0213 — re-encrypt script and backup warning.
+
+## Work items
+
+1. Migration + Drizzle: `ai_instance_credentials`; alter `ai_audit_log_action_chk` to allow `key_mode`; seed `ai_key_mode` = `"instance_only"` when the row is absent.
+2. `aiCredentialsCrypto.ts` + `AI_CREDENTIALS_KEY` in `envKeys.ts` and startup assert.
+3. Service: read/replace/remove/verify instance key; set key mode with the acknowledgement rules; write the audit row.
+4. Admin routes and extend `GET /api/v1/admin/ai-providers` (and the key-mode read) so the client can render hint, user count, and whether the next mode needs the phrase.
+5. Assistant key lookup: instance ciphertext, else env var. Do not branch on key mode.
+6. Admin UI: key controls + billing-risk modal on `AdminAiProvidersSection`.
+7. Tests and schema docs.
+
+## QA checklist (after implementation)
+
+- Set `AI_CREDENTIALS_KEY` (32+ chars) and restart the DEV API. Replace a key on an enabled provider; the field clears and only the last 4 remain. Responses and the API log line do not contain the key.
+- Verify succeeds or shows a provider error. Remove clears the hint.
+- With one active user, switch key mode with no phrase.
+- With two or more active users, `instance_only` and `user_preferred_instance_fallback` stay put until the phrase matches exactly. A wrong phrase does not change the mode.
+- After a successful multi-user switch, one `ai_audit_log` row records the admin, mode, and user count, and not the key.

@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.65.0 — 2026-10-12
+
+### New Functionality
+- Administrators store an encrypted instance key for each AI provider under System properties. The page shows only the last four characters. A stored key is used before the deprecated environment variable.
+- The key mode is instance only, user only, or user preferred with instance fallback. On an instance with more than one active user, choosing a mode that spends the instance key requires typing “I understand and accept.” That acceptance is recorded without the key.
+
 ## 0.64.3 — 2026-10-12
 
 ### New Functionality

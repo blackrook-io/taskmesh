@@ -22,6 +22,7 @@ import {
   type StoredAiPermissionTiers,
 } from "./assistant/aiTiers.js";
 import { isAiAccess, type AiAccess } from "./assistant/aiAccess.js";
+import { parseAiKeyMode, type AiKeyMode } from "./assistant/aiKeyMode.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -59,6 +60,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "ai_web_fetch",
   "ai_permission_tiers",
   "ai_project_access_default",
+  "ai_key_mode",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -83,6 +85,8 @@ export type SystemProperties = {
   aiProjectAccessDefault: AiAccess;
   /** Administrator tier matrix and blast-radius thresholds. User opt-in is not stored here. */
   aiPermissionTiers: StoredAiPermissionTiers;
+  /** Who may spend an instance provider key. Changed only through the billing-risk route. */
+  aiKeyMode: AiKeyMode;
   updatedAt: string | null;
 };
 
@@ -114,6 +118,7 @@ const DEFAULTS: {
   ai_web_fetch: boolean;
   ai_permission_tiers: StoredAiPermissionTiers;
   ai_project_access_default: AiAccess;
+  ai_key_mode: AiKeyMode;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -130,6 +135,7 @@ const DEFAULTS: {
   ai_web_fetch: false,
   ai_permission_tiers: defaultStoredAiPermissionTiers(),
   ai_project_access_default: "full",
+  ai_key_mode: "instance_only",
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -285,6 +291,7 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
     aiPermissionTiers: parseStoredAiPermissionTiers(
       map.get("ai_permission_tiers")?.value ?? DEFAULTS.ai_permission_tiers,
     ),
+    aiKeyMode: parseAiKeyMode(map.get("ai_key_mode")?.value ?? DEFAULTS.ai_key_mode),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);
