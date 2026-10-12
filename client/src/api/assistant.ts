@@ -31,7 +31,8 @@ export type ChatTurn = {
 export type AssistantProposal = {
   id: string;
   action: "create" | "update";
-  entityType: "idea" | "document" | "task";
+  policyAction?: "link" | "tag" | "comment";
+  entityType: "idea" | "project" | "document" | "task" | "todo" | "todo_list";
   entityId?: number;
   projectId?: number;
   summary: string;

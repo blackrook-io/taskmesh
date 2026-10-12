@@ -1,0 +1,63 @@
+# T0210 — AI expanded tool registry
+
+**Task:** T0210 (id 225) — AI: expanded tool registry
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0194 Knowledge and context foundations (group)
+**Depends on:** T0178 (complete). Required later by T0214 (Draft) and T0229 (Ready)
+**Branch (after approval):** `T0210-expanded-tool-registry`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`)
+
+## Size / dependencies
+
+One registry, a wider instance-policy allowlist, thin read and propose tools over records that already exist, and apply-route cases so a confirmed proposal can save. No migration and no new UI. Neighbourhood reuses `GET /api/v1/graph` from T0163. Path search stays on T0167 (On Hold); this task does not create a second path task. No split.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Registry | One map in the assistant tool module: every tool name → policy `action` and `entityType` (null only for cross-type search and `web_fetch`). `executeAssistantTool` checks policy from that row before it runs. A test fails if a declared tool has no row or the action is not an `AiAction` |
+| 2 | Existing tools | Stay as they are. `search_records` and `get_entity` gain `todo` and `todo_list`. Task state changes stay on `propose_task_update` |
+| 3 | New reads | `list_todos`, `list_links`, `list_tags`, `list_comments`, `list_task_dependencies`, `get_neighbourhood`. Each is action `read`. Results go through minimizers (T0179): identifiers, titles, display numbers, state, priority, due date, progress, tag names, and a 2,000-character excerpt. No colors, owners, or emails |
+| 4 | New writes | Proposals only, classified by T0185 on the existing chat path. `propose_todo_create` / `propose_todo_update` (title, description, state, priority, due date, progress 0–100). `propose_todo_list_create` / `propose_todo_list_update` (title). `propose_link` (action `link`). `propose_tag` (action `tag`, add a tag by name). `propose_comment` (action `comment`, activity comment). `propose_task_dependency` (action `link`, add depends-on) |
+| 5 | Removals | No unlink, untag, remove-dependency, or delete tools. Apply still denies DELETE (T0185) |
+| 6 | Policy allowlist | Instance policy may `read` `todo` and `todo_list`. It may `propose_create`, `propose_update`, and `apply` those two types. It may `link`, `tag`, and `comment` when `entityType` is a domain type already allowed for read. Floor resources, `ownerId`, and project `aiAccess` stay denied. Other entity types (board, canvas, wiki, image board) stay denied |
+| 7 | Graph | `get_neighbourhood` calls the existing graph service (depth default 2, clamp 1–3, same relation and visibility rules). Returned nodes are key, type, id, title, state. No node bodies. Path search is not in T0163; T0167 owns `GET /api/v1/graph/path` and the Mesh UI |
+| 8 | Apply | Extend the proposal schema and apply route so confirm can create or update a todo or todo list, add a manual entity link, add a tag, add an activity comment, and add a task dependency. Same ownership checks as the human routes. Mention-origin links are not created by the assistant |
+| 9 | Search | `search_records` title search includes todos and todo lists, still title-level plus display number |
+| 10 | Out of this task | Boards, canvases, wiki nodes, image boards. Structured task filters and `list_my_attention` (T0229). Capture sentences (T0214). Path finder and orphan report (T0167). Progress-note record type (none exists; a comment covers a note) |
+
+## Work items
+
+### 1. Registry and policy
+
+- Tool registration map and the acceptance test (every declared tool → an `AiAction`).
+- Widen `READ_TYPES` / `WRITE_TYPES` and allow `link`, `tag`, and `comment` in the instance layer, with tests beside the existing policy suite.
+
+### 2. Minimizers
+
+- `minimizeTodo`, `minimizeTodoList`, and small shapes for a link, a tag name, a comment excerpt, and a graph node.
+
+### 3. Tool handlers
+
+- Read handlers scoped with the same ownership helpers as the HTTP routes, then minimized.
+- Propose handlers emit `AssistantProposal` rows (method, path, fields) and do not write.
+
+### 4. Apply route
+
+- New proposal shapes call the existing create/update services for todos, lists, links, tags, comments, and task dependencies.
+- Policy `apply` check runs before the write, as it does for ideas, documents, and tasks.
+
+## Out of scope
+
+- A graph path tool or any T0167 UI.
+- Delete, unlink, untag, or dependency removal.
+- MCP adapters (T0229) and the capture endpoint (T0214).
+- Schema changes. Finish-up version bump is **PATCH**.
+
+## QA checklist (after implementation)
+
+1. Chat can search or load a todo and a todo list, and the tool payload has title, number, state, and progress — not color or owner.
+2. Asking for a neighbourhood of a project returns nodes and edges the same way the graph API does, and does not offer a path tool.
+3. Confirming a proposed todo, list, link, tag, comment, or task dependency saves that record and shows it in the normal UI.
+4. The assistant still cannot delete, unlink, or change ownership.
+5. `npm test` includes the registry mapping test and the new policy allow/deny cases.

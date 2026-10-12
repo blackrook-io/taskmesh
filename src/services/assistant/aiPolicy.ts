@@ -73,8 +73,19 @@ export type PolicyLayerFns = {
   user: (input: PolicyCheckInput) => PolicyDecision;
 };
 
-const READ_TYPES = new Set<EntityType>(["idea", "project", "task", "document"]);
-const WRITE_TYPES = new Set<EntityType>(["idea", "document", "task"]);
+export const AI_READ_ENTITY_TYPES = [
+  "idea",
+  "project",
+  "task",
+  "document",
+  "todo",
+  "todo_list",
+] as const;
+
+export const AI_WRITE_ENTITY_TYPES = ["idea", "document", "task", "todo", "todo_list"] as const;
+
+const READ_TYPES = new Set<EntityType>(AI_READ_ENTITY_TYPES);
+const WRITE_TYPES = new Set<EntityType>(AI_WRITE_ENTITY_TYPES);
 
 /** Administrator default for the action, before opt-in and escalation. */
 export function tierForAction(action: AiAction): AiTier {
@@ -133,6 +144,9 @@ function instanceAllows(input: PolicyCheckInput): boolean {
     input.action === "apply"
   ) {
     return input.entityType != null && WRITE_TYPES.has(input.entityType);
+  }
+  if (input.action === "link" || input.action === "tag" || input.action === "comment") {
+    return input.entityType != null && READ_TYPES.has(input.entityType);
   }
   return false;
 }
@@ -248,12 +262,12 @@ export function describeAllowedPolicy(
   options?: { webFetchEnabled?: boolean },
 ): string {
   const actions = options?.webFetchEnabled
-    ? "read ideas, projects, tasks, and documents; propose and apply creates and updates of ideas, documents, and tasks; fetch public web pages. "
-    : "read ideas, projects, tasks, and documents; propose and apply creates and updates of ideas, documents, and tasks. ";
+    ? "read ideas, projects, tasks, documents, todos, and todo lists; propose and apply creates and updates of ideas, documents, tasks, todos, and todo lists; add links, tags, comments, and task dependencies; fetch public web pages. "
+    : "read ideas, projects, tasks, documents, todos, and todo lists; propose and apply creates and updates of ideas, documents, tasks, todos, and todo lists; add links, tags, comments, and task dependencies. ";
   return (
     `Allowed for the ${feature} feature (informational only; the server enforces these rules): ` +
     actions +
-    "Not allowed: link, tag, comment, propose delete, bulk, and any other record type. " +
+    "Not allowed: propose delete, bulk, boards, canvases, wiki nodes, image boards, and removing a link, tag, or dependency. " +
     "Projects may be read-only for AI or excluded entirely. Excluded projects and their records are omitted. Read-only projects can be read but not changed. " +
     "Never allowed: users, roles, groups, API keys, AI credentials, backups, ownership transfer, system properties, AI policy, and project AI access. " +
     "The server assigns the permission tier; the model cannot set it. Deletes are proposals only, and a person deletes the record in the app."

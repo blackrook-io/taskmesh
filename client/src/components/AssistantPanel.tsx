@@ -44,6 +44,16 @@ function saveTranscript(turns: ChatTurn[]) {
   }
 }
 
+function proposalHeading(p: AssistantProposal): string {
+  if (p.policyAction === "link") return `Add link on ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}`;
+  if (p.policyAction === "tag") return `Add tag on ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}`;
+  if (p.policyAction === "comment") {
+    return `Add comment on ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}`;
+  }
+  const verb = p.action === "create" ? "Create" : "Update";
+  return `${verb} ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}${p.projectId != null ? ` · project #${p.projectId}` : ""}`;
+}
+
 function previewFields(fields: Record<string, unknown>): string {
   const lines: string[] = [];
   for (const [k, v] of Object.entries(fields)) {
@@ -127,6 +137,14 @@ export function AssistantPanel({ open, onClose }: Props) {
         if (p.projectId != null) {
           void qc.invalidateQueries({ queryKey: ["tasks", p.projectId] });
         }
+      } else if (p.entityType === "todo") {
+        void qc.invalidateQueries({ queryKey: ["todos"] });
+        void qc.invalidateQueries({ queryKey: ["todo-lists"] });
+      } else if (p.entityType === "todo_list") {
+        void qc.invalidateQueries({ queryKey: ["todo-lists"] });
+      }
+      if (p.policyAction === "tag") {
+        void qc.invalidateQueries({ queryKey: ["tags"] });
       }
       const verb = p.action === "create" ? "Created" : "Updated";
       const target =
@@ -341,11 +359,7 @@ export function AssistantPanel({ open, onClose }: Props) {
               {proposals.map((p) => (
                 <article key={p.id} className="assistant-proposal-card">
                   <header className="assistant-proposal-card__head">
-                    <strong>
-                      {p.action === "create" ? "Create" : "Update"} {p.entityType}
-                      {p.entityId != null ? ` #${p.entityId}` : ""}
-                      {p.projectId != null ? ` · project #${p.projectId}` : ""}
-                    </strong>
+                    <strong>{proposalHeading(p)}</strong>
                   </header>
                   <p className="assistant-proposal-card__summary">{p.summary}</p>
                   <pre className="assistant-proposal-card__fields">{previewFields(p.fields)}</pre>
