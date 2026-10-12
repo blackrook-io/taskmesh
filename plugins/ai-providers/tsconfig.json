@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./contract" },
+    { "path": "./stub" },
+    { "path": "./openai" },
+    { "path": "./openai-compatible" }
+  ]
+}

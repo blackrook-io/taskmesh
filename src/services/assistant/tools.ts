@@ -1,3 +1,4 @@
+import type { AiToolDefinition } from "@taskmesh/ai-provider-contract";
 import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -250,6 +251,14 @@ export const OPENAI_TOOLS = [
     },
   },
 ];
+
+export function assistantToolDefinitions(): AiToolDefinition[] {
+  return OPENAI_TOOLS.map((tool) => ({
+    name: tool.function.name,
+    description: tool.function.description,
+    parameters: tool.function.parameters as Record<string, unknown>,
+  }));
+}
 
 function clip(s: string, max = 4000): string {
   return s.length <= max ? s : `${s.slice(0, max)}…`;

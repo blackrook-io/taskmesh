@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.62.1 — 2026-10-12
+
+### Enhancements
+- Assistant chat goes through administrator-enabled provider plugins. OpenAI is the first plugin, and an OpenAI-compatible plugin can point at another public https Chat Completions host. The server environment key still unlocks OpenAI and is logged as deprecated. It is not copied into the database.
+- System properties lists each loaded provider so an Administrator can enable it and set its base URL and default model. Private addresses and non-https URLs are rejected.
+
 ## 0.62.0 — 2026-10-12
 
 ### Enhancements

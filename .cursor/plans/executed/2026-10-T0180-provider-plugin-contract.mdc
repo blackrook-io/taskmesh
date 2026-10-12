@@ -1,0 +1,106 @@
+# T0180 — AI provider plugin contract and loader
+
+**Task:** T0180 (id 195) — AI: provider plugin contract and loader
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Branch (after approval):** `T0180-provider-plugin-contract`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`). `ai_providers` is a system-property key, same pattern as `mesh_appearance`.
+
+## Size / dependencies
+
+Depends-on is empty. Required-by (not blockers): T0181 Ollama, T0182 instance keys, T0202 Anthropic, T0203 Gemini, T0204 Azure OpenAI, T0205 routing, T0212 prompt registry.
+
+This task is the contract, the loader, the OpenAI plugin (port of today's fetch client), and the generic OpenAI-compatible plugin. It does not add those later providers, routing, or the billing-risk modal.
+
+One decision overlaps T0182 and is called out below: the env key is not copied into the database here.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Packages | npm workspaces: `plugins/ai-providers/*` only. The client stays on its own lockfile. Each plugin has its own `package.json`. No UI install or download. |
+| 2 | Loader | At process start, read only direct child directories of `plugins/ai-providers/`. A child loads when `package.json` has `"taskmesh": { "role": "provider" }` and `name` is `@taskmesh/ai-provider-<id>` matching the directory. Resolve the entry with `realpath` and refuse anything outside that directory (symlink escape). Dev (`tsx`) imports `src/index.ts`; production imports `dist/index.js`. Skip `role: "contract"` and `role: "test"`. |
+| 3 | Contract | One `AiProviderPlugin` type in `plugins/ai-providers/contract` (imported by the app and every plugin). Fields from the task: `id`, `displayName`, `version`, zod `configSchema`, `capabilities` (`chat`, `streaming`, `tools`, `embeddings`, `local`), `listModels`, `verifyKey`, `streamChat({ messages, tools, model, signal })`, optional `embed(texts)`. `streamChat` is an async iterable of `delta`, `tool_calls`, `usage`, `done`. |
+| 4 | Errors and usage | Plugins throw `AiProviderError` with `code`: `auth`, `rate_limit`, `quota`, `model_not_found`, `network`, `invalid_config`, `unsupported`. Usage is `{ inputTokens, outputTokens }` only. The app maps that into the existing audit columns. |
+| 5 | Tool loop | `runWithTools` stops calling `api.openai.com` itself. It calls the resolved plugin. Tool rounds consume `tool_calls` events and run the existing `executeAssistantTool` path. The final reply forwards `delta` events to the current SSE handler. Provider id and model on audit rows come from the plugin, not the hard-coded `"openai"`. |
+| 6 | Secrets | Non-secret config only in `system_properties.ai_providers` (enabled flag, base URL, default model). No API key in that JSON, in logs, or in API responses. Until T0182, the OpenAI plugin reads `OPENAI_API_KEY` at call time. The compatible plugin has no key source yet, so chat and verify return `auth` unless a test injects one. |
+| 7 | First boot | If `ai_providers` is absent and `OPENAI_API_KEY` is set, write `{ openai: { enabled: true, config: { baseUrl: "https://api.openai.com/v1", defaultModel: <current env or gpt-4.1-mini> } } }` and log once that `OPENAI_API_KEY` is deprecated and remains the key until instance keys (T0182). Do not delete the env var and do not persist it. |
+| 8 | SSRF | Base URLs are https only, no userinfo, no private, link-local, or metadata hosts (`src/lib/privateNet.ts`), checked when config is saved and again before each outbound request. Ollama's private-address exception stays in T0181. |
+| 9 | SDKs | OpenAI and the compatible plugin keep the current `fetch` client. No new npm SDK in this task. Later provider tasks pin their own SDKs inside their package. |
+| 10 | Admin UI | On the existing Admin · System properties page: list discovered plugins (name, version, capabilities), enable/disable, edit base URL and default model. Save goes through each plugin's zod schema. No key fields (T0182). |
+| 11 | Status API | `GET /api/v1/assistant/status` keeps `configuredProviders.openai` (enabled plugin and env key present) so the current settings page still works. Add `plugins: [{ id, displayName, enabled, configured, capabilities }]`. Settings copy notes the env var is deprecated. |
+| 12 | Tests | Shared contract kit. Stub plugin (`role: "test"`) scripts events and errors for this kit and for later tasks (T0179). Root `npm test` includes the kit and both provider suites. CI already runs `npm test`; no new workflow. |
+| 13 | Docs | Update the `OPENAI_API_KEY` notes in `INSTALL.md`, `README.md`, and `SECURITY.md` to the deprecation behavior. No `docs/database/` change (no schema change). |
+
+## Work items
+
+### 1. Contract package
+
+`plugins/ai-providers/contract/`
+
+- Export the plugin type, chat events, normalized tool definition, usage, and `AiProviderError`.
+- Export `assertPublicProviderBaseUrl(url)` wrapping `privateNet`.
+- Export the contract kit: given a plugin and a mock `fetch`, assert `listModels`, `verifyKey` success and auth failure, a text stream, a tool-call round, usage shape, and error mapping for auth / rate limit / quota / model not found / network. Skip `embed` when `capabilities.embeddings` is false.
+
+### 2. Stub plugin
+
+`plugins/ai-providers/stub/` with `"taskmesh": { "role": "test" }`. In-memory scripted responses. Not loaded in the running app.
+
+### 3. Loader and `ai_providers`
+
+- `src/services/assistant/providerLoader.ts` — scan, realpath check, dynamic import, registry by `id`.
+- Add `ai_providers` to `SYSTEM_PROPERTY_KEYS`. Value shape: `{ [pluginId]: { enabled: boolean, config: object } }`. Unknown plugin ids and config that fails that plugin's schema are rejected. Disabled plugins are not used for chat.
+- `resolveProvider()` uses the enabled, configured plugin. Today's single-provider behavior: the enabled OpenAI plugin when `OPENAI_API_KEY` is set; otherwise the assistant stays unconfigured (503, same message, plus the deprecation hint when the env var is missing and nothing is enabled).
+- First-boot seed in the system-properties read path, once, as in decision 7.
+
+### 4. OpenAI plugin
+
+`plugins/ai-providers/openai/` — move the Chat Completions calls out of `openaiProvider.ts` and `runWithTools.ts`.
+
+- Config schema: `baseUrl` (default `https://api.openai.com/v1`), `defaultModel` (default `gpt-4.1-mini`).
+- Capabilities: chat, streaming, tools. Embeddings false (no embeddings client today). `local: false`.
+- `listModels` via `GET {baseUrl}/models`. `verifyKey` via a cheap models call.
+- Map HTTP 401/403 → `auth`, 429 with quota wording → `quota`, other 429 → `rate_limit`, 404 → `model_not_found`, network failure → `network`.
+- Pass normalized tools through as Chat Completions `tools`. Emit `usage` from `prompt_tokens` / `completion_tokens`.
+
+### 5. OpenAI-compatible plugin
+
+`plugins/ai-providers/openai-compatible/` — same wire protocol, separate id `openai-compatible`.
+
+- Config schema: `baseUrl` required, `defaultModel` required. No default host.
+- Same capabilities and error mapping. Used for Mistral, Groq, OpenRouter, LM Studio, vLLM once an Administrator sets a public https base URL. No key until T0182, so it cannot serve live chat yet; contract tests inject a key and a mock fetch.
+
+### 6. Assistant wiring
+
+- `runWithTools` takes the plugin and a key resolver `(pluginId) => string | null`.
+- Delete the in-file OpenAI `fetch`. Keep `openaiProvider.ts` as a thin re-export only if something still imports it; otherwise remove it and fix imports.
+- Audit `provider` field uses `plugin.id`.
+
+### 7. Admin API and page
+
+- `GET/PATCH /api/v1/admin/ai-providers` (administrator only). PATCH body: plugin id, enabled, config. Reject SSRF base URLs. Response never includes secrets.
+- Section on `AdminSystemPropertiesPanel`: one row per discovered provider plugin.
+
+### 8. CI
+
+- Root `build` compiles plugin packages to `dist/` before `tsc` of the app (production loader imports `dist`).
+- `npm test` globs the contract kit and plugin tests.
+- `npm ci` at the repo root installs the new workspaces. Confirm the security workflow's cache path still matches the root lockfile.
+
+## Out of scope
+
+- Encrypted instance keys, key modes, billing-risk acknowledgement (T0182). This task does not add `AI_CREDENTIALS_KEY` or a credentials table.
+- Ollama, Anthropic, Gemini, Azure (T0181, T0202–T0204).
+- Model routing and fallback (T0205).
+- Prompt files (T0212).
+- Official provider SDKs.
+
+## QA checklist (after implementation)
+
+1. With `OPENAI_API_KEY` set and no `ai_providers` row, restart the DEV API and confirm the log line about deprecation and that `ai_providers` now enables `openai` with `https://api.openai.com/v1`.
+2. Assistant chat still answers and can call a tool (search or get). The panel streams the reply.
+3. Unset the env key, restart, and confirm chat returns the unconfigured 503 and the settings page shows OpenAI as not configured.
+4. As Administrator, disable the OpenAI plugin and confirm chat is unconfigured even if the env key is set. Re-enable it.
+5. Save a base URL of `http://…`, `http://127.0.0.1`, or `https://169.254.169.254` and confirm the save is rejected.
+6. Enable the compatible plugin with a public https base URL and a model name; confirm it is listed and that chat does not use it while OpenAI is the configured provider.
+7. `npm test` includes the contract kit for OpenAI, the compatible plugin, and the stub.

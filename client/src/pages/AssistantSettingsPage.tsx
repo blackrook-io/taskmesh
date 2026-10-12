@@ -21,9 +21,9 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
         </div>
       )}
       <p className="muted" style={embedded ? { marginTop: 0 } : undefined}>
-        TaskMesh talks to OpenAI with a server-side API key. Keys stay in <code>.env</code> on the
-        host (not entered in the browser). Outbound HTTPS to <code>api.openai.com</code> is
-        required.
+        TaskMesh talks to an Administrator-enabled AI provider. The OpenAI plugin still uses{" "}
+        <code>OPENAI_API_KEY</code> in the server <code>.env</code> (deprecated). Keys are not
+        entered in the browser. The provider base URL must be public https.
       </p>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
@@ -49,6 +49,12 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
             <li>
               OpenAI key present: {data.configuredProviders.openai ? "Yes" : "No"}
             </li>
+            {data.plugins?.map((plugin) => (
+              <li key={plugin.id}>
+                {plugin.displayName}: {plugin.enabled ? "enabled" : "disabled"}
+                {plugin.configured ? ", key present" : ""}
+              </li>
+            ))}
           </ul>
         ) : null}
       </section>
@@ -67,12 +73,11 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
             <li>
               On the server, edit <code>/srv/taskmesh/.env</code>:
               <pre className="assistant-env-sample">{`OPENAI_API_KEY=sk-...
-ASSISTANT_DEFAULT_PROVIDER=openai
 ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini`}</pre>
             </li>
             <li>
-              Restart: <code>sudo systemctl restart taskmesh</code> (or restart{" "}
-              <code>npm run dev:web</code>).
+              Restart the API. On first boot with the key set, the OpenAI plugin is enabled.
+              Administrators can disable it under Administration → System properties.
             </li>
           </ol>
           <p className="muted" style={{ marginTop: "0.75rem" }}>

@@ -1,28 +1,16 @@
+import type { AiChatMessage, AiProviderPlugin, AiToolCall } from "@taskmesh/ai-provider-contract";
+import { AiProviderError } from "@taskmesh/ai-provider-contract";
 import { writeAiAudit } from "./aiAudit.js";
 import type { ChatMessage } from "./types.js";
-import { getAssistantConfig } from "./types.js";
-import { executeAssistantTool, OPENAI_TOOLS, type AssistantProposal, type ToolHandlers } from "./tools.js";
-
-type OpenAiMessage =
-  | { role: "system" | "user" | "assistant"; content: string | null; tool_calls?: OpenAiToolCall[] }
-  | { role: "tool"; tool_call_id: string; content: string };
-
-type OpenAiToolCall = {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
-};
-
-type ChatCompletionResponse = {
-  choices?: Array<{
-    message?: OpenAiMessage;
-    finish_reason?: string | null;
-  }>;
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
-  error?: { message?: string };
-};
+import {
+  assistantToolDefinitions,
+  executeAssistantTool,
+  type AssistantProposal,
+  type ToolHandlers,
+} from "./tools.js";
 
 const MAX_TOOL_ROUNDS = 6;
+const DELTA_CHUNK = 48;
 
 export type RunAssistantHandlers = ToolHandlers & {
   onDelta: (text: string) => void;
@@ -31,27 +19,25 @@ export type RunAssistantHandlers = ToolHandlers & {
 };
 
 /**
- * Tool-calling loop (non-streaming rounds), then emit the final assistant text as deltas.
+ * Tool-calling loop through a provider plugin, then emit the final assistant text as deltas.
  */
 export async function runAssistantWithTools(args: {
+  plugin: AiProviderPlugin;
+  apiKey: string;
+  config: unknown;
   messages: ChatMessage[];
   model?: string;
   signal?: AbortSignal;
   handlers: RunAssistantHandlers;
   actorUserId: number;
   isAdministrator: boolean;
+  assertBaseUrl: (url: string) => Promise<string>;
 }): Promise<void> {
-  const cfg = getAssistantConfig();
-  const apiKey = cfg.openaiKey;
-  if (!apiKey) {
-    args.handlers.onError("OpenAI is not configured (set OPENAI_API_KEY)");
-    return;
-  }
-  const model = args.model?.trim() || cfg.model;
-
-  const messages: OpenAiMessage[] = args.messages.map((m) => ({
-    role: m.role,
-    content: m.content,
+  const model = args.model?.trim() || readDefaultModel(args.config);
+  const tools = assistantToolDefinitions();
+  const messages: AiChatMessage[] = args.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
   }));
 
   try {
@@ -60,55 +46,29 @@ export async function runAssistantWithTools(args: {
         args.handlers.onDone();
         return;
       }
-
       const roundStarted = Date.now();
-      const completion = await requestCompletion({
-        apiKey,
-        model,
-        messages,
-        tools: OPENAI_TOOLS,
-        signal: args.signal,
-      });
+      const outcome = await readRound(args, messages, tools, model);
       const roundLatency = Date.now() - roundStarted;
-      const tokensIn = completion.usage?.prompt_tokens ?? null;
-      const tokensOut = completion.usage?.completion_tokens ?? null;
-
-      const choice = completion.choices?.[0];
-      const msg = choice?.message;
-      if (!msg || msg.role === "tool") {
-        args.handlers.onError(completion.error?.message ?? "Empty completion from OpenAI");
-        return;
-      }
-
-      const toolCalls = msg.role === "assistant" ? (msg.tool_calls ?? []) : [];
-      if (toolCalls.length > 0) {
+      if (outcome.toolCalls.length > 0) {
         messages.push({
           role: "assistant",
-          content: msg.content ?? null,
-          tool_calls: toolCalls,
+          content: outcome.text || null,
+          toolCalls: outcome.toolCalls,
         });
-        for (const call of toolCalls) {
-          const result = await executeAssistantTool(
-            call.function.name,
-            call.function.arguments ?? "{}",
-            {
-              onTool: args.handlers.onTool,
-              onProposal: args.handlers.onProposal,
-              signal: args.signal,
-              actorUserId: args.actorUserId,
-              isAdministrator: args.isAdministrator,
-              feature: "assistant",
-              provider: "openai",
-              model,
-              tokensIn,
-              tokensOut,
-            },
-          );
-          messages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            content: result,
+        for (const call of outcome.toolCalls) {
+          const result = await executeAssistantTool(call.name, call.arguments || "{}", {
+            onTool: args.handlers.onTool,
+            onProposal: args.handlers.onProposal,
+            signal: args.signal,
+            actorUserId: args.actorUserId,
+            isAdministrator: args.isAdministrator,
+            feature: "assistant",
+            provider: args.plugin.id,
+            model,
+            tokensIn: outcome.usage?.inputTokens ?? null,
+            tokensOut: outcome.usage?.outputTokens ?? null,
           });
+          messages.push({ role: "tool", toolCallId: call.id, content: result });
         }
         continue;
       }
@@ -116,24 +76,22 @@ export async function runAssistantWithTools(args: {
       await writeAiAudit({
         userId: args.actorUserId,
         feature: "assistant",
-        provider: "openai",
+        provider: args.plugin.id,
         model,
         tool: null,
         action: "respond",
         decision: "allow",
         reason: "Assistant reply",
         tier: 0,
-        tokensIn,
-        tokensOut,
+        tokensIn: outcome.usage?.inputTokens ?? null,
+        tokensOut: outcome.usage?.outputTokens ?? null,
         latencyMs: roundLatency,
       });
 
-      const text = ((msg.content ?? "") as string).trim() || "Done.";
-      // Emit in small chunks so the UI still feels like a stream
-      const chunkSize = 48;
-      for (let i = 0; i < text.length; i += chunkSize) {
+      const text = outcome.text.trim() || "Done.";
+      for (let i = 0; i < text.length; i += DELTA_CHUNK) {
         if (args.signal?.aborted) break;
-        args.handlers.onDelta(text.slice(i, i + chunkSize));
+        args.handlers.onDelta(text.slice(i, i + DELTA_CHUNK));
       }
       args.handlers.onDone();
       return;
@@ -148,36 +106,52 @@ export async function runAssistantWithTools(args: {
       }
       return;
     }
-    args.handlers.onError(err instanceof Error ? err.message : "Assistant failed");
+    const message =
+      err instanceof AiProviderError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Assistant failed";
+    args.handlers.onError(message);
   }
 }
 
-async function requestCompletion(args: {
-  apiKey: string;
-  model: string;
-  messages: OpenAiMessage[];
-  tools: typeof OPENAI_TOOLS;
-  signal?: AbortSignal;
-}): Promise<ChatCompletionResponse> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${args.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: args.model,
-      messages: args.messages,
-      tools: args.tools,
-      tool_choice: "auto",
-    }),
-    signal: args.signal,
-  });
-  const json = (await res.json()) as ChatCompletionResponse;
-  if (!res.ok) {
-    throw new Error(json.error?.message ?? `OpenAI error (${res.status})`);
+function readDefaultModel(config: unknown): string {
+  if (config && typeof config === "object" && "defaultModel" in config) {
+    const model = (config as { defaultModel?: unknown }).defaultModel;
+    if (typeof model === "string" && model.trim()) return model.trim();
   }
-  return json;
+  return "gpt-4.1-mini";
+}
+
+async function readRound(
+  args: {
+    plugin: AiProviderPlugin;
+    apiKey: string;
+    config: unknown;
+    signal?: AbortSignal;
+    assertBaseUrl: (url: string) => Promise<string>;
+  },
+  messages: AiChatMessage[],
+  tools: ReturnType<typeof assistantToolDefinitions>,
+  model: string,
+): Promise<{ text: string; toolCalls: AiToolCall[]; usage: { inputTokens: number; outputTokens: number } | null }> {
+  let text = "";
+  let toolCalls: AiToolCall[] = [];
+  let usage: { inputTokens: number; outputTokens: number } | null = null;
+  for await (const event of args.plugin.streamChat(
+    {
+      config: args.config,
+      apiKey: args.apiKey,
+      assertBaseUrl: args.assertBaseUrl,
+    },
+    { messages, tools, model, signal: args.signal },
+  )) {
+    if (event.type === "delta") text += event.text;
+    if (event.type === "tool_calls") toolCalls = event.calls;
+    if (event.type === "usage") usage = event.usage;
+  }
+  return { text, toolCalls, usage };
 }
 
 export type { AssistantProposal };

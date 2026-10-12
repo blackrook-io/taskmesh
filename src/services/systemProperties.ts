@@ -10,6 +10,12 @@ import {
   type MeshAppearance,
 } from "../lib/meshAppearance.js";
 import { DEFAULT_THEME, isThemeId, THEME_IDS, type ThemeId } from "../lib/theme.js";
+import {
+  normalizeAiProviders,
+  OPENAI_KEY_DEPRECATION_LOG,
+  openAiPluginSeed,
+  type AiProvidersFile,
+} from "./assistant/aiProviderConfig.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -43,6 +49,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "mfa_trusted_device_days",
   "mfa_trusted_device_max",
   "mesh_appearance",
+  "ai_providers",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -60,6 +67,7 @@ export type SystemProperties = {
   mfaTrustedDeviceDays: number;
   mfaTrustedDeviceMax: number;
   meshAppearance: MeshAppearance;
+  aiProviders: AiProvidersFile;
   updatedAt: string | null;
 };
 
@@ -150,6 +158,11 @@ export function rememberSystemPropertiesCache(value: SystemProperties, now = Dat
   };
 }
 
+function defaultPropertyValue(key: SystemPropertyKey): unknown {
+  if (key === "ai_providers") return openAiPluginSeed(process.env) ?? {};
+  return DEFAULTS[key];
+}
+
 export async function getSystemProperties(db: Db, now = Date.now()): Promise<SystemProperties> {
   const cached = readSystemPropertiesCache(now);
   if (cached) return cached;
@@ -163,11 +176,15 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
 
   for (const key of SYSTEM_PROPERTY_KEYS) {
     if (!map.has(key)) {
+      const value = defaultPropertyValue(key);
       const [inserted] = await db
         .insert(schema.systemProperties)
-        .values({ key, value: DEFAULTS[key] })
+        .values({ key, value })
         .onConflictDoNothing()
         .returning();
+      if (inserted && key === "ai_providers" && openAiPluginSeed(process.env)) {
+        console.warn(OPENAI_KEY_DEPRECATION_LOG);
+      }
       if (inserted) map.set(key, inserted);
       else {
         const [again] = await db
@@ -228,6 +245,7 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
       DEFAULTS.mfa_trusted_device_max,
     ),
     meshAppearance: normalizeMeshAppearance(map.get("mesh_appearance")?.value),
+    aiProviders: normalizeAiProviders(map.get("ai_providers")?.value),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);

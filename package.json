@@ -1,13 +1,14 @@
 {
   "name": "taskmesh",
-  "version": "0.62.0",
+  "version": "0.62.1",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "PORT=${DEV_API_PORT:-3001} tsx watch src/index.ts",
+    "dev": "npm run build:plugins && PORT=${DEV_API_PORT:-3001} tsx watch src/index.ts",
     "dev:client": "npm run dev --prefix client",
     "dev:web": "concurrently -n api,web -c blue,green \"npm run dev\" \"npm run dev --prefix client\"",
-    "build": "tsc",
+    "build": "npm run build:plugins && tsc",
+    "build:plugins": "tsc -b plugins/ai-providers",
     "build:client": "npm run build --prefix client",
     "build:all": "npm run build && npm run build:client",
     "lint": "npm run lint --prefix client",
@@ -20,7 +21,7 @@
     "docs:sync-schema": "tsx src/scripts/syncSchemaDocsToProject.ts",
     "security:scan": "python3 security/scan/run.py",
     "security:ci": "python3 security/scan/run.py --modules repo_static --fail-on-findings --no-html",
-    "test": "tsx --test src/**/*.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshPins.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts client/src/lib/taskFields.workflow.test.ts"
+    "test": "npm run build:plugins && tsx --test src/**/*.test.ts plugins/ai-providers/*/src/**/*.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshPins.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts client/src/lib/taskFields.workflow.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -49,6 +50,9 @@
   "engines": {
     "node": ">=20"
   },
+  "workspaces": [
+    "plugins/ai-providers/*"
+  ],
   "overrides": {
     "qs": "^6.16.0",
     "shell-quote": "^1.12.0",

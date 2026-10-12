@@ -24,6 +24,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     mfaTrustedDeviceDays: 15,
     mfaTrustedDeviceMax: 5,
     meshAppearance: MESH_APPEARANCE_DEFAULTS,
+    aiProviders: {},
     updatedAt: null,
     ...overrides,
   };

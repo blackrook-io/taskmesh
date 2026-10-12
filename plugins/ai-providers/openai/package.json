@@ -1,0 +1,19 @@
+{
+  "name": "@taskmesh/ai-provider-openai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@taskmesh/ai-provider-contract": "*",
+    "zod": "^4.4.3"
+  },
+  "taskmesh": {
+    "role": "provider"
+  }
+}

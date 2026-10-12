@@ -129,7 +129,7 @@ Run after adding a route or query:
 
 ## Secrets and host hardening (T0087)
 
-- **`.env`:** mode `600`, owned by the service user; never commit. Contains `DATABASE_URL` and optional `OPENAI_API_KEY`.
+- **`.env`:** mode `600`, owned by the service user; never commit. Contains `DATABASE_URL` and optional `OPENAI_API_KEY` (deprecated OpenAI plugin key; not stored in the database).
 - **Postgres:** dedicated `taskmesh` role with least privilege on the `taskmesh` database only (not superuser).
 - **OS:** run systemd unit as a non-root user; only nginx (:443/:80) exposed on the LAN/internet, not Express `:3000`. Compose app process drops to uid **10001** after entrypoint volume `chown`.
 - **TLS:** prefer HTTPS via nginx; see [`deploy/ssl/README.md`](deploy/ssl/README.md). For public hosts, use certbot/Let's Encrypt (manual setup documented there). Compose desktop uses `docker/nginx/generate-certs.sh` self-signed certs by default.
