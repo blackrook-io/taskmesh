@@ -221,7 +221,7 @@ export async function runConfiguredAssistant(args: {
           },
           model: attempt.model,
           signal: args.signal,
-          handlers: args.handlers,
+          handlers: { ...args.handlers, routeLocalOnly: args.localOnly === true },
           actorUserId: args.actorUserId,
           isAdministrator: args.isAdministrator,
           assertBaseUrl: attempt.plugin.capabilities.local

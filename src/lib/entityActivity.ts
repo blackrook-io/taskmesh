@@ -1,5 +1,5 @@
 /** Fields Mesh treats as a record's last update. Comments are never one of these. */
-export const ACTIVITY_UPDATE_FIELDS = ["state", "progress", "status", "body", "ai_access"] as const;
+export const ACTIVITY_UPDATE_FIELDS = ["state", "progress", "status", "body", "ai_access", "ai_local_only"] as const;
 
 export type ActivityUpdateField = (typeof ACTIVITY_UPDATE_FIELDS)[number];
 
@@ -96,6 +96,18 @@ export function trackedAiAccessChange(
     field: "ai_access",
     oldValue: before,
     newValue: after,
+  };
+}
+
+export function trackedAiLocalOnlyChange(
+  before: boolean,
+  after: boolean,
+): { field: "ai_local_only"; oldValue: string; newValue: string } | null {
+  if (before === after) return null;
+  return {
+    field: "ai_local_only",
+    oldValue: before ? "true" : "false",
+    newValue: after ? "true" : "false",
   };
 }
 

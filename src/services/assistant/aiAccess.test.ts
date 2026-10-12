@@ -7,6 +7,7 @@ import {
   linksVisibleToAi,
   narrowerAiAccess,
 } from "./aiAccess.js";
+import { aiLocalOnlyWiderThanCeiling, effectiveAiLocalOnly } from "./projectAiAccess.js";
 
 describe("project AI access", () => {
   it("treats excluded as narrower than read-only and full", () => {
@@ -28,5 +29,15 @@ describe("project AI access", () => {
       { from: "excluded" as const, to: "full" as const, id: 2 },
     ]);
     assert.deepEqual(kept.map((link) => link.id), [1]);
+  });
+
+  it("forces local-only from the project or the ceiling, and only narrows", () => {
+    assert.equal(effectiveAiLocalOnly(false, false), false);
+    assert.equal(effectiveAiLocalOnly(true, false), true);
+    assert.equal(effectiveAiLocalOnly(false, true), true);
+    assert.equal(effectiveAiLocalOnly(true, true), true);
+    assert.equal(aiLocalOnlyWiderThanCeiling(false, true), true);
+    assert.equal(aiLocalOnlyWiderThanCeiling(true, true), false);
+    assert.equal(aiLocalOnlyWiderThanCeiling(false, false), false);
   });
 });

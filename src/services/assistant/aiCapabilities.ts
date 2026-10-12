@@ -2,7 +2,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../../db/schema.js";
 import { AiCredentialsError } from "./aiInstanceKeys.js";
 import { resolveAssistantSession } from "./index.js";
-import { resolveEffectiveAiAccess } from "./projectAiAccess.js";
+import { resolveEffectiveAiAccess, resolveEffectiveLocalOnly } from "./projectAiAccess.js";
 import { getSystemProperties } from "../systemProperties.js";
 import { loadedAiProviders } from "./providerLoader.js";
 import { pluginBudgetReason, sumDayUsage, usageWarning, utcDayStart, type AiKeySource } from "./aiBudgets.js";
@@ -14,6 +14,7 @@ export const AI_CAPABILITY_REASONS = [
   "no_key",
   "disabled_by_administrator",
   "project_excluded",
+  "no_local_model",
   "budget_reached",
 ] as const;
 
@@ -33,6 +34,7 @@ export async function listAiCapabilities(
   db: Db,
   args: { userId: number; projectId?: number | null; env?: NodeJS.ProcessEnv },
 ): Promise<AiCapability[]> {
+  let localOnly = false;
   if (args.projectId != null) {
     const access = await resolveEffectiveAiAccess(db, args.projectId);
     if (!access) {
@@ -41,11 +43,15 @@ export async function listAiCapabilities(
     if (access === "excluded") {
       return [{ id: "assistant", available: false, reason: "project_excluded" }];
     }
+    localOnly = (await resolveEffectiveLocalOnly(db, args.projectId)) === true;
   }
   const session = await resolveAssistantSession(db, args.userId, args.env);
-  if (!session) return [{ id: "assistant", available: false, reason: await unavailableReason(db) }];
   const props = await getSystemProperties(db);
-  const route = await resolveFeatureRoute(db, { userId: args.userId, env: args.env });
+  const route = await resolveFeatureRoute(db, { userId: args.userId, env: args.env, localOnly });
+  if (localOnly && route.attempts.length === 0) {
+    return [{ id: "assistant", available: false, reason: "no_local_model" }];
+  }
+  if (!session) return [{ id: "assistant", available: false, reason: await unavailableReason(db) }];
   const keySource = route.attempts[0]?.keySource ?? null;
   const totals = await sumDayUsage(db, { userId: args.userId });
   if (pluginBudgetReason(props.aiBudgets, totals, keySource)) {
@@ -93,7 +99,9 @@ export async function readUserAiUsage(
   };
 }
 
-async function unavailableReason(db: Db): Promise<Exclude<AiCapabilityReason, "project_excluded" | "budget_reached">> {
+async function unavailableReason(
+  db: Db,
+): Promise<Exclude<AiCapabilityReason, "project_excluded" | "budget_reached" | "no_local_model">> {
   const props = await getSystemProperties(db);
   const ready = loadedAiProviders().filter((plugin) => {
     if (!plugin.capabilities.chat) return false;

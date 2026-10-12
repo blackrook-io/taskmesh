@@ -40,6 +40,7 @@ erDiagram
     int source_idea_id FK
     int owner_id FK
     text ai_access
+    boolean ai_local_only
   }
   project_managers {
     int id PK
@@ -135,6 +136,7 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 | `source_idea_id` | integer | yes | — | FK → `ideas.id` |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112); nested content inherits for access |
 | `ai_access` | text | no | `'full'` | Project AI choice: `full` \| `read_only` \| `excluded` (T0184). Effective access is the narrower of this value and the instance ceiling `system_properties.ai_project_access_default` (default `full`). `excluded` records are never sent to a model. `read_only` allows reads and denies proposals and applies. |
+| `ai_local_only` | boolean | no | `false` | When true, AI for this project may use local models only (T0320). Effective mark is this value OR `system_properties.ai_project_local_only` (default `false`). A project can turn the mark on and cannot turn it off while the ceiling is on. Reads and proposals still follow `ai_access`. |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 

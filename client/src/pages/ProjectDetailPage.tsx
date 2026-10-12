@@ -92,6 +92,12 @@ function aiAccessBadge(value: AiAccess | undefined): string | null {
   return null;
 }
 
+function localOnlyBadge(project: { aiAccessEffective?: AiAccess; aiLocalOnlyEffective?: boolean }): string | null {
+  if (project.aiAccessEffective === "excluded") return null;
+  if (project.aiLocalOnlyEffective) return "Local models only";
+  return null;
+}
+
 const PROJECT_STATUS_OPTIONS = [
   { value: "idea", label: "Idea" },
   { value: "active", label: "Active" },
@@ -155,6 +161,7 @@ export function ProjectDetailPage() {
   const [status, setStatus] = useState("idea");
   const [description, setDescription] = useState("");
   const [aiAccess, setAiAccess] = useState<AiAccess>("full");
+  const [aiLocalOnly, setAiLocalOnly] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [requestOpenTask, setRequestOpenTask] = useState<Task | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
@@ -508,6 +515,7 @@ export function ProjectDetailPage() {
       setStatus(project.status);
       setDescription(project.description ?? "");
       setAiAccess(project.aiAccess ?? "full");
+      setAiLocalOnly(project.aiLocalOnly === true);
     }
     setOverviewEdit(true);
   };
@@ -518,6 +526,7 @@ export function ProjectDetailPage() {
       setStatus(project.status);
       setDescription(project.description ?? "");
       setAiAccess(project.aiAccess ?? "full");
+      setAiLocalOnly(project.aiLocalOnly === true);
     }
     setOverviewEdit(false);
   };
@@ -529,6 +538,9 @@ export function ProjectDetailPage() {
         body.description = description;
         if (project && aiAccess !== (project.aiAccess ?? "full")) {
           body.aiAccess = aiAccess;
+        }
+        if (project && aiLocalOnly !== (project.aiLocalOnly === true)) {
+          body.aiLocalOnly = aiLocalOnly;
         }
       }
       const res = await apiJson<{ data: Project }>(`/api/v1/projects/${projectId}`, {
@@ -735,6 +747,9 @@ export function ProjectDetailPage() {
                     {aiAccessBadge(project.aiAccessEffective)}
                   </span>
                 ) : null}
+                {localOnlyBadge(project) ? (
+                  <span className="overview-meta__ai-badge">{localOnlyBadge(project)}</span>
+                ) : null}
                 {overviewEdit ? (
                   <>
                     <button type="button" className="btn small ghost" onClick={cancelOverviewEdit}>
@@ -804,6 +819,25 @@ export function ProjectDetailPage() {
                       {project.aiAccessCeiling && project.aiAccessCeiling !== "full"
                         ? "The instance limit is narrower than Full. This project can only stay at that limit or tighter."
                         : "Full lets AI read and propose changes. Read-only allows reading only. Excluded keeps this project off every model."}
+                    </p>
+                  </div>
+                ) : null}
+                {canManageSettings ? (
+                  <div className="field">
+                    <label htmlFor="proj-ai-local-only" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <input
+                        id="proj-ai-local-only"
+                        type="checkbox"
+                        checked={aiLocalOnly || project.aiLocalOnlyCeiling === true}
+                        disabled={project.aiLocalOnlyCeiling === true}
+                        onChange={(e) => setAiLocalOnly(e.target.checked)}
+                      />
+                      <span>Local models only</span>
+                    </label>
+                    <p className="muted" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
+                      {project.aiLocalOnlyCeiling
+                        ? "The instance requires local models. This project cannot use a cloud model."
+                        : "When this is on, AI for this project uses a local model only. A local error does not fall through to a cloud model. Reads and proposals still follow AI access."}
                     </p>
                   </div>
                 ) : null}

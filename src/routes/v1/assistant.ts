@@ -13,7 +13,12 @@ import {
   runConfiguredAssistant,
 } from "../../services/assistant/index.js";
 import { db } from "../../db/client.js";
+import { assertCanAccessProject } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
+import {
+  resolveEffectiveAiAccess,
+  resolveEffectiveLocalOnly,
+} from "../../services/assistant/projectAiAccess.js";
 import { getSystemProperties } from "../../services/systemProperties.js";
 import { getCurrentUserId } from "../../services/users.js";
 import type { AssistantProposal } from "../../services/assistant/tools.js";
@@ -55,6 +60,7 @@ const chatBody = z.object({
     .optional(),
   pageContext: z.string().max(16_000).nullable().optional(),
   model: z.string().min(1).max(120).optional(),
+  projectId: z.number().int().positive().optional(),
 });
 
 const feedbackBody = z.object({
@@ -193,6 +199,20 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
     }
 
     const parsed = chatBody.parse(req.body ?? {});
+    let localOnly = false;
+    if (parsed.projectId != null) {
+      await assertCanAccessProject(db, actorUserId, parsed.projectId);
+      const access = await resolveEffectiveAiAccess(db, parsed.projectId);
+      if (!access) {
+        sendError(res, 404, "not_found", "No such project.");
+        return;
+      }
+      if (access === "excluded") {
+        sendError(res, 403, "project_excluded", "This project is excluded from AI.");
+        return;
+      }
+      localOnly = (await resolveEffectiveLocalOnly(db, parsed.projectId)) === true;
+    }
     const props = await getSystemProperties(db);
     const messages = buildMessages({
       history: parsed.history ?? [],
@@ -235,12 +255,13 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
     });
     const proposals: AssistantProposal[] = [];
 
-    await runConfiguredAssistant({
+    const ran = await runConfiguredAssistant({
       db,
       actorUserId,
       isAdministrator,
       messages,
       model: parsed.model,
+      localOnly,
       signal: ac.signal,
       handlers: {
         onTool: (info) => writeEvent("tool", info),
@@ -285,6 +306,14 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
         },
       },
     });
+    if (!ran && !res.writableEnded) {
+      writeEvent("error", {
+        message: localOnly
+          ? "No local model is available for this project."
+          : assistantUnconfiguredMessage(status.keyMode),
+      });
+      res.end();
+    }
   } catch (err) {
     if (!res.headersSent) {
       handleRouteError(res, err);

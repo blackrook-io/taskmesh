@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { fetchAiCapabilities, aiUnavailableTitle } from "../api/aiCapabilities";
 
-function projectIdFromPath(pathname: string): number | null {
+export function projectIdFromPath(pathname: string): number | null {
   const match = pathname.match(/^\/projects\/(\d+)(?:\/|$)/);
   if (!match) return null;
   const id = Number(match[1]);

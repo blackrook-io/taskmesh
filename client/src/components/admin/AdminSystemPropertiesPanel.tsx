@@ -26,6 +26,7 @@ type SystemProperties = {
   mfaTrustedDeviceMax?: number;
   aiWebFetch?: boolean;
   aiProjectAccessDefault?: "full" | "read_only" | "excluded";
+  aiProjectLocalOnly?: boolean;
   aiBudgets?: {
     tokensPerUserPerDay: number | null;
     instanceSpendUsdPerDay: number | null;
@@ -103,6 +104,7 @@ export function AdminSystemPropertiesPanel() {
   const [aiProjectAccessDefault, setAiProjectAccessDefault] = useState<
     "full" | "read_only" | "excluded"
   >("full");
+  const [aiProjectLocalOnly, setAiProjectLocalOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -170,6 +172,7 @@ export function AdminSystemPropertiesPanel() {
       ) {
         setAiProjectAccessDefault(propsQuery.data.aiProjectAccessDefault);
       }
+      setAiProjectLocalOnly(propsQuery.data.aiProjectLocalOnly === true);
     }
   }
 
@@ -254,6 +257,7 @@ export function AdminSystemPropertiesPanel() {
         mfaTrustedDeviceMax: number;
         aiWebFetch: boolean;
         aiProjectAccessDefault: "full" | "read_only" | "excluded";
+        aiProjectLocalOnly: boolean;
         aiBudgets: {
           tokensPerUserPerDay: number | null;
           instanceSpendUsdPerDay: number | null;
@@ -271,6 +275,7 @@ export function AdminSystemPropertiesPanel() {
         mfaTrustedDeviceMax: trustMax,
         aiWebFetch,
         aiProjectAccessDefault,
+        aiProjectLocalOnly,
         aiBudgets: {
           tokensPerUserPerDay,
           instanceSpendUsdPerDay,
@@ -576,6 +581,18 @@ export function AdminSystemPropertiesPanel() {
       <p className="muted small" style={{ marginTop: 0 }}>
         New projects start here. A project owner or manager can only narrow this. Excluded
         projects are never sent to a model. Read-only projects can be read but not changed by AI.
+      </p>
+      <label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <input
+          type="checkbox"
+          checked={aiProjectLocalOnly}
+          onChange={(e) => setAiProjectLocalOnly(e.target.checked)}
+        />
+        <span>Require local models for every project</span>
+      </label>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Projects can only narrow this. When it is on, a cloud model is never called for project
+        work, even if the local model errors or is rate-limited.
       </p>
 
       <button

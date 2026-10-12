@@ -154,6 +154,21 @@ describe("aiPolicy.check", () => {
     assert.match(decision.reason, /excluded/i);
   });
 
+  it("denies a proposal that changes the local-only mark", () => {
+    const decision = check(
+      base({
+        action: "apply",
+        entityType: "project",
+        projectId: 4,
+        projectAiAccess: "full",
+        fields: { aiLocalOnly: true },
+      }),
+      { instance: allowAll, project: allowAll, user: allowAll },
+    );
+    assert.equal(decision.decision, "deny");
+    assert.match(decision.reason, /project AI access/i);
+  });
+
   it("denies a proposal that changes project AI access", () => {
     const decision = check(
       base({

@@ -18,12 +18,19 @@ import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
-import { recordProjectAiAccessChange, recordProjectStatusChange } from "../../services/entityActivity.js";
+import {
+  recordProjectAiAccessChange,
+  recordProjectAiLocalOnlyChange,
+  recordProjectStatusChange,
+} from "../../services/entityActivity.js";
 import {
   aiAccessWiderThan,
+  aiLocalOnlyWiderThanCeiling,
   getAiProjectAccessCeiling,
+  getAiProjectLocalOnlyCeiling,
   isAiAccess,
   projectAiAccessFields,
+  projectAiLocalOnlyFields,
 } from "../../services/assistant/projectAiAccess.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { listAssignableUsers } from "../../services/assignees.js";
@@ -61,6 +68,7 @@ const projectPatch = z.object({
   description: optionalMarkdown(500_000),
   status: projectStatus.optional(),
   aiAccess: aiAccessValue.optional(),
+  aiLocalOnly: z.boolean().optional(),
 });
 
 const overviewPanelInstanceSchema = z.object({
@@ -203,10 +211,12 @@ projectsRouter.get("/:id", async (req, res) => {
     const row = await assertCanAccessProject(db, actorId, id);
     const myRole = await resolveProjectActorRole(db, actorId, row);
     const access = await projectAiAccessFields(db, row.aiAccess);
+    const localOnly = await projectAiLocalOnlyFields(db, row.aiLocalOnly);
     res.json({
       data: {
         ...row,
         ...access,
+        ...localOnly,
         myRole,
         canWrite: myRole != null && myRole !== "viewer",
         canManageSettings:
@@ -222,7 +232,7 @@ projectsRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const parsed = projectPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["name", "description", "status", "aiAccess"])) {
+    if (!hasDefinedKeys(parsed, ["name", "description", "status", "aiAccess", "aiLocalOnly"])) {
       sendError(res, 400, "empty_patch", "Provide name, description, status, and/or AI access");
       return;
     }
@@ -239,8 +249,23 @@ projectsRouter.patch("/:id", async (req, res) => {
         return;
       }
     }
-    // Description and AI access are Owner/Manager/Admin only; name/status remain write-level.
-    const needsSettings = parsed.description !== undefined || parsed.aiAccess !== undefined;
+    if (parsed.aiLocalOnly !== undefined) {
+      const ceiling = await getAiProjectLocalOnlyCeiling(db);
+      if (aiLocalOnlyWiderThanCeiling(parsed.aiLocalOnly, ceiling)) {
+        sendError(
+          res,
+          400,
+          "ai_local_only_wider_than_ceiling",
+          "This project cannot use a cloud model while the instance requires local models",
+        );
+        return;
+      }
+    }
+    // Description and AI settings are Owner/Manager/Admin only; name/status remain write-level.
+    const needsSettings =
+      parsed.description !== undefined ||
+      parsed.aiAccess !== undefined ||
+      parsed.aiLocalOnly !== undefined;
     const existing = needsSettings
       ? await assertCanAccessProject(db, actorId, id, "settings")
       : await assertCanAccessProject(db, actorId, id, "write");
@@ -251,6 +276,7 @@ projectsRouter.patch("/:id", async (req, res) => {
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(parsed.status !== undefined ? { status: parsed.status } : {}),
         ...(parsed.aiAccess !== undefined ? { aiAccess: parsed.aiAccess } : {}),
+        ...(parsed.aiLocalOnly !== undefined ? { aiLocalOnly: parsed.aiLocalOnly } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.projects.id, id))
@@ -271,6 +297,16 @@ projectsRouter.patch("/:id", async (req, res) => {
         id,
         existing.aiAccess,
         parsed.aiAccess,
+        actorId,
+        activitySourceFromRequest(req),
+      );
+    }
+    if (parsed.aiLocalOnly !== undefined) {
+      await recordProjectAiLocalOnlyChange(
+        db,
+        id,
+        existing.aiLocalOnly,
+        parsed.aiLocalOnly,
         actorId,
         activitySourceFromRequest(req),
       );

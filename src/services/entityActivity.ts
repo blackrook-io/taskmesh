@@ -9,6 +9,7 @@ import {
   deriveListLastUpdate,
   documentBodyChanged,
   trackedAiAccessChange,
+  trackedAiLocalOnlyChange,
   trackedStatusChange,
   trackedTodoChanges,
   type ActivityUpdateField,
@@ -97,6 +98,25 @@ export async function recordProjectStatusChange(
   source: ActivitySource = "api",
 ): Promise<void> {
   const change = trackedStatusChange(before, after);
+  if (!change) return;
+  await recordTrackedChanges(db, {
+    entityType: "project",
+    entityId: projectId,
+    actorId,
+    source,
+    changes: [change],
+  });
+}
+
+export async function recordProjectAiLocalOnlyChange(
+  db: Db,
+  projectId: number,
+  before: boolean,
+  after: boolean,
+  actorId: number | null,
+  source: ActivitySource = "api",
+): Promise<void> {
+  const change = trackedAiLocalOnlyChange(before, after);
   if (!change) return;
   await recordTrackedChanges(db, {
     entityType: "project",

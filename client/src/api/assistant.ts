@@ -77,6 +77,7 @@ export async function streamAssistantChat(args: {
   message: string;
   history: ChatTurn[];
   pageContext?: string | null;
+  projectId?: number | null;
   signal?: AbortSignal;
   onDelta: (text: string) => void;
   onMeta?: (meta: { provider: string; model: string }) => void;
@@ -97,6 +98,7 @@ export async function streamAssistantChat(args: {
       message: args.message,
       history: args.history.map((turn) => ({ role: turn.role, content: turn.content })),
       pageContext: args.pageContext ?? null,
+      ...(args.projectId != null ? { projectId: args.projectId } : {}),
     }),
     credentials: "include",
     signal: args.signal,

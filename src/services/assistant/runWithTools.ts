@@ -185,6 +185,7 @@ export async function runAssistantWithTools(args: {
             checkPolicy: args.handlers.checkPolicy,
             recordAudit: args.handlers.recordAudit,
             privateRecordsInTurn: sawPrivate,
+            routeLocalOnly: args.handlers.routeLocalOnly === true,
           });
           if (TOOL_REGISTRY[call.name]?.action === "read") sawPrivate = true;
           messages.push({
