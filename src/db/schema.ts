@@ -957,6 +957,7 @@ export const userAiRoutePrefs = pgTable(
 /**
  * Append-only log of assistant tool calls, replies, and proposal applies (T0178).
  * Stores the decision and token counts, not prompts, arguments, or record text.
+ * A respond row may store prompt id, version, and a composed ref (T0212). It does not store prompt text.
  * A web_fetch allow row stores `Fetched` plus the capped URL in `reason`.
  */
 export const aiAuditLog = pgTable(
@@ -980,6 +981,12 @@ export const aiAuditLog = pgTable(
     tokensIn: integer("tokens_in"),
     tokensOut: integer("tokens_out"),
     latencyMs: integer("latency_ms"),
+    /** Primary prompt id for a model reply (T0212). Null on route, tool, apply, and key-mode rows. */
+    promptId: text("prompt_id"),
+    /** Version of `prompt_id`. */
+    promptVersion: integer("prompt_version"),
+    /** Full composition, e.g. assistant@1 or assistant@1+assistant_web_fetch@1. No prompt text. */
+    promptRef: text("prompt_ref"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -991,6 +998,22 @@ export const aiAuditLog = pgTable(
     actionCheck: check(
       "ai_audit_log_action_chk",
       sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route')`,
+    ),
+    promptIdCheck: check(
+      "ai_audit_log_prompt_id_chk",
+      sql`${t.promptId} is null or ${t.promptId} ~ '^[a-z0-9_]+$'`,
+    ),
+    promptVersionCheck: check(
+      "ai_audit_log_prompt_version_chk",
+      sql`${t.promptVersion} is null or ${t.promptVersion} >= 1`,
+    ),
+    promptRefCheck: check(
+      "ai_audit_log_prompt_ref_chk",
+      sql`${t.promptRef} is null or char_length(${t.promptRef}) between 1 and 200`,
+    ),
+    promptSetCheck: check(
+      "ai_audit_log_prompt_set_chk",
+      sql`(${t.promptId} is null and ${t.promptVersion} is null and ${t.promptRef} is null) or (${t.promptId} is not null and ${t.promptVersion} is not null and ${t.promptRef} is not null and (${t.promptRef} = ${t.promptId} || '@' || ${t.promptVersion}::text or ${t.promptRef} like ${t.promptId} || '@' || ${t.promptVersion}::text || '/%' or ${t.promptRef} like ${t.promptId} || '@' || ${t.promptVersion}::text || '+%'))`,
     ),
   }),
 );

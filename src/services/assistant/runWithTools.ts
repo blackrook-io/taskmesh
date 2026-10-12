@@ -41,6 +41,8 @@ export async function runAssistantWithTools(args: {
   rethrowFirstProviderError?: boolean;
   /** Written once, after the first model call succeeds. */
   routeReason?: string | null;
+  /** Prompt files sent with this call. Recorded on the respond row only. */
+  prompt?: { promptId: string; promptVersion: number; promptRef: string } | null;
   /** Test seam. Production writes to `ai_audit_log`. */
   auditSink?: AiAuditSink;
 }): Promise<void> {
@@ -122,6 +124,9 @@ export async function runAssistantWithTools(args: {
         tokensIn: outcome.usage?.inputTokens ?? null,
         tokensOut: outcome.usage?.outputTokens ?? null,
         latencyMs: roundLatency,
+        promptId: args.prompt?.promptId ?? null,
+        promptVersion: args.prompt?.promptVersion ?? null,
+        promptRef: args.prompt?.promptRef ?? null,
       }, args.auditSink);
 
       const text = outcome.text.trim() || "Done.";

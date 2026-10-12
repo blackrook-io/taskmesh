@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.69.0 — 2026-10-12
+
+### Enhancements
+- Assistant prompts live in versioned files in the repo. Each reply records the prompt id and version in the audit log, including the web-fetch addendum when that is on, so a quality change can be traced to a prompt change. The log still does not store the prompt text.
+
 ## 0.68.0 — 2026-10-12
 
 ### New Functionality

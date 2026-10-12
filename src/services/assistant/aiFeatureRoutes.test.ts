@@ -263,6 +263,7 @@ describe("model routing", () => {
     assert.equal(routeRows[1]?.decision, "allow");
     assert.equal(routeRows[1]?.model, "claude-sonnet-4-5");
     assert.equal(routeRows[1]?.reason, "fallback:0");
+    assert.equal(routeRows.every((row) => row.promptId == null && row.promptRef == null), true);
     assert.equal(JSON.stringify(routeRows).includes("hello"), false);
   });
 });

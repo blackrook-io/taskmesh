@@ -1,0 +1,47 @@
+---
+description: T0212 — versioned prompt files for AI calls, with id and version on the audit row
+---
+
+# T0212 — AI versioned prompt registry
+
+**Task:** T0212 · id `227` · Ready · project 4 (TaskMesh) · parent T0195 (Quality and operations)
+**Depends on:** T0180 (complete). No open blockers.
+**Branch (after approval):** `T0212-prompt-registry`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` columns on `ai_audit_log`).
+
+## Goal
+
+Move the assistant system prompt out of inline strings into versioned files in the repo. Every assistant reply records which prompt files were sent, so a quality change can be traced to a prompt change. A provider can have its own wording when it needs it. The audit log still does not store prompt text.
+
+## Current state
+
+- The only system prompt in the app is inline in `src/services/assistant/index.ts`: `SYSTEM_PROMPT_BASE`, plus `SYSTEM_PROMPT_FETCH` when web fetch is on. `describeAllowedPolicy` is appended at runtime from the live permission matrix. Page context is user data, not a prompt.
+- `ai_audit_log` has no prompt id or version. The reply the user can rate is the `respond` row (`runWithTools`). Route, key-mode, apply, and tool rows are decisions, not a prompt choice.
+- Tagging (T0199), capture (T0196), and duplicate detection (T0200) are still Draft. Mesh suggestions (T0168) are not a provider call. There are no other feature prompts to migrate.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Where files live | `src/services/assistant/prompts/<id>/v<N>.md`. `<id>` is lowercase `[a-z0-9_]+`. `<N>` is a positive integer. The loader uses the highest N. |
+| 2 | What ships | Two prompts, wording unchanged: `assistant/v1.md` (today’s base) and `assistant_web_fetch/v1.md` (today’s fetch addendum). No empty files for features that are not built. |
+| 3 | Provider variants | Optional `prompts/<id>/<providerId>/v<N>.md`. When that directory has a file, it replaces the default for that provider. This task does not add a real provider copy. A test fixture proves the override. |
+| 4 | Composition | `buildMessages` loads `assistant`. When web fetch is on, it appends `assistant_web_fetch`. Policy text stays generated. Page context stays runtime data. |
+| 5 | Audit columns | Nullable `prompt_id` (text), `prompt_version` (integer ≥ 1), and `prompt_ref` (text, max 200). `prompt_ref` is the full set: `assistant@1`, `assistant@1+assistant_web_fetch@1`, and `/<provider>` on a part that used a variant (`assistant@1/ollama`). Primary columns are the first part, without the provider suffix. |
+| 6 | Which rows | Only the assistant `respond` row. Route, tool, apply, and key-mode rows stay null. Missing prompt id throws at load time; a chat does not send an empty system prompt. |
+| 7 | No prompt body in the log | Columns store ids and versions only. Docs keep the existing rule: the audit log does not store prompts, arguments, or record text. |
+| 8 | API for later features | `loadPrompt({ id, providerId? })` returns `{ id, version, providerId, body, ref }`. Tagging, capture, and duplicates call it when those tasks ship. |
+
+## Out of scope
+
+- Editing prompts in the UI, A/B tests, or a prompt browser.
+- Prompt files for tagging, capture, duplicates, or suggestions.
+- Stamping prompt refs on tool, route, apply, or key-mode rows.
+- Shipping a provider-specific wording change.
+
+## Work items
+
+1. Migration: `prompt_id`, `prompt_version`, `prompt_ref` on `ai_audit_log`, with checks (id shape, version ≥ 1, ref length). Update `docs/database/platform.md` (and glossary if it lists audit columns). Run `npm run docs:sync-schema`.
+2. Prompt files and `loadPrompt`. Move the two assistant strings into `v1.md` files and delete the inline constants.
+3. `buildMessages` composes from the registry. `runConfiguredAssistant` passes the resolved ref into the `respond` audit write.
+4. Tests: default text matches the previous wording; a provider file wins over the default and the ref includes `/provider`; a missing id throws; a `respond` row stores `assistant` / `1` / `assistant@1`, and with web fetch the ref includes `assistant_web_fetch@1`; a route row leaves the new columns null.
