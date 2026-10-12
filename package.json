@@ -21,7 +21,7 @@
     "docs:sync-schema": "tsx src/scripts/syncSchemaDocsToProject.ts",
     "security:scan": "python3 security/scan/run.py",
     "security:ci": "python3 security/scan/run.py --modules repo_static --fail-on-findings --no-html",
-    "test": "npm run build:plugins && tsx --test src/**/*.test.ts plugins/ai-providers/*/src/**/*.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshPins.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts client/src/lib/taskFields.workflow.test.ts"
+    "test": "npm run build:plugins && tsx --test src/**/*.test.ts plugins/ai-providers/openai/src/contract.test.ts plugins/ai-providers/openai-compatible/src/contract.test.ts plugins/ai-providers/stub/src/contract.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshPins.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts client/src/lib/taskFields.workflow.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
