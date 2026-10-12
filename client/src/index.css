@@ -762,6 +762,11 @@ a.app-nav__item.active {
   justify-content: center;
 }
 
+.app-nav__tools .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .system-clock {
   display: block;
   font-size: 0.68rem;
@@ -1065,9 +1070,14 @@ a.app-nav__item.active {
 }
 
 .command-palette__item.is-active,
-.command-palette__item:hover {
+.command-palette__item:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 16%, var(--surface));
   color: var(--accent);
+}
+
+.command-palette__item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .command-palette__label {

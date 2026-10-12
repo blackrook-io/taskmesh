@@ -11,7 +11,8 @@ import {
   selectChatPlugin,
   type AiProvidersFile,
 } from "./aiProviderConfig.js";
-import { loadDecryptedInstanceKeys, listInstancePluginIds } from "./aiInstanceKeys.js";
+import type { AiKeyMode } from "./aiKeyMode.js";
+import { loadResolvedKeys } from "./aiUserKeys.js";
 import { assertLocalProviderBaseUrl, assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
 import { getAiProvider, loadedAiProviders } from "./providerLoader.js";
 import { runAssistantWithTools } from "./runWithTools.js";
@@ -46,6 +47,16 @@ function systemPrompt(webFetchEnabled: boolean): string {
 export const ASSISTANT_UNCONFIGURED =
   "Assistant is not configured. An Administrator must enable a chat provider. Cloud providers also need an instance key, or the deprecated provider environment variable.";
 
+export function assistantUnconfiguredMessage(mode: AiKeyMode): string {
+  if (mode === "user_only") {
+    return "Assistant is not configured. An Administrator must enable a chat provider. Cloud providers need your own provider key.";
+  }
+  if (mode === "user_preferred_instance_fallback") {
+    return "Assistant is not configured. An Administrator must enable a chat provider. Cloud providers need your provider key, or an instance key.";
+  }
+  return ASSISTANT_UNCONFIGURED;
+}
+
 export type AssistantSession = {
   plugin: AiProviderPlugin;
   config: unknown;
@@ -57,15 +68,22 @@ function configValid(plugin: AiProviderPlugin, config: Record<string, unknown>):
   return plugin.configSchema.safeParse(config).success;
 }
 
-export async function resolveAssistantSession(db: Db): Promise<AssistantSession | null> {
+export async function resolveAssistantSession(
+  db: Db,
+  userId: number,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<AssistantSession | null> {
   const props = await getSystemProperties(db);
-  const keys = await loadDecryptedInstanceKeys(db);
-  return sessionFrom(props.aiProviders, (pluginId) => keys.get(pluginId) ?? resolvePluginApiKey(pluginId));
+  const keys = await loadResolvedKeys(db, userId, env);
+  return sessionFrom(props.aiProviders, (pluginId) => keys.resolve(pluginId));
 }
 
 export function sessionFrom(
   file: AiProvidersFile,
-  resolveKey: (pluginId: string) => string | null = (pluginId) => resolvePluginApiKey(pluginId),
+  resolveKey: (pluginId: string) => { apiKey: string | null; defaultModel: string | null } = (pluginId) => ({
+    apiKey: resolvePluginApiKey(pluginId),
+    defaultModel: null,
+  }),
 ): AssistantSession | null {
   const plugins = loadedAiProviders();
   const id = selectChatPlugin({
@@ -75,7 +93,7 @@ export function sessionFrom(
       local: plugin.capabilities.local,
     })),
     file,
-    hasKey: (pluginId) => Boolean(resolveKey(pluginId)),
+    hasKey: (pluginId) => Boolean(resolveKey(pluginId).apiKey),
     configValid: (pluginId, config) => {
       const plugin = getAiProvider(pluginId);
       return plugin ? configValid(plugin, config) : false;
@@ -85,11 +103,12 @@ export function sessionFrom(
   const plugin = getAiProvider(id);
   const entry = file[id];
   if (!plugin || !entry) return null;
-  const apiKey = plugin.capabilities.local ? null : resolveKey(id);
+  const resolved = resolveKey(id);
+  const apiKey = plugin.capabilities.local ? null : resolved.apiKey;
   if (!plugin.capabilities.local && !apiKey) return null;
   const parsed = plugin.configSchema.safeParse(entry.config);
   if (!parsed.success) return null;
-  const model = configuredChatModel(parsed.data) ?? "gpt-4.1-mini";
+  const model = resolved.defaultModel ?? configuredChatModel(parsed.data) ?? "gpt-4.1-mini";
   return { plugin, config: parsed.data, apiKey, model };
 }
 
@@ -101,17 +120,22 @@ export type AssistantPluginStatus = {
   capabilities: AiProviderPlugin["capabilities"];
 };
 
-export async function assistantStatus(db: Db): Promise<{
+export async function assistantStatus(
+  db: Db,
+  userId: number,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{
   enabled: boolean;
   provider: string;
   model: string;
+  keyMode: AiKeyMode;
   configuredProviders: { openai: boolean };
   plugins: AssistantPluginStatus[];
   toolsEnabled: boolean;
 }> {
   const props = await getSystemProperties(db);
-  const instanceIds = await listInstancePluginIds(db);
-  const session = await resolveAssistantSession(db);
+  const keys = await loadResolvedKeys(db, userId, env);
+  const session = sessionFrom(props.aiProviders, (pluginId) => keys.resolve(pluginId));
   const plugins = loadedAiProviders().map((plugin) => {
     const entry = props.aiProviders[plugin.id];
     return {
@@ -122,7 +146,7 @@ export async function assistantStatus(db: Db): Promise<{
         local: plugin.capabilities.local,
         enabled: Boolean(entry?.enabled),
         configValid: plugin.configSchema.safeParse(entry?.config ?? {}).success,
-        hasKey: instanceIds.has(plugin.id) || Boolean(resolvePluginApiKey(plugin.id)),
+        hasKey: Boolean(keys.resolve(plugin.id).apiKey),
       }),
       capabilities: plugin.capabilities,
     };
@@ -133,6 +157,7 @@ export async function assistantStatus(db: Db): Promise<{
     provider: session?.plugin.id ?? "none",
     model: session?.model ?? "",
     configuredProviders: { openai: Boolean(openai?.configured) },
+    keyMode: keys.mode,
     plugins,
     toolsEnabled: true,
   };
@@ -174,7 +199,7 @@ export async function runConfiguredAssistant(args: {
   actorUserId: number;
   isAdministrator: boolean;
 }): Promise<boolean> {
-  const session = await resolveAssistantSession(args.db);
+  const session = await resolveAssistantSession(args.db, args.actorUserId);
   if (!session) return false;
   const props = await getSystemProperties(args.db);
   await runAssistantWithTools({
@@ -182,7 +207,7 @@ export async function runConfiguredAssistant(args: {
     apiKey: session.apiKey,
     config: session.config,
     messages: args.messages,
-    model: args.model,
+    model: args.model?.trim() || session.model,
     signal: args.signal,
     handlers: args.handlers,
     actorUserId: args.actorUserId,

@@ -5,8 +5,8 @@ import { sendMutation } from "../../lib/mutationResult.js";
 import { applyAssistantProposal } from "./assistantApply.js";
 import { assistantChatRateLimit } from "../../middleware/rateLimits.js";
 import {
-  ASSISTANT_UNCONFIGURED,
   assistantStatus,
+  assistantUnconfiguredMessage,
   buildMessages,
   runConfiguredAssistant,
 } from "../../services/assistant/index.js";
@@ -27,7 +27,8 @@ export const assistantRouter = Router();
 
 assistantRouter.get("/status", async (_req, res) => {
   try {
-    res.json({ data: await assistantStatus(db) });
+    const actorUserId = await getCurrentUserId(db);
+    res.json({ data: await assistantStatus(db, actorUserId) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -109,9 +110,10 @@ assistantRouter.post("/proposals/apply", async (req, res) => {
 
 assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
   try {
-    const status = await assistantStatus(db);
+    const actorUserId = await getCurrentUserId(db);
+    const status = await assistantStatus(db, actorUserId);
     if (!status.enabled) {
-      sendError(res, 503, "assistant_unconfigured", ASSISTANT_UNCONFIGURED);
+      sendError(res, 503, "assistant_unconfigured", assistantUnconfiguredMessage(status.keyMode));
       return;
     }
 
@@ -148,7 +150,6 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
       toolsEnabled: true,
     });
 
-    const actorUserId = await getCurrentUserId(db);
     const isAdministrator = await userHasAdministrator(db, actorUserId);
     const tierSettings = resolveAiPermissionSettings(props.aiPermissionTiers);
     const proposals: AssistantProposal[] = [];

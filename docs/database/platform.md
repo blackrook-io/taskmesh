@@ -34,6 +34,7 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag, request/response byte counts). Indexed on `created_at` for retention prune (default **90** days via the pg-boss job `logs-prune-api-requests`; override `API_REQUEST_LOG_RETENTION_DAYS`). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
 | `ai_audit_log` | Append-only assistant audit (T0178): user, feature, provider, model, tool, action, entity refs, allow/deny decision, reason, tier, token counts, and latency. Does not store prompts, tool arguments, or record text. A `web_fetch` allow row's reason is `Fetched` plus the URL after the query string is capped at 256 characters (T0179). A `key_mode` allow row records an Administrator's billing-risk acceptance (`mode=<mode> activeUsers=<n>`) and never a provider key (T0182). No retention job yet (T0188). Quality signals live on `ai_output_feedback`, not on this row (T0211). | Optional FKs `user_id` → `users` and `project_id` → `projects` · **SET NULL**. |
 | `ai_instance_credentials` | One encrypted provider API key for the instance (T0182). `plugin_id` is unique. `secret_enc` is AES-256-GCM ciphertext under env `AI_CREDENTIALS_KEY`. `hint` is the last 4 characters of the key. `verified_at` is set only after a successful Verify. The plaintext key is not stored. | Optional FK `updated_by_id` → `users` · **SET NULL**. |
+| `user_ai_credentials` | One encrypted provider API key per user and plugin (T0183). Unique on `(user_id, plugin_id)`. `secret_enc` uses the same `AI_CREDENTIALS_KEY` as instance keys. `hint` is the last 4 characters. `default_model` is optional. `verified_at` is set when save-time verification succeeds. `last_error` stores a redacted provider error (max 500 characters) when it does not. The plaintext key is not stored. Rows are deleted with the user. | FK `user_id` → `users` · **CASCADE**. |
 | `ai_output_feedback` | One user's quality signal for an AI audit row (T0211): `thumb_up`, `thumb_down`, `accept`, `dismiss`, or `undo`. Optional `note` (max 500 characters) is for thumbs only. One thumb per `(audit_id, user_id)` — a later thumb replaces it. Accept, dismiss, and undo are one row per `(audit_id, kind)`; repeats are ignored. Does not store the prompt or the model output. | FK `audit_id` → `ai_audit_log` · **CASCADE**. Optional FK `user_id` → `users` · **SET NULL**. |
 | `db_stats_snapshots` | Periodic gauges of the connected app database (size, user table count) for Administration → Database charts. A pg-boss job (`stats-sample-db`) writes a row every 5 minutes. | Standalone; no FKs. |
 
@@ -57,6 +58,7 @@ erDiagram
   api_keys ||--o{ api_request_logs : "optional"
   users ||--o{ ai_audit_log : "assistant calls"
   users ||--o{ ai_instance_credentials : "updated by"
+  users ||--o{ user_ai_credentials : owns
   projects ||--o{ ai_audit_log : "optional"
   ai_audit_log ||--o{ ai_output_feedback : "quality signals"
   users ||--o{ ai_output_feedback : "optional"
@@ -128,6 +130,11 @@ erDiagram
   ai_instance_credentials {
     int id PK
     text plugin_id UK
+  }
+  user_ai_credentials {
+    int id PK
+    int user_id FK
+    text plugin_id
   }
   ai_output_feedback {
     int id PK
