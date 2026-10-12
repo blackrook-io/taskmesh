@@ -11,6 +11,7 @@ import {
   type PolicyDecision,
 } from "./aiPolicy.js";
 import { executeAssistantTool, OPENAI_TOOLS } from "./tools.js";
+import { unwrapUntrusted } from "./untrustedContent.js";
 import { TOOL_REGISTRY } from "./toolRegistry.js";
 import type { AiAuditInput } from "./aiAudit.js";
 
@@ -226,7 +227,7 @@ describe("assistant tool policy gate", () => {
         rows.push(row);
       },
     });
-    const body = JSON.parse(raw) as {
+    const body = JSON.parse(unwrapUntrusted(raw)) as {
       denied?: boolean;
       decision?: string;
       action?: string;
@@ -254,7 +255,7 @@ describe("assistant tool policy gate", () => {
         rows.push(row);
       },
     });
-    const body = JSON.parse(raw) as { denied?: boolean; error?: string };
+    const body = JSON.parse(unwrapUntrusted(raw)) as { denied?: boolean; error?: string };
     assert.notEqual(body.denied, true);
     assert.equal(typeof body.error, "string");
     assert.equal(rows.length, 1);

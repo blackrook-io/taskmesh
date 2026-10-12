@@ -25,6 +25,7 @@ import {
 import { todoListsVisibleToAi, todosVisibleToAi } from "./projectAiAccess.js";
 import { capUrlQuery, fetchUrlForAssistant } from "./fetchUrl.js";
 import { policyTargetForRegisteredTool } from "./toolRegistry.js";
+import { toolUntrustedSource, withUntrustedFollowup, wrapUntrusted } from "./untrustedContent.js";
 import {
   toolGetNeighbourhood,
   toolGetTodo,
@@ -97,6 +98,8 @@ export type ToolHandlers = {
   recordAudit?: AiAuditSink;
   /** Administrator switch. Omitted or false denies `web_fetch`. */
   webFetchEnabled?: boolean;
+  /** Page context or a read-tool result is already in this turn. */
+  privateRecordsInTurn?: boolean;
 };
 
 type ToolPolicyTarget = {
@@ -649,7 +652,11 @@ async function auditTool(
       entityId: target.entityId ?? null,
       projectId: target.projectId ?? null,
       decision: decision.decision,
-      reason: reasonOverride ?? decision.reason,
+      reason: withUntrustedFollowup(
+        target.action,
+        reasonOverride ?? decision.reason,
+        handlers.privateRecordsInTurn === true,
+      ),
       tier: decision.tier,
       tokensIn: handlers.tokensIn ?? null,
       tokensOut: handlers.tokensOut ?? null,
@@ -719,6 +726,15 @@ export async function executeAssistantTool(
   argsJson: string,
   handlers: ToolHandlers = {},
 ): Promise<string> {
+  const raw = await executeAssistantToolInner(name, argsJson, handlers);
+  return wrapUntrusted(redactSecrets(raw), toolUntrustedSource(name));
+}
+
+async function executeAssistantToolInner(
+  name: string,
+  argsJson: string,
+  handlers: ToolHandlers = {},
+): Promise<string> {
   let args: unknown = {};
   let invalidJson = false;
   try {
@@ -766,6 +782,7 @@ export async function executeAssistantTool(
     projectId: resolvedTarget.projectId,
     fields: policyFields(args),
     webFetchEnabled: handlers.webFetchEnabled === true,
+    privateRecordsInTurn: handlers.privateRecordsInTurn === true,
   });
   const decision = decide(policyInput);
 

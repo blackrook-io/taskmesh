@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.69.2 — 2026-10-12
+
+### Enhancements
+- Record text, fetched pages, and file text sent to the assistant are wrapped as data. Instructions hidden in that text cannot close the wrapper or impersonate a system message. A later write or web fetch is marked in the audit log. A background feature cannot fetch the web after it has read a private record.
+
 ## 0.69.1 — 2026-10-12
 
 ### New Functionality

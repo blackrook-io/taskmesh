@@ -16,6 +16,7 @@ import {
 import { capUrlQuery, MAX_URL_QUERY_LENGTH } from "./fetchUrl.js";
 import { runAssistantWithTools } from "./runWithTools.js";
 import { assistantToolDefinitions, executeAssistantTool } from "./tools.js";
+import { unwrapUntrusted } from "./untrustedContent.js";
 
 const SECRET = "sk-test-secret-key-0123456789abcdef";
 
@@ -195,7 +196,7 @@ describe("web fetch audit", () => {
         },
       },
     );
-    const body = JSON.parse(raw) as { error?: string };
+    const body = JSON.parse(unwrapUntrusted(raw)) as { error?: string };
     assert.equal(typeof body.error, "string");
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.action, "web_fetch");

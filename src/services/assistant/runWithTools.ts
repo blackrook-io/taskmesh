@@ -4,12 +4,18 @@ import { writeAiAudit, type AiAuditSink } from "./aiAudit.js";
 import { configuredChatModel } from "./aiProviderConfig.js";
 import { redactSecrets } from "./aiMinimize.js";
 import type { ChatMessage } from "./types.js";
+import { TOOL_REGISTRY } from "./toolRegistry.js";
 import {
   assistantToolDefinitions,
   executeAssistantTool,
   type AssistantProposal,
   type ToolHandlers,
 } from "./tools.js";
+import {
+  containsPrivateUntrusted,
+  toolUntrustedSource,
+  wrapUntrusted,
+} from "./untrustedContent.js";
 
 const MAX_TOOL_ROUNDS = 6;
 const DELTA_CHUNK = 48;
@@ -53,6 +59,7 @@ export async function runAssistantWithTools(args: {
     role: message.role,
     content: message.content,
   }));
+  let sawPrivate = args.messages.some((message) => containsPrivateUntrusted(message.content));
   let committed = false;
 
   try {
@@ -99,14 +106,22 @@ export async function runAssistantWithTools(args: {
             signal: args.signal,
             actorUserId: args.actorUserId,
             isAdministrator: args.isAdministrator,
-            feature: "assistant",
+            feature: args.handlers.feature ?? "assistant",
             provider: args.plugin.id,
             model,
             tokensIn: outcome.usage?.inputTokens ?? null,
             tokensOut: outcome.usage?.outputTokens ?? null,
             webFetchEnabled: args.webFetchEnabled === true,
+            checkPolicy: args.handlers.checkPolicy,
+            recordAudit: args.handlers.recordAudit,
+            privateRecordsInTurn: sawPrivate,
           });
-          messages.push({ role: "tool", toolCallId: call.id, content: redactSecrets(result) });
+          if (TOOL_REGISTRY[call.name]?.action === "read") sawPrivate = true;
+          messages.push({
+            role: "tool",
+            toolCallId: call.id,
+            content: wrapUntrusted(redactSecrets(result), toolUntrustedSource(call.name)),
+          });
         }
         continue;
       }
