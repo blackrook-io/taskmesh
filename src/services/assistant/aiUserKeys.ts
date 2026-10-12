@@ -26,6 +26,8 @@ export type ResolvedProviderKey = {
   apiKey: string | null;
   /** Set only when the call spends this user's stored key. */
   defaultModel: string | null;
+  /** Whose secret pays for the call. Null when no key is available. */
+  keySource: "user" | "instance" | "local" | null;
 };
 
 type UserKeySecret = {
@@ -139,7 +141,7 @@ export async function resolveProviderKey(
   db: Db,
   args: { userId: number; pluginId: string; local?: boolean; env?: NodeJS.ProcessEnv },
 ): Promise<ResolvedProviderKey> {
-  if (args.local) return { apiKey: null, defaultModel: null };
+  if (args.local) return { apiKey: null, defaultModel: null, keySource: "local" };
   const mode = await readAiKeyMode(db);
   const userKeys = mode === "instance_only" ? new Map<string, UserKeySecret>() : await loadDecryptedUserKeys(db, args.userId);
   const instanceKeys = mode === "user_only" ? new Map<string, string>() : await loadDecryptedInstanceKeys(db);
@@ -161,14 +163,14 @@ export function pickProviderKey(args: {
 }): ResolvedProviderKey {
   if (args.mode !== "instance_only" && args.user) {
     if (args.mode === "user_only" || args.mode === "user_preferred_instance_fallback") {
-      return { apiKey: args.user.apiKey, defaultModel: args.user.defaultModel };
+      return { apiKey: args.user.apiKey, defaultModel: args.user.defaultModel, keySource: "user" };
     }
   }
-  if (args.mode === "user_only") return { apiKey: null, defaultModel: null };
-  if (args.instanceKey) return { apiKey: args.instanceKey, defaultModel: null };
+  if (args.mode === "user_only") return { apiKey: null, defaultModel: null, keySource: null };
+  if (args.instanceKey) return { apiKey: args.instanceKey, defaultModel: null, keySource: "instance" };
   const envKey = resolvePluginApiKey(args.pluginId, args.env);
-  if (envKey) return { apiKey: envKey, defaultModel: null };
-  return { apiKey: null, defaultModel: null };
+  if (envKey) return { apiKey: envKey, defaultModel: null, keySource: "instance" };
+  return { apiKey: null, defaultModel: null, keySource: null };
 }
 
 export async function loadResolvedKeys(

@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.71.0 — 2026-10-12
+
+### New Functionality
+- Each AI provider call is recorded with token counts and whether it spent your key, the instance key, or a local model. Administrators can cap tokens per user per day, estimated instance-key spend per day, and how many tool calls or writes one reply may make. At 80% of a cap you see a warning. At the cap the assistant stops and says you have reached the AI usage budget. Assistant settings shows your usage today, and Administrators see the same day grouped by user, feature, and provider.
+
 ## 0.70.1 — 2026-10-12
 
 ### New Functionality

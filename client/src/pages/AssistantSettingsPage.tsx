@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAssistantStatus } from "../api/assistant";
+import { fetchUserAiUsage, formatUsdFromMicro } from "../api/aiUsage";
 import { patchTier1OptIn } from "../api/aiActivity";
 import { useSettings } from "../lib/settings";
 
@@ -13,6 +14,10 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
   const statusQuery = useQuery({
     queryKey: ["assistant-status"],
     queryFn: fetchAssistantStatus,
+  });
+  const usageQuery = useQuery({
+    queryKey: ["ai-usage"],
+    queryFn: fetchUserAiUsage,
   });
   const optIn = useMutation({
     mutationFn: patchTier1OptIn,
@@ -67,6 +72,36 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
               </li>
             ))}
           </ul>
+        ) : null}
+      </section>
+
+      <section className="card" style={{ marginTop: "1.25rem" }}>
+        <h2>Usage today</h2>
+        {usageQuery.isLoading ? <p className="muted">Loading…</p> : null}
+        {usageQuery.isError ? <p role="alert">{(usageQuery.error as Error).message}</p> : null}
+        {usageQuery.data ? (
+          <>
+            {usageQuery.data.blocked ? (
+              <p role="alert">You have reached the AI usage budget.</p>
+            ) : usageQuery.data.warning ? (
+              <p role="status">You have used 80% of today’s AI budget.</p>
+            ) : null}
+            <ul className="assistant-status-list">
+              <li>
+                Tokens: <strong>{usageQuery.data.tokensUsed}</strong>
+                {usageQuery.data.tokenLimit == null ? " (no daily cap)" : ` / ${usageQuery.data.tokenLimit}`}
+              </li>
+              {usageQuery.data.instanceSpendMicroUsd != null ? (
+                <li>
+                  Instance-key spend:{" "}
+                  <strong>{formatUsdFromMicro(usageQuery.data.instanceSpendMicroUsd)}</strong>
+                  {usageQuery.data.instanceSpendLimitMicroUsd == null
+                    ? " (no daily cap)"
+                    : ` / ${formatUsdFromMicro(usageQuery.data.instanceSpendLimitMicroUsd)}`}
+                </li>
+              ) : null}
+            </ul>
+          </>
         ) : null}
       </section>
 

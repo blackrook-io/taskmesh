@@ -209,15 +209,15 @@ describe("user provider keys", { concurrency: false }, () => {
     const user = { apiKey: SECRET, defaultModel: "gpt-user" };
     assert.deepEqual(
       pickProviderKey({ mode: "instance_only", pluginId: "openai", user, instanceKey: INSTANCE, env: EMPTY_ENV }),
-      { apiKey: INSTANCE, defaultModel: null },
+      { apiKey: INSTANCE, defaultModel: null, keySource: "instance" },
     );
     assert.deepEqual(
       pickProviderKey({ mode: "user_only", pluginId: "openai", user, instanceKey: INSTANCE, env: { OPENAI_API_KEY: ENV_KEY } }),
-      { apiKey: SECRET, defaultModel: "gpt-user" },
+      { apiKey: SECRET, defaultModel: "gpt-user", keySource: "user" },
     );
     assert.deepEqual(
       pickProviderKey({ mode: "user_only", pluginId: "openai", user: null, instanceKey: INSTANCE, env: { OPENAI_API_KEY: ENV_KEY } }),
-      { apiKey: null, defaultModel: null },
+      { apiKey: null, defaultModel: null, keySource: null },
     );
     assert.deepEqual(
       pickProviderKey({
@@ -227,7 +227,7 @@ describe("user provider keys", { concurrency: false }, () => {
         instanceKey: INSTANCE,
         env: EMPTY_ENV,
       }),
-      { apiKey: SECRET, defaultModel: "gpt-user" },
+      { apiKey: SECRET, defaultModel: "gpt-user", keySource: "user" },
     );
     assert.deepEqual(
       pickProviderKey({
@@ -237,7 +237,7 @@ describe("user provider keys", { concurrency: false }, () => {
         instanceKey: INSTANCE,
         env: EMPTY_ENV,
       }),
-      { apiKey: INSTANCE, defaultModel: null },
+      { apiKey: INSTANCE, defaultModel: null, keySource: "instance" },
     );
     assert.deepEqual(
       pickProviderKey({
@@ -247,11 +247,11 @@ describe("user provider keys", { concurrency: false }, () => {
         instanceKey: null,
         env: { OPENAI_API_KEY: ENV_KEY },
       }),
-      { apiKey: ENV_KEY, defaultModel: null },
+      { apiKey: ENV_KEY, defaultModel: null, keySource: "instance" },
     );
     assert.deepEqual(
       pickProviderKey({ mode: "instance_only", pluginId: "openai", user: null, instanceKey: null, env: EMPTY_ENV }),
-      { apiKey: null, defaultModel: null },
+      { apiKey: null, defaultModel: null, keySource: null },
     );
   });
 

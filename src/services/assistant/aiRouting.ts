@@ -42,6 +42,7 @@ export type ResolvedAttempt = RouteAttempt & {
   plugin: AiProviderPlugin;
   config: unknown;
   apiKey: string | null;
+  keySource: "user" | "instance" | "local" | null;
 };
 
 export type ResolvedRoute = {
@@ -127,6 +128,7 @@ export async function resolveFeatureRoute(
       plugin,
       config: parsed.data,
       apiKey,
+      keySource: plugin.capabilities.local ? "local" : resolved.keySource,
       model: attempt.model,
     });
   }

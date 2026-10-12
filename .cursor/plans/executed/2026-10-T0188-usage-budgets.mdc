@@ -1,0 +1,56 @@
+# T0188 — AI usage budgets and metering
+
+**Task:** T0188 (id 203) — AI: usage budgets and metering
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0192 AI: Guardrails and governance (group). Design decisions are in epic T0177.
+**Depends on:** T0178 complete (policy and audit log), T0183 complete (per-user keys and capabilities). Gate is clear.
+**Required by:** T0189 (Administrator AI settings panel, still Draft).
+**Branch (after approval):** `T0188-usage-budgets`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for the usage audit action and key-source / cost columns).
+
+## Size
+
+One feature: record one usage row per plugin call, enforce four limits, and show the user and the Administrator today’s usage. The Administrator hub (T0189) and the full user AI settings page (T0190) stay in those tasks. No split.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | What “normalized usage” means | One `ai_audit_log` row per plugin call (`streamChat` round, and `embed` when a caller exists). Action `usage`. Tokens live on that row only. Tool rows stop copying the round’s token counts, so a daily sum is not multiplied by the number of tools in the round. Pre-T0188 rows are not included in the meter. |
+| 2 | Key source | New column `key_source`: `user` \| `instance` \| `local`. `resolveProviderKey` reports which secret it picked. A stored instance key and the deprecated plugin env var are both `instance`. Local plugins are `local`. The column is null on non-usage rows. |
+| 3 | Instance-key spend | Estimated USD, not a provider invoice. System property `ai_instance_usd_per_million_tokens` (non-negative number, default `1`). Spend for a call is `(tokens_in + tokens_out) / 1_000_000 * rate`, stored as integer micro-USD on `cost_microusd`. Only `key_source = instance` counts toward the spend cap. User-key and local calls store `0`. |
+| 4 | Limits | One system-property object `ai_budgets`: `tokensPerUserPerDay`, `instanceSpendUsdPerDay`, `toolCallsPerRun`, `writesPerRun`. Each is a positive integer or `null`. **`null` means no cap** (today’s behavior). A UTC day is 00:00–24:00 UTC. |
+| 5 | When checks run | Before every plugin call: user token total for the UTC day, and instance spend for the UTC day when this call would use the instance key. Before every tool execution in the run: tool-call count, and write count when the tool’s policy action is a write (`propose_create`, `propose_update`, `link`, `tag`, `comment`, `apply`, `propose_delete`, `bulk`). `read` and `web_fetch` count as tool calls and not as writes. A refused call is not sent to the provider. |
+| 6 | Over budget | The assistant shows “You have reached the AI usage budget.” `GET /api/v1/ai/capabilities` returns `available: false`, `reason: "budget_reached"` when the user cannot start another plugin call (token cap already met, or the call would spend the instance key and that cap is already met). A user who still has their own key is not blocked by the instance spend cap alone. A per-run cap stops that run with the same message and an audit `deny` (`reason` `budget_tools` or `budget_writes`). |
+| 7 | 80% warning | Usage payloads include `warning: true` when tokens or (for a user who would spend the instance key) instance spend is at least 80% of a configured cap. The assistant panel and both usage views show “You have used 80% of today’s AI budget.” Capabilities stay available until 100%. |
+| 8 | User view | Block on the existing Assistant settings page: today’s tokens, today’s cap, instance spend only when this user would spend the instance key, and the warning. T0190 can move this block later. |
+| 9 | Administrator view | Block on the existing Admin → System properties AI section: the four limits (blank = unlimited) and the USD-per-million rate, plus today’s totals grouped by user, feature, and provider. T0189 can move this block into the hub later. Saving limits is an ordinary system-properties update (no billing-risk phrase). |
+| 10 | Billing-risk modal | Replace the placeholder sentence. No spend cap: “No instance-key spend cap is configured yet.” Cap set: “Instance-key spend cap: $X.XX per UTC day (estimated).” |
+| 11 | Audit of a refusal | `usage` row with `decision: deny`, `reason` `budget_tokens` or `budget_spend`, tokens and cost null, `key_source` set. Does not add to the totals. |
+| 12 | Tests | Meter sums one row per plugin round (two tool calls in one round do not double tokens). A null cap does not block. Crossing the token cap returns `budget_reached` and does not call the plugin. Instance spend ignores user-key calls. Tool-call and write caps stop the run. 80% sets `warning` and leaves capabilities available. |
+| 13 | Docs | `docs/database/` for the new action, columns, and system properties. `npm run docs:sync-schema`. |
+
+## Out of scope (already tasked)
+
+- T0189 — Administrator AI settings hub, audit-log viewer, and relocating these budget controls.
+- T0190 — full user AI settings page; it can keep this usage block.
+- Provider invoice reconciliation, per-model price lists, and per-user budget overrides.
+
+## Work items
+
+1. Migration + Drizzle: `usage` on `ai_audit_log_action_chk`; `key_source` and `cost_microusd`; seed `ai_budgets` (all null) and `ai_instance_usd_per_million_tokens` (`1`).
+2. `resolveProviderKey` returns `keySource`. Record one usage row from each plugin round. Stop copying tokens onto tool rows.
+3. Budget service: read caps, sum UTC-day usage, check before a plugin call and before a tool, 80% warning.
+4. Capabilities: return `budget_reached` when the next plugin call is already blocked.
+5. Routes: user `GET /api/v1/ai/usage`; admin limits on the system-properties AI payload; admin `GET /api/v1/admin/ai/usage`.
+6. UI: Assistant settings usage block, Admin AI limits + grouped usage, billing-risk sentence, assistant over-budget and 80% messages.
+7. Tests and schema docs.
+
+## QA checklist (after implementation)
+
+- With every limit blank, chat still works and a usage row appears for the reply (tokens filled, no prompt text).
+- Set a token cap below current use: Assistant shows the budget message, capabilities report `budget_reached`, and no further provider call is made.
+- Set an instance spend cap and use a user key: that user’s chat still works; the admin usage view shows the tokens under `user` and they do not increase instance spend.
+- Set tool-calls-per-run to 1: the second tool in one reply is refused and the run stops with the budget message.
+- At 80% of the token cap, the warning shows and chat still runs. At 100%, it stops.
+- Billing-risk modal names the spend cap when one is set, and keeps the “not configured” sentence when it is blank.

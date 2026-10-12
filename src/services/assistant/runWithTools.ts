@@ -1,6 +1,15 @@
 import type { AiChatMessage, AiProviderPlugin, AiToolCall } from "@taskmesh/ai-provider-contract";
 import { AiProviderError } from "@taskmesh/ai-provider-contract";
 import { writeAiAudit, type AiAuditSink } from "./aiAudit.js";
+import {
+  AI_BUDGET_MESSAGE,
+  isAiWriteAction,
+  noteAllowUsage,
+  pluginBudgetReason,
+  recordUsageDenial,
+  runBudgetReason,
+  type AiUsageMeter,
+} from "./aiBudgets.js";
 import { configuredChatModel } from "./aiProviderConfig.js";
 import { redactSecrets } from "./aiMinimize.js";
 import type { ChatMessage } from "./types.js";
@@ -51,6 +60,8 @@ export async function runAssistantWithTools(args: {
   prompt?: { promptId: string; promptVersion: number; promptRef: string } | null;
   /** Test seam. Production writes to `ai_audit_log`. */
   auditSink?: AiAuditSink;
+  /** When set, each plugin round is metered and limits are checked first. */
+  meter?: AiUsageMeter;
 }): Promise<void> {
   const model = args.model?.trim() || readDefaultModel(args.config);
   const tools = assistantToolDefinitions({ webFetchEnabled: args.webFetchEnabled === true });
@@ -61,12 +72,22 @@ export async function runAssistantWithTools(args: {
   }));
   let sawPrivate = args.messages.some((message) => containsPrivateUntrusted(message.content));
   let committed = false;
+  let toolCalls = 0;
+  let writes = 0;
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       if (args.signal?.aborted) {
         await args.handlers.onDone();
         return;
+      }
+      if (args.meter) {
+        const blocked = pluginBudgetReason(args.meter.limits, args.meter.totals, args.meter.keySource);
+        if (blocked) {
+          await recordUsageDenial(args.meter, blocked);
+          args.handlers.onError(AI_BUDGET_MESSAGE);
+          return;
+        }
       }
       const roundStarted = Date.now();
       let outcome: Awaited<ReturnType<typeof readRound>>;
@@ -93,6 +114,29 @@ export async function runAssistantWithTools(args: {
         }
       }
       const roundLatency = Date.now() - roundStarted;
+      if (args.meter) {
+        const tokensIn = outcome.usage?.inputTokens ?? 0;
+        const tokensOut = outcome.usage?.outputTokens ?? 0;
+        const cost = noteAllowUsage(args.meter, tokensIn, tokensOut);
+        await writeAiAudit(
+          {
+            userId: args.actorUserId,
+            feature: args.meter.feature,
+            provider: args.plugin.id,
+            model,
+            action: "usage",
+            decision: "allow",
+            reason: "Plugin call",
+            tier: 0,
+            tokensIn,
+            tokensOut,
+            latencyMs: roundLatency,
+            keySource: args.meter.keySource,
+            costMicrousd: cost,
+          },
+          args.meter.auditSink ?? args.auditSink,
+        );
+      }
       if (outcome.toolCalls.length > 0) {
         messages.push({
           role: "assistant",
@@ -100,6 +144,34 @@ export async function runAssistantWithTools(args: {
           toolCalls: outcome.toolCalls,
         });
         for (const call of outcome.toolCalls) {
+          const action = TOOL_REGISTRY[call.name]?.action ?? "read";
+          if (args.meter) {
+            const blocked = runBudgetReason(
+              args.meter.limits,
+              { toolCalls, writes },
+              action,
+            );
+            if (blocked) {
+              await writeAiAudit(
+                {
+                  userId: args.actorUserId,
+                  feature: args.meter.feature,
+                  provider: args.plugin.id,
+                  model,
+                  tool: call.name,
+                  action,
+                  decision: "deny",
+                  reason: blocked,
+                  tier: 0,
+                },
+                args.meter.auditSink ?? args.auditSink,
+              );
+              args.handlers.onError(AI_BUDGET_MESSAGE);
+              return;
+            }
+          }
+          toolCalls += 1;
+          if (isAiWriteAction(action)) writes += 1;
           const result = await execute(call.name, call.arguments || "{}", {
             onTool: args.handlers.onTool,
             onProposal: args.handlers.onProposal,
@@ -109,8 +181,6 @@ export async function runAssistantWithTools(args: {
             feature: args.handlers.feature ?? "assistant",
             provider: args.plugin.id,
             model,
-            tokensIn: outcome.usage?.inputTokens ?? null,
-            tokensOut: outcome.usage?.outputTokens ?? null,
             webFetchEnabled: args.webFetchEnabled === true,
             checkPolicy: args.handlers.checkPolicy,
             recordAudit: args.handlers.recordAudit,
@@ -136,8 +206,6 @@ export async function runAssistantWithTools(args: {
         decision: "allow",
         reason: "Assistant reply",
         tier: 0,
-        tokensIn: outcome.usage?.inputTokens ?? null,
-        tokensOut: outcome.usage?.outputTokens ?? null,
         latencyMs: roundLatency,
         promptId: args.prompt?.promptId ?? null,
         promptVersion: args.prompt?.promptVersion ?? null,

@@ -61,6 +61,7 @@ import {
 } from "../../services/apiRequestLogs.js";
 import { getDatabaseStatsSummary } from "../../services/dbStats.js";
 import { getAiQualitySummary } from "../../services/assistant/aiFeedback.js";
+import { listAdminAiUsage } from "../../services/assistant/aiBudgets.js";
 import { meshAppearanceEqual } from "../../lib/meshAppearance.js";
 import { isUsageRange } from "../../lib/usageRange.js";
 import { registerAiProviderAdminRoutes } from "./adminAiProviders.js";
@@ -750,6 +751,20 @@ adminRouter.patch("/system-properties", async (req, res) => {
     ) {
       parts.push("mesh_appearance updated");
     }
+    if (
+      parsed.aiBudgets !== undefined &&
+      JSON.stringify(before.aiBudgets) !== JSON.stringify(after.aiBudgets)
+    ) {
+      parts.push("ai_budgets updated");
+    }
+    if (
+      parsed.aiInstanceUsdPerMillionTokens !== undefined &&
+      before.aiInstanceUsdPerMillionTokens !== after.aiInstanceUsdPerMillionTokens
+    ) {
+      parts.push(
+        `ai_instance_usd_per_million_tokens ${before.aiInstanceUsdPerMillionTokens}→${after.aiInstanceUsdPerMillionTokens}`,
+      );
+    }
     res.locals.logUserId = actor.id;
     res.locals.logMessage =
       parts.length > 0
@@ -762,6 +777,14 @@ adminRouter.patch("/system-properties", async (req, res) => {
 });
 
 // ── API usage + logs ───────────────────────────────────────────────────────
+
+adminRouter.get("/ai/usage", async (_req, res) => {
+  try {
+    res.json({ data: await listAdminAiUsage(db) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
 
 adminRouter.get("/ai-quality", async (req, res) => {
   try {
