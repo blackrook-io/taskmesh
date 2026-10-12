@@ -115,6 +115,7 @@ Edit `.env.docker`:
 - Optionally override **`TASKMESH_HTTP_PORT`** / **`TASKMESH_HTTPS_PORT`** if 80/443 are busy.
 - Optionally set **`OPENAI_API_KEY`** for the Assistant panel. The variable is deprecated and stays the OpenAI plugin key until instance keys exist.
 - Optionally set **`ANTHROPIC_API_KEY`** after an Administrator enables the Anthropic plugin. It is not stored and does not enable the plugin on its own.
+- Optionally set **`GEMINI_API_KEY`** after an Administrator enables the Google Gemini plugin. It is not stored and does not enable the plugin on its own.
 
 Generate a self-signed cert for the proxy (once; SANs default to `localhost` + `127.0.0.1`):
 
@@ -523,6 +524,12 @@ The Anthropic plugin is loaded from the same directory. Enable it under Administ
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The Google Gemini plugin is loaded from the same directory. Enable it under Administration → System properties and set `GEMINI_API_KEY` in `.env` (not stored in the database). It does not turn itself on at first boot. When OpenAI is enabled and has a key, chat still uses OpenAI.
+
+```env
+GEMINI_API_KEY=...
 ```
 
 The assistant can also **fetch public http(s) URLs** for research (`fetch_url`) when an Administrator turns on **Allow assistant chat to fetch public web pages** under Administration → System properties. That switch is off by default. Fetching requires outbound access from this host to the target sites (not only the provider). Private/LAN addresses are blocked, and query strings are capped.
