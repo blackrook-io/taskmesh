@@ -20,16 +20,39 @@ function jsonResponse(status: number, body: unknown): Response {
 
 function authKey(init?: RequestInit): string {
   const headers = new Headers(init?.headers);
-  return headers.get("x-api-key") ?? headers.get("authorization") ?? "";
+  return headers.get("x-goog-api-key") ?? headers.get("x-api-key") ?? headers.get("authorization") ?? "";
+}
+
+function isGemini(init?: RequestInit): boolean {
+  return new Headers(init?.headers).has("x-goog-api-key");
 }
 
 function isAnthropic(init?: RequestInit): boolean {
   return new Headers(init?.headers).has("x-api-key");
 }
 
+function geminiAskedForTool(raw: string): boolean {
+  const body = JSON.parse(raw) as {
+    contents?: Array<{ parts?: Array<{ text?: string }> }>;
+  };
+  const parts = body.contents?.flatMap((content) => content.parts ?? []) ?? [];
+  return parts.some((part) => part.text === "TOOL");
+}
+
+function geminiChat(tool: boolean): unknown {
+  const part = tool
+    ? { functionCall: { name: "search_records", args: { q: "mesh" } } }
+    : { text: CONTRACT_TEXT };
+  return {
+    candidates: [{ content: { role: "model", parts: [part] } }],
+    usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 4 },
+  };
+}
+
 /**
  * Mock models and chat server. OpenAI requests use `Authorization`.
- * Anthropic requests (`x-api-key`) get Messages API JSON. Key suffixes are shared.
+ * Anthropic requests (`x-api-key`) get Messages API JSON.
+ * Gemini requests (`x-goog-api-key`) get generateContent JSON. Key suffixes are shared.
  */
 export const contractMockFetch: ProviderFetch = async (input, init) => {
   const key = authKey(init);
@@ -37,6 +60,9 @@ export const contractMockFetch: ProviderFetch = async (input, init) => {
   if (key.endsWith("offline")) throw new TypeError("fetch failed");
   if (url.endsWith("/models")) {
     if (key.endsWith("bad")) return jsonResponse(401, { error: { message: "invalid api key" } });
+    if (isGemini(init)) {
+      return jsonResponse(200, { models: [{ name: `models/${CONTRACT_MODEL_ID}`, displayName: "GPT Test" }] });
+    }
     return jsonResponse(200, { data: [{ id: CONTRACT_MODEL_ID }] });
   }
   if (key.endsWith("rate")) return jsonResponse(429, { error: { message: "Rate limit reached" } });
@@ -47,6 +73,10 @@ export const contractMockFetch: ProviderFetch = async (input, init) => {
     return jsonResponse(404, { error: { message: "The model was not found" } });
   }
   const raw = typeof init?.body === "string" ? init.body : "{}";
+  if (isGemini(init) && url.includes("embed")) {
+    return jsonResponse(200, { embeddings: [{ values: [0.1, 0.2] }] });
+  }
+  if (isGemini(init)) return jsonResponse(200, geminiChat(geminiAskedForTool(raw)));
   const body = JSON.parse(raw) as { messages?: Array<{ content?: unknown }> };
   const last = body.messages?.at(-1);
   const tool = last?.content === "TOOL";

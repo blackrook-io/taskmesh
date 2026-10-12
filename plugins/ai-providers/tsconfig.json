@@ -5,6 +5,7 @@
     { "path": "./stub" },
     { "path": "./openai" },
     { "path": "./openai-compatible" },
-    { "path": "./anthropic" }
+    { "path": "./anthropic" },
+    { "path": "./gemini" }
   ]
 }

@@ -1,0 +1,51 @@
+# T0203 — Google Gemini provider plugin
+
+**Task:** T0203 (id 218) — AI: Google Gemini provider plugin
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Depends on:** T0180 (complete). No open blockers.
+**Branch (after approval):** `T0203-gemini-provider`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`).
+
+## Size
+
+One plugin package plus a Gemini branch in the shared contract-kit mock. No schema, no new admin fields, no routing change (T0205), no instance-key store (T0182), no embeddings product pipeline (T0208). Fits one session.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Package | `plugins/ai-providers/gemini/`, npm name `@taskmesh/ai-provider-gemini`, export `plugin` with `id: "gemini"`. `"taskmesh": { "role": "provider" }`. Workspace glob already covers it. Add the package to `plugins/ai-providers/tsconfig.json` project references. |
+| 2 | Wire | Gemini Developer API (`generativelanguage.googleapis.com`) via `fetch` inside this package. No official SDK and no Vertex AI. Header `x-goog-api-key`. Paths `{baseUrl}/models`, `{baseUrl}/models/{model}:generateContent`, `{baseUrl}/models/{model}:streamGenerateContent?alt=sse`, and `{baseUrl}/models/gemini-embedding-001:batchEmbedContents`. Default base URL `https://generativelanguage.googleapis.com/v1beta`. |
+| 3 | Config | Zod schema matches the admin form: `baseUrl` and `defaultModel` (default `gemini-3.8-flash`). Public https only, same schema helper as OpenAI. `generationConfig.thinkingConfig.thinkingLevel` is fixed `low` on each chat request, not an admin field. Embedding model is fixed `gemini-embedding-001`, not an admin field. |
+| 4 | Capabilities | `chat`, `streaming`, `tools`, and `embeddings` true. `local` false. |
+| 5 | Chat | Map contract messages onto Gemini: system text is `systemInstruction`; user and assistant text are `contents` with roles `user` and `model`; assistant tool calls are `functionCall` parts; tool results are user `functionResponse` parts matched by tool name. Tools use `functionDeclarations`. When `tools` is an array (the contract kit and the assistant), send one `generateContent` JSON body and emit `delta` or `tool_calls`, then `usage`, then `done`. Tool-call ids are `call_1`, `call_2`, … when the API omits them. When `tools` is omitted, stream SSE (`data:` JSON chunks; text deltas, function calls, `usageMetadata`). |
+| 6 | Models and verify | `GET /models`. Strip a leading `models/` from each name so the id is the model code. `verifyKey` is that list. Missing key is `auth`. |
+| 7 | Embeddings | `embed(texts)` calls `batchEmbedContents` and returns `vectors` from `embeddings[].values`. Usage is `{ inputTokens, outputTokens: 0 }` when the response includes a token count, otherwise omitted. This does not index records; T0208 still owns that pipeline. |
+| 8 | Errors and usage | Reuse `mapProviderHttpError`: 401/403 `auth`, 404 `model_not_found`, 429 with quota/billing/credit wording `quota`, other 429 `rate_limit`, network `network`. Chat usage is `{ inputTokens, outputTokens }` from `promptTokenCount` / `candidatesTokenCount`. |
+| 9 | Contract kit | Extend `contractMockFetch` only: if the request sends `x-goog-api-key`, read that key for the existing suffixes (`bad`, `rate`, `quota`, `missing-model`, `offline`). Models JSON is `{ models: [{ name: "models/gpt-test" }] }`. Chat JSON is `candidates[].content.parts` text or `functionCall`, with `usageMetadata` 3/4. Embed URLs return one vector. OpenAI and Anthropic requests stay on their existing paths. Assertions in `assertProviderContract` do not change. |
+| 10 | Key until T0182 | Read `GEMINI_API_KEY` at call time in `resolvePluginApiKey`. Do not store it, do not first-boot seed `ai_providers`, and do not log a deprecation line. `selectChatPlugin` still prefers an enabled OpenAI plugin, then the first other ready plugin in loader order. Gemini does not jump ahead of Anthropic. |
+| 11 | Tests and docs | `plugins/ai-providers/gemini/src/contract.test.ts`: shared kit, rejected base URLs, one SSE fixture, one embed fixture. Add that file to the root `npm test` explicit list. Note `GEMINI_API_KEY` in `README.md`, `INSTALL.md`, `SECURITY.md`, `.env.example`, and `.env.docker.example` as optional and not stored. |
+
+## Work items
+
+1. **Mock** — Gemini branch in `plugins/ai-providers/contract/src/kit.ts` as in decision 9.
+2. **Plugin** — `index.ts` implementing list, verify, JSON chat, SSE chat, and batch embed. Gemini client stays in this package.
+3. **Key resolver** — `GEMINI_API_KEY` for id `gemini` only. Update `aiProviderConfig` tests so OpenAI still wins when Gemini is also ready.
+4. **Build graph** — tsconfig project reference so `npm run build:plugins` emits `dist/index.js`.
+5. **Docs** — env-var notes only.
+
+## Out of scope
+
+- Encrypted instance keys, key modes, billing-risk acknowledgement (T0182).
+- Provider preference or fallback beyond the existing OpenAI-first rule (T0205).
+- Record indexing or suggestion embeddings (T0208).
+- Vertex AI, Interactions API, vision, audio, search grounding, and a custom thinking-level field.
+- Azure OpenAI (T0204) and Ollama (T0181).
+
+## QA checklist (after implementation)
+
+1. `npm test` includes the Gemini contract file and it passes with the shared kit, including a non-empty embedding vector.
+2. Restart the DEV API after `npm run build:plugins`. Administration → System properties lists **Gemini** with base URL `https://generativelanguage.googleapis.com/v1beta` and default model `gemini-3.8-flash`. Saving `http://…` or a private host is rejected.
+3. With `OPENAI_API_KEY` set and OpenAI enabled, chat still uses OpenAI even if `GEMINI_API_KEY` is also set and Gemini is enabled.
+4. Disable OpenAI (and any other ready chat plugin), enable Gemini, set `GEMINI_API_KEY`, restart, and confirm a short assistant reply returns. Unset the key, restart, and confirm Gemini shows as not configured.

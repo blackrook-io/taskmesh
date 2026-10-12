@@ -84,6 +84,9 @@ describe("ai provider config", () => {
     assert.equal(resolvePluginApiKey("anthropic", { ANTHROPIC_API_KEY: " sk-ant " }), "sk-ant");
     assert.equal(resolvePluginApiKey("anthropic", { OPENAI_API_KEY: "sk-live" }), null);
     assert.equal(resolvePluginApiKey("openai", { ANTHROPIC_API_KEY: "sk-ant" }), null);
+    assert.equal(resolvePluginApiKey("gemini", { GEMINI_API_KEY: " sk-gem " }), "sk-gem");
+    assert.equal(resolvePluginApiKey("gemini", { OPENAI_API_KEY: "sk-live" }), null);
+    assert.equal(resolvePluginApiKey("openai", { GEMINI_API_KEY: "sk-gem" }), null);
   });
 
   it("keeps OpenAI ahead of an enabled Anthropic plugin", () => {
@@ -108,6 +111,40 @@ describe("ai provider config", () => {
         plugins: [{ id: "anthropic", chat: true }],
         file: { anthropic: file.anthropic },
         hasKey: (id) => id === "anthropic",
+        configValid: () => true,
+      }),
+      "anthropic",
+    );
+  });
+
+  it("keeps OpenAI ahead of an enabled Gemini plugin", () => {
+    const file = {
+      gemini: { enabled: true, config: { baseUrl: "https://generativelanguage.googleapis.com/v1beta" } },
+      openai: { enabled: true, config: { baseUrl: "https://api.openai.com/v1" } },
+    };
+    assert.equal(
+      selectChatPlugin({
+        plugins: [
+          { id: "gemini", chat: true },
+          { id: "openai", chat: true },
+        ],
+        file,
+        hasKey: () => true,
+        configValid: () => true,
+      }),
+      "openai",
+    );
+    assert.equal(
+      selectChatPlugin({
+        plugins: [
+          { id: "anthropic", chat: true },
+          { id: "gemini", chat: true },
+        ],
+        file: {
+          anthropic: { enabled: true, config: { baseUrl: "https://api.anthropic.com" } },
+          gemini: file.gemini,
+        },
+        hasKey: () => true,
         configValid: () => true,
       }),
       "anthropic",
