@@ -1,0 +1,97 @@
+---
+description: T0211 — thumbs and outcome signals on AI output, plus an admin quality view and a golden-set runner
+---
+
+# T0211 — AI feedback capture and evaluation
+
+**Task:** T0211 · id `226` · Ready · project 4 (TaskMesh) · parent T0195  
+**Depends on:** T0178 (complete)  
+**Branch (after approval):** `T0211-ai-feedback-eval`
+
+## Goal
+
+Let a user rate every assistant output, record accept / dismiss / undo as quality signals on that output’s audit row, and give Administrators a per-feature, per-model quality view. Ship the golden-set runner CI will use; leave the feature corpora for suggestions, tagging, capture, and duplicates to T0300.
+
+## Current state
+
+- `ai_audit_log` is append-only (T0178): user, feature, provider, model, tool, action, decision, tokens, latency. It does not store prompts or record text. `writeAiAudit` does not return the new row id, and the chat SSE `done` event does not carry one.
+- The assistant panel shows replies and proposals. Apply is the only outcome control. There is no thumbs control, no Dismiss, and no undo of an AI apply.
+- Tagging (T0199), capture (T0196), and duplicate detection (T0200) are still Draft. Mesh suggestions (T0168) are still Ready and are not a provider call. A golden corpus for those features cannot run yet.
+- Admin AI settings today are the provider section on System properties. There is no quality view.
+- The stub plugin (`plugins/ai-providers/stub`, role `test`) returns a fixed “Hello from plugin” chat delta. It is not loaded by the app.
+
+## Scope
+
+### Feedback store
+
+New table `ai_output_feedback` (migration → MINOR on finish-up), documented in `docs/database/` and synced:
+
+- `audit_id` → `ai_audit_log.id` (required)
+- `user_id`
+- `kind`: `thumb_up` | `thumb_down` | `accept` | `dismiss` | `undo`
+- `note` optional, max 500 characters, only meaningful for thumbs
+- `created_at`
+
+The audit log stays append-only. Feedback is a separate row that points at the audit row (“stored with” it). One thumb per `(audit_id, user_id)` — a later thumb replaces the previous one and its note. Accept, dismiss, and undo are one row per audit id (ignore repeats).
+
+`writeAiAudit` returns the inserted id.
+
+### Assistant surfaces
+
+- The reply audit (`action: respond`) id is sent on the SSE `done` event and kept on the transcript turn (localStorage, same as today’s transcript).
+- Each assistant turn with an audit id shows thumbs up / thumbs down. Choosing one reveals an optional note and saves immediately. Switching the thumb updates the same feedback row.
+- Each proposal shows **Apply** (existing) and **Dismiss**. Apply writes `accept` against the proposal tool’s audit row. Dismiss writes `dismiss` and removes the card. Dismiss does not change records.
+- **Undo** is a signal the API accepts (`POST` with `kind: undo`). The assistant has no undo action today, so this task does not build one. The admin view shows the undo rate (zero until some feature posts it). Proposals need their tool-call audit id on the SSE `proposal` event so Apply and Dismiss can attach.
+
+API (session user, own feedback only):
+
+- `PUT /api/v1/assistant/feedback` `{ auditId, kind, note? }`
+- Owner of the audit row, or an Administrator, may write the signal. Another user’s audit id is rejected.
+
+### Admin quality view
+
+Administrator-only section **AI quality** on System properties.
+
+`GET /api/v1/admin/ai-quality?days=30` (default 30, max 90):
+
+- Group by `feature` and `model`
+- Counts: thumbs up, thumbs down, accept, dismiss, undo
+- Rates: up / (up+down), accept / (accept+dismiss), undo / accept — omit a rate when the denominator is 0
+- Recent notes (capped list): feature, model, kind, note, time. No prompt and no record text
+
+### Golden-set runner
+
+- JSON fixtures under `src/services/assistant/golden/` for the assistant reply contract against the stub plugin (fixed user message → stub delta).
+- `npm test` runs that set with no network and no API key.
+- `npm run ai:golden` runs the same set against a configured real provider when invoked explicitly, and exits 0 with a skip message when no key is set. CI does not call real providers.
+
+## Deferred — T0300
+
+**T0300** (Draft, child of T0195) holds the golden sets for suggestions, tagging, capture parsing, and duplicate pairs. It depends on T0211, T0168, T0196, T0199, and T0200. Those features are not built, so their corpora are not part of this task.
+
+## Out of scope
+
+- Building undo for AI applies
+- Prompt registry (T0212) and key rotation (T0213)
+- Changing what the audit log stores (still no prompts or record text)
+- Mesh suggestion UI
+
+## Acceptance
+
+- Thumbs and an optional note persist for an assistant reply and survive a panel reopen in the same browser.
+- Apply and Dismiss each create one outcome row; repeating them does not duplicate it.
+- A non-owner cannot write feedback on someone else’s audit row.
+- Admin quality view matches the stored rows for feature + model.
+- Stub golden test passes in `npm test` with no network.
+- `docs/database/` updated and `npm run docs:sync-schema` run.
+
+## Interview defaults (change on approval if needed)
+
+- Feedback lives in `ai_output_feedback`, not as updates to `ai_audit_log`.
+- Thumbs ship on the assistant only. Later features call the same API.
+- Undo is recorded when posted; this task does not add an Undo button.
+- Feature golden corpora stay on T0300.
+
+## QA follow-ups
+
+- Thumbs are small outline icons at the bottom right of the assistant reply bubble. The optional note field opens underneath the bubble only after Up or Down is selected.

@@ -93,6 +93,13 @@ Every row also has `entity_type` and `entity_id`. `task_id` is set only for task
 
 `source`: `ui` when the SPA identifies itself; `ai` when an assistant proposal is applied; otherwise `api`.
 
+## AI output feedback (T0211)
+
+`ai_output_feedback.kind`:
+
+- **`thumb_up` / `thumb_down`** — one row per audit row and user. A later thumb replaces the earlier one and its optional note (max 500 characters).
+- **`accept` / `dismiss` / `undo`** — one row per audit row and kind. A repeat is ignored. Apply records `accept`. Dismiss records `dismiss`. `undo` is stored when a feature posts it; the assistant has no undo action yet.
+
 ## Project role lists (T0127 / T0128)
 
 Tables: `project_managers`, `project_members`, `project_viewers`.

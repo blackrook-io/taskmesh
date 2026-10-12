@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.64.0 — 2026-10-12
+
+### New Functionality
+- Rate each assistant reply with a thumbs-up or thumbs-down outline at the bottom right of the bubble, then add an optional note. Apply and Dismiss on a proposal are recorded as quality signals.
+- Administrators see those signals under System properties, grouped by feature and model, including accept, dismiss, and undo rates.
+
 ## 0.63.1 — 2026-10-12
 
 ### Enhancements

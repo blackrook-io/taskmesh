@@ -4,6 +4,7 @@ import { apiJson } from "../../api/client";
 import { ThemeSwitcher } from "../shell/ThemeSwitcher";
 import { isThemeId, type ThemeId } from "../../lib/theme";
 import { AdminAiProvidersSection } from "./AdminAiProvidersSection";
+import { AdminAiQualitySection } from "./AdminAiQualitySection";
 
 type MfaEnforcement = "none" | "administrators";
 
@@ -477,6 +478,7 @@ export function AdminSystemPropertiesPanel() {
         Save
       </button>
       <AdminAiProvidersSection />
+      <AdminAiQualitySection />
     </div>
   );
 }

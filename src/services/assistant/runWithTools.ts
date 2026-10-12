@@ -15,7 +15,7 @@ const DELTA_CHUNK = 48;
 
 export type RunAssistantHandlers = ToolHandlers & {
   onDelta: (text: string) => void;
-  onDone: () => void;
+  onDone: (info?: { auditId: number | null }) => void;
   onError: (message: string) => void;
 };
 
@@ -79,7 +79,7 @@ export async function runAssistantWithTools(args: {
         continue;
       }
 
-      await writeAiAudit({
+      const auditId = await writeAiAudit({
         userId: args.actorUserId,
         feature: "assistant",
         provider: args.plugin.id,
@@ -99,7 +99,7 @@ export async function runAssistantWithTools(args: {
         if (args.signal?.aborted) break;
         args.handlers.onDelta(text.slice(i, i + DELTA_CHUNK));
       }
-      args.handlers.onDone();
+      args.handlers.onDone({ auditId });
       return;
     }
     args.handlers.onError("Too many tool rounds; try a simpler request.");

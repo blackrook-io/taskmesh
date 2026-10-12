@@ -21,6 +21,7 @@ import {
   operationFromProposal,
   resolveAiPermissionSettings,
 } from "../../services/assistant/aiTiers.js";
+import { AiFeedbackError, recordAiFeedback, AI_FEEDBACK_KINDS } from "../../services/assistant/aiFeedback.js";
 
 export const assistantRouter = Router();
 
@@ -45,6 +46,43 @@ const chatBody = z.object({
     .optional(),
   pageContext: z.string().max(16_000).nullable().optional(),
   model: z.string().min(1).max(120).optional(),
+});
+
+const feedbackBody = z.object({
+  auditId: z.number().int().positive(),
+  kind: z.enum(AI_FEEDBACK_KINDS),
+  note: z.string().max(500).optional().nullable(),
+});
+
+assistantRouter.put("/feedback", async (req, res) => {
+  try {
+    const parsed = feedbackBody.parse(req.body ?? {});
+    const actorUserId = await getCurrentUserId(db);
+    const isAdministrator = await userHasAdministrator(db, actorUserId);
+    const recorded = await recordAiFeedback(db, {
+      auditId: parsed.auditId,
+      actorUserId,
+      isAdministrator,
+      kind: parsed.kind,
+      note: parsed.note,
+    });
+    res.json({
+      data: {
+        id: recorded.id,
+        auditId: recorded.auditId,
+        kind: recorded.kind,
+        note: recorded.note,
+        createdAt: recorded.createdAt.toISOString(),
+        created: recorded.created,
+      },
+    });
+  } catch (err) {
+    if (err instanceof AiFeedbackError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
 });
 
 assistantRouter.post("/proposals/apply", async (req, res) => {
@@ -133,12 +171,16 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
           writeEvent("proposal", { ...proposal, tier: classified.tier });
         },
         onDelta: (text) => writeEvent("delta", { text }),
-        onDone: () => {
+        onDone: (info) => {
           const plan = classifyChangePlan(
             proposals.map((proposal) => operationFromProposal(proposal, actorUserId)),
             tierSettings,
           );
-          writeEvent("done", { planTier: plan.tier, planEscalations: plan.escalations });
+          writeEvent("done", {
+            planTier: plan.tier,
+            planEscalations: plan.escalations,
+            auditId: info?.auditId ?? null,
+          });
           res.end();
         },
         onError: (message) => {

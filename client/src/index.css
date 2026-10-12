@@ -6534,6 +6534,57 @@ a:focus-visible {
   padding: 0.45rem 0.6rem;
 }
 
+.assistant-feedback {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.1rem;
+  margin-top: 0.35rem;
+}
+
+.assistant-feedback__thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip, 6px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.assistant-feedback__thumb:hover,
+.assistant-feedback__thumb.is-on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.admin-ai-quality {
+  margin-top: 1.5rem;
+}
+
+.admin-ai-quality__notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.assistant-feedback__note {
+  width: 100%;
+  margin-top: 0.35rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.5rem;
+}
+
 .assistant-panel__error {
   margin: 0;
   padding: 0.4rem 0.8rem;
