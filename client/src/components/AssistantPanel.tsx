@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import {
   fetchAssistantStatus,
   putAssistantFeedback,
@@ -10,6 +11,7 @@ import {
 import { apiJson, ApiRequestError } from "../api/client";
 import { fetchUserAiUsage } from "../api/aiUsage";
 import { useAssistantAttachTarget } from "../lib/assistantAttach";
+import { projectIdFromPath } from "../lib/useAssistantAvailability";
 import { isDeleteProposal, proposalExpired, proposalHeading } from "../lib/aiReview";
 import { showAiAppliedToast, showAiApplyFailedToast } from "../lib/aiApplyToast";
 import { dispatchOpenSettings } from "../lib/settings";
@@ -80,6 +82,8 @@ function ThumbIcon({ down = false }: { down?: boolean }) {
 
 export function AssistantPanel({ open, onClose }: Props) {
   const qc = useQueryClient();
+  const { pathname } = useLocation();
+  const projectId = projectIdFromPath(pathname);
   const attachTarget = useAssistantAttachTarget();
   const [attachEnabled, setAttachEnabled] = useState(true);
   const [seenAttachKey, setSeenAttachKey] = useState(attachTarget?.key);
@@ -298,6 +302,7 @@ export function AssistantPanel({ open, onClose }: Props) {
           message,
           history,
           pageContext,
+          projectId,
           signal: ac.signal,
           onDelta: (text) => {
             full += text;

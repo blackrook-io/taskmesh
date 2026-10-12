@@ -28,6 +28,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     aiProviders: {},
     aiWebFetch: false,
     aiProjectAccessDefault: "full",
+    aiProjectLocalOnly: false,
     aiPermissionTiers: defaultStoredAiPermissionTiers(),
     aiUndoWindowDays: 7,
     aiKeyMode: "instance_only",
@@ -105,6 +106,11 @@ describe("system properties patch schema", () => {
     );
     assert.equal(
       systemPropertiesPatchSchema.safeParse({ aiProjectAccessDefault: "open" }).success,
+      false,
+    );
+    assert.equal(systemPropertiesPatchSchema.safeParse({ aiProjectLocalOnly: true }).success, true);
+    assert.equal(
+      systemPropertiesPatchSchema.safeParse({ aiProjectLocalOnly: "yes" }).success,
       false,
     );
   });

@@ -20,6 +20,7 @@ import {
   projectIdForAiEntity,
   projectsVisibleToAi,
   resolveEffectiveAiAccess,
+  resolveEffectiveLocalOnly,
   tasksVisibleToAi,
 } from "./projectAiAccess.js";
 import { todoListsVisibleToAi, todosVisibleToAi } from "./projectAiAccess.js";
@@ -106,6 +107,8 @@ export type ToolHandlers = {
   webFetchEnabled?: boolean;
   /** Page context or a read-tool result is already in this turn. */
   privateRecordsInTurn?: boolean;
+  /** This turn was routed to a local model. Cloud turns cannot touch a local-only project. */
+  routeLocalOnly?: boolean;
 };
 
 type ToolPolicyTarget = {
@@ -616,6 +619,8 @@ function policyFields(args: unknown): Record<string, unknown> | null {
   if (Object.prototype.hasOwnProperty.call(rec, "ownerId")) fields.ownerId = rec.ownerId;
   if (Object.prototype.hasOwnProperty.call(rec, "aiAccess")) fields.aiAccess = rec.aiAccess;
   if (Object.prototype.hasOwnProperty.call(rec, "ai_access")) fields.ai_access = rec.ai_access;
+  if (Object.prototype.hasOwnProperty.call(rec, "aiLocalOnly")) fields.aiLocalOnly = rec.aiLocalOnly;
+  if (Object.prototype.hasOwnProperty.call(rec, "ai_local_only")) fields.ai_local_only = rec.ai_local_only;
   const nested = rec.fields;
   if (nested && typeof nested === "object") {
     const inner = nested as Record<string, unknown>;
@@ -623,8 +628,31 @@ function policyFields(args: unknown): Record<string, unknown> | null {
     if (Object.prototype.hasOwnProperty.call(inner, "ownerId")) fields.ownerId = inner.ownerId;
     if (Object.prototype.hasOwnProperty.call(inner, "aiAccess")) fields.aiAccess = inner.aiAccess;
     if (Object.prototype.hasOwnProperty.call(inner, "ai_access")) fields.ai_access = inner.ai_access;
+    if (Object.prototype.hasOwnProperty.call(inner, "aiLocalOnly")) fields.aiLocalOnly = inner.aiLocalOnly;
+    if (Object.prototype.hasOwnProperty.call(inner, "ai_local_only")) fields.ai_local_only = inner.ai_local_only;
   }
   return Object.keys(fields).length > 0 ? fields : null;
+}
+
+async function localOnlyRouteDenial(
+  handlers: ToolHandlers,
+  input: PolicyCheckInput,
+): Promise<PolicyDecision | null> {
+  if (handlers.routeLocalOnly === true) return null;
+  const ids: number[] = [];
+  if (typeof input.projectId === "number") ids.push(input.projectId);
+  const dest = input.fields?.projectId;
+  if (typeof dest === "number" && !ids.includes(dest)) ids.push(dest);
+  for (const projectId of ids) {
+    const local = await resolveEffectiveLocalOnly(db, projectId);
+    if (local !== true) continue;
+    return {
+      decision: "deny",
+      tier: tierForAction(input.action),
+      reason: "Project is limited to local models",
+    };
+  }
+  return null;
 }
 
 async function excludedReadDenial(projectId: number | null | undefined): Promise<string | null> {
@@ -790,6 +818,11 @@ async function executeAssistantToolInner(
     webFetchEnabled: handlers.webFetchEnabled === true,
     privateRecordsInTurn: handlers.privateRecordsInTurn === true,
   });
+  const localDenial = await localOnlyRouteDenial(handlers, policyInput);
+  if (localDenial) {
+    await auditTool(handlers, name, resolvedTarget, localDenial, started);
+    return denialPayload(resolvedTarget.action, localDenial);
+  }
   const decision = decide(policyInput);
 
   if (decision.decision === "deny") {
@@ -855,11 +888,11 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
   const [ideaScope, visibleProjects, visibleTasks, visibleDocuments, visibleTodos, visibleLists] =
     await Promise.all([
     Promise.resolve(ownerScope(schema.ideas.ownerId, actorUserId, isAdministrator)),
-    projectsVisibleToAi(db),
-    tasksVisibleToAi(db),
-    documentsVisibleToAi(db),
-    todosVisibleToAi(db),
-    todoListsVisibleToAi(db),
+    projectsVisibleToAi(db, handlers.routeLocalOnly === true),
+    tasksVisibleToAi(db, handlers.routeLocalOnly === true),
+    documentsVisibleToAi(db, handlers.routeLocalOnly === true),
+    todosVisibleToAi(db, handlers.routeLocalOnly === true),
+    todoListsVisibleToAi(db, handlers.routeLocalOnly === true),
   ]);
   const projectScope = projectAccessListFilter(db, actorUserId, isAdministrator);
   const taskScope = dualScopeListFilter(

@@ -71,6 +71,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "ai_permission_tiers",
   "ai_undo_window_days",
   "ai_project_access_default",
+  "ai_project_local_only",
   "ai_key_mode",
   "ai_feature_routes",
   "ai_budgets",
@@ -97,6 +98,8 @@ export type SystemProperties = {
   aiWebFetch: boolean;
   /** Instance ceiling for project AI access. Projects can only narrow this. */
   aiProjectAccessDefault: AiAccess;
+  /** When true, every project is local-model only. Projects can only narrow this. */
+  aiProjectLocalOnly: boolean;
   /** Administrator tier matrix and blast-radius thresholds. User opt-in is not stored here. */
   aiPermissionTiers: StoredAiPermissionTiers;
   /** Days an auto-applied change stays undoable. Default 7. */
@@ -141,6 +144,7 @@ const DEFAULTS: {
   ai_permission_tiers: StoredAiPermissionTiers;
   ai_undo_window_days: number;
   ai_project_access_default: AiAccess;
+  ai_project_local_only: boolean;
   ai_key_mode: AiKeyMode;
   ai_feature_routes: AiFeatureRoutesFile;
   ai_budgets: AiBudgets;
@@ -162,6 +166,7 @@ const DEFAULTS: {
   ai_permission_tiers: defaultStoredAiPermissionTiers(),
   ai_undo_window_days: 7,
   ai_project_access_default: "full",
+  ai_project_local_only: false,
   ai_key_mode: "instance_only",
   ai_feature_routes: { features: {}, profiles: [] },
   ai_budgets: EMPTY_AI_BUDGETS,
@@ -318,6 +323,10 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
       map.get("ai_project_access_default")?.value,
       DEFAULTS.ai_project_access_default,
     ),
+    aiProjectLocalOnly: asBoolean(
+      map.get("ai_project_local_only")?.value,
+      DEFAULTS.ai_project_local_only,
+    ),
     aiPermissionTiers: parseStoredAiPermissionTiers(
       map.get("ai_permission_tiers")?.value ?? DEFAULTS.ai_permission_tiers,
     ),
@@ -371,6 +380,7 @@ export async function patchSystemProperties(
     meshAppearance?: MeshAppearance;
     aiWebFetch?: boolean;
     aiProjectAccessDefault?: AiAccess;
+    aiProjectLocalOnly?: boolean;
     aiBudgets?: AiBudgets;
     aiInstanceUsdPerMillionTokens?: number;
   },
@@ -558,6 +568,19 @@ export async function patchSystemProperties(
         set: { value: patch.aiProjectAccessDefault, updatedAt: now },
       });
   }
+  if (patch.aiProjectLocalOnly !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "ai_project_local_only",
+        value: patch.aiProjectLocalOnly,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.aiProjectLocalOnly, updatedAt: now },
+      });
+  }
   if (patch.aiBudgets !== undefined) {
     await db
       .insert(schema.systemProperties)
@@ -614,6 +637,7 @@ export const systemPropertiesPatchSchema = z
     meshAppearance: meshAppearanceSchema.optional(),
     aiWebFetch: z.boolean().optional(),
     aiProjectAccessDefault: z.enum(["full", "read_only", "excluded"]).optional(),
+    aiProjectLocalOnly: z.boolean().optional(),
     aiBudgets: z
       .object({
         tokensPerUserPerDay: z.number().int().positive().max(1_000_000_000).nullable(),

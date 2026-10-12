@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.72.0 — 2026-10-12
+
+### New Functionality
+- A project can be marked so AI for it uses local models only. Reads and proposals still follow full, read-only, or excluded. An Administrator can require local models for every project. A project can turn the mark on and cannot turn it off while that requirement is on. Chat on that project does not fall through to a cloud model if the local one errors or is rate-limited, and a chat opened somewhere else cannot read that project's records.
+
 ## 0.71.0 — 2026-10-12
 
 ### New Functionality

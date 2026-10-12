@@ -1,0 +1,74 @@
+---
+description: T0320 — mark a project so AI for it may use local models only
+---
+
+# T0320 — Mark a project local-only
+
+**Task:** T0320 (id 335) — AI: mark a project local-only
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0192 AI: Guardrails and governance (group). Design decisions live in epic T0177.
+**Depends on:** T0205 complete (router `localOnly` already drops cloud candidates and does not fall through when the local provider errors or is rate-limited). No open blockers.
+**Branch (after approval):** `T0320-project-local-only`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for `projects.ai_local_only` and the instance ceiling property is a system-properties key, not a migration by itself — the project column is the migration).
+
+## Size
+
+One orthogonal flag beside T0184 access, one instance ceiling, project and admin controls, and wiring so chat (the only router caller that has a project) passes `localOnly`. Does not redo provider plugins, key resolution, or the routing catalog. Fits one session.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Storage | New `projects.ai_local_only` boolean, not null, default `false`. Not a fourth `ai_access` value. `full` / `read_only` / `excluded` stay as they are. Reads and proposals still follow effective `ai_access`. The flag only chooses which models may serve that project. |
+| 2 | Effective mark | `effective = stored OR ceiling`. A project can turn local-only on. It cannot turn it off while the ceiling is on (that would widen). Tightening the ceiling forces every project without rewriting rows. Loosening it restores cloud only for projects that did not store `true`. |
+| 3 | Ceiling | System property `ai_project_local_only`, boolean, default `false`. Administrator sets it on the existing system-properties panel, next to Project AI access. |
+| 4 | New projects | Stored `false`. The ceiling still applies at read time. Do not stamp `true` on insert, so turning the ceiling off later does not leave every project stuck local-only. |
+| 5 | Who edits | Same as AI access: owner, manager, or administrator (`settings`). AI cannot change the flag (policy floor, same as `aiAccess`). A change is a project activity row, not an `ai_audit_log` row. |
+| 6 | Excluded | Unchanged. An excluded project is never sent to a model, local or cloud. Chat with that project id fails before routing. The local-only badge is hidden when effective access is `excluded`. |
+| 7 | Chat binding | Chat body gains optional `projectId`. The panel sends the id already derived from `/projects/:id` (same path as assistant availability). No project on the page means `localOnly` stays false. |
+| 8 | No cloud fallback | Server resolves the effective mark and passes `localOnly: true` into `runConfiguredAssistant` → `resolveFeatureRoute`. T0205 already refuses cloud candidates and does not fall through on local `rate_limit` / provider error. If the route has no local attempt, chat does not call a cloud model. |
+| 9 | Tools on a cloud turn | A turn that was not routed local-only cannot read or propose against a local-only project (no record text in the denial). A local-only turn may still touch other non-excluded projects. This is the enforcement for “the model that serves them must be local” when chat is open somewhere else. |
+| 10 | Capabilities | `listAiCapabilities` passes `localOnly` for that project. If no local model is eligible, assistant availability is false with a new reason `no_local_model`, so the AI button stays disabled and explains why. |
+| 11 | UI | Project overview: checkbox “Local models only”, locked on when the ceiling is on. Header badge “Local models only” when the effective mark is set and the project is not excluded. Admin copy states that projects can only narrow this. |
+
+## Work items
+
+### 1. Schema
+
+- `projects.ai_local_only` boolean not null default `false`.
+- `npm run db:generate`, review `drizzle/`, migrate.
+- Update `docs/database/projects-and-ideas.md` and the glossary note for the new system property in `docs/database/platform.md` / `glossary.md`. Run `npm run docs:sync-schema`.
+
+### 2. Ceiling and project API
+
+- Parse/patch `ai_project_local_only` beside `ai_project_access_default`.
+- Project GET returns `aiLocalOnly`, `aiLocalOnlyEffective`, `aiLocalOnlyCeiling` next to the existing access fields.
+- PATCH accepts `aiLocalOnly`. Reject `false` while the ceiling is `true` (`ai_local_only_wider_than_ceiling`). Settings-level permission, same as `aiAccess`.
+- Record a project activity change when the stored value changes.
+
+### 3. Chat and tools
+
+- Optional `projectId` on `POST /api/v1/assistant/chat`. Unknown or inaccessible project is an error and does not call a model. Excluded project does not call a model.
+- Pass `localOnly` from the effective mark into the router.
+- Tool handlers receive whether this turn is local-only. A target project (including a move destination) that is effectively local-only is denied when the turn is not.
+
+### 4. UI
+
+- Admin system-properties checkbox, saved with the existing Save button.
+- Project overview checkbox, help text, and badge. Client type + save body include the flag.
+- Assistant panel sends `projectId` from the current project path.
+- Unavailable title for `no_local_model`.
+
+### 5. Tests
+
+- Effective mark: project opt-in, ceiling force, ceiling off restores only unstamped projects, cannot save `false` under a true ceiling.
+- Excluded project still never reaches a model.
+- Chat/route: with the mark set, a cloud plugin is not called when the local provider returns `rate_limit` or another retriable error (router behavior already covered; this task covers the project → `localOnly` handoff).
+- Tool denial: cloud turn does not return text from a local-only project.
+- Policy denies a proposal that sets `aiLocalOnly`.
+
+## Out of scope
+
+- Provider plugins, key resolution, routing catalog, and the T0205 fallback rules themselves.
+- Background features that do not call the router with a project id yet (suggestions, embeddings). They must pass `localOnly` when they gain a project id; this task does not build them.
+- Changing `dueDate` or AI access values.

@@ -66,6 +66,11 @@ export const projects = pgTable("projects", {
    * Effective access is the narrower of this value and the instance ceiling.
    */
   aiAccess: text("ai_access").notNull().default("full"),
+  /**
+   * When true, AI for this project may use local models only (T0320).
+   * The effective mark is this value OR the instance ceiling `ai_project_local_only`.
+   */
+  aiLocalOnly: boolean("ai_local_only").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

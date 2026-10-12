@@ -131,7 +131,9 @@ function floorDecision(input: PolicyCheckInput): PolicyDecision | null {
   if (
     input.fields &&
     (Object.prototype.hasOwnProperty.call(input.fields, "aiAccess") ||
-      Object.prototype.hasOwnProperty.call(input.fields, "ai_access"))
+      Object.prototype.hasOwnProperty.call(input.fields, "ai_access") ||
+      Object.prototype.hasOwnProperty.call(input.fields, "aiLocalOnly") ||
+      Object.prototype.hasOwnProperty.call(input.fields, "ai_local_only"))
   ) {
     return {
       decision: "deny",
@@ -288,6 +290,7 @@ export function describeAllowedPolicy(
     actions +
     "Not allowed: propose delete, bulk, boards, canvases, wiki nodes, image boards, and removing a link, tag, or dependency. " +
     "Projects may be read-only for AI or excluded entirely. Excluded projects and their records are omitted. Read-only projects can be read but not changed. " +
+    "A project marked local-only is served only by a local model. " +
     "Never allowed: users, roles, groups, API keys, AI credentials, backups, ownership transfer, system properties, AI policy, and project AI access. " +
     "The server assigns the permission tier; the model cannot set it. Deletes are proposals only, and a person deletes the record in the app."
   );

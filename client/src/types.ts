@@ -22,6 +22,10 @@ export type Project = {
   aiAccess?: AiAccess;
   aiAccessEffective?: AiAccess;
   aiAccessCeiling?: AiAccess;
+  /** Stored local-only choice. Effective mark may be forced by the instance ceiling. */
+  aiLocalOnly?: boolean;
+  aiLocalOnlyEffective?: boolean;
+  aiLocalOnlyCeiling?: boolean;
   sortOrder: number;
   sourceIdeaId: number | null;
   ownerId?: number;

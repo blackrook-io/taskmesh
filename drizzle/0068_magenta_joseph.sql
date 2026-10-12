@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "ai_local_only" boolean DEFAULT false NOT NULL;

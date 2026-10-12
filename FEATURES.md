@@ -110,6 +110,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable Azure OpenAI for assistant chat and embeddings. Set the resource endpoint, deployment names, and API version. An environment key remains the fallback when no instance key is stored
 - Enable Ollama for local assistant chat and embeddings. Set a private or loopback address, a chat model, and an embedding model. No API key is required
 - Set a project to full, read-only, or excluded from AI. Owners and managers can only narrow the Administrator default, and an excluded project is never sent to a model
+- Mark a project so AI uses local models only. Owners and managers can only turn that on, an Administrator can require it for every project, and a local error does not fall through to a cloud model
 - Confirm ordinary assistant edits one at a time. Riskier or bulk changes open a review list where you check each item before anything is saved, and an edit expires if the record changed
 - Opt in so the assistant applies tags, links, comments, and task dependencies immediately, then undo them from a toast or the AI activity page for 7 days
 - Ask the assistant about todos, lists, links, tags, comments, task dependencies, and the records around one item. Proposed adds still wait for your confirmation
