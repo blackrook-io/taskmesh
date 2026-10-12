@@ -131,6 +131,16 @@ export type TaskActivityEntry = {
 
 export type DocumentKind = "markdown" | "epub" | "pdf";
 
+export type DocumentExtractionStatus = "pending" | "ready" | "empty" | "failed";
+
+export type DocumentExtraction = {
+  status: DocumentExtractionStatus;
+  errorMessage: string | null;
+  unitCount: number;
+  charCount: number;
+  truncated: boolean;
+};
+
 export type ProjectDocument = {
   id: number;
   number: number;
@@ -142,6 +152,7 @@ export type ProjectDocument = {
   fileUrl?: string | null;
   fileMimeType?: string | null;
   fileOriginalName?: string | null;
+  extraction?: DocumentExtraction | null;
   position: number;
   updatedById?: number | null;
   updatedBy?: UserRef | null;

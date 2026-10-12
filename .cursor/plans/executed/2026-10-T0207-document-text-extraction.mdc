@@ -1,0 +1,78 @@
+# T0207 — Text extraction from uploaded documents
+
+**Task:** T0207 (id 222) — AI: text extraction from uploaded documents
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0194 AI: Knowledge and context foundations (group) — still Draft; this child is Ready and its description is the brief
+**Depends on:** T0206 AI: durable background job queue — `complete`
+**Required by:** T0208 AI: knowledge index (full-text and embeddings) — stays out of this work
+**Branch (after approval):** `T0207-document-text-extraction`
+**Version on finish-up:** MINOR (new `drizzle/*.sql`)
+
+## Size / dependencies
+
+One migration, one pg-boss job, PDF and EPUB extractors, a status line on the existing PDF/EPUB document view, and a page/chapter text read API. Depends-on is satisfied. No split and no new deferred Task. OCR, full-text search, and embeddings stay on later tasks.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | What “searchable” means here | Store page- and chapter-bounded text and return it by locator. Global search, `tsvector`, and embeddings stay on T0208 |
+| 2 | Storage | New tables, not `project_documents.body`. Markdown bodies stay unchanged |
+| 3 | When | Enqueue on PDF/EPUB create and on file replacement. On worker start, enqueue any binary document whose stored extraction is missing or still points at an older upload |
+| 4 | Engine | PDF via `pdfjs-dist` on the server (legacy/Node entry, same major as the client). EPUB via root `jszip`: container → OPF spine → strip XHTML to text. One span per PDF page or EPUB spine item |
+| 5 | Empty vs failed | A file that parses but yields no text is `empty` (scanned PDF, or an EPUB with no chapter text). OCR is not run; the document shows that. Corrupt files, password-protected PDFs, and worker errors are `failed` with a short message |
+| 6 | Limits | Stop after 2,000 pages/chapters or 2,000,000 stored characters and set `truncated`. Job expires in 180 seconds, retries twice with backoff, concurrency 1. `singletonKey` is the document id so a replacement does not stack |
+| 7 | UI | Status under the PDF/EPUB heading: extracting, ready (page or chapter count, plus truncated), empty, or failed. Poll while pending. The reader still renders the file; this task does not add a text pane or find box |
+| 8 | Docs | `docs/database/content-and-modules.md` and glossary status values, then `npm run docs:sync-schema` |
+
+## Work items
+
+### 1. Schema
+
+- `document_extractions` — one row per document. `document_id` PK, FK → `project_documents.id` ON DELETE CASCADE. `upload_id` (the file this row describes). `status` `pending` \| `ready` \| `empty` \| `failed`. `error_message`, `unit_count` (pages or chapters), `char_count`, `truncated`, `updated_at`.
+- `document_text_spans` — `document_id` FK CASCADE, `ordinal`, `locator` (1-based page or spine index), `label` (page number or chapter title), `text`.
+- Drizzle migration. Do not write extracted text into `project_documents.body`.
+
+### 2. Extractors
+
+- `src/services/documents/extractPdf.ts` — `getTextContent` per page, join items with spaces, skip empty pages’ text but still count the page. All-empty → `empty`.
+- `src/services/documents/extractEpub.ts` — spine order, strip tags and decode entities, skip non-content docs. All-empty → `empty`.
+- Shared result: `{ status: "ready" \| "empty", spans, unitCount, charCount, truncated, errorMessage? }`. Thrown errors become `failed` in the job.
+
+### 3. Job
+
+- Register `document-extract-text` before the queue starts (`registerJob`). Handler loads the document and upload bytes from `UPLOAD_DIR`, replaces spans in a transaction, writes the extraction row.
+- Create and upload-replacement paths set `pending`, delete prior spans, then `enqueue` with `singletonKey` = document id.
+- Startup sweep covers documents uploaded before this feature.
+
+### 4. API
+
+- Document list and detail include `extraction: { status, errorMessage, unitCount, charCount, truncated } | null` (`null` for markdown).
+- `GET /api/v1/projects/:projectId/documents/:docId/text?locator=N` returns that page or chapter’s spans (citation). Same project access check as the document.
+
+### 5. UI
+
+- Binary document header in `ProjectDetailPage` shows the status line and refetches while `pending`.
+
+### 6. Tests
+
+No live Postgres.
+
+- A small PDF fixture yields text on the expected page.
+- A small EPUB fixture yields chapter text in spine order.
+- A PDF with no text layer maps to `empty`, not `failed`.
+- Over-limit input sets `truncated` and stops.
+
+## Out of scope
+
+- OCR and image-only recovery.
+- Full-text index, embeddings, chunking, and replacing ILIKE search (T0208).
+- In-reader find, a text preview pane, or assistant context that pastes the extracted body (later AI tasks).
+- Markdown documents, images, and canvases.
+
+## Acceptance
+
+- Uploading or replacing a PDF enqueues extraction. After the job, that page’s text is returned by `?locator=`.
+- A scanned PDF shows the no-text-layer note on the document and does not sit in `failed`.
+- A failed extract shows its message on the document. A replacement clears the old spans and runs again.
+- Existing PDF and EPUB documents are picked up by the startup sweep.

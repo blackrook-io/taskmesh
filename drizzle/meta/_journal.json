@@ -449,6 +449,13 @@
       "when": 1791816826660,
       "tag": "0063_faulty_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1791817799875,
+      "tag": "0064_furry_hammerhead",
+      "breakpoints": true
     }
   ]
 }

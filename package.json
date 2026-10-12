@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.67.0",
+  "version": "0.68.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -35,6 +35,7 @@
     "multer": "^2.4.0",
     "openid-client": "^6.8.8",
     "otpauth": "^9.5.2",
+    "pdfjs-dist": "^6.3.289",
     "pg": "^8.13.1",
     "pg-boss": "^10.4.2",
     "zod": "^4.4.3"
