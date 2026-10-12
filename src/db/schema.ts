@@ -243,6 +243,11 @@ export const users = pgTable("users", {
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   /** Last API-key usage — written when API keys exist. */
   lastApiAt: timestamp("last_api_at", { withTimezone: true }),
+  /**
+   * User opt-in for Tier 1 auto-apply (T0186). Default off.
+   * Ignored when the Administrator ceiling has `tier1Enabled` false.
+   */
+  aiTier1OptIn: boolean("ai_tier1_opt_in").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -970,7 +975,7 @@ export const aiAuditLog = pgTable(
     provider: text("provider"),
     model: text("model"),
     tool: text("tool"),
-    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode | route */
+    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode | route | undo */
     action: text("action").notNull(),
     entityType: text("entity_type"),
     entityId: integer("entity_id"),
@@ -998,7 +1003,7 @@ export const aiAuditLog = pgTable(
     ),
     actionCheck: check(
       "ai_audit_log_action_chk",
-      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route')`,
+      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route', 'undo')`,
     ),
     promptIdCheck: check(
       "ai_audit_log_prompt_id_chk",
@@ -1015,6 +1020,46 @@ export const aiAuditLog = pgTable(
     promptSetCheck: check(
       "ai_audit_log_prompt_set_chk",
       sql`(${t.promptId} is null and ${t.promptVersion} is null and ${t.promptRef} is null) or (${t.promptId} is not null and ${t.promptVersion} is not null and ${t.promptRef} is not null and (${t.promptRef} = ${t.promptId} || '@' || ${t.promptVersion}::text or ${t.promptRef} like ${t.promptId} || '@' || ${t.promptVersion}::text || '/%' or ${t.promptRef} like ${t.promptId} || '@' || ${t.promptVersion}::text || '+%'))`,
+    ),
+  }),
+);
+
+/**
+ * Inverse of a Tier 1 auto-apply (T0186).
+ * `inverse` holds ids and a comment body hash, not prompt or record text.
+ */
+export const aiUndoJournal = pgTable(
+  "ai_undo_journal",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    auditId: integer("audit_id").references(() => aiAuditLog.id, { onDelete: "set null" }),
+    /** tag | link | comment. A task dependency is stored as link. */
+    action: text("action").notNull(),
+    entityType: text("entity_type"),
+    entityId: integer("entity_id"),
+    summary: text("summary").notNull(),
+    inverse: jsonb("inverse").notNull(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    /** applied | undone | skipped */
+    status: text("status").notNull().default("applied"),
+  },
+  (t) => ({
+    userAppliedIdx: index("ai_undo_journal_user_applied_idx").on(t.userId, t.appliedAt),
+    actionCheck: check(
+      "ai_undo_journal_action_chk",
+      sql`${t.action} in ('tag', 'link', 'comment')`,
+    ),
+    statusCheck: check(
+      "ai_undo_journal_status_chk",
+      sql`${t.status} in ('applied', 'undone', 'skipped')`,
+    ),
+    summaryCheck: check(
+      "ai_undo_journal_summary_chk",
+      sql`char_length(${t.summary}) between 1 and 500`,
     ),
   }),
 );

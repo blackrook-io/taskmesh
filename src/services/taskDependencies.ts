@@ -116,7 +116,7 @@ async function recordDepChange(
 }
 
 export type AddDependencyResult =
-  | { ok: true; dependsOn: TaskDepSummary[]; requiredBy: TaskDepSummary[] }
+  | { ok: true; created: boolean; dependsOn: TaskDepSummary[]; requiredBy: TaskDepSummary[] }
   | { ok: false; code: string; message: string };
 
 export async function addDependency(
@@ -170,6 +170,7 @@ export async function addDependency(
   if (existing) {
     return {
       ok: true,
+      created: false,
       dependsOn: await listDependsOn(db, taskId),
       requiredBy: await listRequiredBy(db, taskId),
     };
@@ -198,6 +199,7 @@ export async function addDependency(
 
   return {
     ok: true,
+    created: true,
     dependsOn: await listDependsOn(db, taskId),
     requiredBy: await listRequiredBy(db, taskId),
   };

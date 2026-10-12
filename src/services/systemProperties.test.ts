@@ -29,6 +29,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     aiWebFetch: false,
     aiProjectAccessDefault: "full",
     aiPermissionTiers: defaultStoredAiPermissionTiers(),
+    aiUndoWindowDays: 7,
     aiKeyMode: "instance_only",
     aiFeatureRoutes: { features: {}, profiles: [] },
     updatedAt: null,

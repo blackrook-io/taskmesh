@@ -1,0 +1,87 @@
+# T0186 — AI auto-apply with Undo journal (Tier 1)
+
+**Task:** T0186 (id 201) — AI: auto-apply with Undo journal (Tier 1)
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0192 Guardrails and governance (group); design decisions in epic T0177
+**Depends on:** T0185 (complete)
+**Required by:** T0199 Auto-tagging (Draft; stays out of this pass)
+**Branch (after approval):** `T0186-auto-apply-undo`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for the journal table and an `undo` audit action)
+
+## Size / dependencies
+
+One feature: when a chat turn’s change plan is Tier 1, apply those operations, store the inverse, show a toast, and list them on a per-user activity page with Undo. Depends-on T0185 is complete. T0187 (Tier 2/3 review UX), T0189 (admin panel), and T0190 (full user AI settings) stay out. No split.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | When auto-apply runs | Only when the **whole change plan** classifies as Tier 1. A mixed turn (any Tier 2/3 step, blast-radius escalation, another user’s record, or missing opt-in) keeps today’s proposal cards and applies nothing. Tier 0 stays silent |
+| 2 | Opt-in | `tier1OptIn` stays default **false**. This task stores it on the user and adds one checkbox on the existing Assistant settings page so the flow can be turned on and QA’d. T0190 still owns the matrix, locks, budgets, and the rest of that page; it keeps this checkbox |
+| 3 | Operations | Tag add, manual link add, comment add, and a task-dependency add (already classified as `link`). Creates, updates, and deletes never auto-apply |
+| 4 | Already present | A tag, link, or dependency that already exists is not journaled. Undo must not remove something the user had before this apply |
+| 5 | Inverse | Tag → delete that tagging row (leave the tag name). Link → delete that link row. Comment → delete that activity row. Dependency → remove that edge. New tag vocabulary rows are left in place |
+| 6 | Journal | New `ai_undo_journal` rows: user, action, entity, short summary, inverse payload (ids only), a conflict fingerprint, `appliedAt`, `undoneAt`. No prompt text and no full record bodies |
+| 7 | Window | System property `ai_undo_window_days`, default **7**. The feed lists rows inside the window. Undo outside the window is rejected. T0189 will edit the property later; this task seeds and reads it |
+| 8 | Conflict | Before undo, compare the fingerprint. Tag/link/dependency missing, or a comment edited or deleted, is a conflict. The dialog shows what changed and offers **Undo anyway** (perform the inverse if the target still exists) or **Skip** (leave the journal row, do not change the record). A target that is already gone can only be skipped |
+| 9 | Audit | Each auto-apply writes an allow row for `tag`, `link`, or `comment` (same as a confirmed apply). Each undo writes action `undo` (check constraint change). Deny/skip does not invent a second apply |
+| 10 | Toast | A small toast after each auto-apply: what happened, plus Undo. Undo from the toast uses the same API as the feed |
+| 11 | Feed | New page at `/settings/ai-activity`, linked from Assistant settings. Per signed-in user only. Each row: time, summary, Undo or Undone. Conflict uses the dialog in decision 8 |
+| 12 | Progress notes | No progress-note record or writer exists. Deferred to **T0330** (Draft, Depends on T0186). This pass restores tags, links, comments, and task dependencies |
+
+## Work items
+
+### 1. Schema
+
+- `ai_undo_journal` as above, indexed by `(user_id, applied_at)`.
+- Extend `ai_audit_log` action check with `undo`.
+- User boolean `ai_tier1_opt_in` default false.
+- Seed `ai_undo_window_days` = 7 on `system_properties`.
+- Update `docs/database/` and run `npm run docs:sync-schema`.
+
+### 2. Apply path
+
+In the assistant chat turn, after `classifyChangePlan`:
+
+- Plan tier 1 and the user opted in (and `tier1Enabled`): run the existing apply functions for each proposal, journal only newly created rows, audit each apply, emit an SSE `applied` event (journal id + summary) instead of a pending proposal card.
+- Otherwise: current proposal SSE, unchanged.
+
+`POST /api/v1/assistant/proposals/apply` stays the confirm path for Tier 2. It does not journal Tier 2 applies.
+
+### 3. Undo API
+
+- `GET /api/v1/ai/activity` — current user’s journal inside the window.
+- `POST /api/v1/ai/activity/:id/undo` — body `{ force?: boolean }`. Conflict without `force` returns 409 and a short description of what changed. `force` is Undo anyway. Expired, another user’s row, or an already-undone row is rejected.
+- Opt-in: `PATCH` the current user’s `aiTier1OptIn` from the settings checkbox. The server still refuses Tier 1 when the Administrator ceiling has `tier1Enabled: false`.
+
+### 4. UI
+
+- Toast host for `applied` events, with Undo.
+- `/settings/ai-activity` feed and conflict dialog.
+- Assistant settings: Tier 1 opt-in checkbox and a link to the feed.
+
+### 5. Tests
+
+- Plan tier 1 + opt-in journals a new tag and does not journal a duplicate tag.
+- Plan tier 2 (no opt-in, or a create mixed in) does not journal.
+- Undo removes the tagging, link, comment, or dependency created by that row.
+- Edited comment → 409; `force` deletes it; missing target → skip only.
+- Undo past the window is rejected.
+- Undo writes an `undo` audit row.
+
+## Out of scope
+
+- Tier 2/3 review screen (T0187).
+- Administrator editor for the window and tier matrix (T0189).
+- User policy matrix, locks, budgets (T0190).
+- Auto-tagging pipeline (T0199).
+- Progress-note undo (T0330, Draft, Depends on T0186).
+- Undo for creates, field updates, or deletes.
+
+## QA checklist (after implementation)
+
+1. With Tier 1 opt-in off, a chat that proposes a tag still shows a pending card and does not change the record.
+2. Turn opt-in on. Ask for a tag, a link, and a comment on a record you can edit. Each applies immediately, a toast appears, and the record shows the change.
+3. Undo from the toast restores that one change. The AI activity page shows the row as undone.
+4. Apply a comment, edit the comment text, then Undo from the activity page. The dialog names the edit. Skip leaves the edit. Undo anyway removes the comment.
+5. A turn that also creates a task does not auto-apply the tag in that same turn.

@@ -1,5 +1,7 @@
+import { eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
+import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { sendMutation } from "../../lib/mutationResult.js";
 import { applyAssistantProposal } from "./assistantApply.js";
@@ -21,6 +23,11 @@ import {
   operationFromProposal,
   resolveAiPermissionSettings,
 } from "../../services/assistant/aiTiers.js";
+import {
+  insertUndoJournal,
+  journalDraftFromMutation,
+  shouldAutoApplyTier1,
+} from "../../services/assistant/aiUndo.js";
 import { AiFeedbackError, recordAiFeedback, AI_FEEDBACK_KINDS } from "../../services/assistant/aiFeedback.js";
 
 export const assistantRouter = Router();
@@ -108,6 +115,63 @@ assistantRouter.post("/proposals/apply", async (req, res) => {
   }
 });
 
+const tier1Body = z.object({ optIn: z.boolean() });
+
+assistantRouter.patch("/tier1-opt-in", async (req, res) => {
+  try {
+    const parsed = tier1Body.parse(req.body ?? {});
+    const actorUserId = await getCurrentUserId(db);
+    await db
+      .update(schema.users)
+      .set({ aiTier1OptIn: parsed.optIn, updatedAt: new Date() })
+      .where(eq(schema.users.id, actorUserId));
+    const props = await getSystemProperties(db);
+    res.json({
+      data: { optIn: parsed.optIn, tier1Enabled: props.aiPermissionTiers.tier1Enabled },
+    });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+async function autoApplyProposal(
+  proposal: AssistantProposal,
+  actorUserId: number,
+  writeEvent: (event: string, data: unknown) => void,
+): Promise<void> {
+  try {
+    const outcome = await applyAssistantProposal({ body: proposal, actorId: actorUserId });
+    if (outcome.kind === "denied") {
+      writeEvent("apply_failed", { summary: proposal.summary, message: outcome.decision.reason });
+      return;
+    }
+    if (!outcome.result.ok) {
+      writeEvent("apply_failed", { summary: proposal.summary, message: outcome.result.message });
+      return;
+    }
+    const draft = journalDraftFromMutation({
+      policyAction: proposal.policyAction,
+      path: proposal.path,
+      entityType: proposal.entityType,
+      entityId: proposal.entityId ?? null,
+      summary: proposal.summary,
+      result: outcome.result,
+    });
+    if (!draft) return;
+    const row = await insertUndoJournal(db, {
+      ...draft,
+      userId: actorUserId,
+      auditId: outcome.auditId,
+    });
+    writeEvent("applied", { journalId: row.id, summary: row.summary });
+  } catch (err) {
+    writeEvent("apply_failed", {
+      summary: proposal.summary,
+      message: err instanceof Error ? err.message : "Could not apply this change",
+    });
+  }
+}
+
 assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
   try {
     const actorUserId = await getCurrentUserId(db);
@@ -151,7 +215,13 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
     });
 
     const isAdministrator = await userHasAdministrator(db, actorUserId);
-    const tierSettings = resolveAiPermissionSettings(props.aiPermissionTiers);
+    const [actor] = await db
+      .select({ aiTier1OptIn: schema.users.aiTier1OptIn })
+      .from(schema.users)
+      .where(eq(schema.users.id, actorUserId));
+    const tierSettings = resolveAiPermissionSettings(props.aiPermissionTiers, {
+      tier1OptIn: actor?.aiTier1OptIn === true,
+    });
     const proposals: AssistantProposal[] = [];
 
     await runConfiguredAssistant({
@@ -165,18 +235,26 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
         onTool: (info) => writeEvent("tool", info),
         onProposal: (proposal) => {
           proposals.push(proposal);
-          const classified = classifyOperation(
-            operationFromProposal(proposal, actorUserId),
-            tierSettings,
-          );
-          writeEvent("proposal", { ...proposal, tier: classified.tier });
         },
         onDelta: (text) => writeEvent("delta", { text }),
-        onDone: (info) => {
+        onDone: async (info) => {
           const plan = classifyChangePlan(
             proposals.map((proposal) => operationFromProposal(proposal, actorUserId)),
             tierSettings,
           );
+          if (shouldAutoApplyTier1(plan.tier, tierSettings)) {
+            for (const proposal of proposals) {
+              await autoApplyProposal(proposal, actorUserId, writeEvent);
+            }
+          } else {
+            for (const proposal of proposals) {
+              const classified = classifyOperation(
+                operationFromProposal(proposal, actorUserId),
+                tierSettings,
+              );
+              writeEvent("proposal", { ...proposal, tier: classified.tier });
+            }
+          }
           writeEvent("done", {
             planTier: plan.tier,
             planEscalations: plan.escalations,

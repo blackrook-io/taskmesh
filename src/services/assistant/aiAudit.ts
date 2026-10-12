@@ -2,7 +2,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import type { AiAction } from "./aiPolicy.js";
 
-export type AiAuditAction = AiAction | "respond" | "key_mode" | "route";
+export type AiAuditAction = AiAction | "respond" | "key_mode" | "route" | "undo";
 
 export type AiAuditInput = {
   userId?: number | null;

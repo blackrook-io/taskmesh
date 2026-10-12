@@ -1,14 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAssistantStatus } from "../api/assistant";
+import { patchTier1OptIn } from "../api/aiActivity";
+import { useSettings } from "../lib/settings";
 
 type Props = {
   embedded?: boolean;
 };
 
 export function AssistantSettingsPage({ embedded = false }: Props) {
+  const queryClient = useQueryClient();
+  const { setSection } = useSettings();
   const statusQuery = useQuery({
     queryKey: ["assistant-status"],
     queryFn: fetchAssistantStatus,
+  });
+  const optIn = useMutation({
+    mutationFn: patchTier1OptIn,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["assistant-status"] });
+    },
   });
 
   const data = statusQuery.data;
@@ -58,6 +68,38 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
             ))}
           </ul>
         ) : null}
+      </section>
+
+      <section className="card" style={{ marginTop: "1.25rem" }}>
+        <h2>Automatic changes</h2>
+        <label className="appearance-separate">
+          <input
+            type="checkbox"
+            checked={optIn.isPending ? optIn.variables === true : data?.tier1OptIn === true}
+            disabled={optIn.isPending || statusQuery.isLoading}
+            onChange={(event) => {
+              optIn.mutate(event.target.checked);
+            }}
+          />
+          <span>Apply small reversible changes automatically, with Undo</span>
+        </label>
+        {data && data.tier1Enabled === false ? (
+          <p className="muted">
+            Your administrator has turned this off. The preference is saved and takes effect when
+            they turn it back on.
+          </p>
+        ) : (
+          <p className="muted">
+            Tags, links, comments, and task dependencies apply as soon as a chat turn is only those
+            changes. Creates and edits still wait for you.
+          </p>
+        )}
+        {optIn.isError ? <p role="alert">{(optIn.error as Error).message}</p> : null}
+        <p>
+          <button type="button" className="btn small" onClick={() => setSection("ai-activity")}>
+            AI activity and Undo
+          </button>
+        </p>
       </section>
 
       {data && !data.enabled ? (

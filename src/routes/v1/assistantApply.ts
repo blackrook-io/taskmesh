@@ -42,7 +42,7 @@ export type AssistantProposalInput = z.infer<typeof proposalBody>;
 
 export type ApplyOutcome =
   | { kind: "denied"; decision: PolicyDecision }
-  | { kind: "result"; result: MutationResult };
+  | { kind: "result"; result: MutationResult; auditId: number | null };
 
 type ApplyTarget =
   | { kind: "idea-create" }
@@ -326,7 +326,7 @@ export async function applyAssistantProposal(args: {
 
   try {
     const result = await runTarget(target, fields, args.actorId, "ai");
-    await writeAiAudit({
+    const auditId = await writeAiAudit({
       ...auditBase,
       decision: "allow",
       reason: decision.reason,
@@ -344,7 +344,7 @@ export async function applyAssistantProposal(args: {
         if (!(err instanceof AiFeedbackError)) throw err;
       }
     }
-    return { kind: "result", result };
+    return { kind: "result", result, auditId };
   } catch (err) {
     await writeAiAudit({
       ...auditBase,

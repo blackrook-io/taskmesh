@@ -22,7 +22,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Non-main** (inventory + minimal on diagrams):
 
-`users`, `sessions`, `mfa_login_challenges`, `mfa_trusted_devices`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `ai_instance_credentials`, `user_ai_credentials`, `user_ai_route_prefs`, `ai_output_feedback`, `db_stats_snapshots`
+`users`, `sessions`, `mfa_login_challenges`, `mfa_trusted_devices`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `ai_undo_journal`, `ai_instance_credentials`, `user_ai_credentials`, `user_ai_route_prefs`, `ai_output_feedback`, `db_stats_snapshots`
 
 ## Conceptual model
 
@@ -77,6 +77,8 @@ erDiagram
   api_keys ||--o{ api_request_logs : "optional"
   users ||--o{ api_request_logs : "optional"
   users ||--o{ ai_audit_log : "assistant calls"
+  users ||--o{ ai_undo_journal : "automatic changes"
+  ai_audit_log ||--o{ ai_undo_journal : "optional"
   users ||--o{ ai_instance_credentials : "updated by"
   users ||--o{ user_ai_credentials : owns
   users ||--o{ user_ai_route_prefs : "model choice"
@@ -115,6 +117,9 @@ erDiagram
   ai_audit_log {
     string action
   }
+  ai_undo_journal {
+    string status
+  }
   ai_instance_credentials {
     string plugin_id
   }
@@ -131,7 +136,7 @@ erDiagram
   }
 ```
 
-Non-main entities (`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `ai_instance_credentials`, `user_ai_credentials`, `user_ai_route_prefs`, `ai_output_feedback`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
+Non-main entities (`users`, `sessions`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `ai_undo_journal`, `ai_instance_credentials`, `user_ai_credentials`, `user_ai_route_prefs`, `ai_output_feedback`, `db_stats_snapshots`) are shown without full attribute catalogs. See [platform.md](platform.md).
 
 ## Domain pages
 

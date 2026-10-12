@@ -8567,3 +8567,73 @@ a:focus-visible {
   font-size: 0.75rem;
   color: var(--text);
 }
+
+.ai-toast-host {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(24rem, calc(100vw - 2rem));
+}
+
+.ai-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-chip, 8px);
+  background: var(--canvas-bg, #1c1f24);
+  color: var(--text, #e8eee8);
+  border: 1px solid var(--accent, #7dd87d);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.ai-toast p {
+  margin: 0;
+}
+
+.ai-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ai-activity-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ai-undo-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 1rem;
+}
+
+.ai-undo-dialog {
+  width: min(28rem, 100%);
+  padding: 1.25rem;
+  border-radius: 12px;
+  background: var(--canvas-bg, #1c1f24);
+  color: var(--text, #e8eee8);
+  border: 1px solid var(--accent, #7dd87d);
+}
+
+.ai-undo-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
