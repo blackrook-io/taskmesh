@@ -154,6 +154,7 @@ Exact FK lists are on the domain pages.
   - `ai_key_mode` — `instance_only` \| `user_only` \| `user_preferred_instance_fallback` (default `instance_only`, T0182). Controls who may spend an instance provider key. Missing or invalid values fall back to `instance_only`. The billing-risk acknowledgement is an `ai_audit_log` row, not a value on this key.
   - `ai_permission_tiers` — jsonb permission ceiling (T0185): `matrix` of action (or `action:entityType`) → tier 0–3, `tier1Enabled` (default true), `maxRecords` (default **5**), `maxProjects` (default **2**). Missing or invalid JSON uses those defaults. User opt-in is not stored on this key.
   - `ai_project_access_default` — `full` \| `read_only` \| `excluded` (default `full`, T0184). Instance ceiling for `projects.ai_access`. Projects can only narrow it. Missing or invalid values fall back to `full`.
+  - `ai_feature_routes` — jsonb (T0205): `features` maps a feature id to an optional `{ pluginId, model }` default and an ordered `fallbacks` list; `profiles` is a list of per-model overrides (`tools`, `embeddings`, `longContext`, `size`). Missing or invalid JSON is treated as empty. API keys are not stored here.
 - **`mesh_layouts.positions`** — pinned Mesh node key → `{ x, y }` (T0165). **`mesh_layouts.viewport`** — `{ x, y, zoom }` or empty. `view` is `focus` \| `plan`.
 
 ## Uploads vs database

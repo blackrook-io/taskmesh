@@ -11,6 +11,10 @@ import {
 } from "../lib/meshAppearance.js";
 import { DEFAULT_THEME, isThemeId, THEME_IDS, type ThemeId } from "../lib/theme.js";
 import {
+  normalizeAiFeatureRoutes,
+  type AiFeatureRoutesFile,
+} from "./assistant/aiFeatureRoutes.js";
+import {
   normalizeAiProviders,
   OPENAI_KEY_DEPRECATION_LOG,
   openAiPluginSeed,
@@ -61,6 +65,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "ai_permission_tiers",
   "ai_project_access_default",
   "ai_key_mode",
+  "ai_feature_routes",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -87,6 +92,8 @@ export type SystemProperties = {
   aiPermissionTiers: StoredAiPermissionTiers;
   /** Who may spend an instance provider key. Changed only through the billing-risk route. */
   aiKeyMode: AiKeyMode;
+  /** Per-feature model defaults, fallbacks, and model-profile overrides (T0205). */
+  aiFeatureRoutes: AiFeatureRoutesFile;
   updatedAt: string | null;
 };
 
@@ -119,6 +126,7 @@ const DEFAULTS: {
   ai_permission_tiers: StoredAiPermissionTiers;
   ai_project_access_default: AiAccess;
   ai_key_mode: AiKeyMode;
+  ai_feature_routes: AiFeatureRoutesFile;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -136,6 +144,7 @@ const DEFAULTS: {
   ai_permission_tiers: defaultStoredAiPermissionTiers(),
   ai_project_access_default: "full",
   ai_key_mode: "instance_only",
+  ai_feature_routes: { features: {}, profiles: [] },
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -292,6 +301,9 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
       map.get("ai_permission_tiers")?.value ?? DEFAULTS.ai_permission_tiers,
     ),
     aiKeyMode: parseAiKeyMode(map.get("ai_key_mode")?.value ?? DEFAULTS.ai_key_mode),
+    aiFeatureRoutes: normalizeAiFeatureRoutes(
+      map.get("ai_feature_routes")?.value ?? DEFAULTS.ai_feature_routes,
+    ),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);

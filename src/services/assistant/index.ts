@@ -4,18 +4,15 @@ import type * as schema from "../../db/schema.js";
 import { describeAllowedPolicy } from "./aiPolicy.js";
 import { redactSecrets } from "./aiMinimize.js";
 import { getSystemProperties } from "../systemProperties.js";
-import {
-  configuredChatModel,
-  providerEntryConfigured,
-  resolvePluginApiKey,
-  selectChatPlugin,
-  type AiProvidersFile,
-} from "./aiProviderConfig.js";
+import { providerEntryConfigured } from "./aiProviderConfig.js";
 import type { AiKeyMode } from "./aiKeyMode.js";
 import { loadResolvedKeys } from "./aiUserKeys.js";
 import { assertLocalProviderBaseUrl, assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
-import { getAiProvider, loadedAiProviders } from "./providerLoader.js";
+import { loadedAiProviders } from "./providerLoader.js";
 import { runAssistantWithTools } from "./runWithTools.js";
+import { auditRouteSkips, resolveFeatureRoute } from "./aiRouting.js";
+import { followRouteAttempts } from "./aiFeatureRoutes.js";
+import { writeAiAudit } from "./aiAudit.js";
 import type { ChatMessage } from "./types.js";
 
 export type { ChatMessage } from "./types.js";
@@ -64,52 +61,20 @@ export type AssistantSession = {
   model: string;
 };
 
-function configValid(plugin: AiProviderPlugin, config: Record<string, unknown>): boolean {
-  return plugin.configSchema.safeParse(config).success;
-}
-
 export async function resolveAssistantSession(
   db: Db,
   userId: number,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<AssistantSession | null> {
-  const props = await getSystemProperties(db);
-  const keys = await loadResolvedKeys(db, userId, env);
-  return sessionFrom(props.aiProviders, (pluginId) => keys.resolve(pluginId));
-}
-
-export function sessionFrom(
-  file: AiProvidersFile,
-  resolveKey: (pluginId: string) => { apiKey: string | null; defaultModel: string | null } = (pluginId) => ({
-    apiKey: resolvePluginApiKey(pluginId),
-    defaultModel: null,
-  }),
-): AssistantSession | null {
-  const plugins = loadedAiProviders();
-  const id = selectChatPlugin({
-    plugins: plugins.map((plugin) => ({
-      id: plugin.id,
-      chat: plugin.capabilities.chat,
-      local: plugin.capabilities.local,
-    })),
-    file,
-    hasKey: (pluginId) => Boolean(resolveKey(pluginId).apiKey),
-    configValid: (pluginId, config) => {
-      const plugin = getAiProvider(pluginId);
-      return plugin ? configValid(plugin, config) : false;
-    },
-  });
-  if (!id) return null;
-  const plugin = getAiProvider(id);
-  const entry = file[id];
-  if (!plugin || !entry) return null;
-  const resolved = resolveKey(id);
-  const apiKey = plugin.capabilities.local ? null : resolved.apiKey;
-  if (!plugin.capabilities.local && !apiKey) return null;
-  const parsed = plugin.configSchema.safeParse(entry.config);
-  if (!parsed.success) return null;
-  const model = resolved.defaultModel ?? configuredChatModel(parsed.data) ?? "gpt-4.1-mini";
-  return { plugin, config: parsed.data, apiKey, model };
+  const route = await resolveFeatureRoute(db, { userId, env });
+  const attempt = route.attempts[0];
+  if (!attempt) return null;
+  return {
+    plugin: attempt.plugin,
+    config: attempt.config,
+    apiKey: attempt.apiKey,
+    model: attempt.model,
+  };
 }
 
 export type AssistantPluginStatus = {
@@ -135,7 +100,7 @@ export async function assistantStatus(
 }> {
   const props = await getSystemProperties(db);
   const keys = await loadResolvedKeys(db, userId, env);
-  const session = sessionFrom(props.aiProviders, (pluginId) => keys.resolve(pluginId));
+  const session = await resolveAssistantSession(db, userId, env);
   const plugins = loadedAiProviders().map((plugin) => {
     const entry = props.aiProviders[plugin.id];
     return {
@@ -198,24 +163,54 @@ export async function runConfiguredAssistant(args: {
   handlers: Parameters<typeof runAssistantWithTools>[0]["handlers"];
   actorUserId: number;
   isAdministrator: boolean;
+  localOnly?: boolean;
 }): Promise<boolean> {
-  const session = await resolveAssistantSession(args.db, args.actorUserId);
-  if (!session) return false;
   const props = await getSystemProperties(args.db);
-  await runAssistantWithTools({
-    plugin: session.plugin,
-    apiKey: session.apiKey,
-    config: session.config,
-    messages: args.messages,
-    model: args.model?.trim() || session.model,
-    signal: args.signal,
-    handlers: args.handlers,
-    actorUserId: args.actorUserId,
-    isAdministrator: args.isAdministrator,
-    assertBaseUrl: session.plugin.capabilities.local
-      ? assertLocalProviderBaseUrl
-      : assertPublicProviderBaseUrl,
-    webFetchEnabled: props.aiWebFetch,
+  const route = await resolveFeatureRoute(args.db, {
+    userId: args.actorUserId,
+    localOnly: args.localOnly,
+    requestedModel: args.model,
   });
+  if (route.attempts.length === 0) return false;
+  await auditRouteSkips(route.skipped, { userId: args.actorUserId, feature: "assistant" });
+  try {
+    await followRouteAttempts({
+      attempts: route.attempts,
+      onDeny: async (attempt, code) => {
+        await writeAiAudit({
+          userId: args.actorUserId,
+          feature: "assistant",
+          provider: attempt.pluginId,
+          model: attempt.model,
+          action: "route",
+          decision: "deny",
+          reason: code,
+          tier: 0,
+        });
+      },
+      call: async (attempt) => {
+        await runAssistantWithTools({
+          plugin: attempt.plugin,
+          apiKey: attempt.apiKey,
+          config: attempt.config,
+          messages: args.messages,
+          model: attempt.model,
+          signal: args.signal,
+          handlers: args.handlers,
+          actorUserId: args.actorUserId,
+          isAdministrator: args.isAdministrator,
+          assertBaseUrl: attempt.plugin.capabilities.local
+            ? assertLocalProviderBaseUrl
+            : assertPublicProviderBaseUrl,
+          webFetchEnabled: props.aiWebFetch,
+          rethrowFirstProviderError: true,
+          routeReason: attempt.reason,
+        });
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Assistant failed";
+    args.handlers.onError(message);
+  }
   return true;
 }

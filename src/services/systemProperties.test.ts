@@ -30,6 +30,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     aiProjectAccessDefault: "full",
     aiPermissionTiers: defaultStoredAiPermissionTiers(),
     aiKeyMode: "instance_only",
+    aiFeatureRoutes: { features: {}, profiles: [] },
     updatedAt: null,
     ...overrides,
   };

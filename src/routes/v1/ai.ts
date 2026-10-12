@@ -6,11 +6,17 @@ import { redactSecret } from "../../services/assistant/aiKeyMode.js";
 import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
 import { listAiCapabilities } from "../../services/assistant/aiCapabilities.js";
 import { listUserCredentials, removeUserKey, replaceUserKey } from "../../services/assistant/aiUserKeys.js";
+import { AiRoutingError, listAiRouting, setUserRoutePreference } from "../../services/assistant/aiRouting.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 export const aiRouter = Router();
 
 const pluginIdSchema = z.string().regex(/^[a-z0-9-]+$/);
+const featureIdSchema = z.string().regex(/^[a-z0-9_]+$/);
+const routePinSchema = z.object({
+  pluginId: z.string().regex(/^[a-z0-9-]+$/).nullable(),
+  model: z.string().trim().min(1).max(120).nullable(),
+});
 const replaceKeySchema = z.object({
   apiKey: z.string().trim().min(1).max(2000),
   defaultModel: z.string().max(120).nullable().optional(),
@@ -92,5 +98,41 @@ aiRouter.get("/capabilities", async (req, res) => {
     res.json({ data: await listAiCapabilities(db, { userId, projectId }) });
   } catch (err) {
     sendCredentialsError(res, err);
+  }
+});
+
+aiRouter.get("/routing", async (_req, res) => {
+  try {
+    const userId = await getCurrentUserId(db);
+    res.json({ data: await listAiRouting(db, userId) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.put("/routing/:feature", async (req, res) => {
+  try {
+    const feature = featureIdSchema.parse(req.params.feature);
+    const body = routePinSchema.parse(req.body ?? {});
+    const clearing = body.pluginId == null && body.model == null;
+    const setting = body.pluginId != null && body.model != null;
+    if (!clearing && !setting) {
+      sendError(res, 400, "validation_error", "Send both pluginId and model, or null for both.");
+      return;
+    }
+    res.locals.logMessage = clearing ? `AI route clear ${feature}` : `AI route ${feature} ${body.pluginId}`;
+    const userId = await getCurrentUserId(db);
+    const preference = await setUserRoutePreference(db, {
+      userId,
+      feature,
+      pin: setting ? { pluginId: body.pluginId!, model: body.model! } : null,
+    });
+    res.json({ data: { feature, preference } });
+  } catch (err) {
+    if (err instanceof AiRoutingError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
   }
 });
