@@ -136,7 +136,8 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | `DEV_API_PORT` | DEV API port for `npm run dev` / `dev:web` (default `3001`) |
 | `BACKUP_SCHEDULE_PATH` | Backup schedule JSON path (default `./data/backup-schedule.json`) |
 | `PROD_RELEASE_PATH` | Sidecar JSON with the last production-host deploy stamp (default `./data/prod-release.json`; written by `deploy:prod` on that host) |
-| `OPENAI_API_KEY` | Deprecated. Enables the OpenAI provider plugin on first boot and remains that plugin's key until instance keys exist |
+| `OPENAI_API_KEY` | Deprecated. Enables the OpenAI provider plugin on first boot. A stored instance key is preferred; this variable remains the fallback when no instance key is stored |
+| `AI_CREDENTIALS_KEY` | Encrypts instance provider keys. Minimum 32 characters when set. Unset until an Administrator stores a key |
 | `ANTHROPIC_API_KEY` | Optional. Key for the Anthropic plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
 | `GEMINI_API_KEY` | Optional. Key for the Google Gemini plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
 | `AZURE_OPENAI_API_KEY` | Optional. Key for the Azure OpenAI plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |

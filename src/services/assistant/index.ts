@@ -10,6 +10,7 @@ import {
   selectChatPlugin,
   type AiProvidersFile,
 } from "./aiProviderConfig.js";
+import { loadDecryptedInstanceKeys, listInstancePluginIds } from "./aiInstanceKeys.js";
 import { assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
 import { getAiProvider, loadedAiProviders } from "./providerLoader.js";
 import { runAssistantWithTools } from "./runWithTools.js";
@@ -42,7 +43,7 @@ function systemPrompt(webFetchEnabled: boolean): string {
 }
 
 export const ASSISTANT_UNCONFIGURED =
-  "Assistant is not configured. An Administrator must enable the OpenAI provider, and OPENAI_API_KEY must be set in the server .env (deprecated), then restart.";
+  "Assistant is not configured. An Administrator must enable a chat provider and set an instance key, or the deprecated provider environment variable.";
 
 export type AssistantSession = {
   plugin: AiProviderPlugin;
@@ -57,15 +58,19 @@ function configValid(plugin: AiProviderPlugin, config: Record<string, unknown>):
 
 export async function resolveAssistantSession(db: Db): Promise<AssistantSession | null> {
   const props = await getSystemProperties(db);
-  return sessionFrom(props.aiProviders);
+  const keys = await loadDecryptedInstanceKeys(db);
+  return sessionFrom(props.aiProviders, (pluginId) => keys.get(pluginId) ?? resolvePluginApiKey(pluginId));
 }
 
-export function sessionFrom(file: AiProvidersFile): AssistantSession | null {
+export function sessionFrom(
+  file: AiProvidersFile,
+  resolveKey: (pluginId: string) => string | null = (pluginId) => resolvePluginApiKey(pluginId),
+): AssistantSession | null {
   const plugins = loadedAiProviders();
   const id = selectChatPlugin({
     plugins: plugins.map((plugin) => ({ id: plugin.id, chat: plugin.capabilities.chat })),
     file,
-    hasKey: (pluginId) => Boolean(resolvePluginApiKey(pluginId)),
+    hasKey: (pluginId) => Boolean(resolveKey(pluginId)),
     configValid: (pluginId, config) => {
       const plugin = getAiProvider(pluginId);
       return plugin ? configValid(plugin, config) : false;
@@ -74,7 +79,7 @@ export function sessionFrom(file: AiProvidersFile): AssistantSession | null {
   if (!id) return null;
   const plugin = getAiProvider(id);
   const entry = file[id];
-  const apiKey = resolvePluginApiKey(id);
+  const apiKey = resolveKey(id);
   if (!plugin || !entry || !apiKey) return null;
   const parsed = plugin.configSchema.safeParse(entry.config);
   if (!parsed.success) return null;
@@ -99,14 +104,17 @@ export async function assistantStatus(db: Db): Promise<{
   toolsEnabled: boolean;
 }> {
   const props = await getSystemProperties(db);
-  const session = sessionFrom(props.aiProviders);
+  const instanceIds = await listInstancePluginIds(db);
+  const session = await resolveAssistantSession(db);
   const plugins = loadedAiProviders().map((plugin) => {
     const entry = props.aiProviders[plugin.id];
     return {
       id: plugin.id,
       displayName: plugin.displayName,
       enabled: Boolean(entry?.enabled),
-      configured: Boolean(entry?.enabled && resolvePluginApiKey(plugin.id)),
+      configured: Boolean(
+        entry?.enabled && (instanceIds.has(plugin.id) || resolvePluginApiKey(plugin.id)),
+      ),
       capabilities: plugin.capabilities,
     };
   });
