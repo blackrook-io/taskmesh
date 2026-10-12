@@ -20,7 +20,13 @@ function jsonResponse(status: number, body: unknown): Response {
 
 function authKey(init?: RequestInit): string {
   const headers = new Headers(init?.headers);
-  return headers.get("x-goog-api-key") ?? headers.get("x-api-key") ?? headers.get("authorization") ?? "";
+  return (
+    headers.get("x-goog-api-key") ??
+    headers.get("x-api-key") ??
+    headers.get("api-key") ??
+    headers.get("authorization") ??
+    ""
+  );
 }
 
 function isGemini(init?: RequestInit): boolean {
@@ -29,6 +35,17 @@ function isGemini(init?: RequestInit): boolean {
 
 function isAnthropic(init?: RequestInit): boolean {
   return new Headers(init?.headers).has("x-api-key");
+}
+
+function isAzure(init?: RequestInit): boolean {
+  const headers = new Headers(init?.headers);
+  return headers.has("api-key") && !isGemini(init) && !isAnthropic(init);
+}
+
+function isAzureDeploymentList(url: string, init?: RequestInit): boolean {
+  if (!isAzure(init)) return false;
+  if (url.includes("/chat/completions") || url.includes("/embeddings")) return false;
+  return url.includes("/openai/deployments");
 }
 
 function geminiAskedForTool(raw: string): boolean {
@@ -52,13 +69,15 @@ function geminiChat(tool: boolean): unknown {
 /**
  * Mock models and chat server. OpenAI requests use `Authorization`.
  * Anthropic requests (`x-api-key`) get Messages API JSON.
- * Gemini requests (`x-goog-api-key`) get generateContent JSON. Key suffixes are shared.
+ * Gemini requests (`x-goog-api-key`) get generateContent JSON.
+ * Azure requests (`api-key`) list deployments and otherwise use chat-completions JSON.
+ * Key suffixes are shared.
  */
 export const contractMockFetch: ProviderFetch = async (input, init) => {
   const key = authKey(init);
   const url = String(input);
   if (key.endsWith("offline")) throw new TypeError("fetch failed");
-  if (url.endsWith("/models")) {
+  if (url.endsWith("/models") || isAzureDeploymentList(url, init)) {
     if (key.endsWith("bad")) return jsonResponse(401, { error: { message: "invalid api key" } });
     if (isGemini(init)) {
       return jsonResponse(200, { models: [{ name: `models/${CONTRACT_MODEL_ID}`, displayName: "GPT Test" }] });
@@ -75,6 +94,9 @@ export const contractMockFetch: ProviderFetch = async (input, init) => {
   const raw = typeof init?.body === "string" ? init.body : "{}";
   if (isGemini(init) && url.includes("embed")) {
     return jsonResponse(200, { embeddings: [{ values: [0.1, 0.2] }] });
+  }
+  if (isAzure(init) && url.includes("/embeddings")) {
+    return jsonResponse(200, { data: [{ embedding: [0.1, 0.2], index: 0 }] });
   }
   if (isGemini(init)) return jsonResponse(200, geminiChat(geminiAskedForTool(raw)));
   const body = JSON.parse(raw) as { messages?: Array<{ content?: unknown }> };

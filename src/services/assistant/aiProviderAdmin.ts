@@ -16,6 +16,14 @@ export const aiProviderPatchSchema = z.object({
   config: z.record(z.string(), z.unknown()),
 });
 
+export type AiProviderPublicConfig = {
+  baseUrl: string;
+  defaultModel: string;
+  chatDeployment: string;
+  embeddingsDeployment: string;
+  apiVersion: string;
+};
+
 export type AiProviderAdminRow = {
   id: string;
   displayName: string;
@@ -23,7 +31,7 @@ export type AiProviderAdminRow = {
   enabled: boolean;
   configured: boolean;
   capabilities: AiProviderPlugin["capabilities"];
-  config: { baseUrl: string; defaultModel: string };
+  config: AiProviderPublicConfig;
 };
 
 async function readFile(db: Db): Promise<AiProvidersFile> {
@@ -35,21 +43,23 @@ async function readFile(db: Db): Promise<AiProvidersFile> {
   return normalizeAiProviders(row?.value);
 }
 
-function publicConfig(plugin: AiProviderPlugin, raw: Record<string, unknown> | undefined): {
-  baseUrl: string;
-  defaultModel: string;
-} {
+function stringField(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function publicConfig(plugin: AiProviderPlugin, raw: Record<string, unknown> | undefined): AiProviderPublicConfig {
   const parsed = plugin.configSchema.safeParse(raw ?? {});
-  if (parsed.success && parsed.data && typeof parsed.data === "object") {
-    const data = parsed.data as { baseUrl?: unknown; defaultModel?: unknown };
-    return {
-      baseUrl: typeof data.baseUrl === "string" ? data.baseUrl : "",
-      defaultModel: typeof data.defaultModel === "string" ? data.defaultModel : "",
-    };
-  }
+  const data =
+    parsed.success && parsed.data && typeof parsed.data === "object"
+      ? (parsed.data as Record<string, unknown>)
+      : (raw ?? {});
+  const apiVersion = stringField(data.apiVersion);
   return {
-    baseUrl: typeof raw?.baseUrl === "string" ? raw.baseUrl : "",
-    defaultModel: typeof raw?.defaultModel === "string" ? raw.defaultModel : "",
+    baseUrl: stringField(data.baseUrl),
+    defaultModel: stringField(data.defaultModel),
+    chatDeployment: stringField(data.chatDeployment),
+    embeddingsDeployment: stringField(data.embeddingsDeployment),
+    apiVersion: apiVersion || (plugin.id === "azure-openai" ? "2024-10-21" : ""),
   };
 }
 
@@ -85,7 +95,6 @@ export async function patchAiProvider(
   }
   const parsed = plugin.configSchema.parse(body.config) as {
     baseUrl?: string;
-    defaultModel?: string;
   };
   if (typeof parsed.baseUrl === "string") {
     parsed.baseUrl = await assertPublicProviderBaseUrl(parsed.baseUrl);

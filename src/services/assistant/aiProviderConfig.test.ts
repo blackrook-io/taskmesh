@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  configuredChatModel,
   normalizeAiProviders,
   openAiPluginSeed,
   resolvePluginApiKey,
@@ -87,6 +88,9 @@ describe("ai provider config", () => {
     assert.equal(resolvePluginApiKey("gemini", { GEMINI_API_KEY: " sk-gem " }), "sk-gem");
     assert.equal(resolvePluginApiKey("gemini", { OPENAI_API_KEY: "sk-live" }), null);
     assert.equal(resolvePluginApiKey("openai", { GEMINI_API_KEY: "sk-gem" }), null);
+    assert.equal(resolvePluginApiKey("azure-openai", { AZURE_OPENAI_API_KEY: " azure-key " }), "azure-key");
+    assert.equal(resolvePluginApiKey("azure-openai", { OPENAI_API_KEY: "sk-live" }), null);
+    assert.equal(resolvePluginApiKey("openai", { AZURE_OPENAI_API_KEY: "azure-key" }), null);
   });
 
   it("keeps OpenAI ahead of an enabled Anthropic plugin", () => {
@@ -149,5 +153,46 @@ describe("ai provider config", () => {
       }),
       "anthropic",
     );
+  });
+
+  it("keeps OpenAI ahead of an enabled Azure OpenAI plugin", () => {
+    const file = {
+      "azure-openai": {
+        enabled: true,
+        config: { baseUrl: "https://example.openai.azure.com", chatDeployment: "chat" },
+      },
+      openai: { enabled: true, config: { baseUrl: "https://api.openai.com/v1" } },
+    };
+    assert.equal(
+      selectChatPlugin({
+        plugins: [
+          { id: "azure-openai", chat: true },
+          { id: "openai", chat: true },
+        ],
+        file,
+        hasKey: () => true,
+        configValid: () => true,
+      }),
+      "openai",
+    );
+    assert.equal(
+      selectChatPlugin({
+        plugins: [{ id: "azure-openai", chat: true }],
+        file: { "azure-openai": file["azure-openai"] },
+        hasKey: (id) => id === "azure-openai",
+        configValid: () => true,
+      }),
+      "azure-openai",
+    );
+  });
+
+  it("uses the Azure chat deployment when no default model is set", () => {
+    assert.equal(configuredChatModel({ defaultModel: " gpt-4.1-mini " }), "gpt-4.1-mini");
+    assert.equal(configuredChatModel({ chatDeployment: " my-deploy " }), "my-deploy");
+    assert.equal(
+      configuredChatModel({ defaultModel: "gpt-4.1-mini", chatDeployment: "my-deploy" }),
+      "gpt-4.1-mini",
+    );
+    assert.equal(configuredChatModel({}), null);
   });
 });

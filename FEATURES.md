@@ -103,6 +103,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Administrators enable AI providers from System properties and set each provider's public https address and default model
 - Enable Anthropic for assistant chat. The key stays in the server environment and is not stored in the database
 - Enable Google Gemini for assistant chat and embeddings. The key stays in the server environment and is not stored in the database
+- Enable Azure OpenAI for assistant chat and embeddings. Set the resource endpoint, deployment names, and API version. The key stays in the server environment and is not stored in the database
 - Set a project to full, read-only, or excluded from AI. Owners and managers can only narrow the Administrator default, and an excluded project is never sent to a model
 - Propose creates and edits that apply only after you confirm
 - Ask the assistant about todos, lists, links, tags, comments, task dependencies, and the records around one item. Proposed adds still wait for your confirmation

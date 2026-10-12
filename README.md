@@ -139,6 +139,7 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | `OPENAI_API_KEY` | Deprecated. Enables the OpenAI provider plugin on first boot and remains that plugin's key until instance keys exist |
 | `ANTHROPIC_API_KEY` | Optional. Key for the Anthropic plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
 | `GEMINI_API_KEY` | Optional. Key for the Google Gemini plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
+| `AZURE_OPENAI_API_KEY` | Optional. Key for the Azure OpenAI plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
 | `ASSISTANT_DEFAULT_MODEL` | Default model seeded for the OpenAI plugin (default `gpt-4.1-mini`) |
 
 Back up **Postgres** and the uploads directory together. Commands and scheduling notes are in [INSTALL.md § Backups](INSTALL.md#18-backups).

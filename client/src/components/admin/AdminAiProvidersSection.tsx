@@ -17,10 +17,34 @@ type AiProviderRow = {
   enabled: boolean;
   configured: boolean;
   capabilities: Capabilities;
-  config: { baseUrl: string; defaultModel: string };
+  config: {
+    baseUrl: string;
+    defaultModel: string;
+    chatDeployment: string;
+    embeddingsDeployment: string;
+    apiVersion: string;
+  };
 };
 
-type Draft = { enabled: boolean; baseUrl: string; defaultModel: string };
+type Draft = {
+  enabled: boolean;
+  baseUrl: string;
+  defaultModel: string;
+  chatDeployment: string;
+  embeddingsDeployment: string;
+  apiVersion: string;
+};
+
+function emptyDraft(): Draft {
+  return {
+    enabled: false,
+    baseUrl: "",
+    defaultModel: "",
+    chatDeployment: "",
+    embeddingsDeployment: "",
+    apiVersion: "",
+  };
+}
 
 function capabilityLine(capabilities: Capabilities): string {
   const on = (Object.entries(capabilities) as Array<[keyof Capabilities, boolean]>)
@@ -50,9 +74,13 @@ export function AdminAiProvidersSection() {
       const next: Record<string, Draft> = {};
       for (const plugin of query.data) {
         next[plugin.id] = {
+          ...emptyDraft(),
           enabled: plugin.enabled,
           baseUrl: plugin.config.baseUrl,
           defaultModel: plugin.config.defaultModel,
+          chatDeployment: plugin.config.chatDeployment,
+          embeddingsDeployment: plugin.config.embeddingsDeployment,
+          apiVersion: plugin.config.apiVersion,
         };
       }
       setDrafts(next);
@@ -68,7 +96,15 @@ export function AdminAiProvidersSection() {
         body: JSON.stringify({
           id,
           enabled: draft.enabled,
-          config: { baseUrl: draft.baseUrl, defaultModel: draft.defaultModel },
+          config:
+            id === "azure-openai"
+              ? {
+                  baseUrl: draft.baseUrl,
+                  chatDeployment: draft.chatDeployment,
+                  embeddingsDeployment: draft.embeddingsDeployment,
+                  apiVersion: draft.apiVersion,
+                }
+              : { baseUrl: draft.baseUrl, defaultModel: draft.defaultModel },
         }),
       });
       return res.data;
@@ -95,9 +131,8 @@ export function AdminAiProvidersSection() {
     <section style={{ marginTop: "1.75rem" }}>
       <h2>AI providers</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        Enable a provider and set its public https base URL and default model. API keys are not
-        stored here. The OpenAI plugin still reads <code>OPENAI_API_KEY</code> until instance keys
-        are available.
+        Enable a provider and set its connection settings. API keys are not stored here. The OpenAI
+        plugin still reads <code>OPENAI_API_KEY</code> until instance keys are available.
       </p>
       {query.isLoading ? <p className="muted">Loading…</p> : null}
       {query.isError ? <p role="alert">{(query.error as Error).message}</p> : null}
@@ -122,22 +157,62 @@ export function AdminAiProvidersSection() {
               />
               <span>Enabled</span>
             </label>
-            <label className="field">
-              <span>Base URL</span>
-              <input
-                value={draft.baseUrl}
-                onChange={(e) => update(plugin.id, { baseUrl: e.target.value })}
-                spellCheck={false}
-              />
-            </label>
-            <label className="field">
-              <span>Default model</span>
-              <input
-                value={draft.defaultModel}
-                onChange={(e) => update(plugin.id, { defaultModel: e.target.value })}
-                spellCheck={false}
-              />
-            </label>
+            {plugin.id === "azure-openai" ? (
+              <>
+                <label className="field">
+                  <span>Endpoint</span>
+                  <input
+                    value={draft.baseUrl}
+                    onChange={(e) => update(plugin.id, { baseUrl: e.target.value })}
+                    spellCheck={false}
+                    placeholder="https://my-resource.openai.azure.com"
+                  />
+                </label>
+                <label className="field">
+                  <span>Chat deployment</span>
+                  <input
+                    value={draft.chatDeployment}
+                    onChange={(e) => update(plugin.id, { chatDeployment: e.target.value })}
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="field">
+                  <span>Embeddings deployment</span>
+                  <input
+                    value={draft.embeddingsDeployment}
+                    onChange={(e) => update(plugin.id, { embeddingsDeployment: e.target.value })}
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="field">
+                  <span>API version</span>
+                  <input
+                    value={draft.apiVersion}
+                    onChange={(e) => update(plugin.id, { apiVersion: e.target.value })}
+                    spellCheck={false}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="field">
+                  <span>Base URL</span>
+                  <input
+                    value={draft.baseUrl}
+                    onChange={(e) => update(plugin.id, { baseUrl: e.target.value })}
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="field">
+                  <span>Default model</span>
+                  <input
+                    value={draft.defaultModel}
+                    onChange={(e) => update(plugin.id, { defaultModel: e.target.value })}
+                    spellCheck={false}
+                  />
+                </label>
+              </>
+            )}
             <button
               type="button"
               className="btn primary small"

@@ -5,6 +5,7 @@ import { describeAllowedPolicy } from "./aiPolicy.js";
 import { redactSecrets } from "./aiMinimize.js";
 import { getSystemProperties } from "../systemProperties.js";
 import {
+  configuredChatModel,
   resolvePluginApiKey,
   selectChatPlugin,
   type AiProvidersFile,
@@ -77,13 +78,7 @@ export function sessionFrom(file: AiProvidersFile): AssistantSession | null {
   if (!plugin || !entry || !apiKey) return null;
   const parsed = plugin.configSchema.safeParse(entry.config);
   if (!parsed.success) return null;
-  const model =
-    parsed.data &&
-    typeof parsed.data === "object" &&
-    "defaultModel" in parsed.data &&
-    typeof (parsed.data as { defaultModel?: unknown }).defaultModel === "string"
-      ? (parsed.data as { defaultModel: string }).defaultModel
-      : "gpt-4.1-mini";
+  const model = configuredChatModel(parsed.data) ?? "gpt-4.1-mini";
   return { plugin, config: parsed.data, apiKey, model };
 }
 
