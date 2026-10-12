@@ -5,10 +5,10 @@ import { sendMutation } from "../../lib/mutationResult.js";
 import { applyAssistantProposal } from "./assistantApply.js";
 import { assistantChatRateLimit } from "../../middleware/rateLimits.js";
 import {
+  ASSISTANT_UNCONFIGURED,
+  assistantStatus,
   buildMessages,
-  getAssistantConfig,
-  resolveProvider,
-  runAssistantWithTools,
+  runConfiguredAssistant,
 } from "../../services/assistant/index.js";
 import { db } from "../../db/client.js";
 import { userHasAdministrator } from "../../services/roles.js";
@@ -16,21 +16,9 @@ import { getCurrentUserId } from "../../services/users.js";
 
 export const assistantRouter = Router();
 
-assistantRouter.get("/status", (_req, res) => {
+assistantRouter.get("/status", async (_req, res) => {
   try {
-    const cfg = getAssistantConfig();
-    const provider = resolveProvider();
-    res.json({
-      data: {
-        enabled: Boolean(provider),
-        provider: provider?.id ?? cfg.provider,
-        model: provider?.defaultModel ?? cfg.model,
-        configuredProviders: {
-          openai: Boolean(cfg.openaiKey),
-        },
-        toolsEnabled: true,
-      },
-    });
+    res.json({ data: await assistantStatus(db) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -75,14 +63,9 @@ assistantRouter.post("/proposals/apply", async (req, res) => {
 
 assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
   try {
-    const provider = resolveProvider();
-    if (!provider) {
-      sendError(
-        res,
-        503,
-        "assistant_unconfigured",
-        "Assistant is not configured. Set OPENAI_API_KEY in the server .env and restart.",
-      );
+    const status = await assistantStatus(db);
+    if (!status.enabled) {
+      sendError(res, 503, "assistant_unconfigured", ASSISTANT_UNCONFIGURED);
       return;
     }
 
@@ -112,15 +95,16 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
     });
 
     writeEvent("meta", {
-      provider: provider.id,
-      model: parsed.model ?? provider.defaultModel,
+      provider: status.provider,
+      model: parsed.model ?? status.model,
       toolsEnabled: true,
     });
 
     const actorUserId = await getCurrentUserId(db);
     const isAdministrator = await userHasAdministrator(db, actorUserId);
 
-    await runAssistantWithTools({
+    await runConfiguredAssistant({
+      db,
       actorUserId,
       isAdministrator,
       messages,

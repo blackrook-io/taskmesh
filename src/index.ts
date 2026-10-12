@@ -19,6 +19,8 @@ import {
 import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
 import { assertConfiguredEnvKeys } from "./lib/envKeys.js";
 import { parseTrustProxy } from "./lib/trustProxy.js";
+import { loadAiProviderPlugins } from "./services/assistant/providerLoader.js";
+import { getSystemProperties } from "./services/systemProperties.js";
 
 assertConfiguredEnvKeys();
 warnIfRateLimitDisableIgnored();
@@ -110,10 +112,15 @@ app.use(
   },
 );
 
+await loadAiProviderPlugins();
+
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "127.0.0.1";
 const server = app.listen(port, host, () => {
   console.log(`TaskMesh API listening on http://${host}:${port}`);
+  void getSystemProperties(db).catch((err) => {
+    console.error("System property startup failed", err);
+  });
   startBackupScheduler();
   startDbStatsSampler(db);
   startApiRequestLogPruner(db);

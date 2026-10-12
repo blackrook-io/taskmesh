@@ -275,7 +275,8 @@ export function AssistantPanel({ open, onClose }: Props) {
 
         {!enabled && !statusQuery.isLoading ? (
           <p className="assistant-panel__banner">
-            Set <code>OPENAI_API_KEY</code> in the server <code>.env</code> and restart TaskMesh. See{" "}
+            Set <code>OPENAI_API_KEY</code> in the server <code>.env</code> (deprecated) and enable
+            the OpenAI provider. See{" "}
             <button
               type="button"
               className="linkish"

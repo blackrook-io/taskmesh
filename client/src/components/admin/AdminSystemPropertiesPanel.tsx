@@ -3,6 +3,7 @@ import { useState } from "react";
 import { apiJson } from "../../api/client";
 import { ThemeSwitcher } from "../shell/ThemeSwitcher";
 import { isThemeId, type ThemeId } from "../../lib/theme";
+import { AdminAiProvidersSection } from "./AdminAiProvidersSection";
 
 type MfaEnforcement = "none" | "administrators";
 
@@ -424,6 +425,7 @@ export function AdminSystemPropertiesPanel() {
       >
         Save
       </button>
+      <AdminAiProvidersSection />
     </div>
   );
 }

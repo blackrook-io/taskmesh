@@ -136,8 +136,8 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | `DEV_API_PORT` | DEV API port for `npm run dev` / `dev:web` (default `3001`) |
 | `BACKUP_SCHEDULE_PATH` | Backup schedule JSON path (default `./data/backup-schedule.json`) |
 | `PROD_RELEASE_PATH` | Sidecar JSON with the last production-host deploy stamp (default `./data/prod-release.json`; written by `deploy:prod` on that host) |
-| `OPENAI_API_KEY` | Enables embedded assistant (optional) |
-| `ASSISTANT_DEFAULT_MODEL` | OpenAI model id (default `gpt-4.1-mini`) |
+| `OPENAI_API_KEY` | Deprecated. Enables the OpenAI provider plugin on first boot and remains that plugin's key until instance keys exist |
+| `ASSISTANT_DEFAULT_MODEL` | Default model seeded for the OpenAI plugin (default `gpt-4.1-mini`) |
 
 Back up **Postgres** and the uploads directory together. Commands and scheduling notes are in [INSTALL.md § Backups](INSTALL.md#18-backups).
 

@@ -113,7 +113,7 @@ Edit `.env.docker`:
 - Set **`POSTGRES_PASSWORD`** to a long random secret. Prefer **URL-safe** characters (letters, digits, `-` `_`) so the Compose `DATABASE_URL` does not need encoding.
 - Defaults already set **`COOKIE_SECURE=true`** and **`TRUST_PROXY=1`** for the TLS proxy path.
 - Optionally override **`TASKMESH_HTTP_PORT`** / **`TASKMESH_HTTPS_PORT`** if 80/443 are busy.
-- Optionally set **`OPENAI_API_KEY`** (and related assistant vars) for the Assistant panel.
+- Optionally set **`OPENAI_API_KEY`** for the Assistant panel. The variable is deprecated and stays the OpenAI plugin key until instance keys exist.
 
 Generate a self-signed cert for the proxy (once; SANs default to `localhost` + `127.0.0.1`):
 
@@ -505,17 +505,18 @@ sudo chown "$USER":"$USER" /var/lib/taskmesh/uploads
 
 Do **not** commit `.env` (it is gitignored). Keep the password aligned with the Postgres role from §6.
 
-### Assistant (OpenAI)
+### Assistant (OpenAI provider plugin)
 
-Optional embedded chat (UI: **AI** in the top bar, ⌘J / Ctrl+J, or ⌘K → Open assistant). Requires outbound HTTPS from this host to OpenAI.
+Optional embedded chat (UI: **AI** in the top bar, ⌘J / Ctrl+J, or ⌘K → Open assistant). The OpenAI plugin is loaded from `plugins/ai-providers/` and enabled by an Administrator. `OPENAI_API_KEY` is deprecated: if it is set the first time TaskMesh reads system properties, the OpenAI plugin is enabled and the variable remains the API key until instance keys exist. It is not copied into the database.
 
 ```env
 OPENAI_API_KEY=sk-...
-ASSISTANT_DEFAULT_PROVIDER=openai
 ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini
 ```
 
-If `OPENAI_API_KEY` is unset, the assistant panel shows as not configured. Restart the API after changing keys (`sudo systemctl restart taskmesh`). Status page: `/settings/assistant`.
+`ASSISTANT_DEFAULT_MODEL` is only the model written into that first-boot plugin config (default `gpt-4.1-mini`). Provider base URLs must be public https. Restart the API after changing the key (`sudo systemctl restart taskmesh`). Status page: `/settings/assistant`. Administrators enable or disable plugins under Administration → System properties.
+
+If the OpenAI plugin is disabled or the key is unset, the assistant panel shows as not configured.
 
 The assistant can also **fetch public http(s) URLs** for research (`fetch_url`). That requires outbound access from this host to the target sites (not only OpenAI). Private/LAN addresses are blocked.
 
@@ -857,7 +858,7 @@ Always run migrations after pulling schema changes; review `drizzle/` if you mai
 | nginx 502 Bad Gateway | TaskMesh not running (`systemctl status taskmesh`); wrong `HOST`/`PORT`; `ss -tlnp \| grep 3000` should show `127.0.0.1:3000` |
 | Blank Excalidraw / missing fonts | Re-run `cd client && npm install`; confirm `client/public/excalidraw-assets/fonts` exists; `index.html` sets `EXCALIDRAW_ASSET_PATH` |
 | SPA 404 on refresh in production | Ensure `NODE_ENV=production` and `client/dist/index.html` exists (`npm run build:all`) |
-| Assistant “not configured” / 503 | Set `OPENAI_API_KEY` in `.env`; restart TaskMesh; confirm host can reach `https://api.openai.com` |
+| Assistant “not configured” / 503 | Enable the OpenAI plugin (Administration → System properties) and set `OPENAI_API_KEY` in `.env`; restart TaskMesh; confirm the host can reach the plugin base URL |
 | Client `postinstall` skipped | Run `node client/scripts/copy-excalidraw-assets.mjs` manually from `client/` |
 
 ---

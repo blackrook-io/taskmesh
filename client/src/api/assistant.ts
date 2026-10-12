@@ -1,10 +1,25 @@
 import { applySpaClientHeaders, maybeNotifySessionExpired } from "./client";
 
+export type AssistantPluginStatus = {
+  id: string;
+  displayName: string;
+  enabled: boolean;
+  configured: boolean;
+  capabilities: {
+    chat: boolean;
+    streaming: boolean;
+    tools: boolean;
+    embeddings: boolean;
+    local: boolean;
+  };
+};
+
 export type AssistantStatus = {
   enabled: boolean;
   provider: string;
   model: string;
   configuredProviders: { openai: boolean };
+  plugins?: AssistantPluginStatus[];
   toolsEnabled?: boolean;
 };
 

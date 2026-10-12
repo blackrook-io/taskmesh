@@ -100,6 +100,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Assistant
 
 - Optional OpenAI side panel for chat, research, and summarization with current-page context
+- Administrators enable AI providers from System properties and set each provider's public https address and default model
 - Propose creates and edits that apply only after you confirm
 
 

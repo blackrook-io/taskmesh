@@ -62,6 +62,7 @@ import {
 import { getDatabaseStatsSummary } from "../../services/dbStats.js";
 import { meshAppearanceEqual } from "../../lib/meshAppearance.js";
 import { isUsageRange } from "../../lib/usageRange.js";
+import { registerAiProviderAdminRoutes } from "./adminAiProviders.js";
 import {
   getSystemProperties,
   patchSystemProperties,
@@ -92,6 +93,7 @@ import {
 export const adminRouter = Router();
 
 adminRouter.use(requireAdministrator);
+registerAiProviderAdminRoutes(adminRouter);
 
 function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boolean {
   if (
