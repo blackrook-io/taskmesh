@@ -1,0 +1,7 @@
+ALTER TABLE "ai_audit_log" ADD COLUMN "prompt_id" text;--> statement-breakpoint
+ALTER TABLE "ai_audit_log" ADD COLUMN "prompt_version" integer;--> statement-breakpoint
+ALTER TABLE "ai_audit_log" ADD COLUMN "prompt_ref" text;--> statement-breakpoint
+ALTER TABLE "ai_audit_log" ADD CONSTRAINT "ai_audit_log_prompt_id_chk" CHECK ("ai_audit_log"."prompt_id" is null or "ai_audit_log"."prompt_id" ~ '^[a-z0-9_]+$');--> statement-breakpoint
+ALTER TABLE "ai_audit_log" ADD CONSTRAINT "ai_audit_log_prompt_version_chk" CHECK ("ai_audit_log"."prompt_version" is null or "ai_audit_log"."prompt_version" >= 1);--> statement-breakpoint
+ALTER TABLE "ai_audit_log" ADD CONSTRAINT "ai_audit_log_prompt_ref_chk" CHECK ("ai_audit_log"."prompt_ref" is null or char_length("ai_audit_log"."prompt_ref") between 1 and 200);--> statement-breakpoint
+ALTER TABLE "ai_audit_log" ADD CONSTRAINT "ai_audit_log_prompt_set_chk" CHECK (("ai_audit_log"."prompt_id" is null and "ai_audit_log"."prompt_version" is null and "ai_audit_log"."prompt_ref" is null) or ("ai_audit_log"."prompt_id" is not null and "ai_audit_log"."prompt_version" is not null and "ai_audit_log"."prompt_ref" is not null and ("ai_audit_log"."prompt_ref" = "ai_audit_log"."prompt_id" || '@' || "ai_audit_log"."prompt_version"::text or "ai_audit_log"."prompt_ref" like "ai_audit_log"."prompt_id" || '@' || "ai_audit_log"."prompt_version"::text || '/%' or "ai_audit_log"."prompt_ref" like "ai_audit_log"."prompt_id" || '@' || "ai_audit_log"."prompt_version"::text || '+%')));

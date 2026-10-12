@@ -20,6 +20,11 @@ export type AiAuditInput = {
   tokensIn?: number | null;
   tokensOut?: number | null;
   latencyMs?: number | null;
+  /** Primary prompt id. Set on assistant replies only. */
+  promptId?: string | null;
+  promptVersion?: number | null;
+  /** Composed ref such as `assistant@1` or `assistant@1+assistant_web_fetch@1`. */
+  promptRef?: string | null;
 };
 
 export type AiAuditSink = (row: AiAuditInput) => Promise<number | void>;
@@ -46,6 +51,9 @@ export async function writeAiAudit(row: AiAuditInput, sink?: AiAuditSink): Promi
     tokensIn: row.tokensIn ?? null,
     tokensOut: row.tokensOut ?? null,
     latencyMs: row.latencyMs ?? null,
+    promptId: row.promptId ?? null,
+    promptVersion: row.promptVersion ?? null,
+    promptRef: row.promptRef ?? null,
   }).returning({ id: schema.aiAuditLog.id });
   return inserted?.id ?? null;
 }
