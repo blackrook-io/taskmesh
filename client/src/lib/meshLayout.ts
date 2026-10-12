@@ -54,6 +54,40 @@ export type MeshGraphEdge = {
 
 export type MeshRole = "focus" | "parent" | "link" | "child" | "grandchild" | "rail" | "suggestion";
 
+/** More than this many records of one type in one band become one group node. */
+export const MESH_GROUP_LIMIT = 12;
+
+export type MeshGroup = {
+  count: number;
+  type: string;
+  bandId: string;
+  expanded: boolean;
+  memberKeys: readonly string[];
+};
+
+export function meshGroupKey(bandId: string, type: string): string {
+  return `group:${bandId}:${type}`;
+}
+
+const TYPE_PLURAL: Record<string, string> = {
+  project: "projects",
+  todo_list: "to-do lists",
+  task: "tasks",
+  todo: "to-dos",
+  document: "documents",
+  idea: "ideas",
+  board: "boards",
+  canvas: "canvases",
+  wiki_node: "wiki pages",
+  image_board: "image boards",
+  tag: "tags",
+};
+
+export function meshGroupTitle(count: number, type: string): string {
+  const name = TYPE_PLURAL[type] ?? `${type.replaceAll("_", " ")}s`;
+  return `${count} ${name}`;
+}
+
 export type MeshLayoutNode = {
   key: string;
   /** Top-left of the node box. The glyph center is `centerX` / `centerY`. */
@@ -71,6 +105,8 @@ export type MeshLayoutNode = {
   projectLabel: string | null;
   /** Plan view only. Focus view leaves this null. */
   planMark: MeshPlanMark | null;
+  /** Set when this node stands in for a crowded type. Null for a real record. */
+  group: MeshGroup | null;
 };
 
 export type MeshHeading = {
@@ -351,6 +387,98 @@ function placedNode(
     type: node.type,
     projectLabel: projectLabel(node, meshProjectId, projectRefs),
     planMark: null,
+    group: null,
+  };
+}
+
+export type MeshBandSlot =
+  | { kind: "record"; node: MeshGraphNode }
+  | {
+      kind: "group";
+      key: string;
+      type: string;
+      title: string;
+      count: number;
+      bandId: string;
+      expanded: boolean;
+      memberKeys: string[];
+    };
+
+/** Collapse a band when one type is past the limit. The focus record always stays. */
+export function collapseMeshBand(
+  bandId: string,
+  items: readonly MeshGraphNode[],
+  focusKey: string,
+  expandedGroups: ReadonlySet<string> = new Set(),
+  hiddenMemberToGroup: Map<string, string> = new Map(),
+): MeshBandSlot[] {
+  const counts = new Map<string, MeshGraphNode[]>();
+  for (const item of items) {
+    if (item.key === focusKey) continue;
+    const list = counts.get(item.type) ?? [];
+    list.push(item);
+    counts.set(item.type, list);
+  }
+  const grouped = new Set<string>();
+  for (const [type, list] of counts) {
+    if (list.length > MESH_GROUP_LIMIT) grouped.add(type);
+  }
+  const emitted = new Set<string>();
+  const slots: MeshBandSlot[] = [];
+  for (const item of items) {
+    if (item.key === focusKey || !grouped.has(item.type)) {
+      slots.push({ kind: "record", node: item });
+      continue;
+    }
+    if (emitted.has(item.type)) continue;
+    emitted.add(item.type);
+    const members = counts.get(item.type) ?? [];
+    const key = meshGroupKey(bandId, item.type);
+    const expanded = expandedGroups.has(key);
+    const memberKeys = members.map((member) => member.key);
+    slots.push({
+      kind: "group",
+      key,
+      type: item.type,
+      title: meshGroupTitle(members.length, item.type),
+      count: members.length,
+      bandId,
+      expanded,
+      memberKeys,
+    });
+    if (expanded) {
+      for (const member of members) slots.push({ kind: "record", node: member });
+    } else {
+      for (const member of members) hiddenMemberToGroup.set(member.key, key);
+    }
+  }
+  return slots;
+}
+
+function groupGraphNode(slot: Extract<MeshBandSlot, { kind: "group" }>): MeshGraphNode {
+  return {
+    key: slot.key,
+    type: slot.type,
+    id: 0,
+    referenceId: null,
+    title: slot.title,
+    projectId: null,
+  };
+}
+
+function withGroup(
+  node: MeshLayoutNode,
+  slot: Extract<MeshBandSlot, { kind: "group" }>,
+): MeshLayoutNode {
+  return {
+    ...node,
+    group: {
+      count: slot.count,
+      type: slot.type,
+      bandId: slot.bandId,
+      expanded: slot.expanded,
+      memberKeys: slot.memberKeys,
+    },
   };
 }
 
@@ -682,6 +810,8 @@ export function layoutMesh(input: {
   dependsOn?: boolean;
   /** Proposed links. Empty until a caller such as T0168 supplies them. */
   suggestions?: readonly MeshSuggestion[];
+  /** Group keys (`group:<band>:<type>`) that should show their members. */
+  expandedGroups?: ReadonlySet<string>;
 }): MeshLayout {
   const refs = input.projectRefs ?? new Map<number, string>();
   const referencesOn = input.references !== false;
@@ -781,15 +911,25 @@ export function layoutMesh(input: {
   }));
   if (leaves.length > 0) columns.push({ head: null, members: leaves });
 
+  const expandedGroups = input.expandedGroups ?? new Set<string>();
+  const hiddenMemberToGroup = new Map<string, string>();
+  const columnSlots = columns.map((column, index) =>
+    collapseMeshBand(`column:${index}`, column.members, focus.key, expandedGroups, hiddenMemberToGroup),
+  );
+  const linkSlots = collapseMeshBand("link", linkNodes, focus.key, expandedGroups, hiddenMemberToGroup);
+  const railSlots = collapseMeshBand("rail", railNodes, focus.key, expandedGroups, hiddenMemberToGroup);
+  const slotKey = (slot: MeshBandSlot) => (slot.kind === "record" ? slot.node.key : slot.key);
+  const visibleKey = (key: string) => hiddenMemberToGroup.get(key) ?? key;
+
   const columnOf = new Map<string, number>();
   columns.forEach((column, index) => {
     if (column.head) columnOf.set(column.head.key, index);
-    for (const member of column.members) columnOf.set(member.key, index);
+    for (const slot of columnSlots[index] ?? []) columnOf.set(slotKey(slot), index);
   });
   const gutterCount = new Array<number>(columns.length).fill(0);
   const channelKeys = new Set<string>([
-    ...linkNodes.map((node) => node.key),
-    ...railNodes.map((node) => node.key),
+    ...linkSlots.map(slotKey),
+    ...railSlots.map(slotKey),
     ...bandSuggestions.map((node) => node.key),
     ...railSuggestions.map((node) => node.key),
   ]);
@@ -808,19 +948,25 @@ export function layoutMesh(input: {
       gutterCount[targetColumn] = (gutterCount[targetColumn] ?? 0) + 1;
     }
   };
+  const gutterSeen = new Set<string>();
+  const addVisibleGutter = (source: string, target: string, relation: string) => {
+    const from = visibleKey(source);
+    const to = visibleKey(target);
+    if (from === to) return;
+    const id = `${relation}:${from}:${to}`;
+    if (gutterSeen.has(id)) return;
+    gutterSeen.add(id);
+    addGutter(from, to);
+  };
   for (const edge of input.edges) {
     if (referencesOn && LINK_RELATIONS.has(edge.relation)) {
-      addGutter(edge.source, edge.target);
+      addVisibleGutter(edge.source, edge.target, edge.relation);
       continue;
     }
-    if (dependsOn && edge.relation === "depends_on") addGutter(edge.source, edge.target);
+    if (dependsOn && edge.relation === "depends_on") addVisibleGutter(edge.source, edge.target, edge.relation);
   }
-  const countedSuggestions = new Set<string>();
   for (const suggestion of suggestions) {
-    const id = `s:${suggestion.sourceKey}:${suggestion.targetKey}`;
-    if (countedSuggestions.has(id)) continue;
-    countedSuggestions.add(id);
-    addGutter(suggestion.sourceKey, suggestion.targetKey);
+    addVisibleGutter(suggestion.sourceKey, suggestion.targetKey, "suggested");
   }
   const baseX = (index: number) => MESH_ORIGIN_X + index * MESH_COLUMN_PITCH;
   const baseExtent = columns.map((column, index) => columnExtent(columnCenters(column, baseX(index))));
@@ -856,28 +1002,41 @@ export function layoutMesh(input: {
     const busY = fy + 70;
     tie(focus.key, null, `M${cx},${fy + focusR + 10} V${busY}`);
     if (columns.length > 1) tree.push(`M${colX(0)},${busY} H${colX(columns.length - 1)}`);
+    const placeColumnSlot = (slot: MeshBandSlot, x: number, y: number, role: MeshRole) => {
+      const stub = `M${x},${y} H${x + MESH_STUB - glyphR - 4}`;
+      if (slot.kind === "group") {
+        placed.push(
+          withGroup(placedNode(groupGraphNode(slot), x + MESH_STUB, y, role, input.meshProjectId, refs), slot),
+        );
+        tie(null, slot.key, stub);
+        return;
+      }
+      placed.push(placedNode(slot.node, x + MESH_STUB, y, role, input.meshProjectId, refs));
+      tie(null, slot.node.key, stub);
+    };
     columns.forEach((column, index) => {
       const x = colX(index);
+      const slots = columnSlots[index] ?? [];
       if (column.head) {
         placed.push(placedNode(column.head, x, rowY, "child", input.meshProjectId, refs));
         tie(null, column.head.key, `M${x},${busY} V${rowY - 30}`);
         const top = rowY + 40;
-        column.members.forEach((member, memberIndex) => {
-          const y = top + 30 + memberIndex * MESH_ROW_PITCH;
-          placed.push(placedNode(member, x + MESH_STUB, y, "grandchild", input.meshProjectId, refs));
-          tie(null, member.key, `M${x},${y} H${x + MESH_STUB - glyphR - 4}`);
+        slots.forEach((slot, memberIndex) => {
+          placeColumnSlot(slot, x, top + 30 + memberIndex * MESH_ROW_PITCH, "grandchild");
         });
-        const last = top + 30 + (column.members.length - 1) * MESH_ROW_PITCH;
-        tree.push(`M${x},${rowY + 30} V${last}`);
+        if (slots.length > 0) {
+          const last = top + 30 + (slots.length - 1) * MESH_ROW_PITCH;
+          tree.push(`M${x},${rowY + 30} V${last}`);
+        }
       } else {
         const top = rowY - 30;
-        column.members.forEach((member, memberIndex) => {
-          const y = top + 30 + memberIndex * MESH_ROW_PITCH;
-          placed.push(placedNode(member, x + MESH_STUB, y, "child", input.meshProjectId, refs));
-          tie(null, member.key, `M${x},${y} H${x + MESH_STUB - glyphR - 4}`);
+        slots.forEach((slot, memberIndex) => {
+          placeColumnSlot(slot, x, top + 30 + memberIndex * MESH_ROW_PITCH, "child");
         });
-        const last = top + 30 + (column.members.length - 1) * MESH_ROW_PITCH;
-        tree.push(`M${x},${busY} V${last}`);
+        if (slots.length > 0) {
+          const last = top + 30 + (slots.length - 1) * MESH_ROW_PITCH;
+          tree.push(`M${x},${busY} V${last}`);
+        }
       }
     });
   }
@@ -888,17 +1047,22 @@ export function layoutMesh(input: {
     placed.push(placedNode(parent, cx, parentY, "parent", input.meshProjectId, refs));
     tie(parent.key, focus.key, `M${cx},${parentY + glyphR + 4} V${fy - focusR - 6}`);
   }
-  const bandCount = linkNodes.length + bandSuggestions.length;
+  const bandCount = linkSlots.length + bandSuggestions.length;
   if (bandCount > 0) {
     const bandX = cx + 280;
     headings.push({ x: bandX - 14, y: 16, text: "Linked to this", tone: null });
-    linkNodes.forEach((node, index) => {
-      placed.push(placedNode(node, bandX + index * MESH_COLUMN_PITCH, 56, "link", input.meshProjectId, refs));
+    linkSlots.forEach((slot, index) => {
+      const x = bandX + index * MESH_COLUMN_PITCH;
+      if (slot.kind === "group") {
+        placed.push(withGroup(placedNode(groupGraphNode(slot), x, 56, "link", input.meshProjectId, refs), slot));
+        return;
+      }
+      placed.push(placedNode(slot.node, x, 56, "link", input.meshProjectId, refs));
     });
     bandSuggestions.forEach((node, index) => {
       const placedSuggestion = placedNode(
         node,
-        bandX + (linkNodes.length + index) * MESH_COLUMN_PITCH,
+        bandX + (linkSlots.length + index) * MESH_COLUMN_PITCH,
         56,
         "suggestion",
         input.meshProjectId,
@@ -912,13 +1076,19 @@ export function layoutMesh(input: {
   const railX = Math.max(maxX + 40, cx + 280);
   if (railNodes.length > 0 || railSuggestions.length > 0) {
     let railY = fy + 40;
-    if (railNodes.length > 0) {
+    if (railSlots.length > 0) {
       headings.push({ x: railX - 14, y: railY, text: "Linked from inside", tone: null });
       railY += 34;
-      railNodes.forEach((node) => {
-        placed.push(placedNode(node, railX, railY, "rail", input.meshProjectId, refs));
+      for (const slot of railSlots) {
+        if (slot.kind === "group") {
+          placed.push(
+            withGroup(placedNode(groupGraphNode(slot), railX, railY, "rail", input.meshProjectId, refs), slot),
+          );
+        } else {
+          placed.push(placedNode(slot.node, railX, railY, "rail", input.meshProjectId, refs));
+        }
         railY += MESH_ROW_PITCH;
-      });
+      }
       if (railSuggestions.length > 0) railY += 14;
     }
     if (railSuggestions.length > 0) {
@@ -947,14 +1117,29 @@ export function layoutMesh(input: {
     return meshEdgeHandles(from?.centerX ?? 0, to?.centerX ?? 0);
   };
   const edges: MeshLayoutEdge[] = [];
+  const seenEdges = new Set<string>();
+  const pushEdge = (edge: MeshLayoutEdge) => {
+    if (seenEdges.has(edge.id)) {
+      if (edge.blocking) {
+        const existing = edges.find((item) => item.id === edge.id);
+        if (existing) existing.blocking = true;
+      }
+      return;
+    }
+    seenEdges.add(edge.id);
+    edges.push(edge);
+  };
   for (const edge of input.edges) {
-    if (!placedKeys.has(edge.source) || !placedKeys.has(edge.target)) continue;
+    const source = visibleKey(edge.source);
+    const target = visibleKey(edge.target);
+    if (source === target) continue;
+    if (!placedKeys.has(source) || !placedKeys.has(target)) continue;
     if (referencesOn && LINK_RELATIONS.has(edge.relation)) {
-      edges.push({
-        id: `l:${edge.source}:${edge.target}:${edge.relation}`,
-        source: edge.source,
-        target: edge.target,
-        ...edgeHandles(edge.source, edge.target),
+      pushEdge({
+        id: `l:${source}:${target}:${edge.relation}`,
+        source,
+        target,
+        ...edgeHandles(source, target),
         kind: "link",
         blocking: false,
         sourceOffset: 0,
@@ -969,11 +1154,11 @@ export function layoutMesh(input: {
     }
     if (!dependsOn || edge.relation !== "depends_on") continue;
     const prerequisite = byKey.get(edge.target);
-    edges.push({
-      id: `d:${edge.source}:${edge.target}`,
-      source: edge.source,
-      target: edge.target,
-      ...edgeHandles(edge.source, edge.target),
+    pushEdge({
+      id: `d:${source}:${target}`,
+      source,
+      target,
+      ...edgeHandles(source, target),
       kind: "depends",
       blocking: prerequisite?.state !== "complete",
       sourceOffset: 0,
@@ -985,17 +1170,16 @@ export function layoutMesh(input: {
       trunkPath: null,
     });
   }
-  const suggestedSeen = new Set<string>();
   for (const suggestion of suggestions) {
-    if (!placedKeys.has(suggestion.sourceKey) || !placedKeys.has(suggestion.targetKey)) continue;
-    const id = `s:${suggestion.sourceKey}:${suggestion.targetKey}`;
-    if (suggestedSeen.has(id)) continue;
-    suggestedSeen.add(id);
-    edges.push({
-      id,
-      source: suggestion.sourceKey,
-      target: suggestion.targetKey,
-      ...edgeHandles(suggestion.sourceKey, suggestion.targetKey),
+    const source = visibleKey(suggestion.sourceKey);
+    const target = visibleKey(suggestion.targetKey);
+    if (source === target) continue;
+    if (!placedKeys.has(source) || !placedKeys.has(target)) continue;
+    pushEdge({
+      id: `s:${source}:${target}`,
+      source,
+      target,
+      ...edgeHandles(source, target),
       kind: "suggested",
       blocking: false,
       sourceOffset: 0,

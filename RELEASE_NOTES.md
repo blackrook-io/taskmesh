@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.60.1 — 2026-10-12
+
+### Enhancements
+- Mesh collapses a band with more than 12 records of one type into one group node labeled with the count and drawn in a light box. Click the group to show those records, and click it again to collapse them. The focused record stays on the canvas, and depth, Hide done, and type filters still decide what is counted.
+
 ## 0.60.0 — 2026-10-11
 
 ### New Functionality

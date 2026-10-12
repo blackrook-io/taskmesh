@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { filterMeshGraph } from "./meshFilters.ts";
 import {
   containmentParent,
+  collapseMeshBand,
   layoutMesh,
   MESH_BOX_HEIGHT,
   MESH_COLUMN_PITCH,
@@ -541,5 +543,154 @@ describe("mesh trunk corridor", () => {
     assert.ok(columns.every((item) => (link?.corridor?.corridorY ?? 0) > boxBottom(item)));
     assert.ok(Math.abs((band?.centerX ?? 0) - (layout.nodes.find((item) => item.role === "focus")?.centerX ?? 0)) > MESH_COLUMN_PITCH / 2);
     assert.equal(meshNodesOverlap(layout.nodes), false);
+  });
+});
+
+function many(
+  type: string,
+  count: number,
+  start = 1,
+  state: string | null = null,
+): MeshGraphNode[] {
+  return Array.from({ length: count }, (_, index) => {
+    const id = start + index;
+    return { ...node(`${type}:${id}`, `${type} ${id}`, null), state };
+  });
+}
+
+describe("mesh group nodes", () => {
+  it("leaves twelve records of one type in a column", () => {
+    const tasks = many("task", 12);
+    const nodes = [node("project:4", "TaskMesh", "P0003"), ...tasks];
+    const edges: MeshGraphEdge[] = tasks.map((task) => ({
+      source: "project:4",
+      target: task.key,
+      relation: "in_project",
+    }));
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    assert.equal(layout.nodes.some((item) => item.group), false);
+    assert.equal(layout.nodes.filter((item) => item.type === "task").length, 12);
+  });
+
+  it("collapses a column past twelve and keeps the column head", () => {
+    const grands = many("task", 13, 2);
+    const nodes = [node("project:4", "TaskMesh", "P0003"), node("task:1", "Head", "T0001"), ...grands];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:1", relation: "in_project" },
+      ...grands.map((task) => ({ source: task.key, target: "task:1", relation: "child_of" as const })),
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const head = layout.nodes.find((item) => item.key === "task:1");
+    const group = layout.nodes.find((item) => item.group);
+    assert.equal(head?.role, "child");
+    assert.equal(head?.group, null);
+    assert.equal(group?.key, "group:column:0:task");
+    assert.equal(group?.title, "13 tasks");
+    assert.equal(group?.role, "grandchild");
+    assert.equal(group?.group?.expanded, false);
+    assert.equal(
+      layout.nodes.some((item) => item.key.startsWith("task:") && item.key !== "task:1"),
+      false,
+    );
+    assert.equal(meshNodesOverlap(layout.nodes), false);
+  });
+
+  it("judges each type on its own and redraws lines onto the group", () => {
+    const tasks = many("task", 13);
+    const docs = many("document", 3, 1);
+    const nodes = [node("project:4", "TaskMesh", "P0003"), node("task:100", "Anchor", "T0100"), ...tasks, ...docs];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:100", relation: "in_project" },
+      ...docs.map((doc) => ({ source: "task:100", target: doc.key, relation: "references" as const })),
+      ...tasks.map((task) => ({ source: "task:100", target: task.key, relation: "references" as const })),
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const groups = layout.nodes.filter((item) => item.group);
+    assert.deepEqual(groups.map((item) => item.title), ["13 tasks"]);
+    assert.equal(layout.nodes.filter((item) => item.type === "document" && item.role === "rail").length, 3);
+    const ontoGroup = layout.edges.filter((edge) => edge.source === "group:rail:task" || edge.target === "group:rail:task");
+    assert.equal(ontoGroup.length, 1);
+    assert.equal(ontoGroup[0]?.source, "task:100");
+    assert.equal(layout.edges.some((edge) => edge.source.startsWith("task:") && edge.target.startsWith("task:") && edge.target !== "group:rail:task"), false);
+  });
+
+  it("places members under an expanded group and restores their lines", () => {
+    const ideas = many("idea", 13);
+    const nodes = [node("project:4", "TaskMesh", "P0003"), ...ideas];
+    const edges: MeshGraphEdge[] = ideas.map((idea) => ({
+      source: "project:4",
+      target: idea.key,
+      relation: "supports",
+    }));
+    const collapsed = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    assert.equal(collapsed.nodes.filter((item) => item.role === "link").length, 1);
+    assert.equal(collapsed.edges.filter((edge) => edge.kind === "link").length, 1);
+    assert.equal(collapsed.edges[0]?.target, "group:link:idea");
+
+    const layout = layoutMesh({
+      nodes,
+      edges,
+      focusKey: "project:4",
+      meshProjectId: 4,
+      expandedGroups: new Set(["group:link:idea"]),
+    });
+    const group = layout.nodes.find((item) => item.key === "group:link:idea");
+    assert.equal(group?.group?.expanded, true);
+    assert.equal(layout.nodes.filter((item) => item.key.startsWith("idea:")).length, 13);
+    assert.equal(layout.edges.filter((edge) => edge.kind === "link" && edge.target.startsWith("idea:")).length, 13);
+    assert.equal(meshNodesOverlap(layout.nodes), false);
+  });
+
+  it("keeps the focused record out of the group", () => {
+    const items = [node("task:1", "Focus", "T0001"), ...many("task", 13, 2)];
+    const slots = collapseMeshBand("rail", items, "task:1");
+    assert.equal(slots[0]?.kind, "record");
+    assert.equal(slots[0]?.kind === "record" ? slots[0].node.key : "", "task:1");
+    const group = slots.find((slot) => slot.kind === "group");
+    assert.equal(group?.kind === "group" ? group.count : 0, 13);
+    assert.equal(group?.kind === "group" ? group.memberKeys.includes("task:1") : true, false);
+  });
+
+  it("counts the graph after hide-done and type filters", () => {
+    const tasks = [
+      ...many("task", 11, 1, "ready"),
+      ...many("task", 2, 12, "complete"),
+    ];
+    const nodes = [node("project:4", "TaskMesh", "P0003"), ...tasks];
+    const edges: MeshGraphEdge[] = tasks.map((task) => ({
+      source: "project:4",
+      target: task.key,
+      relation: "in_project",
+    }));
+    const hidden = filterMeshGraph({
+      nodes,
+      edges,
+      focusKey: "project:4",
+      hideDone: true,
+      hiddenTypes: new Set(),
+    });
+    const filtered = layoutMesh({
+      nodes: hidden.nodes,
+      edges: hidden.edges,
+      focusKey: "project:4",
+      meshProjectId: 4,
+    });
+    assert.equal(filtered.nodes.some((item) => item.group), false);
+    assert.equal(filtered.nodes.filter((item) => item.type === "task").length, 11);
+
+    const typed = filterMeshGraph({
+      nodes,
+      edges,
+      focusKey: "project:4",
+      hideDone: false,
+      hiddenTypes: new Set(["task"]),
+    });
+    const withoutTasks = layoutMesh({
+      nodes: typed.nodes,
+      edges: typed.edges,
+      focusKey: "project:4",
+      meshProjectId: 4,
+    });
+    assert.equal(withoutTasks.nodes.some((item) => item.type === "task" || item.group), false);
   });
 });

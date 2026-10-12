@@ -8134,6 +8134,27 @@ a:focus-visible {
 .mesh-node--next .mesh-mark {
   box-shadow: 0 0 0 2px var(--accent);
 }
+.mesh-node--group {
+  position: relative;
+}
+.mesh-group-box {
+  position: absolute;
+  z-index: 0;
+  inset: -8px -12px -8px -8px;
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--surface) 78%, var(--canvas-bg));
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  pointer-events: none;
+}
+.mesh-node--group .mesh-mark,
+.mesh-node--group .mesh-copy {
+  position: relative;
+  z-index: 1;
+}
+.mesh-node--group .mesh-title {
+  font-weight: 600;
+  background: transparent;
+}
 .mesh-node--focus .mesh-mark {
   width: var(--mesh-glyph-focus);
   height: var(--mesh-glyph-focus);

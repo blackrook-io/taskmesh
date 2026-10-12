@@ -50,6 +50,7 @@ import {
   type MeshCorridor,
   type MeshGraphEdge,
   type MeshGraphNode,
+  type MeshGroup,
   type MeshLayoutNode,
   type MeshSuggestion,
 } from "../lib/meshLayout";
@@ -89,7 +90,9 @@ type MeshNodeData = {
   enterFrom: { x: number; y: number } | null;
   reduceMotion: boolean;
   cardText: string;
+  group: MeshGroup | null;
   onOpen: (key: string) => void;
+  onToggleGroup: (key: string) => void;
   onPointerEnter: (key: string) => void;
   onPointerLeave: () => void;
   onFocusNode: (key: string) => void;
@@ -540,17 +543,19 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
     );
   }, [data.enterFrom, data.reduceMotion, data.x, data.y]);
 
-  const label = [
-    data.referenceId,
-    data.role === "suggestion" ? "AI suggestion" : null,
-    data.planMark === "blocked" ? "blocked" : data.planMark === "next" ? "next" : null,
-    data.title,
-    data.projectLabel,
-    data.role === "suggestion" ? null : data.schedule === "overdue" ? "overdue" : null,
-    data.role === "suggestion" ? null : data.stale ? "stale" : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const label = data.group
+    ? `${data.title}, ${data.group.expanded ? "expanded" : "collapsed"} group`
+    : [
+        data.referenceId,
+        data.role === "suggestion" ? "AI suggestion" : null,
+        data.planMark === "blocked" ? "blocked" : data.planMark === "next" ? "next" : null,
+        data.title,
+        data.projectLabel,
+        data.role === "suggestion" ? null : data.schedule === "overdue" ? "overdue" : null,
+        data.role === "suggestion" ? null : data.stale ? "stale" : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
   const suggested = data.role === "suggestion";
   const ring = suggested || data.progress == null ? null : Math.max(0, Math.min(100, data.progress));
   return (
@@ -566,17 +571,24 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         type="button"
         className={[
           `mesh-node mesh-node--${data.role}`,
+          data.group ? "mesh-node--group" : "",
           data.planMark ? `mesh-node--${data.planMark}` : "",
         ]
           .filter(Boolean)
           .join(" ")}
         data-mesh-key={id}
         aria-label={label}
-        aria-describedby={cardDescId(id)}
+        aria-expanded={data.group ? data.group.expanded : undefined}
+        aria-describedby={data.group ? undefined : cardDescId(id)}
         onPointerDown={(event) => {
+          if (data.group) return;
           if (event.pointerType === "touch") data.armTouch(id);
         }}
         onClick={(event) => {
+          if (data.group) {
+            data.onToggleGroup(id);
+            return;
+          }
           if (suggested) {
             data.onFocusNode(id);
             return;
@@ -590,6 +602,10 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.preventDefault();
+          if (data.group) {
+            data.onToggleGroup(id);
+            return;
+          }
           if (suggested) {
             data.onFocusNode(id);
             return;
@@ -599,7 +615,7 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         onMouseEnter={(event) => {
           paintMeshHot(event.currentTarget, id);
           data.onHot(id);
-          data.onPointerEnter(id);
+          if (!data.group) data.onPointerEnter(id);
         }}
         onMouseLeave={(event) => {
           const next = event.relatedTarget;
@@ -619,7 +635,7 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         onFocus={(event) => {
           paintMeshHot(event.currentTarget, id);
           data.onHot(id);
-          data.onFocusNode(id);
+          if (!data.group) data.onFocusNode(id);
         }}
         onBlur={(event) => {
           const next = event.relatedTarget;
@@ -640,6 +656,7 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
           data.onBlurNode();
         }}
       >
+        {data.group ? <span className="mesh-group-box" aria-hidden /> : null}
         <span id={cardDescId(id)} className="sr-only">
           {data.cardText}
         </span>
@@ -776,6 +793,10 @@ export function MeshPanel({
     ids: EMPTY_IDS,
   });
   const [view, setView] = useState<"focus" | "plan">("focus");
+  const [openGroups, setOpenGroups] = useState<{ focus: string; keys: ReadonlySet<string> }>({
+    focus: rootKey,
+    keys: EMPTY_IDS,
+  });
   const [resetOpen, setResetOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dragPos, setDragPos] = useState<{
@@ -957,7 +978,10 @@ export function MeshPanel({
             blockNodes: graphQuery.data?.nodes ?? filteredGraph.nodes,
             blockEdges: graphQuery.data?.edges ?? filteredGraph.edges,
           })
-        : layoutMesh(shared);
+        : layoutMesh({
+            ...shared,
+            expandedGroups: openGroups.focus === focusKey ? openGroups.keys : EMPTY_IDS,
+          });
     return applyMeshPins(base, savedPins);
   }, [
     filteredGraph,
@@ -967,6 +991,7 @@ export function MeshPanel({
     projectRefs,
     relations.dependsOn,
     relations.references,
+    openGroups,
     savedPins,
     shownSuggestions,
     view,
@@ -1138,6 +1163,19 @@ export function MeshPanel({
     });
   }, [layout]);
 
+  const toggleGroup = useCallback(
+    (key: string) => {
+      dismissCard();
+      setOpenGroups((prev) => {
+        const keys = new Set(prev.focus === focusKey ? prev.keys : []);
+        if (keys.has(key)) keys.delete(key);
+        else keys.add(key);
+        return { focus: focusKey, keys };
+      });
+    },
+    [dismissCard, focusKey],
+  );
+
   const openNode = useCallback(
     (key: string) => {
       if (skipOpen.current) {
@@ -1283,8 +1321,12 @@ export function MeshPanel({
     () =>
       layout
     ? layout.nodes.map((node) => {
-        const record = graphByKey.get(node.key);
-        const ink = glyphStyle(colorMode, { key: node.key, type: node.type, ...record });
+        const record = node.group ? undefined : graphByKey.get(node.key);
+        const ink = glyphStyle(node.group ? "type" : colorMode, {
+          key: node.key,
+          type: node.type,
+          ...record,
+        });
         const mark = record ? schedule(record, today) : { kind: "none" as const };
         return {
           id: node.key,
@@ -1312,11 +1354,14 @@ export function MeshPanel({
             y: node.y,
             enterFrom: !motion.seen.has(node.key) && motion.origin && !reduceMotion ? motion.origin : null,
             reduceMotion,
-            cardText:
-              (node.role === "suggestion"
-                ? suggestionCards.get(node.key)?.description
-                : cards.get(node.key)?.description) ?? node.title,
+            cardText: node.group
+              ? node.title
+              : ((node.role === "suggestion"
+                  ? suggestionCards.get(node.key)?.description
+                  : cards.get(node.key)?.description) ?? node.title),
+            group: node.group,
             onOpen: openNode,
+            onToggleGroup: toggleGroup,
             onPointerEnter: scheduleShow,
             onPointerLeave: scheduleHide,
             onFocusNode: showCardNow,
@@ -1325,7 +1370,7 @@ export function MeshPanel({
             armTouch,
             consumeTouch,
           },
-          draggable: layoutQuery.isSuccess,
+          draggable: layoutQuery.isSuccess && node.group == null,
           connectable: false,
         };
       })
@@ -1344,6 +1389,7 @@ export function MeshPanel({
       layout,
       layoutQuery.isSuccess,
       motion,
+      toggleGroup,
       openNode,
       reduceMotion,
       rememberHot,
