@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.63.0 — 2026-10-12
+
+### New Functionality
+- A project can be Full, Read-only, or Excluded from AI. The Administrator sets the instance ceiling, and a project owner or manager can only narrow it. Excluded projects are never sent to a model. Read-only projects can still be read, and the assistant cannot propose or apply changes there. The overview shows a badge when access is not full.
+
 ## 0.62.4 — 2026-10-12
 
 ### Enhancements

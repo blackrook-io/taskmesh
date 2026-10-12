@@ -23,6 +23,7 @@ type SystemProperties = {
   mfaTrustedDeviceDays?: number;
   mfaTrustedDeviceMax?: number;
   aiWebFetch?: boolean;
+  aiProjectAccessDefault?: "full" | "read_only" | "excluded";
   updatedAt: string | null;
 };
 
@@ -75,6 +76,9 @@ export function AdminSystemPropertiesPanel() {
   const [mfaTrustedDeviceDays, setMfaTrustedDeviceDays] = useState("15");
   const [mfaTrustedDeviceMax, setMfaTrustedDeviceMax] = useState("5");
   const [aiWebFetch, setAiWebFetch] = useState(false);
+  const [aiProjectAccessDefault, setAiProjectAccessDefault] = useState<
+    "full" | "read_only" | "excluded"
+  >("full");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -125,6 +129,13 @@ export function AdminSystemPropertiesPanel() {
         setMfaTrustedDeviceMax(String(propsQuery.data.mfaTrustedDeviceMax));
       }
       setAiWebFetch(propsQuery.data.aiWebFetch === true);
+      if (
+        propsQuery.data.aiProjectAccessDefault === "full" ||
+        propsQuery.data.aiProjectAccessDefault === "read_only" ||
+        propsQuery.data.aiProjectAccessDefault === "excluded"
+      ) {
+        setAiProjectAccessDefault(propsQuery.data.aiProjectAccessDefault);
+      }
     }
   }
 
@@ -200,6 +211,7 @@ export function AdminSystemPropertiesPanel() {
         mfaTrustedDeviceDays: number;
         mfaTrustedDeviceMax: number;
         aiWebFetch: boolean;
+        aiProjectAccessDefault: "full" | "read_only" | "excluded";
       } = {
         apiRateLimitPerMinute,
         loginFailureThreshold,
@@ -209,6 +221,7 @@ export function AdminSystemPropertiesPanel() {
         mfaTrustedDeviceDays: trustDays,
         mfaTrustedDeviceMax: trustMax,
         aiWebFetch,
+        aiProjectAccessDefault,
       };
       if (supportsGlobalRate) {
         body.globalApiRateLimitPerMinute = globalApiRateLimitPerMinute;
@@ -434,6 +447,25 @@ export function AdminSystemPropertiesPanel() {
       <p className="muted small" style={{ marginTop: 0 }}>
         Off by default. Background AI features cannot fetch the web. Private and local addresses
         stay blocked. Save with the button below.
+      </p>
+
+      <h2>Project AI access</h2>
+      <label className="field">
+        <span>Instance default</span>
+        <select
+          value={aiProjectAccessDefault}
+          onChange={(e) =>
+            setAiProjectAccessDefault(e.target.value as "full" | "read_only" | "excluded")
+          }
+        >
+          <option value="full">Full</option>
+          <option value="read_only">Read-only</option>
+          <option value="excluded">Excluded</option>
+        </select>
+      </label>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        New projects start here. A project owner or manager can only narrow this. Excluded
+        projects are never sent to a model. Read-only projects can be read but not changed by AI.
       </p>
 
       <button

@@ -8,6 +8,7 @@ import {
   commentPairsWithUpdate,
   deriveListLastUpdate,
   documentBodyChanged,
+  trackedAiAccessChange,
   trackedStatusChange,
   trackedTodoChanges,
   type ActivityUpdateField,
@@ -96,6 +97,25 @@ export async function recordProjectStatusChange(
   source: ActivitySource = "api",
 ): Promise<void> {
   const change = trackedStatusChange(before, after);
+  if (!change) return;
+  await recordTrackedChanges(db, {
+    entityType: "project",
+    entityId: projectId,
+    actorId,
+    source,
+    changes: [change],
+  });
+}
+
+export async function recordProjectAiAccessChange(
+  db: Db,
+  projectId: number,
+  before: string,
+  after: string,
+  actorId: number | null,
+  source: ActivitySource = "api",
+): Promise<void> {
+  const change = trackedAiAccessChange(before, after);
   if (!change) return;
   await recordTrackedChanges(db, {
     entityType: "project",

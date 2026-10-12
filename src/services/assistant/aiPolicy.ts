@@ -6,6 +6,7 @@ import {
   type AiPermissionSettings,
   type AiTier,
 } from "./aiTiers.js";
+import type { AiAccess } from "./aiAccess.js";
 
 export const AI_ACTIONS = [
   "read",
@@ -53,6 +54,10 @@ export type PolicyCheckInput = {
   resource?: FloorResource | null;
   entityId?: number | null;
   projectId?: number | null;
+  /** Effective access of `projectId`. Omitted with a project id fails closed. */
+  projectAiAccess?: AiAccess | null;
+  /** Effective access of `fields.projectId` when that id is a different project. */
+  destinationAiAccess?: AiAccess | null;
   fields?: Record<string, unknown> | null;
   /** Owner of the target record, when the server already knows it. */
   targetOwnerId?: number | null;
@@ -95,6 +100,17 @@ function floorDecision(input: PolicyCheckInput): PolicyDecision | null {
       reason: "AI cannot transfer ownership",
     };
   }
+  if (
+    input.fields &&
+    (Object.prototype.hasOwnProperty.call(input.fields, "aiAccess") ||
+      Object.prototype.hasOwnProperty.call(input.fields, "ai_access"))
+  ) {
+    return {
+      decision: "deny",
+      tier: 3,
+      reason: "AI cannot change project AI access",
+    };
+  }
   return null;
 }
 
@@ -129,13 +145,43 @@ export function instancePolicyLayer(input: PolicyCheckInput): PolicyDecision {
   return { decision: "deny", tier, reason: "Denied by instance policy" };
 }
 
-/** T0184 replaces this. Project settings can only narrow the instance ceiling. */
+function destinationProjectId(input: PolicyCheckInput): number | null {
+  const raw = input.fields?.projectId;
+  return typeof raw === "number" && Number.isInteger(raw) && raw > 0 ? raw : null;
+}
+
+function projectAccessDecision(
+  access: AiAccess | null | undefined,
+  required: boolean,
+  action: AiAction,
+): PolicyDecision | null {
+  if (!required) return null;
+  const tier = tierForAction(action);
+  if (access == null) {
+    return { decision: "deny", tier, reason: "Project AI access was not resolved" };
+  }
+  if (access === "excluded") {
+    return { decision: "deny", tier, reason: "Project is excluded from AI" };
+  }
+  if (access === "read_only" && action !== "read") {
+    return { decision: "deny", tier, reason: "Project is read-only for AI" };
+  }
+  return null;
+}
+
+/** Project settings can only narrow the instance ceiling. The caller passes effective access. */
 export function projectPolicyLayer(input: PolicyCheckInput): PolicyDecision {
-  return {
-    decision: "allow",
-    tier: tierForAction(input.action),
-    reason: "Project layer allows all until T0184",
-  };
+  const tier = tierForAction(input.action);
+  const source = projectAccessDecision(input.projectAiAccess, input.projectId != null, input.action);
+  if (source) return source;
+  const destId = destinationProjectId(input);
+  const dest = projectAccessDecision(
+    input.destinationAiAccess,
+    destId != null && destId !== input.projectId,
+    input.action,
+  );
+  if (dest) return dest;
+  return { decision: "allow", tier, reason: "Allowed by project AI access" };
 }
 
 /** T0190 replaces this. A user can only narrow the ceiling. */
@@ -208,7 +254,8 @@ export function describeAllowedPolicy(
     `Allowed for the ${feature} feature (informational only; the server enforces these rules): ` +
     actions +
     "Not allowed: link, tag, comment, propose delete, bulk, and any other record type. " +
-    "Never allowed: users, roles, groups, API keys, AI credentials, backups, ownership transfer, system properties, and AI policy. " +
+    "Projects may be read-only for AI or excluded entirely. Excluded projects and their records are omitted. Read-only projects can be read but not changed. " +
+    "Never allowed: users, roles, groups, API keys, AI credentials, backups, ownership transfer, system properties, AI policy, and project AI access. " +
     "The server assigns the permission tier; the model cannot set it. Deletes are proposals only, and a person deletes the record in the app."
   );
 }

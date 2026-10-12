@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { db } from "../../db/client.js";
 import type { ActivitySource } from "../../lib/activityRequest.js";
 import type { MutationResult } from "../../lib/mutationResult.js";
 import { writeAiAudit } from "../../services/assistant/aiAudit.js";
 import { check, tierForAction, type PolicyDecision } from "../../services/assistant/aiPolicy.js";
+import { attachProjectAiAccess } from "../../services/assistant/projectAiAccess.js";
 import { AI_DELETE_DENY_REASON, isAiDeleteProposal } from "../../services/assistant/aiTiers.js";
 import { createDocumentForActor, updateDocumentForActor } from "./documents.js";
 import { createIdeaForActor, updateIdeaForActor } from "./ideas.js";
@@ -170,16 +172,18 @@ export async function applyAssistantProposal(args: {
   const declaredTier =
     args.body && typeof args.body === "object" ? (args.body as { tier?: unknown }).tier : undefined;
   const started = Date.now();
-  const decision = check({
-    actorUserId: args.actorId,
-    feature: "assistant",
-    action: "apply",
-    entityType: proposal.entityType,
-    entityId: proposal.entityId ?? null,
-    projectId: proposal.projectId ?? null,
-    fields,
-    tier: declaredTier,
-  });
+  const decision = check(
+    await attachProjectAiAccess(db, {
+      actorUserId: args.actorId,
+      feature: "assistant",
+      action: "apply",
+      entityType: proposal.entityType,
+      entityId: proposal.entityId ?? null,
+      projectId: proposal.projectId ?? null,
+      fields,
+      tier: declaredTier,
+    }),
+  );
 
   const auditBase = {
     userId: args.actorId,

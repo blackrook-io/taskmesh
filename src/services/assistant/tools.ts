@@ -15,6 +15,14 @@ import {
   type PolicyDecision,
   type PolicyLayerFns,
 } from "./aiPolicy.js";
+import {
+  attachProjectAiAccess,
+  documentsVisibleToAi,
+  projectIdForAiEntity,
+  projectsVisibleToAi,
+  resolveEffectiveAiAccess,
+  tasksVisibleToAi,
+} from "./projectAiAccess.js";
 import { capUrlQuery, fetchUrlForAssistant } from "./fetchUrl.js";
 import {
   minimizeDocument,
@@ -310,7 +318,7 @@ function policyTargetForTool(name: string, args: unknown): ToolPolicyTarget | nu
     case "search_records":
       return { action: "read" };
     case "get_entity":
-      return { action: "read", entityType, resource };
+      return { action: "read", entityType, resource, entityId: numField(args, "entityId") };
     case "list_project_context":
       return { action: "read", entityType: "project", projectId: numField(args, "projectId") };
     case "fetch_url":
@@ -360,11 +368,33 @@ function denialPayload(action: AiAction, decision: PolicyDecision): string {
   });
 }
 
-function ownerFields(args: unknown): Record<string, unknown> | null {
-  if (!args || typeof args !== "object" || !Object.prototype.hasOwnProperty.call(args, "ownerId")) {
-    return null;
+function policyFields(args: unknown): Record<string, unknown> | null {
+  if (!args || typeof args !== "object") return null;
+  const rec = args as Record<string, unknown>;
+  const fields: Record<string, unknown> = {};
+  if (Object.prototype.hasOwnProperty.call(rec, "ownerId")) fields.ownerId = rec.ownerId;
+  if (Object.prototype.hasOwnProperty.call(rec, "aiAccess")) fields.aiAccess = rec.aiAccess;
+  if (Object.prototype.hasOwnProperty.call(rec, "ai_access")) fields.ai_access = rec.ai_access;
+  const nested = rec.fields;
+  if (nested && typeof nested === "object") {
+    const inner = nested as Record<string, unknown>;
+    if (typeof inner.projectId === "number") fields.projectId = inner.projectId;
+    if (Object.prototype.hasOwnProperty.call(inner, "ownerId")) fields.ownerId = inner.ownerId;
+    if (Object.prototype.hasOwnProperty.call(inner, "aiAccess")) fields.aiAccess = inner.aiAccess;
+    if (Object.prototype.hasOwnProperty.call(inner, "ai_access")) fields.ai_access = inner.ai_access;
   }
-  return { ownerId: (args as Record<string, unknown>).ownerId };
+  return Object.keys(fields).length > 0 ? fields : null;
+}
+
+async function excludedReadDenial(projectId: number | null | undefined): Promise<string | null> {
+  if (projectId == null) return null;
+  const access = await resolveEffectiveAiAccess(db, projectId);
+  if (access !== "excluded") return null;
+  return denialPayload("read", {
+    decision: "deny",
+    tier: tierForAction("read"),
+    reason: "Project is excluded from AI",
+  });
 }
 
 async function auditTool(
@@ -455,22 +485,33 @@ export async function executeAssistantTool(
     return denialPayload(target.action, decision);
   }
 
+  let resolvedTarget = target;
+  if (name === "get_entity" && resolvedTarget.projectId == null && resolvedTarget.entityId != null) {
+    const projectId = await projectIdForAiEntity(
+      db,
+      resolvedTarget.entityType,
+      resolvedTarget.entityId,
+    );
+    if (projectId != null) resolvedTarget = { ...resolvedTarget, projectId };
+  }
+
   const decide = handlers.checkPolicy ?? check;
-  const decision = decide({
+  const policyInput = await attachProjectAiAccess(db, {
     actorUserId: handlers.actorUserId ?? 0,
     feature: handlers.feature ?? "assistant",
-    action: target.action,
-    entityType: target.entityType,
-    resource: target.resource,
-    entityId: target.entityId,
-    projectId: target.projectId,
-    fields: ownerFields(args),
+    action: resolvedTarget.action,
+    entityType: resolvedTarget.entityType,
+    resource: resolvedTarget.resource,
+    entityId: resolvedTarget.entityId,
+    projectId: resolvedTarget.projectId,
+    fields: policyFields(args),
     webFetchEnabled: handlers.webFetchEnabled === true,
   });
+  const decision = decide(policyInput);
 
   if (decision.decision === "deny") {
-    await auditTool(handlers, name, target, decision, started);
-    return denialPayload(target.action, decision);
+    await auditTool(handlers, name, resolvedTarget, decision, started);
+    return denialPayload(resolvedTarget.action, decision);
   }
 
   const fetched =
@@ -479,10 +520,10 @@ export async function executeAssistantTool(
       : undefined;
   try {
     const result = redactSecrets(await dispatchTool(name, args, handlers));
-    await auditTool(handlers, name, target, decision, started, fetched);
+    await auditTool(handlers, name, resolvedTarget, decision, started, fetched);
     return result;
   } catch (err) {
-    await auditTool(handlers, name, target, decision, started, fetched);
+    await auditTool(handlers, name, resolvedTarget, decision, started, fetched);
     return redactSecrets(
       JSON.stringify({
         error: err instanceof Error ? err.message : "Tool failed",
@@ -513,7 +554,12 @@ async function toolFetchUrl(args: unknown, signal?: AbortSignal): Promise<string
 async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string> {
   const { q } = z.object({ q: z.string().min(1).max(200) }).parse(args);
   const { actorUserId, isAdministrator } = requireActor(handlers);
-  const ideaScope = ownerScope(schema.ideas.ownerId, actorUserId, isAdministrator);
+  const [ideaScope, visibleProjects, visibleTasks, visibleDocuments] = await Promise.all([
+    Promise.resolve(ownerScope(schema.ideas.ownerId, actorUserId, isAdministrator)),
+    projectsVisibleToAi(db),
+    tasksVisibleToAi(db),
+    documentsVisibleToAi(db),
+  ]);
   const projectScope = projectAccessListFilter(db, actorUserId, isAdministrator);
   const taskScope = dualScopeListFilter(
     db,
@@ -547,6 +593,7 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
         and(
           or(ilikeEscaped(schema.projects.name, q), ilikeEscaped(schema.projects.description, q)),
           projectScope ?? sql`true`,
+          visibleProjects,
         ),
       )
       .orderBy(desc(schema.projects.updatedAt))
@@ -564,6 +611,7 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
           ne(schema.tasks.state, "deleted"),
           or(ilikeEscaped(schema.tasks.title, q), ilikeEscaped(schema.tasks.description, q)),
           taskScope ?? sql`true`,
+          visibleTasks,
         ),
       )
       .orderBy(desc(schema.tasks.updatedAt))
@@ -582,6 +630,7 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
             ilikeEscaped(schema.projectDocuments.body, q),
           ),
           documentScope ?? sql`true`,
+          visibleDocuments,
         ),
       )
       .orderBy(desc(schema.projectDocuments.updatedAt))
@@ -634,6 +683,8 @@ async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<str
     }
     if (parsed.entityType === "project") {
       const row = await assertCanAccessProject(db, actorUserId, parsed.entityId);
+      const hidden = await excludedReadDenial(row.id);
+      if (hidden) return hidden;
       return JSON.stringify(
         minimizeProject({ ...row, tags: await tagNames("project", row.id) }),
       );
@@ -645,6 +696,8 @@ async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<str
         .where(eq(schema.projectDocuments.id, parsed.entityId));
       if (!row) return JSON.stringify({ error: "Document not found" });
       await assertCanAccessProject(db, actorUserId, row.projectId);
+      const hidden = await excludedReadDenial(row.projectId);
+      if (hidden) return hidden;
       return JSON.stringify(
         minimizeDocument({ ...row, tags: await tagNames("document", row.id) }),
       );
@@ -652,6 +705,8 @@ async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<str
     const [row] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parsed.entityId));
     if (!row) return JSON.stringify({ error: "Task not found" });
     await assertCanAccessDualScoped(db, actorUserId, row);
+    const hidden = await excludedReadDenial(row.projectId);
+    if (hidden) return hidden;
     return JSON.stringify(
       minimizeTask({ ...row, tags: await tagNames("task", row.id) }),
     );
@@ -666,6 +721,8 @@ async function toolListProject(args: unknown, handlers: ToolHandlers): Promise<s
   const { actorUserId } = requireActor(handlers);
   try {
     const proj = await assertCanAccessProject(db, actorUserId, projectId);
+    const hidden = await excludedReadDenial(projectId);
+    if (hidden) return hidden;
     const [docs, tasks] = await Promise.all([
       db
         .select({ id: schema.projectDocuments.id, title: schema.projectDocuments.title })
