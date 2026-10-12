@@ -379,9 +379,19 @@ export function AssistantPanel({ open, onClose }: Props) {
 
         {!enabled && !statusQuery.isLoading ? (
           <p className="assistant-panel__banner">
-            Set an instance key under Administration → System properties, or set{" "}
-            <code>OPENAI_API_KEY</code> in the server <code>.env</code> (deprecated fallback) and
-            enable the OpenAI provider. See{" "}
+            {statusQuery.data?.keyMode === "user_only" ? (
+              <>Add your own provider key in Assistant settings. An Administrator must also enable a chat provider. See </>
+            ) : statusQuery.data?.keyMode === "user_preferred_instance_fallback" ? (
+              <>
+                Add your own provider key in Assistant settings, or ask an Administrator to store an instance key. A chat
+                provider must be enabled. See{" "}
+              </>
+            ) : (
+              <>
+                Set an instance key under Administration → System properties, or set <code>OPENAI_API_KEY</code> in the
+                server <code>.env</code> (deprecated fallback) and enable the OpenAI provider. See{" "}
+              </>
+            )}
             <button
               type="button"
               className="linkish"

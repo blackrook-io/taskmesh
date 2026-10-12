@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { adminRouter } from "./admin.js";
+import { aiRouter } from "./ai.js";
 import { assistantRouter } from "./assistant.js";
 import { authRouter } from "./auth.js";
 import { backupsRouter } from "./backups.js";
@@ -71,6 +72,7 @@ v1Router.use("/mesh-layouts", meshLayoutsRouter);
 v1Router.use("/todo-lists", todoListsRouter);
 v1Router.use("/backups", backupsRouter);
 v1Router.use("/assistant", assistantRouter);
+v1Router.use("/ai", aiRouter);
 v1Router.use("/image-boards", imageBoardsRouter);
 v1Router.use(importExportRouter);
 v1Router.use(uploadsRouter);

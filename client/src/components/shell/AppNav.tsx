@@ -50,6 +50,7 @@ type Props = {
   onExpand: () => void;
   onOpenPalette: () => void;
   onOpenAssistant: () => void;
+  assistantBlockedTitle: string | null;
   onNavigate?: () => void;
 };
 
@@ -168,6 +169,7 @@ export function AppNav({
   onExpand,
   onOpenPalette,
   onOpenAssistant,
+  assistantBlockedTitle,
   onNavigate,
 }: Props) {
   const less = mode === "less";
@@ -435,7 +437,8 @@ export function AppNav({
                 type="button"
                 className="btn ghost small"
                 onClick={onOpenAssistant}
-                title="Assistant (Ctrl/⌘J)"
+                disabled={assistantBlockedTitle != null}
+                title={assistantBlockedTitle ?? "Assistant (Ctrl/⌘J)"}
                 aria-keyshortcuts="Control+J Meta+J"
               >
                 <NavIcon icon={shellIcons.assistant} className="app-nav__inline-icon" />

@@ -9,6 +9,7 @@ import type { SearchResults } from "../types";
 type Props = {
   open: boolean;
   onClose: () => void;
+  assistantBlockedTitle: string | null;
 };
 
 type PaletteItem = {
@@ -19,6 +20,7 @@ type PaletteItem = {
   path: string;
   /** Special client action instead of navigation */
   action?: "open-assistant" | "open-settings" | "open-admin";
+  disabled?: boolean;
   settingsSection?: "profile" | "appearance" | "import-export" | "assistant";
   adminSection?:
     | "users"
@@ -268,12 +270,18 @@ function flattenSearch(data: SearchResults): PaletteItem[] {
   return out;
 }
 
-export function CommandPalette({ open, onClose }: Props) {
+export function CommandPalette({ open, onClose, assistantBlockedTitle }: Props) {
   if (!open) return null;
-  return <CommandPaletteDialog onClose={onClose} />;
+  return <CommandPaletteDialog onClose={onClose} assistantBlockedTitle={assistantBlockedTitle} />;
 }
 
-function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
+function CommandPaletteDialog({
+  onClose,
+  assistantBlockedTitle,
+}: {
+  onClose: () => void;
+  assistantBlockedTitle: string | null;
+}) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const showAdmin = userIsAdministrator(user);
@@ -287,13 +295,17 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
   const [searching, setSearching] = useState(false);
   const [indexResetKey, setIndexResetKey] = useState({ query: "", len: 0 });
 
-  const staticCommands = useMemo(
-    () =>
-      showAdmin
-        ? STATIC_COMMANDS
-        : STATIC_COMMANDS.filter((c) => c.action !== "open-admin"),
-    [showAdmin],
-  );
+  const staticCommands = useMemo(() => {
+    const base = showAdmin
+      ? STATIC_COMMANDS
+      : STATIC_COMMANDS.filter((c) => c.action !== "open-admin");
+    if (!assistantBlockedTitle) return base;
+    return base.map((item) =>
+      item.action === "open-assistant"
+        ? { ...item, hint: assistantBlockedTitle, disabled: true }
+        : item,
+    );
+  }, [showAdmin, assistantBlockedTitle]);
 
   const recentItems = useMemo((): PaletteItem[] => {
     return loadRecentNav()
@@ -360,6 +372,7 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
 
   const go = useCallback(
     (item: PaletteItem) => {
+      if (item.disabled) return;
       if (item.action === "open-assistant") {
         onClose();
         window.dispatchEvent(new CustomEvent("taskmesh:open-assistant"));
@@ -503,6 +516,9 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
                   role="option"
                   data-palette-index={index}
                   aria-selected={index === activeIndex}
+                  aria-disabled={item.disabled || undefined}
+                  disabled={item.disabled}
+                  title={item.disabled ? item.hint : undefined}
                   className={`command-palette__item${index === activeIndex ? " is-active" : ""}`}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => go(item)}

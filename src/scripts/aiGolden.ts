@@ -1,11 +1,18 @@
 import "dotenv/config";
+import { isNull } from "drizzle-orm";
 import { db, pool } from "../db/client.js";
+import * as schema from "../db/schema.js";
 import { resolveAssistantSession } from "../services/assistant/index.js";
 import { assertLocalProviderBaseUrl, assertPublicProviderBaseUrl } from "../services/assistant/providerBaseUrl.js";
 import { runGoldenCases } from "../services/assistant/golden/run.js";
 
 async function main(): Promise<void> {
-  const session = await resolveAssistantSession(db);
+  const [user] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(isNull(schema.users.deactivatedAt))
+    .limit(1);
+  const session = user ? await resolveAssistantSession(db, user.id) : null;
   if (!session) {
     console.log("ai:golden skipped — no chat provider is configured");
     return;

@@ -435,6 +435,13 @@
       "when": 1791812777985,
       "tag": "0061_third_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791815435588,
+      "tag": "0062_young_giant_girl",
+      "breakpoints": true
     }
   ]
 }

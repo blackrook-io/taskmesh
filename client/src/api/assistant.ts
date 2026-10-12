@@ -18,6 +18,7 @@ export type AssistantStatus = {
   enabled: boolean;
   provider: string;
   model: string;
+  keyMode?: "instance_only" | "user_only" | "user_preferred_instance_fallback";
   configuredProviders: { openai: boolean };
   plugins?: AssistantPluginStatus[];
   toolsEnabled?: boolean;

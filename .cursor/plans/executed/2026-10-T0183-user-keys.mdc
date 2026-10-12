@@ -1,0 +1,55 @@
+# T0183 — Per-user provider keys and feature unlocking
+
+**Task:** T0183 (id 198) — AI: per-user provider keys and feature unlocking
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Depends on:** T0182 complete (instance keys, `ai_key_mode`, `AI_CREDENTIALS_KEY`). Gate is clear.
+**Branch (after approval):** `T0183-user-keys`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for `user_ai_credentials`).
+
+## Size
+
+One feature: store each user’s provider keys, resolve the key for a request from `ai_key_mode`, and expose `GET /api/v1/ai/capabilities` so the client can show or hide the assistant. The settings page that edits those keys stays in T0190. Budgets stay in T0188. No split.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Where keys live | New table `user_ai_credentials`. One row per `(user_id, plugin_id)`. Columns: `secret_enc` (same AES-256-GCM as instance keys, `AI_CREDENTIALS_KEY`), `hint` (last 4), `default_model` (nullable text), `verified_at`, `last_error` (nullable, capped), `updated_at`. `user_id` **ON DELETE CASCADE**. Plaintext never stored. |
+| 2 | Who may write | The signed-in user, only their own rows. No administrator route to set another user’s key. |
+| 3 | Which plugins | A non-local plugin that is loaded and **enabled** by the Administrator. Unknown, local, or disabled plugins are rejected. Local plugins (Ollama) never take a user key. |
+| 4 | Write-only API | `GET /api/v1/ai/credentials` lists the caller’s rows: plugin id, hint, default model, `verifiedAt`, `lastError`. Never the key. `PUT /api/v1/ai/credentials/:pluginId` body `{ apiKey, defaultModel? }` replaces the ciphertext, clears `verified_at`, then verifies in the same request. `DELETE` removes the row. Responses, errors, and request logs never contain the key. |
+| 5 | Verify on save | Decrypt only in memory and call the plugin `verifyKey`. Success sets `verified_at` and clears `last_error` (200). Provider rejection **keeps the row** with `verified_at` null and `last_error` set, and returns 422 with the redacted provider message. A stored key is usable at request time even when `verified_at` is null (same as instance keys). |
+| 6 | Resolution | One function used by assistant session setup. Decrypt only for that call. **`instance_only`:** instance ciphertext, else the plugin env var. A user key is ignored. **`user_only`:** the caller’s key only. Instance ciphertext and env vars are never used. **`user_preferred_instance_fallback`:** the caller’s key when a row exists, otherwise instance ciphertext, otherwise the env var. Local plugins stay keyless in every mode. When the user’s row has `default_model`, that model is used for the call; otherwise the plugin’s configured chat model. |
+| 7 | Capabilities | `GET /api/v1/ai/capabilities` (optional `projectId`). One entry for each registered feature. Today the only feature is `assistant`. Shape: `{ id, available, reason }`. `reason` is null when available, otherwise `no_key` \| `disabled_by_administrator` \| `project_excluded` \| `budget_reached`. |
+| 8 | Reason rules | `disabled_by_administrator` when no enabled chat plugin can serve the feature. `no_key` when resolution yields no key for a non-local plugin (including `user_only` with no user row). `project_excluded` only when `projectId` is set and that project’s **effective** AI access is `excluded`. `read_only` does not hide the feature. `budget_reached` is in the enum and is never returned until T0188 wires the check. |
+| 9 | Client | Top-bar **AI** button, Ctrl/⌘J, and `taskmesh:open-assistant`. When `assistant` is unavailable, the button stays visible, is disabled, and its title is a short sentence for that reason. The shortcut does not open the panel. Command palette “Open assistant” follows the same rule. No new settings form (T0190). |
+| 10 | Chat path | `POST /api/v1/assistant/chat` and status use the same resolution for the signed-in user. An unconfigured result stays 503. The unconfigured copy mentions a personal key when the mode is `user_only` or `user_preferred_instance_fallback`. |
+| 11 | Tests | Resolution: each of the three modes (user key used, user key ignored, instance/env refused under `user_only`, fallback order). Capabilities: no key, disabled plugin, `projectId` excluded, and budget reason absent. PUT/GET/DELETE bodies and error strings do not contain the submitted key. Cascade: deleting the user removes the row. |
+| 12 | Docs | `docs/database/platform.md` for `user_ai_credentials`. Glossary only if a new enum needs a line (`reason` values live on the API, not in a system property). `npm run docs:sync-schema` after the doc edit. |
+
+## Out of scope (already tasked)
+
+- T0190 — user AI settings page (key form, model picker, feature toggles, policy matrix, usage).
+- T0188 — budgets and metering; it will set `budget_reached` on this endpoint.
+- T0189 — Administrator AI settings hub.
+- T0205 — model routing and provider fallback (this task only picks the key and the user’s default model for the plugin already selected).
+- T0213 — key rotation and backup guidance.
+
+## Work items
+
+1. Migration + Drizzle: `user_ai_credentials` with unique `(user_id, plugin_id)` and user cascade.
+2. Service: replace (encrypt + verify), remove, list public rows, resolve key for `(userId, pluginId, mode)`.
+3. Routes: credentials CRUD and `GET /api/v1/ai/capabilities`.
+4. Wire `resolveAssistantSession` / chat / status to the signed-in user and the key mode.
+5. Client: fetch capabilities and disable the assistant entry points with the short reason.
+6. Tests and schema docs.
+
+## QA checklist (after implementation)
+
+- With `AI_CREDENTIALS_KEY` set, `PUT` a user key. The response shows only the last 4. A bad key returns 422, keeps the hint, and sets `last_error` without echoing the secret.
+- `instance_only`: chat still uses the instance key (or env fallback) and ignores the user key.
+- `user_only`: chat uses the user key. With no user key, capabilities say `no_key`, the AI button is disabled with that reason, and chat is 503. The instance key and env var are not spent.
+- `user_preferred_instance_fallback`: a user key wins; removing it falls back to the instance key or env var.
+- `GET /api/v1/ai/capabilities?projectId=` on an excluded project reports `project_excluded` for `assistant`. A read-only project does not.
+- Deleting the user removes their credential rows.

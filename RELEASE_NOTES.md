@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.66.0 — 2026-10-12
+
+### New Functionality
+- Each user can store an encrypted provider key. Chat uses that key, the instance key, or neither, according to the key mode. A failed check keeps the last four characters and a short error, and never returns the key.
+- The AI button stays visible and says why AI is off: no provider key, turned off by an Administrator, or this project is excluded. Read-only projects still open the assistant.
+
 ## 0.65.1 — 2026-10-12
 
 ### New Functionality

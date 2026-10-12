@@ -880,6 +880,47 @@ export const aiInstanceCredentials = pgTable(
 );
 
 /**
+ * One encrypted provider API key per user and plugin (T0183).
+ * Ciphertext is AES-256-GCM under `AI_CREDENTIALS_KEY`. `hint` is the last 4 characters only.
+ * Rows are removed when the user is deleted.
+ */
+export const userAiCredentials = pgTable(
+  "user_ai_credentials",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    pluginId: text("plugin_id").notNull(),
+    secretEnc: text("secret_enc").notNull(),
+    hint: text("hint").notNull(),
+    defaultModel: text("default_model"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userPlugin: unique("user_ai_credentials_user_plugin_uidx").on(t.userId, t.pluginId),
+    pluginCheck: check(
+      "user_ai_credentials_plugin_chk",
+      sql`${t.pluginId} ~ '^[a-z0-9-]+$'`,
+    ),
+    hintCheck: check(
+      "user_ai_credentials_hint_chk",
+      sql`char_length(${t.hint}) between 1 and 4`,
+    ),
+    modelCheck: check(
+      "user_ai_credentials_model_chk",
+      sql`${t.defaultModel} is null or char_length(${t.defaultModel}) between 1 and 120`,
+    ),
+    errorCheck: check(
+      "user_ai_credentials_error_chk",
+      sql`${t.lastError} is null or char_length(${t.lastError}) between 1 and 500`,
+    ),
+  }),
+);
+
+/**
  * Append-only log of assistant tool calls, replies, and proposal applies (T0178).
  * Stores the decision and token counts, not prompts, arguments, or record text.
  * A web_fetch allow row stores `Fetched` plus the capped URL in `reason`.
@@ -1790,6 +1831,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   taskListState: many(userTaskListState),
   overviewPrefs: many(userProjectOverviewPrefs),
   meshLayouts: many(meshLayouts),
+  aiCredentials: many(userAiCredentials),
 }));
 
 export const mfaLoginChallengesRelations = relations(mfaLoginChallenges, ({ one }) => ({
@@ -1925,6 +1967,13 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
 export const aiInstanceCredentialsRelations = relations(aiInstanceCredentials, ({ one }) => ({
   updatedBy: one(users, {
     fields: [aiInstanceCredentials.updatedById],
+    references: [users.id],
+  }),
+}));
+
+export const userAiCredentialsRelations = relations(userAiCredentials, ({ one }) => ({
+  user: one(users, {
+    fields: [userAiCredentials.userId],
     references: [users.id],
   }),
 }));

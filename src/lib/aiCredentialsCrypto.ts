@@ -25,7 +25,7 @@ export function getAiCredentialsKey(): Buffer {
   }
   if (!raw) {
     throw new AiCredentialsKeyError(
-      "Set AI_CREDENTIALS_KEY (at least 32 characters) before storing an instance key.",
+      "Set AI_CREDENTIALS_KEY (at least 32 characters) before storing a provider key.",
     );
   }
   return createHash("sha256").update(raw, "utf8").digest();

@@ -9,6 +9,7 @@ const MOBILE_NAV_MQ = "(max-width: 960px)";
 type Props = {
   onOpenPalette: () => void;
   onOpenAssistant: () => void;
+  assistantBlockedTitle: string | null;
 };
 
 function useIsMobileNav(): boolean {
@@ -25,7 +26,7 @@ function useIsMobileNav(): boolean {
   return mobile;
 }
 
-export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
+export function AppShell({ onOpenPalette, onOpenAssistant, assistantBlockedTitle }: Props) {
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
   const { mode, collapse, expand, restoreFromHidden } = useAppNavMode();
@@ -94,6 +95,7 @@ export function AppShell({ onOpenPalette, onOpenAssistant }: Props) {
           onExpand={expand}
           onOpenPalette={onOpenPalette}
           onOpenAssistant={onOpenAssistant}
+          assistantBlockedTitle={assistantBlockedTitle}
           onNavigate={closeDrawer}
         />
       </div>
