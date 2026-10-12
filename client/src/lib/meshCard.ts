@@ -367,7 +367,7 @@ export function buildMeshSuggestionCard(input: {
       `${item.confidence}% match`,
       item.reason,
     ]),
-    "Accept link",
+    "Apply",
     "Dismiss",
     model.hint,
   ];

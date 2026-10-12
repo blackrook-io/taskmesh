@@ -28,6 +28,7 @@ import {
   journalDraftFromMutation,
   shouldAutoApplyTier1,
 } from "../../services/assistant/aiUndo.js";
+import { stampProposalRevision } from "../../services/assistant/proposalRevision.js";
 import { AiFeedbackError, recordAiFeedback, AI_FEEDBACK_KINDS } from "../../services/assistant/aiFeedback.js";
 
 export const assistantRouter = Router();
@@ -109,6 +110,12 @@ assistantRouter.post("/proposals/apply", async (req, res) => {
       });
       return;
     }
+    if (outcome.kind === "stale") {
+      res.status(409).json({
+        error: { code: "proposal_stale", message: outcome.message },
+      });
+      return;
+    }
     sendMutation(res, outcome.result);
   } catch (err) {
     handleRouteError(res, err);
@@ -143,6 +150,10 @@ async function autoApplyProposal(
     const outcome = await applyAssistantProposal({ body: proposal, actorId: actorUserId });
     if (outcome.kind === "denied") {
       writeEvent("apply_failed", { summary: proposal.summary, message: outcome.decision.reason });
+      return;
+    }
+    if (outcome.kind === "stale") {
+      writeEvent("apply_failed", { summary: proposal.summary, message: outcome.message });
       return;
     }
     if (!outcome.result.ok) {
@@ -238,6 +249,12 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
         },
         onDelta: (text) => writeEvent("delta", { text }),
         onDone: async (info) => {
+          for (const proposal of proposals) {
+            const stamp = await stampProposalRevision(db, proposal);
+            if (stamp.before) proposal.before = stamp.before;
+            if (stamp.baseUpdatedAt) proposal.baseUpdatedAt = stamp.baseUpdatedAt;
+            if (stamp.targetMissing) proposal.targetMissing = true;
+          }
           const plan = classifyChangePlan(
             proposals.map((proposal) => operationFromProposal(proposal, actorUserId)),
             tierSettings,

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   fetchAssistantStatus,
   putAssistantFeedback,
@@ -7,10 +7,13 @@ import {
   type AssistantProposal,
   type ChatTurn,
 } from "../api/assistant";
-import { apiJson } from "../api/client";
+import { apiJson, ApiRequestError } from "../api/client";
 import { useAssistantAttachTarget } from "../lib/assistantAttach";
+import { isDeleteProposal, proposalExpired, proposalHeading } from "../lib/aiReview";
 import { showAiAppliedToast, showAiApplyFailedToast } from "../lib/aiApplyToast";
 import { dispatchOpenSettings } from "../lib/settings";
+import { AiProposalCard } from "./shared/AiProposalCard";
+import { AiReviewDialog } from "./shared/AiReviewDialog";
 
 const TRANSCRIPT_KEY = "taskmesh.assistant.transcript";
 
@@ -53,16 +56,6 @@ function saveTranscript(turns: ChatTurn[]) {
   }
 }
 
-function proposalHeading(p: AssistantProposal): string {
-  if (p.policyAction === "link") return `Add link on ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}`;
-  if (p.policyAction === "tag") return `Add tag on ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}`;
-  if (p.policyAction === "comment") {
-    return `Add comment on ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}`;
-  }
-  const verb = p.action === "create" ? "Create" : "Update";
-  return `${verb} ${p.entityType}${p.entityId != null ? ` #${p.entityId}` : ""}${p.projectId != null ? ` · project #${p.projectId}` : ""}`;
-}
-
 function ThumbIcon({ down = false }: { down?: boolean }) {
   return (
     <svg
@@ -84,16 +77,6 @@ function ThumbIcon({ down = false }: { down?: boolean }) {
   );
 }
 
-function previewFields(fields: Record<string, unknown>): string {
-  const lines: string[] = [];
-  for (const [k, v] of Object.entries(fields)) {
-    const raw = v == null ? "∅" : typeof v === "string" ? v : JSON.stringify(v);
-    const clipped = raw.length > 280 ? `${raw.slice(0, 280)}…` : raw;
-    lines.push(`${k}: ${clipped}`);
-  }
-  return lines.join("\n") || "(no fields)";
-}
-
 export function AssistantPanel({ open, onClose }: Props) {
   const qc = useQueryClient();
   const attachTarget = useAssistantAttachTarget();
@@ -110,6 +93,9 @@ export function AssistantPanel({ open, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [proposals, setProposals] = useState<AssistantProposal[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const closeReview = useCallback(() => setReviewOpen(false), []);
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -125,11 +111,16 @@ export function AssistantPanel({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (reviewOpen) {
+        setReviewOpen(false);
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, reviewOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -190,8 +181,14 @@ export function AssistantPanel({ open, onClose }: Props) {
         },
       ]);
     },
-    onError: (e: Error) => {
+    onError: (e: Error, proposal) => {
       setApplyingId(null);
+      if (e instanceof ApiRequestError && e.status === 409) {
+        setProposals((list) =>
+          list.map((item) => (item.id === proposal.id ? { ...item, stale: true } : item)),
+        );
+        return;
+      }
       setError(e.message);
     },
   });
@@ -248,6 +245,33 @@ export function AssistantPanel({ open, onClose }: Props) {
     }
   }
 
+  async function approveSelected(ids: string[]) {
+    for (const id of ids) {
+      const proposal = proposals.find((item) => item.id === id);
+      if (!proposal || proposalExpired(proposal) || isDeleteProposal(proposal)) continue;
+      try {
+        await applyMutation.mutateAsync(proposal);
+        setRowErrors((current) => {
+          if (!(id in current)) return current;
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Could not apply";
+        setRowErrors((current) => ({ ...current, [id]: message }));
+      }
+    }
+  }
+
+  async function rejectTier3() {
+    const pending = proposals.filter((item) => (item.planTier ?? 2) >= 3);
+    for (const proposal of pending) {
+      await dismissProposal(proposal);
+    }
+    setReviewOpen(false);
+  }
+
   const send = useMutation({
     mutationFn: async (message: string) => {
       setError(null);
@@ -259,6 +283,7 @@ export function AssistantPanel({ open, onClose }: Props) {
       const ac = new AbortController();
       abortRef.current = ac;
       let full = "";
+      const turnProposals: AssistantProposal[] = [];
       try {
         const pageContext =
           attachEnabled && attachTarget ? attachTarget.getContext().slice(0, 16_000) : null;
@@ -275,10 +300,8 @@ export function AssistantPanel({ open, onClose }: Props) {
             setToolNote(`Using ${info.name}…`);
           },
           onProposal: (proposal) => {
-            setProposals((list) => {
-              if (list.some((x) => x.id === proposal.id)) return list;
-              return [...list, proposal];
-            });
+            if (turnProposals.some((item) => item.id === proposal.id)) return;
+            turnProposals.push(proposal);
           },
           onApplied: (applied) => {
             showAiAppliedToast(applied);
@@ -296,6 +319,19 @@ export function AssistantPanel({ open, onClose }: Props) {
               ...(done.auditId != null ? { auditId: done.auditId } : {}),
             },
           ]);
+          if (turnProposals.length > 0) {
+            const planTier = done.planTier ?? 2;
+            const stamped = turnProposals.map((proposal) => ({
+              ...proposal,
+              planTier,
+              planEscalations: done.planEscalations,
+            }));
+            setProposals((list) => {
+              const ids = new Set(list.map((item) => item.id));
+              return [...list, ...stamped.filter((item) => !ids.has(item.id))];
+            });
+            if (planTier >= 3) setReviewOpen(true);
+          }
         }
         setStreaming("");
         setToolNote(null);
@@ -334,6 +370,8 @@ export function AssistantPanel({ open, onClose }: Props) {
   if (!open) return null;
 
   const enabled = statusQuery.data?.enabled ?? false;
+  const tier3 = proposals.filter((proposal) => (proposal.planTier ?? 2) >= 3);
+  const tier2 = proposals.filter((proposal) => (proposal.planTier ?? 2) < 3);
 
   return (
     <div className="assistant-backdrop" role="presentation" onMouseDown={onClose}>
@@ -499,38 +537,38 @@ export function AssistantPanel({ open, onClose }: Props) {
             </div>
           ) : null}
 
-          {proposals.length > 0 ? (
+          {tier3.length > 0 || tier2.length > 0 ? (
             <div className="assistant-proposals">
               <h3 className="assistant-proposals__title">Pending changes</h3>
-              <p className="muted" style={{ margin: "0 0 0.5rem", fontSize: "0.85rem" }}>
-                Review each card, then Apply to write to TaskMesh (or Dismiss).
-              </p>
-              {proposals.map((p) => (
-                <article key={p.id} className="assistant-proposal-card">
-                  <header className="assistant-proposal-card__head">
-                    <strong>{proposalHeading(p)}</strong>
-                  </header>
-                  <p className="assistant-proposal-card__summary">{p.summary}</p>
-                  <pre className="assistant-proposal-card__fields">{previewFields(p.fields)}</pre>
-                  <div className="btn-row" style={{ marginTop: "0.5rem" }}>
-                    <button
-                      type="button"
-                      className="btn small ghost"
-                      disabled={applyingId === p.id || dismissingId === p.id}
-                      onClick={() => void dismissProposal(p)}
-                    >
-                      {dismissingId === p.id ? "Dismissing…" : "Dismiss"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn small primary"
-                      disabled={applyingId != null}
-                      onClick={() => applyMutation.mutate(p)}
-                    >
-                      {applyingId === p.id ? "Applying…" : "Apply"}
-                    </button>
-                  </div>
-                </article>
+              {tier3.length > 0 ? (
+                <button type="button" className="btn small" onClick={() => setReviewOpen(true)}>
+                  Review changes ({tier3.length})
+                </button>
+              ) : null}
+              {tier2.length > 0 ? (
+                <p className="muted" style={{ margin: "0 0 0.5rem", fontSize: "0.85rem" }}>
+                  Review each card, then Apply to write to TaskMesh (or Dismiss).
+                </p>
+              ) : null}
+              {tier2.map((p) => (
+                <AiProposalCard
+                  key={p.id}
+                  heading={proposalHeading(p)}
+                  summary={p.summary}
+                  fields={p.fields}
+                  before={p.before}
+                  notice={
+                    proposalExpired(p)
+                      ? "Expired — the target changed since this was proposed."
+                      : undefined
+                  }
+                  applying={applyingId === p.id}
+                  dismissing={dismissingId === p.id}
+                  applyDisabled={proposalExpired(p) || applyingId != null}
+                  dismissDisabled={applyingId === p.id || dismissingId === p.id}
+                  onApply={() => applyMutation.mutate(p)}
+                  onDismiss={() => void dismissProposal(p)}
+                />
               ))}
             </div>
           ) : null}
@@ -584,6 +622,15 @@ export function AssistantPanel({ open, onClose }: Props) {
           </div>
         </form>
       </aside>
+      <AiReviewDialog
+        open={reviewOpen && tier3.length > 0}
+        proposals={tier3}
+        applyingId={applyingId}
+        rowErrors={rowErrors}
+        onApproveSelected={(ids) => void approveSelected(ids)}
+        onRejectAll={() => void rejectTier3()}
+        onClose={closeReview}
+      />
     </div>
   );
 }

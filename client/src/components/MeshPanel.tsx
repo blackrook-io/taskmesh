@@ -24,6 +24,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { AiProposalCard } from "./shared/AiProposalCard";
 import {
   MESH_APPEARANCE_DEFAULTS,
   meshAppearanceStyle,
@@ -477,24 +478,16 @@ function MeshSuggestionCard({
           <p className="mesh-card__meta">
             {item.confidence}% match · {item.reason}
           </p>
-          <div className="mesh-card__actions">
-            <button
-              type="button"
-              className="btn small primary"
-              disabled={pending}
-              onClick={() => onAccept(item.targetKey)}
-            >
-              Accept link
-            </button>
-            <button
-              type="button"
-              className="btn small ghost"
-              disabled={pending}
-              onClick={() => onDismiss(item)}
-            >
-              Dismiss
-            </button>
-          </div>
+          <AiProposalCard
+            compact
+            applyLabel="Apply"
+            dismissLabel="Dismiss"
+            applying={pending}
+            applyDisabled={pending}
+            dismissDisabled={pending}
+            onApply={() => onAccept(item.targetKey)}
+            onDismiss={() => onDismiss(item)}
+          />
         </div>
       ))}
       {error ? (
