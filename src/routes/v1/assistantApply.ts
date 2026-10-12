@@ -3,6 +3,7 @@ import type { ActivitySource } from "../../lib/activityRequest.js";
 import type { MutationResult } from "../../lib/mutationResult.js";
 import { writeAiAudit } from "../../services/assistant/aiAudit.js";
 import { check, tierForAction, type PolicyDecision } from "../../services/assistant/aiPolicy.js";
+import { AI_DELETE_DENY_REASON, isAiDeleteProposal } from "../../services/assistant/aiTiers.js";
 import { createDocumentForActor, updateDocumentForActor } from "./documents.js";
 import { createIdeaForActor, updateIdeaForActor } from "./ideas.js";
 import { createProjectTask, patchProjectTask } from "./tasks.js";
@@ -126,11 +127,48 @@ async function runTarget(
   }
 }
 
+function optionalText(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function optionalId(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
 export async function applyAssistantProposal(args: {
   body: unknown;
   actorId: number;
 }): Promise<ApplyOutcome> {
+  if (isAiDeleteProposal(args.body)) {
+    const started = Date.now();
+    const rec =
+      args.body && typeof args.body === "object" ? (args.body as Record<string, unknown>) : {};
+    const denied: PolicyDecision = {
+      decision: "deny",
+      tier: 3,
+      reason: AI_DELETE_DENY_REASON,
+    };
+    await writeAiAudit({
+      userId: args.actorId,
+      feature: "assistant",
+      tool: null,
+      action: "apply",
+      entityType: optionalText(rec.entityType),
+      entityId: optionalId(rec.entityId),
+      projectId: optionalId(rec.projectId),
+      decision: "deny",
+      reason: denied.reason,
+      tier: denied.tier,
+      latencyMs: Date.now() - started,
+    });
+    return { kind: "denied", decision: denied };
+  }
+
   const proposal = proposalBody.parse(args.body);
+  const fields = { ...proposal.fields };
+  delete fields.tier;
+  const declaredTier =
+    args.body && typeof args.body === "object" ? (args.body as { tier?: unknown }).tier : undefined;
   const started = Date.now();
   const decision = check({
     actorUserId: args.actorId,
@@ -139,7 +177,8 @@ export async function applyAssistantProposal(args: {
     entityType: proposal.entityType,
     entityId: proposal.entityId ?? null,
     projectId: proposal.projectId ?? null,
-    fields: proposal.fields,
+    fields,
+    tier: declaredTier,
   });
 
   const auditBase = {
@@ -181,7 +220,7 @@ export async function applyAssistantProposal(args: {
   }
 
   try {
-    const result = await runTarget(target, proposal.fields, args.actorId, "ai");
+    const result = await runTarget(target, fields, args.actorId, "ai");
     await writeAiAudit({
       ...auditBase,
       decision: "allow",

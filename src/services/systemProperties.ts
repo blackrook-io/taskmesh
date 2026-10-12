@@ -16,6 +16,11 @@ import {
   openAiPluginSeed,
   type AiProvidersFile,
 } from "./assistant/aiProviderConfig.js";
+import {
+  defaultStoredAiPermissionTiers,
+  parseStoredAiPermissionTiers,
+  type StoredAiPermissionTiers,
+} from "./assistant/aiTiers.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -51,6 +56,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "mesh_appearance",
   "ai_providers",
   "ai_web_fetch",
+  "ai_permission_tiers",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -71,6 +77,8 @@ export type SystemProperties = {
   aiProviders: AiProvidersFile;
   /** When true, assistant chat may call `web_fetch`. Default false. */
   aiWebFetch: boolean;
+  /** Administrator tier matrix and blast-radius thresholds. User opt-in is not stored here. */
+  aiPermissionTiers: StoredAiPermissionTiers;
   updatedAt: string | null;
 };
 
@@ -100,6 +108,7 @@ const DEFAULTS: {
   mfa_trusted_device_max: number;
   mesh_appearance: MeshAppearance;
   ai_web_fetch: boolean;
+  ai_permission_tiers: StoredAiPermissionTiers;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -114,6 +123,7 @@ const DEFAULTS: {
   mfa_trusted_device_max: 5,
   mesh_appearance: MESH_APPEARANCE_DEFAULTS,
   ai_web_fetch: false,
+  ai_permission_tiers: defaultStoredAiPermissionTiers(),
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -257,6 +267,9 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
     meshAppearance: normalizeMeshAppearance(map.get("mesh_appearance")?.value),
     aiProviders: normalizeAiProviders(map.get("ai_providers")?.value),
     aiWebFetch: asBoolean(map.get("ai_web_fetch")?.value, DEFAULTS.ai_web_fetch),
+    aiPermissionTiers: parseStoredAiPermissionTiers(
+      map.get("ai_permission_tiers")?.value ?? DEFAULTS.ai_permission_tiers,
+    ),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);

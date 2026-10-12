@@ -14,6 +14,13 @@ import { db } from "../../db/client.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getSystemProperties } from "../../services/systemProperties.js";
 import { getCurrentUserId } from "../../services/users.js";
+import type { AssistantProposal } from "../../services/assistant/tools.js";
+import {
+  classifyChangePlan,
+  classifyOperation,
+  operationFromProposal,
+  resolveAiPermissionSettings,
+} from "../../services/assistant/aiTiers.js";
 
 export const assistantRouter = Router();
 
@@ -105,6 +112,8 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
 
     const actorUserId = await getCurrentUserId(db);
     const isAdministrator = await userHasAdministrator(db, actorUserId);
+    const tierSettings = resolveAiPermissionSettings(props.aiPermissionTiers);
+    const proposals: AssistantProposal[] = [];
 
     await runConfiguredAssistant({
       db,
@@ -115,10 +124,21 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
       signal: ac.signal,
       handlers: {
         onTool: (info) => writeEvent("tool", info),
-        onProposal: (proposal) => writeEvent("proposal", proposal),
+        onProposal: (proposal) => {
+          proposals.push(proposal);
+          const classified = classifyOperation(
+            operationFromProposal(proposal, actorUserId),
+            tierSettings,
+          );
+          writeEvent("proposal", { ...proposal, tier: classified.tier });
+        },
         onDelta: (text) => writeEvent("delta", { text }),
         onDone: () => {
-          writeEvent("done", {});
+          const plan = classifyChangePlan(
+            proposals.map((proposal) => operationFromProposal(proposal, actorUserId)),
+            tierSettings,
+          );
+          writeEvent("done", { planTier: plan.tier, planEscalations: plan.escalations });
           res.end();
         },
         onError: (message) => {

@@ -1,4 +1,11 @@
 import type { EntityType } from "../../lib/entityType.js";
+import {
+  classifyOperation,
+  defaultActionTier,
+  defaultAiPermissionSettings,
+  type AiPermissionSettings,
+  type AiTier,
+} from "./aiTiers.js";
 
 export const AI_ACTIONS = [
   "read",
@@ -30,7 +37,7 @@ export const FLOOR_RESOURCES = [
 
 export type FloorResource = (typeof FLOOR_RESOURCES)[number];
 
-export type AiTier = 0 | 1 | 2 | 3;
+export type { AiTier } from "./aiTiers.js";
 
 export type PolicyDecision = {
   decision: "allow" | "deny";
@@ -47,8 +54,12 @@ export type PolicyCheckInput = {
   entityId?: number | null;
   projectId?: number | null;
   fields?: Record<string, unknown> | null;
+  /** Owner of the target record, when the server already knows it. */
+  targetOwnerId?: number | null;
   /** Chat web fetch is allowed only when the Administrator has turned it on. */
   webFetchEnabled?: boolean;
+  /** Ignored. The model cannot choose a tier. */
+  tier?: unknown;
 };
 
 export type PolicyLayerFns = {
@@ -60,23 +71,9 @@ export type PolicyLayerFns = {
 const READ_TYPES = new Set<EntityType>(["idea", "project", "task", "document"]);
 const WRITE_TYPES = new Set<EntityType>(["idea", "document", "task"]);
 
+/** Administrator default for the action, before opt-in and escalation. */
 export function tierForAction(action: AiAction): AiTier {
-  switch (action) {
-    case "read":
-    case "web_fetch":
-      return 0;
-    case "link":
-    case "tag":
-    case "comment":
-      return 1;
-    case "propose_create":
-    case "propose_update":
-    case "apply":
-      return 2;
-    case "propose_delete":
-    case "bulk":
-      return 3;
-  }
+  return defaultActionTier(action);
 }
 
 export function isFloorResource(value: string): value is FloorResource {
@@ -163,9 +160,24 @@ const DEFAULT_LAYERS: PolicyLayerFns = {
 export function check(
   input: PolicyCheckInput,
   layers?: Partial<PolicyLayerFns>,
+  settings: AiPermissionSettings = defaultAiPermissionSettings(),
 ): PolicyDecision {
   const floor = floorDecision(input);
   if (floor) return floor;
+
+  const classified = classifyOperation(
+    {
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      projectId: input.projectId,
+      actorUserId: input.actorUserId,
+      targetOwnerId: input.targetOwnerId,
+      fields: input.fields,
+      tier: input.tier,
+    },
+    settings,
+  );
 
   const resolved: PolicyLayerFns = { ...DEFAULT_LAYERS, ...layers };
   const parts = [
@@ -175,11 +187,11 @@ export function check(
   ];
   const denied = parts.find((part) => part.decision === "deny");
   if (denied) {
-    return { decision: "deny", tier: tierForAction(input.action), reason: denied.reason };
+    return { decision: "deny", tier: classified.tier, reason: denied.reason };
   }
   return {
     decision: "allow",
-    tier: tierForAction(input.action),
+    tier: classified.tier,
     reason: "Allowed",
   };
 }
@@ -196,6 +208,7 @@ export function describeAllowedPolicy(
     `Allowed for the ${feature} feature (informational only; the server enforces these rules): ` +
     actions +
     "Not allowed: link, tag, comment, propose delete, bulk, and any other record type. " +
-    "Never allowed: users, roles, groups, API keys, AI credentials, backups, ownership transfer, system properties, and AI policy."
+    "Never allowed: users, roles, groups, API keys, AI credentials, backups, ownership transfer, system properties, and AI policy. " +
+    "The server assigns the permission tier; the model cannot set it. Deletes are proposals only, and a person deletes the record in the app."
   );
 }
