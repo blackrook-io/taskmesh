@@ -1,6 +1,6 @@
 import type { AiChatMessage, AiProviderPlugin, AiToolCall } from "@taskmesh/ai-provider-contract";
 import { AiProviderError } from "@taskmesh/ai-provider-contract";
-import { writeAiAudit } from "./aiAudit.js";
+import { writeAiAudit, type AiAuditSink } from "./aiAudit.js";
 import { configuredChatModel } from "./aiProviderConfig.js";
 import { redactSecrets } from "./aiMinimize.js";
 import type { ChatMessage } from "./types.js";
@@ -37,6 +37,12 @@ export async function runAssistantWithTools(args: {
   webFetchEnabled?: boolean;
   /** Test seam. Production calls `executeAssistantTool`. */
   executeTool?: typeof executeAssistantTool;
+  /** When set, a provider error on the first model call is rethrown so the router can try the next candidate. */
+  rethrowFirstProviderError?: boolean;
+  /** Written once, after the first model call succeeds. */
+  routeReason?: string | null;
+  /** Test seam. Production writes to `ai_audit_log`. */
+  auditSink?: AiAuditSink;
 }): Promise<void> {
   const model = args.model?.trim() || readDefaultModel(args.config);
   const tools = assistantToolDefinitions({ webFetchEnabled: args.webFetchEnabled === true });
@@ -45,6 +51,7 @@ export async function runAssistantWithTools(args: {
     role: message.role,
     content: message.content,
   }));
+  let committed = false;
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -53,7 +60,29 @@ export async function runAssistantWithTools(args: {
         return;
       }
       const roundStarted = Date.now();
-      const outcome = await readRound(args, sanitizeProviderMessages(messages), tools, model);
+      let outcome: Awaited<ReturnType<typeof readRound>>;
+      try {
+        outcome = await readRound(args, sanitizeProviderMessages(messages), tools, model);
+      } catch (err) {
+        if (!committed && args.rethrowFirstProviderError && err instanceof AiProviderError) throw err;
+        throw err;
+      }
+      if (!committed) {
+        committed = true;
+        if (args.routeReason) {
+          await writeAiAudit({
+            userId: args.actorUserId,
+            feature: "assistant",
+            provider: args.plugin.id,
+            model,
+            tool: null,
+            action: "route",
+            decision: "allow",
+            reason: args.routeReason,
+            tier: 0,
+          }, args.auditSink);
+        }
+      }
       const roundLatency = Date.now() - roundStarted;
       if (outcome.toolCalls.length > 0) {
         messages.push({
@@ -93,7 +122,7 @@ export async function runAssistantWithTools(args: {
         tokensIn: outcome.usage?.inputTokens ?? null,
         tokensOut: outcome.usage?.outputTokens ?? null,
         latencyMs: roundLatency,
-      });
+      }, args.auditSink);
 
       const text = outcome.text.trim() || "Done.";
       for (let i = 0; i < text.length; i += DELTA_CHUNK) {
@@ -105,6 +134,7 @@ export async function runAssistantWithTools(args: {
     }
     args.handlers.onError("Too many tool rounds; try a simpler request.");
   } catch (err) {
+    if (!committed && args.rethrowFirstProviderError && err instanceof AiProviderError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
       try {
         args.handlers.onError("Cancelled");

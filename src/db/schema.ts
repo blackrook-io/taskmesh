@@ -921,6 +921,40 @@ export const userAiCredentials = pgTable(
 );
 
 /**
+ * One model choice per user and AI feature (T0205).
+ * Distinct from `user_ai_credentials.default_model`, which is the per-plugin default.
+ * Rows are removed when the user is deleted.
+ */
+export const userAiRoutePrefs = pgTable(
+  "user_ai_route_prefs",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    feature: text("feature").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    model: text("model").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userFeature: unique("user_ai_route_prefs_user_feature_uidx").on(t.userId, t.feature),
+    featureCheck: check(
+      "user_ai_route_prefs_feature_chk",
+      sql`${t.feature} ~ '^[a-z0-9_]+$'`,
+    ),
+    pluginCheck: check(
+      "user_ai_route_prefs_plugin_chk",
+      sql`${t.pluginId} ~ '^[a-z0-9-]+$'`,
+    ),
+    modelCheck: check(
+      "user_ai_route_prefs_model_chk",
+      sql`char_length(${t.model}) between 1 and 120`,
+    ),
+  }),
+);
+
+/**
  * Append-only log of assistant tool calls, replies, and proposal applies (T0178).
  * Stores the decision and token counts, not prompts, arguments, or record text.
  * A web_fetch allow row stores `Fetched` plus the capped URL in `reason`.
@@ -934,7 +968,7 @@ export const aiAuditLog = pgTable(
     provider: text("provider"),
     model: text("model"),
     tool: text("tool"),
-    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode */
+    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode | route */
     action: text("action").notNull(),
     entityType: text("entity_type"),
     entityId: integer("entity_id"),
@@ -956,7 +990,7 @@ export const aiAuditLog = pgTable(
     ),
     actionCheck: check(
       "ai_audit_log_action_chk",
-      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode')`,
+      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route')`,
     ),
   }),
 );
@@ -1832,6 +1866,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   overviewPrefs: many(userProjectOverviewPrefs),
   meshLayouts: many(meshLayouts),
   aiCredentials: many(userAiCredentials),
+  aiRoutePrefs: many(userAiRoutePrefs),
 }));
 
 export const mfaLoginChallengesRelations = relations(mfaLoginChallenges, ({ one }) => ({
@@ -1974,6 +2009,13 @@ export const aiInstanceCredentialsRelations = relations(aiInstanceCredentials, (
 export const userAiCredentialsRelations = relations(userAiCredentials, ({ one }) => ({
   user: one(users, {
     fields: [userAiCredentials.userId],
+    references: [users.id],
+  }),
+}));
+
+export const userAiRoutePrefsRelations = relations(userAiRoutePrefs, ({ one }) => ({
+  user: one(users, {
+    fields: [userAiRoutePrefs.userId],
     references: [users.id],
   }),
 }));

@@ -15,6 +15,8 @@ import {
   listAiProvidersForAdmin,
   patchAiProvider,
 } from "../../services/assistant/aiProviderAdmin.js";
+import { saveAiFeatureRoutes } from "../../services/assistant/aiRouting.js";
+import { getSystemProperties } from "../../services/systemProperties.js";
 
 const pluginIdSchema = z.string().regex(/^[a-z0-9-]+$/);
 const replaceKeySchema = z.object({
@@ -127,6 +129,25 @@ export function registerAiProviderAdminRoutes(adminRouter: Router): void {
       res.json({
         data: { mode: row.mode, activeUserCount: row.activeUserCount },
       });
+    } catch (err) {
+      handleRouteError(res, err);
+    }
+  });
+
+  adminRouter.get("/ai/routing", async (_req, res) => {
+    try {
+      const props = await getSystemProperties(db);
+      res.json({ data: props.aiFeatureRoutes });
+    } catch (err) {
+      handleRouteError(res, err);
+    }
+  });
+
+  adminRouter.put("/ai/routing", async (req, res) => {
+    try {
+      res.locals.logMessage = "AI feature routes updated";
+      const routes = await saveAiFeatureRoutes(db, req.body ?? {});
+      res.json({ data: routes });
     } catch (err) {
       handleRouteError(res, err);
     }

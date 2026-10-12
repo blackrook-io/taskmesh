@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.67.0 — 2026-10-12
+
+### New Functionality
+- The assistant picks a model that can use tools and a long context. Your pin wins, then the Administrator default, then the next ready provider. If the first provider is rate-limited, over quota, unreachable, or rejects the key, the next one answers before any tool runs. A local-only request never falls through to a cloud model. Each choice is written to the audit log without the prompt.
+
 ## 0.66.0 — 2026-10-12
 
 ### New Functionality

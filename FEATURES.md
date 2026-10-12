@@ -103,6 +103,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Administrators enable AI providers from System properties and set each provider's public https address and default model
 - Store an encrypted instance key per provider. Choose instance only, user only, or user preferred with instance fallback. On a multi-user instance, a mode that spends the instance key requires a typed confirmation
 - The assistant uses your own provider key when the key mode says so. The AI button stays visible and says why AI is off: no provider key, turned off by an Administrator, or this project is excluded
+- The assistant picks a model that can use tools and falls back to the next provider when the first is rate-limited, over quota, unreachable, or rejects the key
 - Enable Anthropic for assistant chat. An environment key remains the fallback when no instance key is stored
 - Enable Google Gemini for assistant chat and embeddings. An environment key remains the fallback when no instance key is stored
 - Enable Azure OpenAI for assistant chat and embeddings. Set the resource endpoint, deployment names, and API version. An environment key remains the fallback when no instance key is stored

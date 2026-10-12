@@ -442,6 +442,13 @@
       "when": 1791815435588,
       "tag": "0062_young_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1791816826660,
+      "tag": "0063_faulty_mole_man",
+      "breakpoints": true
     }
   ]
 }

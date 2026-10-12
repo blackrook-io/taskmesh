@@ -1,0 +1,57 @@
+---
+description: T0205 — route each AI feature to a capable model, with admin defaults, user choice, and provider fallback
+---
+
+# T0205 — Model routing and provider fallback
+
+**Task:** T0205 (id 220) — AI: model routing and provider fallback
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Depends on:** T0180 complete, T0183 complete. No open blockers.
+**Branch (after approval):** `T0205-model-routing`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for the audit `route` action and user route preferences).
+
+## Size
+
+One feature: a server-side router the assistant already calls. Settings screens stay on T0189 (Administrator hub) and T0190 (user AI page). Project “local-only” is not a value on `projects.ai_access` today (`full` | `read_only` | `excluded`, T0184), so that mark is **T0320** (Draft, depends on this task). The router accepts `localOnly` and tests the no-cloud-fallback rule now. Fits one session.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | What routes | A code registry of feature needs. This task registers **`assistant` only**: tools required, long context required, embeddings not required, size `large`, not local-only. Tagging, embeddings, and other features register when those tasks ship. No new product callers. |
+| 2 | Hard filters vs size | Tools, embeddings, long context, and local-only are hard filters. Size is a sort preference: a `large` feature prefers a `large` model, then accepts `small`. A `small` feature prefers `small`, then accepts `large`. Size never leaves the assistant unconfigured when the only ready model is the current default. |
+| 3 | Model profile | Plugin capabilities are a ceiling (`tools: false` on the plugin means no model from it can serve a tool feature). Known cloud model ids live in a small in-repo catalog (tools + long context, size from the id: `mini` / `flash` / `haiku` → `small`, otherwise `large`). The plugin’s configured chat model **and the user’s per-plugin `default_model`**, when they have no catalog row and no override, **inherit** the plugin’s tool/embedding flags and `longContext: true`, so an Ollama-only install and an existing custom model id keep working. Any other unknown model fails closed (`tools: false`, `longContext: false`, `embeddings: false`, size `small`). An Administrator override can set those flags per `pluginId` + `model` (this is how a model is marked “no tool use” even when the plugin supports tools). |
+| 4 | Who is eligible | Enabled plugin, config valid, and a resolved key from T0183 (local plugins stay keyless). Candidates on the hot path are the user’s feature choice, the Administrator default, the Administrator fallback list, the user’s per-plugin `default_model`, and the plugin configured chat model. No `listModels` call during chat. |
+| 5 | Order | User’s choice for that feature when it passes the filters; else Administrator default; else Administrator fallback list; else today’s `selectChatPlugin` winner, then other eligible plugins in loader order. Inside a plugin, user `default_model` then configured model. Size preference reorders only the automatic tail, not an explicit user or admin pin. |
+| 6 | Fallback | On `rate_limit`, `quota`, `network`, `model_not_found`, or `auth`, try the next candidate. On `unsupported` or `invalid_config`, skip that candidate. Fallback runs only on the **first** provider call, before any tool result is applied. A later tool round that fails surfaces the error and does not switch models mid-plan. |
+| 7 | Local-only | When the caller passes `localOnly: true`, drop every non-local candidate and **do not** fall back to a cloud model if the local one errors or is rate-limited. Assistant chat does not pass the flag (no project mark yet). T0320 will pass it from the project. |
+| 8 | Audit | New action `route` on `ai_audit_log` (check constraint). One row per skipped candidate (`deny`, reason is `capability_mismatch`, `local_only`, or the provider error code) and one `allow` row for the route actually used (`reason` is `user`, `admin`, or `fallback` plus the index). Rows store feature, provider, model, user, tier `0`. No prompt and no record text. |
+| 9 | Stored choices | System property `ai_feature_routes`: per feature, optional `{ pluginId, model }` default, ordered fallbacks, and model-profile overrides. New table `user_ai_route_prefs` (`user_id` cascade, `feature`, `plugin_id`, `model`, unique on user+feature). Distinct from `user_ai_credentials.default_model`, which stays the per-plugin default T0183 already uses. |
+| 10 | API, no new pages | `GET /api/v1/ai/routing` lists features, the caller’s eligible models (no secrets), admin default, and the caller’s preference. `PUT /api/v1/ai/routing/:feature` sets or clears `{ pluginId, model }` and rejects a model that fails the feature’s filters (400). Administrator `GET`/`PUT /api/v1/admin/ai/routing` writes the system property. T0189 and T0190 render this later. |
+| 11 | Assistant wiring | `resolveAssistantSession` / chat / status use the router for `assistant`. `selectChatPlugin` remains the automatic primary when nothing is pinned. Capabilities stay available when at least one candidate passes. Unconfigured copy is unchanged. |
+| 12 | Tests | Capability mismatch: a model overridden to `tools: false` is never chosen for `assistant`, including when it is the user pin or the admin default. Local-only: a rate-limited local model does not fall through to a cloud model. Fallback: `rate_limit` on the first candidate selects the next and writes both audit rows. User pin wins over the admin default when both pass. Unknown model (not the configured default) is not used for a tool feature. |
+
+## Out of scope (already tasked)
+
+- T0189 — Administrator AI settings panel (will edit the routes this task stores).
+- T0190 — user AI settings page (model picker and recommendation).
+- T0320 — project local-only mark, ceiling, and passing `localOnly` into this router. Draft; depends on T0205.
+- T0212 — prompt registry (prompt id on the audit row).
+- Embeddings indexing and background feature pipelines.
+
+## Work items
+
+1. Migration: `route` on `ai_audit_log_action_chk`; `user_ai_route_prefs`. Docs in `docs/database/` and glossary, then `npm run docs:sync-schema`.
+2. Feature registry, model catalog, and `routeAiFeature`.
+3. Admin and user routing routes; validate overrides.
+4. Point assistant session, status, and the first provider call at the router, with fallback before tools run.
+5. Tests in decision 12.
+
+## QA checklist (after implementation)
+
+- With two enabled chat plugins, rate-limit the first: the assistant answers on the second, and the audit log shows a `route` deny then a `route` allow. No prompt text in those rows.
+- Set an Administrator default model whose profile has tools off: the assistant does not use it. A user pin of that same model is rejected.
+- Call the router with `localOnly` (test or a one-off script, not a project setting): a failing local model does not call a cloud plugin.
+- An Ollama-only install whose configured model has no catalog row still opens the assistant.
+- `GET /api/v1/ai/routing` shows eligible models and hides keys.
