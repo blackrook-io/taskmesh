@@ -3,6 +3,7 @@ import { NavIcon } from "./NavIcon";
 import { shellIcons } from "./shellIcons";
 import { AdminApisPanel } from "../admin/AdminApisPanel";
 import { AdminDatabasePanel } from "../admin/AdminDatabasePanel";
+import { AdminJobsPanel } from "../admin/AdminJobsPanel";
 import { AdminDeletedTasksPanel } from "../admin/AdminDeletedTasksPanel";
 import { AdminGroupsPanel } from "../admin/AdminGroupsPanel";
 import { AdminKeysPanel } from "../admin/AdminKeysPanel";
@@ -32,6 +33,7 @@ const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
   oauth: shellIcons.profile,
   apis: shellIcons.chart,
   database: shellIcons.database,
+  jobs: shellIcons.chart,
   logging: shellIcons.logging,
   backups: shellIcons.documents,
   "system-properties": shellIcons.admin,
@@ -128,6 +130,7 @@ export function AdministrationModal() {
             {section === "oauth" ? <AdminOauthPanel /> : null}
             {section === "apis" ? <AdminApisPanel /> : null}
             {section === "database" ? <AdminDatabasePanel /> : null}
+            {section === "jobs" ? <AdminJobsPanel /> : null}
             {section === "logging" ? <AdminLoggingPanel /> : null}
             {section === "backups" ? <BackupsPage embedded /> : null}
             {section === "system-properties" ? <AdminSystemPropertiesPanel /> : null}

@@ -1,0 +1,78 @@
+# T0206 — Durable background job queue
+
+**Task:** T0206 (id 221) — AI: durable background job queue
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0194 AI: Knowledge and context foundations (group) — still Draft; this child is Ready and its description is the brief
+**Branch (after approval):** `T0206-durable-job-queue`
+**Version on finish-up:** PATCH (pg-boss owns schema `pgboss`; no new `drizzle/*.sql`)
+
+## Size / dependencies
+
+One library, one in-process worker, three existing timers moved onto it, and one Administrator panel. Depends-on is empty. Later tasks already exist and stay out of this work: text extraction (T0207), knowledge index (T0208), digest engine (T0216), notification delivery (T0221), email sending (T0131, on hold), MCP long-running jobs (T0236). No split and no new deferred Task.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Engine | **pg-boss 10.4.2** on the existing `DATABASE_URL` (10.x supports Node 20, which CI still uses; 11+ needs Node 22). It creates and migrates schema `pgboss` on startup. Drizzle does not model those tables |
+| 2 | Process | One worker inside the API process. No second Node process. `tsx watch` restarts stay a single process |
+| 3 | Timers to move | Backup schedule, API request-log prune (every 6 hours), DB stats sample (every 5 minutes). Their `setInterval` loops go away |
+| 4 | Later job types | A small registry and `enqueue` helper accept retry/backoff, concurrency, and `singletonKey`. This task does not register empty queues for indexing, extraction, digest, or email |
+| 5 | Backup cron | When the backup schedule is saved or the worker starts, install cron `minute hour * * *` from the existing hour/minute settings. Disabled schedule means no cron. Queue policy keeps one backup from stacking on another |
+| 6 | Admin | New Administration section **Jobs**, administrators only. Queue depth (created, active, retry), a failed-job list, Retry and Delete (with confirm). Activity chart reuses `AdminUsageChart` (completed vs failed over the existing 1h/1d/1w/1m ranges). Email graphs stay on T0131 |
+| 7 | Shutdown | On SIGINT/SIGTERM: stop HTTP, `boss.stop` with a short graceful timeout, then `pool.end()`. A hung worker must not stall `npm run dev` restarts |
+| 8 | Docs | Note in `docs/database/platform.md` that schema `pgboss` is owned by pg-boss, not Drizzle. Sync schema docs. No glossary enum changes |
+
+## Work items
+
+### 1. Queue service
+
+`src/services/jobs/boss.ts` and `src/services/jobs/registry.ts`.
+
+- Start pg-boss from `DATABASE_URL` after the HTTP server is listening (same place the three schedulers start today in `src/index.ts`).
+- `registerJob({ name, handler, retryLimit, retryDelay, retryBackoff, concurrency, schedule? })`.
+- `enqueue(name, data, { singletonKey? })` for later tasks. Scheduled jobs use a fixed singleton so a tick cannot pile up.
+- Default policy for the three migrated jobs: a few retries with backoff, concurrency 1. DB stats may use a lower retry limit (a missed sample is not a user-facing failure).
+- Startup sends one delayed prune and one stats sample so the first run is not “wait for the next cron slot,” matching today’s boot tick.
+
+### 2. Move the three schedulers
+
+- `src/services/backups.ts` — remove `startBackupScheduler` / `stopBackupScheduler`. Keep `runBackup` and the hour/minute settings. Reschedule the cron when those settings change.
+- `src/services/apiRequestLogPrune.ts` — keep `pruneApiRequestLogs`; drop the interval.
+- `src/services/dbStats.ts` — keep `recordDbStatsSnapshot`; drop the interval.
+- Shutdown in `src/index.ts` stops the boss before closing the pool.
+
+### 3. Administrator API and panel
+
+- `GET /api/v1/admin/jobs` — per-queue counts plus a time series of completed and failed jobs for the usage-range query.
+- `GET` failed jobs (dead letter: pg-boss state `failed` after retries are exhausted).
+- `POST /api/v1/admin/jobs/:id/retry` and `DELETE /api/v1/admin/jobs/:id` (confirm in the UI).
+- Administrator gate, same as other `/api/v1/admin` routes.
+- Client: section `jobs` in `client/src/lib/administration.tsx`, `AdministrationModal.tsx`, and `AdminJobsPanel.tsx` using `AdminUsageChart`.
+
+### 4. Docs and dependency
+
+- Add `pg-boss` to root `package.json`.
+- `docs/database/platform.md`: short inventory note for the external `pgboss` schema (not a main-domain table, not in `schema.ts`). Run `npm run docs:sync-schema`.
+
+### 5. Tests
+
+No live Postgres required.
+
+- Registry rejects an unknown job name on `enqueue`.
+- Backup cron string matches the saved hour and minute, and a disabled schedule produces no cron.
+- Retry/backoff fields on the three built-in definitions match the plan (concurrency 1, retries set).
+
+## Out of scope
+
+- Handlers for extraction, indexing, digests, notifications, email, or MCP tasks.
+- Email activity graphs (T0131).
+- A separate worker process or a new database.
+- Drizzle migrations for `pgboss.*`.
+
+## Acceptance
+
+- A job row in `pgboss` is still there after an API restart and runs when the worker comes back.
+- A handler that keeps failing retries, then shows on the Jobs dead-letter list. Retry from that list runs it again. Delete removes it after confirmation.
+- Backup, log prune, and DB stats no longer use `setInterval`. Changing the backup hour/minute updates the cron.
+- `npm run dev` restart returns promptly (graceful stop, then exit).

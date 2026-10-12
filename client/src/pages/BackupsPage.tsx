@@ -191,7 +191,7 @@ export function BackupsPage({ embedded = false }: { embedded?: boolean }) {
     onSuccess: (data) => {
       setDraft(null);
       void qc.setQueryData(["backup-schedule"], data);
-      setMessage("Schedule saved. In-process scheduler uses these settings while the API is running.");
+      setMessage("Schedule saved. The job queue runs the backup at this local time while the API is running.");
     },
     onError: (e: Error) => setMessage(e.message),
   });

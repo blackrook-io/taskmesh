@@ -25,6 +25,7 @@ type PaletteItem = {
     | "keys"
     | "apis"
     | "database"
+    | "jobs"
     | "logging"
     | "backups"
     | "system-properties"
@@ -129,6 +130,14 @@ const STATIC_COMMANDS: PaletteItem[] = [
     path: "/",
     action: "open-admin",
     adminSection: "database",
+  },
+  {
+    id: "nav-admin-jobs",
+    group: "Go to",
+    label: "Admin · Jobs",
+    path: "/",
+    action: "open-admin",
+    adminSection: "jobs",
   },
   {
     id: "nav-backups",

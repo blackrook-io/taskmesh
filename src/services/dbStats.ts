@@ -9,10 +9,7 @@ import { getApiUsageSummary } from "./apiRequestLogs.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
-const SAMPLE_MS = 5 * 60 * 1000;
 const RETAIN_MS = 35 * 24 * 60 * 60 * 1000;
-
-let schedulerTimer: ReturnType<typeof setInterval> | null = null;
 
 export type DbStatsCurrent = {
   datname: string;
@@ -169,22 +166,4 @@ export async function getDatabaseStatsSummary(
     },
     series,
   };
-}
-
-export function startDbStatsSampler(db: Db): void {
-  if (schedulerTimer) return;
-  const tick = () => {
-    void recordDbStatsSnapshot(db).catch((err) => {
-      console.error("db_stats_snapshot failed", err);
-    });
-  };
-  schedulerTimer = setInterval(tick, SAMPLE_MS);
-  tick();
-}
-
-export function stopDbStatsSampler(): void {
-  if (schedulerTimer) {
-    clearInterval(schedulerTimer);
-    schedulerTimer = null;
-  }
 }
