@@ -18,7 +18,13 @@ import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
-import { recordProjectStatusChange } from "../../services/entityActivity.js";
+import { recordProjectAiAccessChange, recordProjectStatusChange } from "../../services/entityActivity.js";
+import {
+  aiAccessWiderThan,
+  getAiProjectAccessCeiling,
+  isAiAccess,
+  projectAiAccessFields,
+} from "../../services/assistant/projectAiAccess.js";
 import { getCurrentUserId } from "../../services/users.js";
 import { listAssignableUsers } from "../../services/assignees.js";
 import {
@@ -42,6 +48,8 @@ import { NOT_ADMINISTRATOR_MESSAGE } from "../../middleware/requireAdministrator
 
 const projectStatus = z.enum(["idea", "active", "paused", "done"]);
 
+const aiAccessValue = z.enum(["full", "read_only", "excluded"]);
+
 const projectBody = z.object({
   name: plainTitle(500),
   description: optionalMarkdown(500_000),
@@ -52,6 +60,7 @@ const projectPatch = z.object({
   name: optionalPlainTitle(500),
   description: optionalMarkdown(500_000),
   status: projectStatus.optional(),
+  aiAccess: aiAccessValue.optional(),
 });
 
 const overviewPanelInstanceSchema = z.object({
@@ -104,6 +113,7 @@ projectsRouter.post("/", async (req, res) => {
     const number = await allocateProjectNumber(db);
     const sortOrder = await nextProjectSortOrder(db);
     const ownerId = await getCurrentUserId(db);
+    const aiAccess = await getAiProjectAccessCeiling(db);
     const [row] = await db
       .insert(schema.projects)
       .values({
@@ -113,6 +123,7 @@ projectsRouter.post("/", async (req, res) => {
         status: parsed.status ?? "idea",
         sortOrder,
         ownerId,
+        aiAccess,
       })
       .returning();
     if (!row) {
@@ -191,9 +202,11 @@ projectsRouter.get("/:id", async (req, res) => {
     const actorId = await getCurrentUserId(db);
     const row = await assertCanAccessProject(db, actorId, id);
     const myRole = await resolveProjectActorRole(db, actorId, row);
+    const access = await projectAiAccessFields(db, row.aiAccess);
     res.json({
       data: {
         ...row,
+        ...access,
         myRole,
         canWrite: myRole != null && myRole !== "viewer",
         canManageSettings:
@@ -209,22 +222,35 @@ projectsRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const parsed = projectPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["name", "description", "status"])) {
-      sendError(res, 400, "empty_patch", "Provide name, description, and/or status");
+    if (!hasDefinedKeys(parsed, ["name", "description", "status", "aiAccess"])) {
+      sendError(res, 400, "empty_patch", "Provide name, description, status, and/or AI access");
       return;
     }
     const actorId = await getCurrentUserId(db);
-    // Description is Owner/Manager/Admin only; name/status remain write-level.
-    const existing =
-      parsed.description !== undefined
-        ? await assertCanAccessProject(db, actorId, id, "settings")
-        : await assertCanAccessProject(db, actorId, id, "write");
+    if (parsed.aiAccess !== undefined) {
+      const ceiling = await getAiProjectAccessCeiling(db);
+      if (!isAiAccess(parsed.aiAccess) || aiAccessWiderThan(parsed.aiAccess, ceiling)) {
+        sendError(
+          res,
+          400,
+          "ai_access_wider_than_ceiling",
+          "Project AI access cannot be wider than the instance default",
+        );
+        return;
+      }
+    }
+    // Description and AI access are Owner/Manager/Admin only; name/status remain write-level.
+    const needsSettings = parsed.description !== undefined || parsed.aiAccess !== undefined;
+    const existing = needsSettings
+      ? await assertCanAccessProject(db, actorId, id, "settings")
+      : await assertCanAccessProject(db, actorId, id, "write");
     const [row] = await db
       .update(schema.projects)
       .set({
         ...(parsed.name !== undefined ? { name: parsed.name } : {}),
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(parsed.status !== undefined ? { status: parsed.status } : {}),
+        ...(parsed.aiAccess !== undefined ? { aiAccess: parsed.aiAccess } : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.projects.id, id))
@@ -235,6 +261,16 @@ projectsRouter.patch("/:id", async (req, res) => {
         id,
         existing.status,
         parsed.status,
+        actorId,
+        activitySourceFromRequest(req),
+      );
+    }
+    if (parsed.aiAccess !== undefined) {
+      await recordProjectAiAccessChange(
+        db,
+        id,
+        existing.aiAccess,
+        parsed.aiAccess,
         actorId,
         activitySourceFromRequest(req),
       );

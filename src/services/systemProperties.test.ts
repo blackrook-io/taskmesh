@@ -27,6 +27,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     meshAppearance: MESH_APPEARANCE_DEFAULTS,
     aiProviders: {},
     aiWebFetch: false,
+    aiProjectAccessDefault: "full",
     aiPermissionTiers: defaultStoredAiPermissionTiers(),
     updatedAt: null,
     ...overrides,
@@ -88,5 +89,13 @@ describe("system properties patch schema", () => {
     assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: true }).success, true);
     assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: false }).success, true);
     assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: "yes" }).success, false);
+    assert.equal(
+      systemPropertiesPatchSchema.safeParse({ aiProjectAccessDefault: "read_only" }).success,
+      true,
+    );
+    assert.equal(
+      systemPropertiesPatchSchema.safeParse({ aiProjectAccessDefault: "open" }).success,
+      false,
+    );
   });
 });

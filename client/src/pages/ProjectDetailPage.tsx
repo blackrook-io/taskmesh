@@ -40,6 +40,7 @@ import { sanitizePlainText } from "../lib/plainText";
 import { storageKeyForProjectTasks, emptyTaskListFilter, isFilterActive, parseTaskListFilterValue } from "../lib/taskListFilter";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import type {
+  AiAccess,
   Project,
   ProjectDocument,
   ProjectModule,
@@ -70,6 +71,24 @@ const TAB_ALIASES: Record<string, Tab> = {
 function parseTab(raw: string | null): Tab {
   if (!raw) return "overview";
   return TAB_ALIASES[raw] ?? "overview";
+}
+
+const AI_ACCESS_OPTIONS: { value: AiAccess; label: string }[] = [
+  { value: "full", label: "Full" },
+  { value: "read_only", label: "Read-only" },
+  { value: "excluded", label: "Excluded" },
+];
+
+const AI_ACCESS_RANK: Record<AiAccess, number> = {
+  full: 0,
+  read_only: 1,
+  excluded: 2,
+};
+
+function aiAccessBadge(value: AiAccess | undefined): string | null {
+  if (value === "read_only") return "AI read-only";
+  if (value === "excluded") return "Excluded from AI";
+  return null;
 }
 
 const PROJECT_STATUS_OPTIONS = [
@@ -134,6 +153,7 @@ export function ProjectDetailPage() {
   const [name, setName] = useState("");
   const [status, setStatus] = useState("idea");
   const [description, setDescription] = useState("");
+  const [aiAccess, setAiAccess] = useState<AiAccess>("full");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [requestOpenTask, setRequestOpenTask] = useState<Task | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
@@ -171,14 +191,24 @@ export function ProjectDetailPage() {
 
   useRegisterAssistantAttach(
     useMemo(() => {
-      if (invalidId || tab !== "overview") return null;
+      if (invalidId || tab !== "overview" || projectQuery.data?.aiAccessEffective === "excluded") {
+        return null;
+      }
       return {
         key: `project-${projectId}-overview`,
         label: overviewName.trim() || `Project #${projectId}`,
         getContext: () =>
           `Project #${projectId}\nName: ${overviewName}\nStatus: ${overviewStatus}\n\n${overviewDescription}`,
       };
-    }, [invalidId, tab, projectId, overviewName, overviewStatus, overviewDescription]),
+    }, [
+      invalidId,
+      tab,
+      projectId,
+      overviewName,
+      overviewStatus,
+      overviewDescription,
+      projectQuery.data?.aiAccessEffective,
+    ]),
   );
 
   const modulesQuery = useQuery({
@@ -474,6 +504,7 @@ export function ProjectDetailPage() {
       setName(project.name);
       setStatus(project.status);
       setDescription(project.description ?? "");
+      setAiAccess(project.aiAccess ?? "full");
     }
     setOverviewEdit(true);
   };
@@ -483,6 +514,7 @@ export function ProjectDetailPage() {
       setName(project.name);
       setStatus(project.status);
       setDescription(project.description ?? "");
+      setAiAccess(project.aiAccess ?? "full");
     }
     setOverviewEdit(false);
   };
@@ -492,6 +524,9 @@ export function ProjectDetailPage() {
       const body: Record<string, unknown> = { name, status };
       if (canManageSettings) {
         body.description = description;
+        if (project && aiAccess !== (project.aiAccess ?? "full")) {
+          body.aiAccess = aiAccess;
+        }
       }
       const res = await apiJson<{ data: Project }>(`/api/v1/projects/${projectId}`, {
         method: "PATCH",
@@ -692,6 +727,11 @@ export function ProjectDetailPage() {
                     {projectStatusLabel(project.status)}
                   </span>
                 ) : null}
+                {aiAccessBadge(project.aiAccessEffective) ? (
+                  <span className="overview-meta__ai-badge">
+                    {aiAccessBadge(project.aiAccessEffective)}
+                  </span>
+                ) : null}
                 {overviewEdit ? (
                   <>
                     <button type="button" className="btn small ghost" onClick={cancelOverviewEdit}>
@@ -736,6 +776,34 @@ export function ProjectDetailPage() {
                     ))}
                   </select>
                 </div>
+                {canManageSettings ? (
+                  <div className="field">
+                    <label htmlFor="proj-ai-access">AI access</label>
+                    <select
+                      id="proj-ai-access"
+                      value={aiAccess}
+                      onChange={(e) => setAiAccess(e.target.value as AiAccess)}
+                    >
+                      {AI_ACCESS_OPTIONS.map((option) => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                          disabled={
+                            AI_ACCESS_RANK[option.value] <
+                            AI_ACCESS_RANK[project.aiAccessCeiling ?? "full"]
+                          }
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="muted" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
+                      {project.aiAccessCeiling && project.aiAccessCeiling !== "full"
+                        ? "The instance limit is narrower than Full. This project can only stay at that limit or tighter."
+                        : "Full lets AI read and propose changes. Read-only allows reading only. Excluded keeps this project off every model."}
+                    </p>
+                  </div>
+                ) : null}
                 <div className="field field--tags-below">
                   <TagInput entityType="project" entityId={projectId} />
                 </div>
@@ -1108,6 +1176,7 @@ export function ProjectDetailPage() {
               <DocumentEditor
                 key={selectedDoc.id}
                 doc={selectedDoc}
+                includeAssistantContext={project.aiAccessEffective !== "excluded"}
                 onSaveMarkdown={(title, body) =>
                   saveDocument.mutate({ docId: selectedDoc.id, title, body })
                 }
@@ -1197,6 +1266,7 @@ function DocumentEditor({
   onSavePdf,
   onDelete,
   busy,
+  includeAssistantContext = true,
 }: {
   doc: ProjectDocument;
   onSaveMarkdown: (title: string, body: string) => void;
@@ -1204,6 +1274,7 @@ function DocumentEditor({
   onSavePdf: (title: string, uploadId?: number) => void;
   onDelete: () => void;
   busy: boolean;
+  includeAssistantContext?: boolean;
 }) {
   const kind = doc.kind ?? "markdown";
   const sanitizedTitle = sanitizePlainText(doc.title);
@@ -1229,17 +1300,26 @@ function DocumentEditor({
   }, [editingTitle]);
 
   useRegisterAssistantAttach(
-    useMemo(
-      () => ({
+    useMemo(() => {
+      if (!includeAssistantContext) return null;
+      return {
         key: `document-${doc.id}`,
         label: title.trim() || `Document #${doc.id}`,
         getContext: () =>
           kind === "epub" || kind === "pdf"
             ? `Document #${doc.id} (project #${doc.projectId}, ${kind.toUpperCase()})\nTitle: ${title}\nFile: ${doc.fileOriginalName ?? doc.fileUrl ?? "(none)"}`
             : `Document #${doc.id} (project #${doc.projectId})\nTitle: ${title}\n\n${body}`,
-      }),
-      [doc.id, doc.projectId, doc.fileOriginalName, doc.fileUrl, title, body, kind],
-    ),
+      };
+    }, [
+      includeAssistantContext,
+      doc.id,
+      doc.projectId,
+      doc.fileOriginalName,
+      doc.fileUrl,
+      title,
+      body,
+      kind,
+    ]),
   );
 
   const onSaveBinary = kind === "pdf" ? onSavePdf : onSaveEpub;

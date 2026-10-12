@@ -14,6 +14,7 @@ import { withRestoredRequestAuth } from "../../middleware/restoreRequestAuth.js"
 import { ensureProjectModules } from "../../services/projectModules.js";
 import { allocateProjectNumber } from "../../services/entityNumbers.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
+import { getAiProjectAccessCeiling } from "../../services/assistant/projectAiAccess.js";
 import { allocateTaskNumber, assertPhaseForProject } from "../../services/tasks.js";
 import {
   assertCanAccessProject,
@@ -221,6 +222,7 @@ importExportRouter.get("/export/bundle", async (req, res) => {
 });
 
 async function importProjects(rows: Record<string, unknown>[]): Promise<ImportResult> {
+  const aiAccess = await getAiProjectAccessCeiling(db);
   const discarded: DiscardRow[] = [];
   let created = 0;
 
@@ -343,6 +345,7 @@ async function importProjects(rows: Record<string, unknown>[]): Promise<ImportRe
           sourceIdeaId: typeof sourceIdeaId === "number" ? sourceIdeaId : null,
           sortOrder,
           ownerId,
+          aiAccess,
         })
         .returning();
       if (!row) {

@@ -39,6 +39,7 @@ erDiagram
     int sort_order
     int source_idea_id FK
     int owner_id FK
+    text ai_access
   }
   project_managers {
     int id PK
@@ -133,6 +134,7 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 | `sort_order` | integer | no | `0` | Manual list order (left nav / project list) |
 | `source_idea_id` | integer | yes | — | FK → `ideas.id` |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112); nested content inherits for access |
+| `ai_access` | text | no | `'full'` | Project AI choice: `full` \| `read_only` \| `excluded` (T0184). Effective access is the narrower of this value and the instance ceiling `system_properties.ai_project_access_default` (default `full`). `excluded` records are never sent to a model. `read_only` allows reads and denies proposals and applies. |
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
@@ -142,6 +144,7 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 - **UNIQUE:** `number`
 - **FK:** `source_idea_id` → `ideas.id` · **ON DELETE SET NULL**
 - **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
+- **CHECK:** `ai_access` in `full`, `read_only`, `excluded`
 
 ### Relationships (outbound ownership)
 

@@ -1,0 +1,2 @@
+ALTER TABLE "projects" ADD COLUMN "ai_access" text DEFAULT 'full' NOT NULL;--> statement-breakpoint
+ALTER TABLE "projects" ADD CONSTRAINT "projects_ai_access_chk" CHECK ("projects"."ai_access" in ('full', 'read_only', 'excluded'));

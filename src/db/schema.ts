@@ -61,13 +61,23 @@ export const projects = pgTable("projects", {
   ownerId: integer("owner_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  /**
+   * Project choice for AI: `full` | `read_only` | `excluded` (T0184).
+   * Effective access is the narrower of this value and the instance ceiling.
+   */
+  aiAccess: text("ai_access").notNull().default("full"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => ({
+  aiAccessCheck: check(
+    "projects_ai_access_chk",
+    sql`${t.aiAccess} in ('full', 'read_only', 'excluded')`,
+  ),
+}));
 
 /** List-view Task Groups (saved filter + color). Distinct from Project Phases. */
 export const taskGroups = pgTable("task_groups", {

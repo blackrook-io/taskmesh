@@ -10,12 +10,18 @@ export type Idea = {
   updatedAt: string;
 };
 
+export type AiAccess = "full" | "read_only" | "excluded";
+
 export type Project = {
   id: number;
   number: number;
   name: string;
   description: string | null;
   status: string;
+  /** Stored project choice. Effective access may be narrower. */
+  aiAccess?: AiAccess;
+  aiAccessEffective?: AiAccess;
+  aiAccessCeiling?: AiAccess;
   sortOrder: number;
   sourceIdeaId: number | null;
   ownerId?: number;

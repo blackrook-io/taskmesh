@@ -15,6 +15,7 @@ import {
 } from "../../services/ownership.js";
 import { nextIdeaSortOrder } from "../../services/ideaSortOrder.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
+import { getAiProjectAccessCeiling } from "../../services/assistant/projectAiAccess.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId, attachAssignees, attachAssignee } from "../../services/users.js";
 import { resolveIdeaAssigneeId } from "../../services/assignees.js";
@@ -222,6 +223,7 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
 
     const number = await allocateProjectNumber(db);
     const sortOrder = await nextProjectSortOrder(db);
+    const aiAccess = await getAiProjectAccessCeiling(db);
     const [project] = await db
       .insert(schema.projects)
       .values({
@@ -232,6 +234,7 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
         sourceIdeaId: idea.id,
         sortOrder,
         ownerId: actorId,
+        aiAccess,
       })
       .returning();
 

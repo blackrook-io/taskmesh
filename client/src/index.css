@@ -7297,6 +7297,16 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+.overview-meta__ai-badge {
+  font-size: 0.75rem;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+
 .overview-meta__tags {
   margin-bottom: 0.35rem;
 }

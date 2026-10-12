@@ -21,6 +21,7 @@ import {
   parseStoredAiPermissionTiers,
   type StoredAiPermissionTiers,
 } from "./assistant/aiTiers.js";
+import { isAiAccess, type AiAccess } from "./assistant/aiAccess.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -57,6 +58,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "ai_providers",
   "ai_web_fetch",
   "ai_permission_tiers",
+  "ai_project_access_default",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -77,6 +79,8 @@ export type SystemProperties = {
   aiProviders: AiProvidersFile;
   /** When true, assistant chat may call `web_fetch`. Default false. */
   aiWebFetch: boolean;
+  /** Instance ceiling for project AI access. Projects can only narrow this. */
+  aiProjectAccessDefault: AiAccess;
   /** Administrator tier matrix and blast-radius thresholds. User opt-in is not stored here. */
   aiPermissionTiers: StoredAiPermissionTiers;
   updatedAt: string | null;
@@ -109,6 +113,7 @@ const DEFAULTS: {
   mesh_appearance: MeshAppearance;
   ai_web_fetch: boolean;
   ai_permission_tiers: StoredAiPermissionTiers;
+  ai_project_access_default: AiAccess;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -124,6 +129,7 @@ const DEFAULTS: {
   mesh_appearance: MESH_APPEARANCE_DEFAULTS,
   ai_web_fetch: false,
   ai_permission_tiers: defaultStoredAiPermissionTiers(),
+  ai_project_access_default: "full",
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -147,6 +153,11 @@ function asThemeId(value: unknown, fallback: ThemeId): ThemeId {
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
   if (typeof value === "boolean") return value;
+  return fallback;
+}
+
+function asAiAccess(value: unknown, fallback: AiAccess): AiAccess {
+  if (isAiAccess(value)) return value;
   return fallback;
 }
 
@@ -267,6 +278,10 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
     meshAppearance: normalizeMeshAppearance(map.get("mesh_appearance")?.value),
     aiProviders: normalizeAiProviders(map.get("ai_providers")?.value),
     aiWebFetch: asBoolean(map.get("ai_web_fetch")?.value, DEFAULTS.ai_web_fetch),
+    aiProjectAccessDefault: asAiAccess(
+      map.get("ai_project_access_default")?.value,
+      DEFAULTS.ai_project_access_default,
+    ),
     aiPermissionTiers: parseStoredAiPermissionTiers(
       map.get("ai_permission_tiers")?.value ?? DEFAULTS.ai_permission_tiers,
     ),
@@ -304,6 +319,7 @@ export async function patchSystemProperties(
     mfaTrustedDeviceMax?: number;
     meshAppearance?: MeshAppearance;
     aiWebFetch?: boolean;
+    aiProjectAccessDefault?: AiAccess;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -476,6 +492,19 @@ export async function patchSystemProperties(
         set: { value: patch.aiWebFetch, updatedAt: now },
       });
   }
+  if (patch.aiProjectAccessDefault !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "ai_project_access_default",
+        value: patch.aiProjectAccessDefault,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.aiProjectAccessDefault, updatedAt: now },
+      });
+  }
   invalidateSystemPropertiesCache();
   return getSystemProperties(db);
 }
@@ -505,5 +534,6 @@ export const systemPropertiesPatchSchema = z
     mfaTrustedDeviceMax: z.number().int().min(1).max(50).optional(),
     meshAppearance: meshAppearanceSchema.optional(),
     aiWebFetch: z.boolean().optional(),
+    aiProjectAccessDefault: z.enum(["full", "read_only", "excluded"]).optional(),
   })
   .strict();

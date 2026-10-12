@@ -100,10 +100,70 @@ describe("aiPolicy.check", () => {
       "deny",
     );
     assert.equal(
-      check(base({ action: "propose_create", entityType: "task", projectId: 4 })).decision,
+      check(base({ action: "propose_create", entityType: "task", projectId: 4, projectAiAccess: "full" }))
+        .decision,
       "allow",
     );
     assert.equal(check(base({ action: "apply", entityType: "idea" })).tier, 2);
+  });
+
+  it("fails closed when a project id has no resolved access", () => {
+    const decision = check(base({ action: "read", entityType: "task", projectId: 4 }));
+    assert.equal(decision.decision, "deny");
+    assert.match(decision.reason, /not resolved/i);
+  });
+
+  it("narrows by project AI access", () => {
+    assert.equal(
+      check(base({ action: "read", entityType: "task", projectId: 4, projectAiAccess: "read_only" }))
+        .decision,
+      "allow",
+    );
+    const write = check(
+      base({
+        action: "propose_update",
+        entityType: "task",
+        projectId: 4,
+        projectAiAccess: "read_only",
+      }),
+    );
+    assert.equal(write.decision, "deny");
+    assert.match(write.reason, /read-only/i);
+    const excluded = check(
+      base({ action: "read", entityType: "document", projectId: 4, projectAiAccess: "excluded" }),
+    );
+    assert.equal(excluded.decision, "deny");
+    assert.match(excluded.reason, /excluded/i);
+  });
+
+  it("denies a move into a narrower project", () => {
+    const decision = check(
+      base({
+        action: "propose_update",
+        entityType: "task",
+        projectId: 1,
+        projectAiAccess: "full",
+        destinationAiAccess: "excluded",
+        fields: { projectId: 2 },
+      }),
+    );
+    assert.equal(decision.decision, "deny");
+    assert.match(decision.reason, /excluded/i);
+  });
+
+  it("denies a proposal that changes project AI access", () => {
+    const decision = check(
+      base({
+        action: "apply",
+        entityType: "task",
+        projectId: 4,
+        projectAiAccess: "full",
+        fields: { title: "Keep", aiAccess: "excluded" },
+      }),
+      { instance: allowAll, project: allowAll, user: allowAll },
+    );
+    assert.equal(decision.decision, "deny");
+    assert.match(decision.reason, /project AI access/i);
   });
 
   it("denies unimplemented actions and other entity types", () => {
@@ -121,6 +181,8 @@ describe("describeAllowedPolicy", () => {
     assert.match(text, /model cannot set it/i);
     assert.match(text, /Deletes are proposals only/);
     assert.match(text, /API keys/);
+    assert.match(text, /Excluded projects/);
+    assert.match(text, /Read-only projects/);
     assert.match(text, /users/);
     assert.doesNotMatch(text, /fetch public web pages/);
   });

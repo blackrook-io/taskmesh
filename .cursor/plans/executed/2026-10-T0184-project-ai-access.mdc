@@ -1,0 +1,72 @@
+# T0184 — Project-level AI access
+
+**Task:** T0184 (id 199) — AI: project-level AI access
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0192 Guardrails and governance (group); design decisions in epic T0177
+**Depends on:** T0178 (complete). Required by T0168 (ready) and T0208 (draft).
+**Branch (after approval):** `T0184-project-ai-access`
+**Version on finish-up:** MINOR (new `drizzle/*.sql` for `projects.ai_access`)
+
+## Size / dependencies
+
+One column, one system property, a project-settings control, a badge, and enforcement in the existing policy layer plus assistant data tools. No split. T0189 still owns the full Administrator AI settings panel; this Task only adds the project-access default next to the existing web-fetch switch. T0168 and T0208 are not built here — they get a shared helper so suggestions and embeddings can skip excluded projects later.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Values | `full` (widest) · `read_only` · `excluded` (narrowest). Stored on `projects.ai_access`, not null, SQL default `full` |
+| 2 | Instance ceiling | System property `ai_project_access_default`, default `full`. The Administrator sets it on the existing Admin system-properties panel. Effective access is the narrower of that ceiling and the project’s stored value. A project cannot save a wider value than the ceiling. Tightening the ceiling narrows existing projects without rewriting rows; loosening it restores a project only up to the value it stored |
+| 3 | New projects | Inserted with the current ceiling, so a `read_only` instance does not create `full` projects |
+| 4 | Who edits the project | Owner, manager, or administrator (`settings` access). Members and viewers cannot. AI cannot: the field is not a tool argument, and a proposal that includes `aiAccess` is denied by the floor |
+| 5 | `read_only` | Policy allows `read`. It denies `propose_create`, `propose_update`, `apply`, `link`, `tag`, `comment`, `propose_delete`, and `bulk` when the target project is read-only. A move into a read-only or excluded project is denied |
+| 6 | `excluded` | No record text, title, or embedding payload from that project reaches a model. Search and list tools omit those rows. `get_entity` and `list_project_context` return a denial with no body. Ideas and tasks with no project stay on the instance layer |
+| 7 | Human UI | People still see excluded projects, their records, and existing links. The skip applies to model context and to AI link pairs, not to the app |
+| 8 | Links | Helper `aiPairExcluded(accessA, accessB)` is false for a pair when either end is `excluded`. Assistant tool payloads that include links drop those pairs. T0168 and T0208 call the same helper; this Task does not build suggestions or the knowledge index |
+| 9 | Badge | On the project overview header, when effective access is not `full`: “AI read-only” or “Excluded from AI” |
+| 10 | Prompt | The system-prompt summary states the rule. It does not list excluded project names or record text |
+| 11 | Audit | A project AI-access change is a project activity row (same path as status changes). It is not an `ai_audit_log` row |
+
+## Work items
+
+### 1. Schema
+
+- `projects.ai_access` text, not null, default `full`, check constraint `full` | `read_only` | `excluded`.
+- `npm run db:generate` then review the SQL. Update `docs/database/projects-and-ideas.md` and run `npm run docs:sync-schema` after the API is up.
+
+### 2. Instance ceiling
+
+- Add `ai_project_access_default` to system properties (default `full`), with parse/patch tests beside `aiWebFetch`.
+- Admin system-properties panel: a three-way control, saved with the existing Save button. Copy states that projects can only narrow this.
+
+### 3. Project API and settings
+
+- Project create/read/patch include `aiAccess`. Patch of that field requires `settings` access and rejects a value wider than the ceiling.
+- Overview edit (owner/manager/admin only) gets the control. Members see the badge and the current value, not the editor.
+- New-project create uses the ceiling as the initial value.
+
+### 4. Policy
+
+- `PolicyCheckInput` gains optional `projectAiAccess` (`full` | `read_only` | `excluded`), resolved by the caller before `check` (same pattern as `webFetchEnabled`). `projectPolicyLayer` stops returning allow-all.
+- `read_only` denies every non-read action. `excluded` denies every action, including read.
+- Missing `projectAiAccess` with a `projectId` denies (fail closed) once callers are updated. Checks with no project stay allow at this layer.
+- Tests for all three values, including a cross-project move and an `aiAccess` field on a proposal.
+
+### 5. Data tools
+
+- `search_records`, `get_entity`, and `list_project_context` resolve effective access and omit or deny excluded projects and their tasks and documents.
+- Propose and apply routes pass the resolved access into `check` so read-only projects cannot be written.
+- Link payloads returned to the model drop a pair when either project is excluded.
+- Export the resolver and `aiPairExcluded` for T0168 and T0208.
+
+## Out of scope
+
+- Administrator AI hub (T0189), user AI settings (T0190), suggestion UI (T0168), embeddings (T0208).
+- Hiding excluded projects from human search, Mesh, or the project list.
+
+## QA checklist (after implementation)
+
+1. As Administrator, set the instance default to Read-only and save. Create a project and confirm it starts read-only and cannot be set to Full.
+2. Set the instance default back to Full. On a project you own, set Excluded. Confirm the overview badge and that a member cannot change it.
+3. In assistant chat, search and open a record in that project: no title or body comes back. A read-only project still returns text, and a propose/apply against it is denied.
+4. Confirm a normal project still searches, reads, and proposes as before.
