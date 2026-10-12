@@ -255,6 +255,7 @@ export function classifyChangePlan(
 export function operationFromProposal(
   proposal: {
     action: "create" | "update";
+    policyAction?: "link" | "tag" | "comment";
     entityType: string;
     entityId?: number;
     projectId?: number;
@@ -265,8 +266,13 @@ export function operationFromProposal(
 ): TierOperation {
   const fields = { ...(proposal.fields ?? {}) };
   delete fields.tier;
+  const action = proposal.policyAction
+    ? proposal.policyAction
+    : proposal.action === "create"
+      ? "propose_create"
+      : "propose_update";
   return {
-    action: proposal.action === "create" ? "propose_create" : "propose_update",
+    action,
     entityType: proposal.entityType,
     entityId: proposal.entityId ?? null,
     projectId: proposal.projectId ?? null,

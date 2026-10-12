@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { pool } from "../../db/client.js";
 import {
+  AI_ACTIONS,
   check,
   describeAllowedPolicy,
   projectPolicyLayer,
@@ -9,7 +10,8 @@ import {
   type PolicyCheckInput,
   type PolicyDecision,
 } from "./aiPolicy.js";
-import { executeAssistantTool } from "./tools.js";
+import { executeAssistantTool, OPENAI_TOOLS } from "./tools.js";
+import { TOOL_REGISTRY } from "./toolRegistry.js";
 import type { AiAuditInput } from "./aiAudit.js";
 
 const FLOOR = [
@@ -79,11 +81,11 @@ describe("aiPolicy.check", () => {
   });
 
   it("intersects layers so an instance deny wins over allow-all project and user", () => {
-    assert.equal(projectPolicyLayer(base({ action: "link", entityType: "task" })).decision, "allow");
-    assert.equal(userPolicyLayer(base({ action: "link", entityType: "task" })).decision, "allow");
-    const decision = check(base({ action: "link", entityType: "task" }));
+    assert.equal(projectPolicyLayer(base({ action: "bulk", entityType: "task" })).decision, "allow");
+    assert.equal(userPolicyLayer(base({ action: "bulk", entityType: "task" })).decision, "allow");
+    const decision = check(base({ action: "bulk", entityType: "task" }));
     assert.equal(decision.decision, "deny");
-    assert.equal(decision.tier, 2);
+    assert.equal(decision.tier, 3);
     assert.match(decision.reason, /instance/i);
   });
 
@@ -166,10 +168,18 @@ describe("aiPolicy.check", () => {
     assert.match(decision.reason, /project AI access/i);
   });
 
-  it("denies unimplemented actions and other entity types", () => {
+  it("denies unimplemented actions and record types outside the assistant set", () => {
     assert.equal(check(base({ action: "propose_delete", entityType: "task" })).decision, "deny");
     assert.equal(check(base({ action: "bulk", entityType: "task" })).tier, 3);
-    assert.equal(check(base({ action: "read", entityType: "todo" })).decision, "deny");
+    assert.equal(check(base({ action: "read", entityType: "todo" })).decision, "allow");
+    assert.equal(check(base({ action: "read", entityType: "canvas" })).decision, "deny");
+    assert.equal(check(base({ action: "link", entityType: "task" })).decision, "allow");
+    assert.equal(check(base({ action: "tag", entityType: "project" })).decision, "allow");
+    assert.equal(check(base({ action: "comment", entityType: "todo_list" })).decision, "allow");
+    assert.equal(check(base({ action: "link", entityType: "canvas" })).decision, "deny");
+    assert.equal(check(base({ action: "link" })).decision, "deny");
+    assert.equal(check(base({ action: "propose_create", entityType: "todo" })).decision, "allow");
+    assert.equal(check(base({ action: "propose_create", entityType: "project" })).decision, "deny");
     assert.equal(check(base({ action: "apply" })).decision, "deny");
   });
 });
@@ -190,6 +200,19 @@ describe("describeAllowedPolicy", () => {
   it("mentions web fetch only when the administrator switch is on", () => {
     const text = describeAllowedPolicy("assistant", { webFetchEnabled: true });
     assert.match(text, /fetch public web pages/);
+  });
+});
+
+describe("assistant tool registry", () => {
+  it("maps every declared tool to a policy action", () => {
+    const declared = OPENAI_TOOLS.map((tool) => tool.function.name);
+    const registered = Object.keys(TOOL_REGISTRY);
+    assert.deepEqual([...registered].sort(), [...declared].sort());
+    for (const name of declared) {
+      const row = TOOL_REGISTRY[name];
+      assert.ok(row, name);
+      assert.ok((AI_ACTIONS as readonly string[]).includes(row.action), name);
+    }
   });
 });
 

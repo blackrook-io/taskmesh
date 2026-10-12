@@ -3,17 +3,30 @@ import { db } from "../../db/client.js";
 import type { ActivitySource } from "../../lib/activityRequest.js";
 import type { MutationResult } from "../../lib/mutationResult.js";
 import { writeAiAudit } from "../../services/assistant/aiAudit.js";
-import { check, tierForAction, type PolicyDecision } from "../../services/assistant/aiPolicy.js";
+import { check, tierForAction, type AiAction, type PolicyDecision } from "../../services/assistant/aiPolicy.js";
 import { attachProjectAiAccess } from "../../services/assistant/projectAiAccess.js";
 import { AI_DELETE_DENY_REASON, isAiDeleteProposal } from "../../services/assistant/aiTiers.js";
 import { createDocumentForActor, updateDocumentForActor } from "./documents.js";
 import { createIdeaForActor, updateIdeaForActor } from "./ideas.js";
 import { createProjectTask, patchProjectTask } from "./tasks.js";
+import {
+  applyComment,
+  applyManualLink,
+  applyTagAdd,
+  applyTaskDependency,
+  applyTodoCreate,
+  applyTodoListCreate,
+  applyTodoListUpdate,
+  applyTodoUpdate,
+} from "../../services/assistant/expandedApply.js";
+
+const proposalEntityType = z.enum(["idea", "project", "task", "document", "todo", "todo_list"]);
 
 const proposalBody = z.object({
   id: z.string().max(80).optional(),
   action: z.enum(["create", "update"]),
-  entityType: z.enum(["idea", "document", "task"]),
+  policyAction: z.enum(["link", "tag", "comment"]).optional(),
+  entityType: proposalEntityType,
   entityId: z.number().int().positive().optional(),
   projectId: z.number().int().positive().optional(),
   summary: z.string().max(500).optional(),
@@ -34,7 +47,15 @@ type ApplyTarget =
   | { kind: "document-create"; projectId: number }
   | { kind: "document-update"; projectId: number; docId: number }
   | { kind: "task-create"; projectId: number }
-  | { kind: "task-update"; projectId: number; taskId: number };
+  | { kind: "task-update"; projectId: number; taskId: number }
+  | { kind: "todo-create" }
+  | { kind: "todo-update"; id: number }
+  | { kind: "todo-list-create" }
+  | { kind: "todo-list-update"; id: number }
+  | { kind: "link-create" }
+  | { kind: "tag-add"; entityType: string; entityId: number }
+  | { kind: "comment-add"; entityType: "task" | "todo" | "todo_list"; entityId: number }
+  | { kind: "task-dependency"; taskId: number };
 
 function oneId(path: string, pattern: RegExp): number | null {
   const match = path.match(pattern);
@@ -85,6 +106,66 @@ export function matchProposalTarget(proposal: AssistantProposalInput): ApplyTarg
       return { kind: "task-update", projectId: ids[0], taskId: ids[1] };
     }
   }
+  if (action === "create" && method === "POST" && entityType === "todo" && path === "/api/v1/todos") {
+    return { kind: "todo-create" };
+  }
+  if (action === "update" && method === "PATCH" && entityType === "todo") {
+    const id = oneId(path, /^\/api\/v1\/todos\/(\d+)$/);
+    if (id != null && id === entityId) return { kind: "todo-update", id };
+  }
+  if (
+    action === "create" &&
+    method === "POST" &&
+    entityType === "todo_list" &&
+    path === "/api/v1/todo-lists"
+  ) {
+    return { kind: "todo-list-create" };
+  }
+  if (action === "update" && method === "PATCH" && entityType === "todo_list") {
+    const id = oneId(path, /^\/api\/v1\/todo-lists\/(\d+)$/);
+    if (id != null && id === entityId) return { kind: "todo-list-update", id };
+  }
+  if (
+    proposal.policyAction === "link" &&
+    action === "create" &&
+    method === "POST" &&
+    path === "/api/v1/links"
+  ) {
+    return { kind: "link-create" };
+  }
+  if (
+    proposal.policyAction === "tag" &&
+    action === "create" &&
+    method === "POST" &&
+    path === "/api/v1/taggings" &&
+    entityId != null
+  ) {
+    return { kind: "tag-add", entityType, entityId };
+  }
+  if (proposal.policyAction === "comment" && action === "create" && method === "POST" && entityId != null) {
+    const taskId = oneId(path, /^\/api\/v1\/tasks\/(\d+)\/activity$/);
+    if (entityType === "task" && taskId === entityId) {
+      return { kind: "comment-add", entityType: "task", entityId };
+    }
+    const todoId = oneId(path, /^\/api\/v1\/todos\/(\d+)\/activity$/);
+    if (entityType === "todo" && todoId === entityId) {
+      return { kind: "comment-add", entityType: "todo", entityId };
+    }
+    const listId = oneId(path, /^\/api\/v1\/todo-lists\/(\d+)\/activity$/);
+    if (entityType === "todo_list" && listId === entityId) {
+      return { kind: "comment-add", entityType: "todo_list", entityId };
+    }
+  }
+  if (
+    proposal.policyAction === "link" &&
+    action === "create" &&
+    method === "POST" &&
+    entityType === "task" &&
+    entityId != null
+  ) {
+    const taskId = oneId(path, /^\/api\/v1\/tasks\/(\d+)\/dependencies$/);
+    if (taskId === entityId) return { kind: "task-dependency", taskId };
+  }
   return null;
 }
 
@@ -126,6 +207,22 @@ async function runTarget(
         source,
         recordHistory: true,
       });
+    case "todo-create":
+      return applyTodoCreate(fields, actorId);
+    case "todo-update":
+      return applyTodoUpdate(target.id, fields, actorId);
+    case "todo-list-create":
+      return applyTodoListCreate(fields, actorId);
+    case "todo-list-update":
+      return applyTodoListUpdate(target.id, fields, actorId);
+    case "link-create":
+      return applyManualLink(fields, actorId);
+    case "tag-add":
+      return applyTagAdd(fields, actorId, target.entityType, target.entityId);
+    case "comment-add":
+      return applyComment(target.entityType, target.entityId, fields, actorId);
+    case "task-dependency":
+      return applyTaskDependency(target.taskId, fields, actorId);
   }
 }
 
@@ -172,11 +269,12 @@ export async function applyAssistantProposal(args: {
   const declaredTier =
     args.body && typeof args.body === "object" ? (args.body as { tier?: unknown }).tier : undefined;
   const started = Date.now();
+  const checkedAction: AiAction = proposal.policyAction ?? "apply";
   const decision = check(
     await attachProjectAiAccess(db, {
       actorUserId: args.actorId,
       feature: "assistant",
-      action: "apply",
+      action: checkedAction,
       entityType: proposal.entityType,
       entityId: proposal.entityId ?? null,
       projectId: proposal.projectId ?? null,
@@ -189,7 +287,7 @@ export async function applyAssistantProposal(args: {
     userId: args.actorId,
     feature: "assistant",
     tool: null,
-    action: "apply" as const,
+    action: checkedAction,
     entityType: proposal.entityType,
     entityId: proposal.entityId ?? null,
     projectId: proposal.projectId ?? null,

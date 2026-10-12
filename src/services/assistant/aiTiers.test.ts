@@ -202,6 +202,23 @@ describe("classifyChangePlan", () => {
     assert.equal(plan.operations[0]?.tier, 2);
     assert.equal(Object.prototype.hasOwnProperty.call(operation.fields, "tier"), false);
   });
+
+  it("classifies a link proposal as tier 1", () => {
+    const operation = operationFromProposal(
+      {
+        action: "create",
+        policyAction: "link",
+        entityType: "task",
+        entityId: 3,
+        fields: { dependsOnTaskId: 9, tier: 0 },
+        tier: 0,
+      },
+      1,
+    );
+    const plan = classifyChangePlan([operation], withSettings({ tier1OptIn: true }));
+    assert.equal(operation.action, "link");
+    assert.equal(plan.operations[0]?.tier, 1);
+  });
 });
 
 describe("permission settings", () => {

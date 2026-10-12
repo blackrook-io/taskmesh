@@ -8,7 +8,6 @@ import type { AiAuditSink } from "./aiAudit.js";
 import { writeAiAudit } from "./aiAudit.js";
 import {
   check,
-  isFloorResource,
   tierForAction,
   type AiAction,
   type PolicyCheckInput,
@@ -23,7 +22,27 @@ import {
   resolveEffectiveAiAccess,
   tasksVisibleToAi,
 } from "./projectAiAccess.js";
+import { todoListsVisibleToAi, todosVisibleToAi } from "./projectAiAccess.js";
 import { capUrlQuery, fetchUrlForAssistant } from "./fetchUrl.js";
+import { policyTargetForRegisteredTool } from "./toolRegistry.js";
+import {
+  toolGetNeighbourhood,
+  toolGetTodo,
+  toolGetTodoList,
+  toolListComments,
+  toolListLinks,
+  toolListTags,
+  toolListTaskDependencies,
+  toolListTodos,
+  toolProposeComment,
+  toolProposeLink,
+  toolProposeTag,
+  toolProposeTaskDependency,
+  toolProposeTodoCreate,
+  toolProposeTodoListCreate,
+  toolProposeTodoListUpdate,
+  toolProposeTodoUpdate,
+} from "./expandedTools.js";
 import {
   minimizeDocument,
   minimizeIdea,
@@ -31,7 +50,7 @@ import {
   minimizeTask,
   redactSecrets,
 } from "./aiMinimize.js";
-import { isEntityType, type EntityType } from "../../lib/entityType.js";
+import type { EntityType } from "../../lib/entityType.js";
 import {
   assertCanAccessDualScoped,
   assertCanAccessOwned,
@@ -47,8 +66,10 @@ import { actorCanReopen, enforceTaskPatch, TaskWorkflowError } from "../taskWork
 export type AssistantProposal = {
   id: string;
   action: "create" | "update";
-  entityType: "idea" | "document" | "task";
-  /** Present for updates */
+  /** Set for link, tag, and comment proposals so the tier matches the tool. */
+  policyAction?: "link" | "tag" | "comment";
+  entityType: "idea" | "project" | "document" | "task" | "todo" | "todo_list";
+  /** Present for updates and for adds that target an existing record */
   entityId?: number;
   projectId?: number;
   summary: string;
@@ -90,7 +111,7 @@ export const OPENAI_TOOLS = [
     type: "function" as const,
     function: {
       name: "search_records",
-      description: "Search ideas, projects, tasks, and documents by text query.",
+      description: "Search ideas, projects, tasks, documents, todos, and todo lists by text query.",
       parameters: {
         type: "object",
         properties: {
@@ -104,11 +125,14 @@ export const OPENAI_TOOLS = [
     type: "function" as const,
     function: {
       name: "get_entity",
-      description: "Load one idea, project, document, or task by id.",
+      description: "Load one idea, project, document, task, todo, or todo list by id.",
       parameters: {
         type: "object",
         properties: {
-          entityType: { type: "string", enum: ["idea", "project", "document", "task"] },
+          entityType: {
+            type: "string",
+            enum: ["idea", "project", "document", "task", "todo", "todo_list"],
+          },
           entityId: { type: "integer" },
         },
         required: ["entityType", "entityId"],
@@ -267,6 +291,265 @@ export const OPENAI_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_todos",
+      description: "List todos the user can see. Optional project, list, or title query.",
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: { type: "integer" },
+          listId: { type: "integer" },
+          q: { type: "string", description: "Title search" },
+        },
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_links",
+      description: "List links touching one record. Returns the other end, relation, and direction.",
+      parameters: {
+        type: "object",
+        properties: {
+          entityType: {
+            type: "string",
+            enum: ["idea", "project", "task", "document", "todo", "todo_list"],
+          },
+          entityId: { type: "integer" },
+        },
+        required: ["entityType", "entityId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_tags",
+      description: "List tag names on one idea, project, task, document, or todo.",
+      parameters: {
+        type: "object",
+        properties: {
+          entityType: {
+            type: "string",
+            enum: ["idea", "project", "task", "document", "todo", "todo_list"],
+          },
+          entityId: { type: "integer" },
+        },
+        required: ["entityType", "entityId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_comments",
+      description: "List recent comments on a task, todo, or todo list.",
+      parameters: {
+        type: "object",
+        properties: {
+          entityType: { type: "string", enum: ["task", "todo", "todo_list"] },
+          entityId: { type: "integer" },
+        },
+        required: ["entityType", "entityId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_task_dependencies",
+      description: "List tasks this task depends on and tasks that depend on it.",
+      parameters: {
+        type: "object",
+        properties: { taskId: { type: "integer" } },
+        required: ["taskId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_neighbourhood",
+      description:
+        "Read the graph neighbourhood of one record (depth 1–3, default 2). Returns node keys, titles, and states, plus edges. Does not find a path between two records.",
+      parameters: {
+        type: "object",
+        properties: {
+          entityType: {
+            type: "string",
+            enum: ["idea", "project", "task", "document", "todo", "todo_list"],
+          },
+          entityId: { type: "integer" },
+          depth: { type: "integer", description: "1 to 3. Default 2." },
+          rel: { type: "string", description: "Comma-separated relation names. Omit for the default set." },
+          hideDone: { type: "boolean" },
+        },
+        required: ["entityType", "entityId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_todo_create",
+      description:
+        "Propose creating a todo. Does not save; the user must confirm. Include state and progress only when the user asked for them.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          description: { type: "string" },
+          dueDate: { type: "string", description: "YYYY-MM-DD" },
+          state: { type: "string" },
+          priority: { type: "string" },
+          progress: { type: "integer", description: "0–100" },
+          projectId: { type: "integer" },
+          summary: { type: "string" },
+        },
+        required: ["title", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_todo_update",
+      description:
+        "Propose updating a todo, including state and progress. Does not save; the user must confirm. Progress on a parent with sub-items is derived.",
+      parameters: {
+        type: "object",
+        properties: {
+          todoId: { type: "integer" },
+          title: { type: "string" },
+          description: { type: "string" },
+          dueDate: { type: "string", description: "YYYY-MM-DD or null to clear" },
+          state: { type: "string" },
+          priority: { type: "string" },
+          progress: { type: "integer", description: "0–100" },
+          summary: { type: "string" },
+        },
+        required: ["todoId", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_todo_list_create",
+      description: "Propose creating a todo list. Does not save; the user must confirm.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          projectId: { type: "integer" },
+          summary: { type: "string" },
+        },
+        required: ["title", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_todo_list_update",
+      description: "Propose renaming a todo list. Does not save; the user must confirm.",
+      parameters: {
+        type: "object",
+        properties: {
+          listId: { type: "integer" },
+          title: { type: "string" },
+          summary: { type: "string" },
+        },
+        required: ["listId", "title", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_link",
+      description:
+        "Propose a manual link between two records. Does not save; the user must confirm. Cannot remove a link.",
+      parameters: {
+        type: "object",
+        properties: {
+          srcType: {
+            type: "string",
+            enum: ["idea", "project", "task", "document", "todo", "todo_list"],
+          },
+          srcId: { type: "integer" },
+          dstType: {
+            type: "string",
+            enum: ["idea", "project", "task", "document", "todo", "todo_list"],
+          },
+          dstId: { type: "integer" },
+          relation: {
+            type: "string",
+            enum: ["relates_to", "references", "supports", "part_of"],
+          },
+          summary: { type: "string" },
+        },
+        required: ["srcType", "srcId", "dstType", "dstId", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_tag",
+      description:
+        "Propose adding a tag by name to an idea, project, task, document, or todo. Does not save; the user must confirm. Cannot remove a tag.",
+      parameters: {
+        type: "object",
+        properties: {
+          entityType: { type: "string", enum: ["idea", "project", "task", "document", "todo"] },
+          entityId: { type: "integer" },
+          name: { type: "string" },
+          summary: { type: "string" },
+        },
+        required: ["entityType", "entityId", "name", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_comment",
+      description:
+        "Propose a comment on a task, todo, or todo list. Does not save; the user must confirm.",
+      parameters: {
+        type: "object",
+        properties: {
+          entityType: { type: "string", enum: ["task", "todo", "todo_list"] },
+          entityId: { type: "integer" },
+          body: { type: "string" },
+          summary: { type: "string" },
+        },
+        required: ["entityType", "entityId", "body", "summary"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_task_dependency",
+      description:
+        "Propose that one task depends on another. Does not save; the user must confirm. Cannot remove a dependency.",
+      parameters: {
+        type: "object",
+        properties: {
+          taskId: { type: "integer", description: "The task that is blocked" },
+          dependsOnTaskId: { type: "integer", description: "The task it depends on" },
+          projectId: { type: "integer" },
+          summary: { type: "string" },
+        },
+        required: ["taskId", "dependsOnTaskId", "summary"],
+      },
+    },
+  },
 ];
 
 export function assistantToolDefinitions(options?: {
@@ -301,61 +584,8 @@ function proposalId(): string {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function numField(args: unknown, key: string): number | null {
-  if (!args || typeof args !== "object") return null;
-  const value = (args as Record<string, unknown>)[key];
-  return typeof value === "number" && Number.isInteger(value) ? value : null;
-}
-
 function policyTargetForTool(name: string, args: unknown): ToolPolicyTarget | null {
-  const entityTypeRaw =
-    args && typeof args === "object" ? (args as Record<string, unknown>).entityType : undefined;
-  const entityType = typeof entityTypeRaw === "string" && isEntityType(entityTypeRaw) ? entityTypeRaw : null;
-  const resource =
-    typeof entityTypeRaw === "string" && isFloorResource(entityTypeRaw) ? entityTypeRaw : null;
-
-  switch (name) {
-    case "search_records":
-      return { action: "read" };
-    case "get_entity":
-      return { action: "read", entityType, resource, entityId: numField(args, "entityId") };
-    case "list_project_context":
-      return { action: "read", entityType: "project", projectId: numField(args, "projectId") };
-    case "fetch_url":
-      return { action: "web_fetch" };
-    case "propose_idea_update":
-      return { action: "propose_update", entityType: "idea", entityId: numField(args, "ideaId") };
-    case "propose_document_update":
-      return {
-        action: "propose_update",
-        entityType: "document",
-        entityId: numField(args, "documentId"),
-        projectId: numField(args, "projectId"),
-      };
-    case "propose_task_update":
-      return {
-        action: "propose_update",
-        entityType: "task",
-        entityId: numField(args, "taskId"),
-        projectId: numField(args, "projectId"),
-      };
-    case "propose_idea_create":
-      return { action: "propose_create", entityType: "idea" };
-    case "propose_document_create":
-      return {
-        action: "propose_create",
-        entityType: "document",
-        projectId: numField(args, "projectId"),
-      };
-    case "propose_task_create":
-      return {
-        action: "propose_create",
-        entityType: "task",
-        projectId: numField(args, "projectId"),
-      };
-    default:
-      return null;
-  }
+  return policyTargetForRegisteredTool(name, args);
 }
 
 function denialPayload(action: AiAction, decision: PolicyDecision): string {
@@ -449,6 +679,34 @@ async function dispatchTool(name: string, args: unknown, handlers: ToolHandlers)
       return await toolProposeDocumentCreate(args, handlers);
     case "propose_task_create":
       return await toolProposeTaskCreate(args, handlers);
+    case "list_todos":
+      return await toolListTodos(args, handlers);
+    case "list_links":
+      return await toolListLinks(args, handlers);
+    case "list_tags":
+      return await toolListTags(args, handlers);
+    case "list_comments":
+      return await toolListComments(args, handlers);
+    case "list_task_dependencies":
+      return await toolListTaskDependencies(args, handlers);
+    case "get_neighbourhood":
+      return await toolGetNeighbourhood(args, handlers);
+    case "propose_todo_create":
+      return await toolProposeTodoCreate(args, handlers);
+    case "propose_todo_update":
+      return await toolProposeTodoUpdate(args, handlers);
+    case "propose_todo_list_create":
+      return await toolProposeTodoListCreate(args, handlers);
+    case "propose_todo_list_update":
+      return await toolProposeTodoListUpdate(args, handlers);
+    case "propose_link":
+      return await toolProposeLink(args, handlers);
+    case "propose_tag":
+      return await toolProposeTag(args, handlers);
+    case "propose_comment":
+      return await toolProposeComment(args, handlers);
+    case "propose_task_dependency":
+      return await toolProposeTaskDependency(args, handlers);
     default:
       return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
@@ -486,7 +744,7 @@ export async function executeAssistantTool(
   }
 
   let resolvedTarget = target;
-  if (name === "get_entity" && resolvedTarget.projectId == null && resolvedTarget.entityId != null) {
+  if (resolvedTarget.projectId == null && resolvedTarget.entityId != null && resolvedTarget.entityType) {
     const projectId = await projectIdForAiEntity(
       db,
       resolvedTarget.entityType,
@@ -554,11 +812,14 @@ async function toolFetchUrl(args: unknown, signal?: AbortSignal): Promise<string
 async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string> {
   const { q } = z.object({ q: z.string().min(1).max(200) }).parse(args);
   const { actorUserId, isAdministrator } = requireActor(handlers);
-  const [ideaScope, visibleProjects, visibleTasks, visibleDocuments] = await Promise.all([
+  const [ideaScope, visibleProjects, visibleTasks, visibleDocuments, visibleTodos, visibleLists] =
+    await Promise.all([
     Promise.resolve(ownerScope(schema.ideas.ownerId, actorUserId, isAdministrator)),
     projectsVisibleToAi(db),
     tasksVisibleToAi(db),
     documentsVisibleToAi(db),
+    todosVisibleToAi(db),
+    todoListsVisibleToAi(db),
   ]);
   const projectScope = projectAccessListFilter(db, actorUserId, isAdministrator);
   const taskScope = dualScopeListFilter(
@@ -574,7 +835,21 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
     actorUserId,
     isAdministrator,
   );
-  const [ideas, projects, tasks, documents] = await Promise.all([
+  const todoScope = dualScopeListFilter(
+    db,
+    schema.todos.projectId,
+    schema.todos.ownerId,
+    actorUserId,
+    isAdministrator,
+  );
+  const listScope = dualScopeListFilter(
+    db,
+    schema.todoLists.projectId,
+    schema.todoLists.ownerId,
+    actorUserId,
+    isAdministrator,
+  );
+  const [ideas, projects, tasks, documents, todos, lists] = await Promise.all([
     db
       .select({ id: schema.ideas.id, title: schema.ideas.title })
       .from(schema.ideas)
@@ -635,6 +910,35 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
       )
       .orderBy(desc(schema.projectDocuments.updatedAt))
       .limit(8),
+    db
+      .select({
+        id: schema.todos.id,
+        title: schema.todos.title,
+        projectId: schema.todos.projectId,
+        number: schema.todos.number,
+      })
+      .from(schema.todos)
+      .where(
+        and(
+          ne(schema.todos.state, "deleted"),
+          or(ilikeEscaped(schema.todos.title, q), ilikeEscaped(schema.todos.description, q)),
+          todoScope ?? sql`true`,
+          visibleTodos,
+        ),
+      )
+      .orderBy(desc(schema.todos.updatedAt))
+      .limit(8),
+    db
+      .select({
+        id: schema.todoLists.id,
+        title: schema.todoLists.title,
+        projectId: schema.todoLists.projectId,
+        number: schema.todoLists.number,
+      })
+      .from(schema.todoLists)
+      .where(and(ilikeEscaped(schema.todoLists.title, q), listScope ?? sql`true`, visibleLists))
+      .orderBy(desc(schema.todoLists.updatedAt))
+      .limit(8),
   ]);
   return JSON.stringify({
     ideas: ideas.map((row) => ({ id: row.id, title: row.title })),
@@ -648,6 +952,18 @@ async function toolSearch(args: unknown, handlers: ToolHandlers): Promise<string
     documents: documents.map((row) => ({
       id: row.id,
       title: row.title,
+      projectId: row.projectId,
+    })),
+    todos: todos.map((row) => ({
+      id: row.id,
+      title: row.title,
+      number: row.number,
+      projectId: row.projectId,
+    })),
+    todoLists: lists.map((row) => ({
+      id: row.id,
+      title: row.title,
+      number: row.number,
       projectId: row.projectId,
     })),
   });
@@ -666,7 +982,7 @@ async function tagNames(entityType: EntityType, entityId: number): Promise<strin
 async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<string> {
   const parsed = z
     .object({
-      entityType: z.enum(["idea", "project", "document", "task"]),
+      entityType: z.enum(["idea", "project", "document", "task", "todo", "todo_list"]),
       entityId: z.number().int().positive(),
     })
     .parse(args);
@@ -701,6 +1017,20 @@ async function toolGetEntity(args: unknown, handlers: ToolHandlers): Promise<str
       return JSON.stringify(
         minimizeDocument({ ...row, tags: await tagNames("document", row.id) }),
       );
+    }
+    if (parsed.entityType === "todo") {
+      const hidden = await excludedReadDenial(
+        await projectIdForAiEntity(db, "todo", parsed.entityId),
+      );
+      if (hidden) return hidden;
+      return await toolGetTodo(parsed.entityId, actorUserId);
+    }
+    if (parsed.entityType === "todo_list") {
+      const hidden = await excludedReadDenial(
+        await projectIdForAiEntity(db, "todo_list", parsed.entityId),
+      );
+      if (hidden) return hidden;
+      return await toolGetTodoList(parsed.entityId, actorUserId);
     }
     const [row] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parsed.entityId));
     if (!row) return JSON.stringify({ error: "Task not found" });

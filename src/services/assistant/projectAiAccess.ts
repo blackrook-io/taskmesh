@@ -110,6 +110,20 @@ export async function projectIdForAiEntity(
       .where(eq(schema.tasks.id, entityId));
     return row?.projectId ?? null;
   }
+  if (entityType === "todo") {
+    const [row] = await db
+      .select({ projectId: schema.todos.projectId })
+      .from(schema.todos)
+      .where(eq(schema.todos.id, entityId));
+    return row?.projectId ?? null;
+  }
+  if (entityType === "todo_list") {
+    const [row] = await db
+      .select({ projectId: schema.todoLists.projectId })
+      .from(schema.todoLists)
+      .where(eq(schema.todoLists.id, entityId));
+    return row?.projectId ?? null;
+  }
   return null;
 }
 
@@ -125,6 +139,30 @@ export async function tasksVisibleToAi(db: Db): Promise<SQL> {
   return sql`(
     ${schema.tasks.projectId} is null
     or ${schema.tasks.projectId} in (
+      select ${schema.projects.id} from ${schema.projects}
+      where ${schema.projects.aiAccess} <> 'excluded'
+    )
+  )`;
+}
+
+export async function todosVisibleToAi(db: Db): Promise<SQL> {
+  const ceiling = await getAiProjectAccessCeiling(db);
+  if (ceiling === "excluded") return sql`${schema.todos.projectId} is null`;
+  return sql`(
+    ${schema.todos.projectId} is null
+    or ${schema.todos.projectId} in (
+      select ${schema.projects.id} from ${schema.projects}
+      where ${schema.projects.aiAccess} <> 'excluded'
+    )
+  )`;
+}
+
+export async function todoListsVisibleToAi(db: Db): Promise<SQL> {
+  const ceiling = await getAiProjectAccessCeiling(db);
+  if (ceiling === "excluded") return sql`${schema.todoLists.projectId} is null`;
+  return sql`(
+    ${schema.todoLists.projectId} is null
+    or ${schema.todoLists.projectId} in (
       select ${schema.projects.id} from ${schema.projects}
       where ${schema.projects.aiAccess} <> 'excluded'
     )

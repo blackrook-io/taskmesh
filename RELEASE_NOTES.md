@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.63.1 — 2026-10-12
+
+### Enhancements
+- The assistant can read todos, todo lists, links, tags, comments, task dependencies, and the neighbourhood of a record. It can propose creating or updating a todo or list, and adding a link, tag, comment, or task dependency. Nothing is saved until you confirm. It still cannot delete, unlink, or find a path between two records.
+
 ## 0.63.0 — 2026-10-12
 
 ### New Functionality
