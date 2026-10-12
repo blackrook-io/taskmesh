@@ -100,6 +100,8 @@ export type Task = {
   updatedBy?: UserRef | null;
   owner?: UserRef | null;
   assignee?: UserRef | null;
+  /** States this user may move the task to. Pending is never included. */
+  allowedNextStates?: Array<Task["state"]>;
   createdAt: string;
   updatedAt: string;
 };

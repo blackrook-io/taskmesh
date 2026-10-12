@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.61.1 — 2026-10-12
+
+### Enhancements
+- A Task follows one state path on every screen and API: Draft to Ready or Canceled, Ready to In Progress or Canceled, In Progress to On Hold or Complete, and On Hold back to In Progress or Complete. Canceling, and reopening a Complete or Canceled Task, requires a comment. Only a project Owner, Manager, or Administrator can reopen. Complete and Canceled Tasks stay read-only except for comments, a Task can have at most three tags, and new Tasks, including spreadsheet import, start as Draft.
+
 ## 0.61.0 — 2026-10-12
 
 ### Fixes

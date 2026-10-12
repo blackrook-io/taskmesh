@@ -10,6 +10,7 @@ import {
   isEmptyTaskGroupFilter,
   type TaskGroupFilter,
 } from "../lib/taskGroupFilter.js";
+import { TASK_TAG_CAP } from "./taskWorkflow.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -60,6 +61,7 @@ export function collectAutoTagAttachments(
         if (!taskMatchesGroupFilter(task, group.filter, ctx)) continue;
         const existing = taskTags.get(task.id) ?? [];
         if (existing.some((t) => t.id === group.autoTagId)) continue;
+        if (existing.length >= TASK_TAG_CAP) continue;
         const key = `${task.id}:${group.autoTagId}`;
         if (seen.has(key)) continue;
         seen.add(key);

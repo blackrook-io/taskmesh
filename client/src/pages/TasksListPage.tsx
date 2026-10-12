@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { StateReasonDialog } from "../components/StateReasonDialog";
 import { CHILD_TITLE_INDENT_PX, StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
 import {
   TaskListContextMenu,
@@ -29,9 +30,13 @@ import { buildTaskListGridTemplate } from "../lib/listViewColumns";
 import { useListViewColumns } from "../lib/useListViewColumns";
 import { useTaskListViewState } from "../lib/useTaskListViewState";
 import {
-  formatTaskNumber,
-  nextTaskState,
+  TASK_STATE_LABELS,
   TASK_STATE_SORT_RANK,
+  allowedTaskStates,
+  formatTaskNumber,
+  nextAllowedTaskState,
+  stateChangeNeedsComment,
+  type TaskState,
 } from "../lib/taskFields";
 import {
   evaluateTaskListFilter,
@@ -144,6 +149,7 @@ export function TasksListPage() {
   const [modalTaskHeld, setModalTaskHeld] = useState<Task | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
+  const [stateReason, setStateReason] = useState<{ task: Task; to: TaskState } | null>(null);
   const { collapsedParents, toggle: toggleListState } = useTaskListViewState();
   const sortStorageKey = storageKeyForGlobalTaskSort(filter);
   const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
@@ -395,6 +401,37 @@ export function TasksListPage() {
     createTask.mutate(title.trim());
   };
 
+  const applyTaskState = (task: Task, next: TaskState, stateComment?: string) => {
+    const patch = stateComment ? { state: next, stateComment } : { state: next };
+    if (next === "complete") {
+      void (async () => {
+        try {
+          const blockers = await fetchOpenDependsOn(task.id);
+          if (blockers.length > 0) {
+            setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
+            return;
+          }
+          await patchTask.mutateAsync({ id: task.id, patch });
+        } catch (err) {
+          setCompleteBlockMsg((err as Error).message);
+        }
+      })();
+      return;
+    }
+    void patchTask.mutateAsync({ id: task.id, patch }).catch((err: unknown) => {
+      setCompleteBlockMsg(err instanceof Error ? err.message : "Could not change state");
+    });
+  };
+
+  const requestTaskState = (task: Task, next: TaskState) => {
+    if (!task.allowedNextStates?.includes(next)) return;
+    if (stateChangeNeedsComment(task.state, next)) {
+      setStateReason({ task, to: next });
+      return;
+    }
+    applyTaskState(task, next);
+  };
+
   if (tasksQuery.isLoading) return <p className="muted">Loading tasks…</p>;
   if (tasksQuery.error) return <p role="alert">{(tasksQuery.error as Error).message}</p>;
 
@@ -473,27 +510,10 @@ export function TasksListPage() {
               </span>
               <StateCheckbox
                 state={task.state}
+                canCycle={nextAllowedTaskState(task.allowedNextStates) != null}
                 onCycle={() => {
-                  const next = nextTaskState(task.state);
-                  if (next === "complete") {
-                    void (async () => {
-                      try {
-                        const blockers = await fetchOpenDependsOn(task.id);
-                        if (blockers.length > 0) {
-                          setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
-                          return;
-                        }
-                        await patchTask.mutateAsync({ id: task.id, patch: { state: next } });
-                      } catch (err) {
-                        setCompleteBlockMsg((err as Error).message);
-                      }
-                    })();
-                    return;
-                  }
-                  void patchTask.mutateAsync({
-                    id: task.id,
-                    patch: { state: next },
-                  });
+                  const next = nextAllowedTaskState(task.allowedNextStates);
+                  if (next) requestTaskState(task, next);
                 }}
               />
               {visibleColumns.map((col) =>
@@ -561,9 +581,25 @@ export function TasksListPage() {
         </ElementShell>
       ) : null}
 
+      <StateReasonDialog
+        open={stateReason != null}
+        title={stateReason?.to === "canceled" ? "Cancel task" : "Reopen task"}
+        message={
+          stateReason?.to === "canceled"
+            ? "Add a comment explaining why this task is canceled."
+            : "Add a comment explaining why this task is reopened."
+        }
+        confirmLabel={stateReason?.to === "canceled" ? "Cancel task" : "Reopen"}
+        onCancel={() => setStateReason(null)}
+        onConfirm={(comment) => {
+          const pending = stateReason;
+          setStateReason(null);
+          if (pending) applyTaskState(pending.task, pending.to, comment);
+        }}
+      />
       <ConfirmDialog
         open={completeBlockMsg != null}
-        title="Cannot mark Complete"
+        title="Cannot change state"
         message={completeBlockMsg ?? ""}
         alertOnly
         confirmLabel="OK"
@@ -578,7 +614,22 @@ export function TasksListPage() {
           const all = tasksQuery.data ?? [];
           const ctxTask = ctxMenu ? (all.find((t) => t.id === ctxMenu.taskId) ?? null) : null;
           if (!ctxMenu || !ctxTask) return [] as TaskListContextMenuItem[];
+          const stateChoices = allowedTaskStates(ctxTask.allowedNextStates);
           return [
+            ...(stateChoices.length > 0
+              ? [
+                  {
+                    type: "submenu" as const,
+                    label: "Set state",
+                    children: stateChoices.map((next) => ({
+                      type: "action" as const,
+                      label: TASK_STATE_LABELS[next],
+                      onSelect: () => requestTaskState(ctxTask, next),
+                    })),
+                  },
+                  { type: "separator" as const },
+                ]
+              : []),
             {
               type: "action" as const,
               label: "Move to…",

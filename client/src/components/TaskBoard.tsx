@@ -27,10 +27,12 @@ import { sanitizePlainText } from "../lib/plainText";
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
-  SELECTABLE_TASK_STATES,
   TASK_STATE_LABELS,
+  allowedTaskStates,
   formatTaskNumber,
-  nextTaskState,
+  isClosedTaskState,
+  nextAllowedTaskState,
+  stateChangeNeedsComment,
   TASK_STATE_SORT_RANK,
   taskStateClass,
   type TaskPriority,
@@ -38,6 +40,7 @@ import {
 } from "../lib/taskFields";
 import type { Project, ProjectPhase, Task, TaskGroup } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { StateReasonDialog } from "./StateReasonDialog";
 import { ColorPopover } from "./shared/ColorPopover";
 import { GroupEditModal } from "./GroupEditModal";
 import {
@@ -133,6 +136,7 @@ type TaskPatch = {
   parentId?: number | null;
   projectId?: number | null;
   state?: TaskState;
+  stateComment?: string;
   priority?: TaskPriority;
   assigneeId?: number | null;
 };
@@ -330,9 +334,11 @@ function buildRows(
 export function StateCheckbox({
   state,
   onCycle,
+  canCycle = true,
 }: {
   state: TaskState;
   onCycle: () => void;
+  canCycle?: boolean;
 }) {
   const glyph =
     state === "ready"
@@ -348,8 +354,11 @@ export function StateCheckbox({
               : state === "on_hold"
                 ? "-"
                 : "";
-  const hint =
-    state === "pending"
+  const hint = !canCycle
+    ? state === "pending"
+      ? `${TASK_STATE_LABELS[state]} — waiting on child tasks`
+      : `${TASK_STATE_LABELS[state]} — no further state change`
+    : state === "pending"
       ? `${TASK_STATE_LABELS[state]} — waiting on child tasks — click to cycle`
       : `${TASK_STATE_LABELS[state]} — click to cycle`;
   return (
@@ -358,9 +367,10 @@ export function StateCheckbox({
       className={taskStateClass("task-state-cb", state)}
       title={hint}
       aria-label={`State ${TASK_STATE_LABELS[state]}`}
+      disabled={!canCycle}
       onClick={(e) => {
         e.stopPropagation();
-        onCycle();
+        if (canCycle) onCycle();
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
@@ -407,6 +417,8 @@ export function TaskEditorFields({
   const [assigneeId, setAssigneeId] = useState(initial.assigneeId);
   const [assignee, setAssignee] = useState(task.assignee ?? null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [stateReason, setStateReason] = useState<TaskState | null>(null);
+  const [allowedNext, setAllowedNext] = useState<string[]>(task.allowedNextStates ?? []);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -468,6 +480,13 @@ export function TaskEditorFields({
   const children = allTasks !== undefined ? knownChildren : (childrenQuery.data ?? knownChildren);
 
   // Call sites key TaskEditorFields by task.id; sync project/phase if props change in place.
+  const allowedKey = (task.allowedNextStates ?? []).join(",");
+  const [syncedAllowedKey, setSyncedAllowedKey] = useState(allowedKey);
+  if (allowedKey !== syncedAllowedKey) {
+    setSyncedAllowedKey(allowedKey);
+    setAllowedNext(task.allowedNextStates ?? []);
+  }
+
   const [syncedProjectId, setSyncedProjectId] = useState(task.projectId);
   const [syncedPhaseId, setSyncedPhaseId] = useState(task.phaseId);
   if (task.projectId !== syncedProjectId || task.phaseId !== syncedPhaseId) {
@@ -512,6 +531,7 @@ export function TaskEditorFields({
     setPriority(row.priority);
     setAssigneeId(row.assigneeId ?? null);
     setAssignee(row.assignee ?? null);
+    setAllowedNext(row.allowedNextStates ?? []);
   };
 
   const commit = async (previous: TaskSnapshot, patch: TaskPatch) => {
@@ -634,7 +654,7 @@ export function TaskEditorFields({
       <button
         type="button"
         className="btn small ghost"
-        disabled={!canUndo}
+        disabled={!canUndo || isClosedTaskState(state)}
         onClick={() => void handleUndoRef.current()}
         title="Revert last saved change (Ctrl+Z)"
       >
@@ -642,7 +662,44 @@ export function TaskEditorFields({
       </button>,
     );
     return () => onHeaderActions(null);
-  }, [canUndo, onHeaderActions]);
+  }, [canUndo, onHeaderActions, state]);
+
+  const closed = isClosedTaskState(state);
+  const nextStates = allowedTaskStates(allowedNext).filter((item) => item !== state);
+  const stateOptions = [state, ...nextStates];
+
+  const commitState = (next: TaskState, stateComment?: string) => {
+    const prev = { ...currentSnap(), state };
+    const patch: TaskPatch = stateComment ? { state: next, stateComment } : { state: next };
+    if (next === "complete") {
+      void (async () => {
+        try {
+          const blockers = await fetchOpenDependsOn(task.id);
+          if (blockers.length > 0) {
+            setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
+            return;
+          }
+        } catch (err) {
+          setSaveError((err as Error).message);
+          return;
+        }
+        setState(next);
+        void commit(prev, patch);
+      })();
+      return;
+    }
+    setState(next);
+    void commit(prev, patch);
+  };
+
+  const requestEditorState = (next: TaskState) => {
+    if (next === state) return;
+    if (stateChangeNeedsComment(state, next)) {
+      setStateReason(next);
+      return;
+    }
+    commitState(next);
+  };
 
   return (
     <div className="task-expand" ref={containerRef}>
@@ -650,13 +707,16 @@ export function TaskEditorFields({
         <div className="task-expand__title-head">
           <label htmlFor={`t-title-${task.id}`}>Title</label>
           <span className="task-editor-hint">
-            Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes
+            {closed
+              ? "This task is closed. You can add a comment."
+              : "Autosaves on blur · History updates on Close · Esc closes · Ctrl+Z undoes"}
           </span>
         </div>
         <input
           id={`t-title-${task.id}`}
           type="text"
           value={title}
+          disabled={closed}
           onChange={(e) => setTitle(sanitizePlainText(e.target.value))}
           onBlur={() => {
             if (title !== task.title) {
@@ -671,6 +731,7 @@ export function TaskEditorFields({
           <select
             id={`t-project-${task.id}`}
             value={projectId ?? ""}
+            disabled={closed}
             onChange={(e) => {
               const raw = e.target.value;
               const nextProject = raw === "" ? null : Number(raw);
@@ -694,7 +755,7 @@ export function TaskEditorFields({
             <select
               id={`t-phase-${task.id}`}
               value={phaseId ?? ""}
-              disabled={task.parentId != null}
+              disabled={closed || task.parentId != null}
               title={
                 task.parentId != null
                   ? "Children share the parent’s phase"
@@ -727,31 +788,10 @@ export function TaskEditorFields({
           <select
             id={`t-state-${task.id}`}
             value={state}
-            onChange={(e) => {
-              const next = e.target.value as TaskState;
-              const prev = { ...currentSnap(), state };
-              if (next === "complete") {
-                void (async () => {
-                  try {
-                    const blockers = await fetchOpenDependsOn(task.id);
-                    if (blockers.length > 0) {
-                      setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
-                      return;
-                    }
-                  } catch (err) {
-                    setSaveError((err as Error).message);
-                    return;
-                  }
-                  setState(next);
-                  void commit(prev, { state: next });
-                })();
-                return;
-              }
-              setState(next);
-              void commit(prev, { state: next });
-            }}
+            disabled={nextStates.length === 0}
+            onChange={(e) => requestEditorState(e.target.value as TaskState)}
           >
-            {SELECTABLE_TASK_STATES.map((s) => (
+            {stateOptions.map((s) => (
               <option key={s} value={s}>
                 {TASK_STATE_LABELS[s]}
               </option>
@@ -763,6 +803,7 @@ export function TaskEditorFields({
           <select
             id={`t-pri-${task.id}`}
             value={priority}
+            disabled={closed}
             onChange={(e) => {
               const next = e.target.value as TaskPriority;
               const prev = { ...currentSnap(), priority };
@@ -784,6 +825,7 @@ export function TaskEditorFields({
               id={`t-due-${task.id}`}
               type="date"
               value={dueLocal}
+              disabled={closed}
               onChange={(e) => setDueLocal(e.target.value)}
               onBlur={() => {
                 const next = dueLocal || null;
@@ -793,16 +835,18 @@ export function TaskEditorFields({
               }}
             />
             <div className="task-color-swatch" title={color ?? "default"}>
-              <ColorPopover
-                color={color}
-                label="Task color"
-                placement="left"
-                onChange={(c) => {
-                  const prev = { ...currentSnap(), color };
-                  setColor(c);
-                  void commit(prev, { color: c });
-                }}
-              />
+              {closed ? null : (
+                <ColorPopover
+                  color={color}
+                  label="Task color"
+                  placement="left"
+                  onChange={(c) => {
+                    const prev = { ...currentSnap(), color };
+                    setColor(c);
+                    void commit(prev, { color: c });
+                  }}
+                />
+              )}
               <span className="task-color-swatch__hex muted">{color ?? "default"}</span>
             </div>
           </div>
@@ -812,6 +856,7 @@ export function TaskEditorFields({
           projectId={projectId}
           assigneeId={assigneeId}
           assignee={assignee}
+          disabled={closed}
           onChange={(next) => {
             const prev = { ...currentSnap(), assigneeId };
             setAssigneeId(next);
@@ -822,6 +867,7 @@ export function TaskEditorFields({
       <div className="field task-expand__notes">
         <div className="task-expand__notes-head">
           <label>Description</label>
+          {closed ? null : (
           <TaskDescriptionTemplatesMenu
             projectId={projectId}
             description={description}
@@ -834,10 +880,12 @@ export function TaskEditorFields({
               }
             }}
           />
+          )}
         </div>
         <MarkdownEditor
           key={`${task.id}-${revision}-description`}
           value={description}
+          readOnly={closed}
           onChange={setDescription}
           fill
           height={280}
@@ -858,7 +906,7 @@ export function TaskEditorFields({
       </div>
       <TaskTimeline task={task} />
       <div className="field field--tags-below">
-        <TagInput entityType="task" entityId={task.id} />
+        <TagInput entityType="task" entityId={task.id} readOnly={closed} />
       </div>
       <EntityLinksPanel entityType="task" entityId={task.id} />
       <TaskDependencyLists taskId={task.id} onOpenTask={onOpenTask} />
@@ -897,9 +945,25 @@ export function TaskEditorFields({
           {deleteError}
         </p>
       ) : null}
+      <StateReasonDialog
+        open={stateReason != null}
+        title={stateReason === "canceled" ? "Cancel task" : "Reopen task"}
+        message={
+          stateReason === "canceled"
+            ? "Add a comment explaining why this task is canceled."
+            : "Add a comment explaining why this task is reopened."
+        }
+        confirmLabel={stateReason === "canceled" ? "Cancel task" : "Reopen"}
+        onCancel={() => setStateReason(null)}
+        onConfirm={(comment) => {
+          const next = stateReason;
+          setStateReason(null);
+          if (next) commitState(next, comment);
+        }}
+      />
       <ConfirmDialog
         open={completeBlockMsg != null}
-        title="Cannot mark Complete"
+        title="Cannot change state"
         message={completeBlockMsg ?? ""}
         alertOnly
         confirmLabel="OK"
@@ -1022,7 +1086,11 @@ function SortableTaskRow({
       <span className="task-drag-handle" title="Drag to reorder">
         ::
       </span>
-      <StateCheckbox state={task.state} onCycle={onCycleState} />
+      <StateCheckbox
+        state={task.state}
+        canCycle={nextAllowedTaskState(task.allowedNextStates) != null}
+        onCycle={onCycleState}
+      />
       {visibleColumns.map((col) =>
         renderTaskColumnCell(col.fieldKey, {
           task,
@@ -1289,6 +1357,7 @@ export function TaskBoard({
   const [pendingGroupDelete, setPendingGroupDelete] = useState<TaskGroup | null>(null);
   const [editGroup, setEditGroup] = useState<TaskGroup | null>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
+  const [stateReason, setStateReason] = useState<{ task: Task; to: TaskState } | null>(null);
   const [pendingAutoTagDrop, setPendingAutoTagDrop] = useState<PendingAutoTagDrop | null>(null);
   const [dndInfo, setDndInfo] = useState<{ title: string; message: string } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<TaskListContextMenuState | null>(null);
@@ -1635,8 +1704,8 @@ export function TaskBoard({
     })();
   };
 
-  const cycleTaskState = (task: Task) => {
-    const next = nextTaskState(task.state);
+  const applyTaskState = (task: Task, next: TaskState, stateComment?: string) => {
+    const patch = stateComment ? { state: next, stateComment } : { state: next };
     if (next === "complete") {
       void (async () => {
         try {
@@ -1645,14 +1714,31 @@ export function TaskBoard({
             setCompleteBlockMsg(formatCompleteBlockMessage(blockers));
             return;
           }
-          await onPatchTask(task.id, { state: next });
+          await onPatchTask(task.id, patch);
         } catch (err) {
           setCompleteBlockMsg((err as Error).message);
         }
       })();
       return;
     }
-    void onPatchTask(task.id, { state: next });
+    void onPatchTask(task.id, patch).catch((err: unknown) => {
+      setCompleteBlockMsg(err instanceof Error ? err.message : "Could not change state");
+    });
+  };
+
+  const requestTaskState = (task: Task, next: TaskState) => {
+    if (!task.allowedNextStates?.includes(next)) return;
+    if (stateChangeNeedsComment(task.state, next)) {
+      setStateReason({ task, to: next });
+      return;
+    }
+    applyTaskState(task, next);
+  };
+
+  const cycleTaskState = (task: Task) => {
+    const next = nextAllowedTaskState(task.allowedNextStates);
+    if (!next) return;
+    requestTaskState(task, next);
   };
 
   const renderTaskRow = (row: Extract<FlatRow, { kind: "task" }>) => (
@@ -1695,7 +1781,22 @@ export function TaskBoard({
   const ctxMenuItems: TaskListContextMenuItem[] = (() => {
     if (!ctxMenu || !ctxTask) return [];
     const due = taskDue(ctxTask);
+    const stateChoices = allowedTaskStates(ctxTask.allowedNextStates);
     const items: TaskListContextMenuItem[] = [
+      ...(stateChoices.length > 0
+        ? [
+            {
+              type: "submenu" as const,
+              label: "Set state",
+              children: stateChoices.map((next) => ({
+                type: "action" as const,
+                label: TASK_STATE_LABELS[next],
+                onSelect: () => requestTaskState(ctxTask, next),
+              })),
+            },
+            { type: "separator" as const },
+          ]
+        : []),
       {
         type: "action",
         label: "Move to…",
@@ -1885,9 +1986,25 @@ export function TaskBoard({
         />
       ) : null}
 
+      <StateReasonDialog
+        open={stateReason != null}
+        title={stateReason?.to === "canceled" ? "Cancel task" : "Reopen task"}
+        message={
+          stateReason?.to === "canceled"
+            ? "Add a comment explaining why this task is canceled."
+            : "Add a comment explaining why this task is reopened."
+        }
+        confirmLabel={stateReason?.to === "canceled" ? "Cancel task" : "Reopen"}
+        onCancel={() => setStateReason(null)}
+        onConfirm={(comment) => {
+          const pending = stateReason;
+          setStateReason(null);
+          if (pending) applyTaskState(pending.task, pending.to, comment);
+        }}
+      />
       <ConfirmDialog
         open={completeBlockMsg != null}
-        title="Cannot mark Complete"
+        title="Cannot change state"
         message={completeBlockMsg ?? ""}
         alertOnly
         confirmLabel="OK"

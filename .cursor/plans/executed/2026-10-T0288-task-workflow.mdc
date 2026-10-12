@@ -1,0 +1,100 @@
+---
+description: "T0288 — One task workflow service for every state change and closed-task edit"
+todos:
+  - id: service
+    content: Add taskWorkflow.ts (allowed next states, transition, edit lock, tag cap) and table-driven tests
+  - id: api
+    content: Enforce on both task PATCH routes, create, import, taggings, and GET allowedNextStates
+  - id: assistant
+    content: Refuse illegal Assistant task proposals before they reach the user
+  - id: client
+    content: Dropdowns, context menu, and state cycle use allowedNextStates; cancel and reopen prompt for a comment; closed tasks are read-only
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0288 — Task workflow rules
+
+**Task:** T0288 · id `303` · Ready · high · project 4 (TaskMesh)
+**Parent:** none
+**Depends on:** none (T0234 depends on this task; it stays Ready)
+**Branch (after approval):** `T0288-task-workflow`
+
+## Goal
+
+One service decides every Task state change and whether a Task may be edited. Project PATCH, standalone PATCH, create, CSV/XLSX import, taggings, and the Assistant all call it. The UI offers only the states that service allows for the current user.
+
+## Decisions (from the Task, 2026-10-11)
+
+| From | Allowed next |
+|------|----------------|
+| Draft (`new`) | Ready, Canceled |
+| Ready | In Progress, Canceled |
+| In Progress | On Hold, Complete |
+| On Hold | In Progress, Complete |
+| Complete or Canceled | Ready, and only for a project Owner, a project Manager, or an Administrator, with a comment |
+| Pending | none for a user (system only) |
+| Deleted | none through a state change (restore stays the Admin action and returns the Task to Draft) |
+
+- Cancel requires a comment, stored as activity in the same transaction as the state change.
+- Reopen uses the same comment requirement.
+- Complete, Canceled, and Deleted Tasks reject field edits. Adding a comment stays allowed. Reopen is the state change above, not a field edit.
+- Soft delete and Admin restore stay outside the transition map.
+- At most 3 tags. Unknown tags, phases, states, and priorities are rejected (phases and priorities already are).
+- Complete still refuses while a Depends-on Task is open (`rejectCompleteIfBlocked`).
+- Requesting Complete while direct children are open still stores Pending (`resolvePersistedState`). That is the system writing Pending. The user never selects Pending.
+- Tasks already sitting in a state the map would not have reached stay there. The map applies on the next change.
+- No Administrator bypass.
+
+## Proposed confirmations (interview)
+
+These match the Task text. Approval of this plan accepts them.
+
+1. **Who may reopen.** Project Owner, project Manager, or Administrator (`resolveProjectActorRole` is `owner`, `manager`, or `admin`). Members and viewers cannot. The Task record’s `ownerId` does not reopen by itself.
+2. **Comment on the same request.** PATCH accepts `stateComment`. It is required when the next state is Canceled, and when reopening to Ready. The comment row is written in the same transaction as the state update. The UI asks for it before sending. Empty or whitespace-only text is rejected.
+3. **Create and import start at Draft.** POST and CSV/XLSX import may only create `new`. A spreadsheet `state` other than empty or `new` is discarded with a row error. Import still does not overwrite existing Tasks.
+4. **Kanban columns are not state columns.** A card drop changes column placement only. It does not change `tasks.state`, so there is no disallowed-column toast to add. This Task does not bind columns to states. State changes stay on the Task record (list, board row, detail). T0234’s MCP tools, when they exist, call this service; this Task does not build MCP.
+5. **Tag cap vs group auto-tag.** A user add that would make a 4th tag fails. Group auto-tag skips tags that would pass 3 and still saves the Task. Tasks that already have more than 3 tags can lose tags and cannot gain one until they are at 3 or fewer.
+6. **`/worktask` skill.** Ready → In Progress and In Progress → Complete stay legal. Complete with open children still becomes Pending. No skill edit unless implementation finds a step the map rejects.
+
+## Service
+
+`src/services/taskWorkflow.ts`
+
+- `allowedNextStates(task, actor)` → state list for that user (empty for Pending, Deleted, and for Complete/Canceled when the actor may not reopen).
+- `assertTransition({ from, to, actor, stateComment })` — throws a typed error whose message names the allowed next states. No-op when `to` is omitted or equals `from`.
+- `assertEditable(task)` — throws when state is Complete, Canceled, or Deleted and the patch changes any field other than an allowed transition (reopen) or a comment-only request.
+- `assertInitialState(state)` — only `new`.
+- `assertTagCap(currentCount, adding)` — reject when the result would exceed 3.
+- Pending is absent from every user-facing list. The existing child coerce still runs after a legal Complete request.
+
+Errors use stable codes: `invalid_transition`, `state_comment_required`, `reopen_forbidden`, `task_closed`, `tag_cap`. HTTP 400 except `reopen_forbidden` (403).
+
+## Call sites
+
+- `PATCH /api/v1/projects/{id}/tasks/{taskId}` and standalone `PATCH /api/v1/tasks/{id}` call the service before `rejectCompleteIfBlocked` and `resolvePersistedState`.
+- Task create (both routers) and `importTasks` call `assertInitialState`.
+- `POST /api/v1/taggings` for `entityType: task` calls `assertTagCap` and `assertEditable` (no new tags on a closed Task).
+- Assistant `propose_task_update` calls `assertTransition` / `assertEditable` and returns the service error instead of a proposal. Create proposals stay Draft-only.
+- `GET /api/v1/tasks/{id}` (and the project task GET if it returns one task) adds `allowedNextStates` for the current actor. List payloads used by the board and the tasks list include it too, so menus do not guess.
+
+## Client
+
+- State `<select>`, the task context menu, and the state-cycle checkbox list only `allowedNextStates`. Cycle order when several are allowed: Ready, In Progress, On Hold, Complete, Canceled.
+- Choosing Canceled, or Ready from Complete/Canceled, opens a short reason prompt, then sends `stateComment`.
+- Complete, Canceled, and Deleted rows keep the comment box and disable title, description, dates, priority, phase, parent, assignee, color, and tags.
+- Filter dropdowns still list every state, including Pending. Filters are not transitions.
+
+## Tests
+
+- Table over every from → to pair, for a member and for a manager/owner/admin, including missing comment and Pending.
+- One test each that project PATCH, standalone PATCH, Assistant propose, import, and taggings refuse the same illegal move the service refuses.
+- Existing complete-gate and Pending-child tests stay green.
+
+## Out of scope
+
+- Binding Kanban columns to task states.
+- MCP write tools (T0234 calls this service when that task is built).
+- Rewriting Tasks that already sit outside the map.
+- An Administrator override.
+- Todo state rules.

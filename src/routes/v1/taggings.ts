@@ -17,6 +17,7 @@ import {
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { applyTaskGroupAutoTagsForTask } from "../../services/taskGroupAutoTag.js";
+import { assertTaskTagAdd, assertTaskTagRemove } from "../../services/taskWorkflow.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 const idParam = z.coerce.number().int().positive();
@@ -156,6 +157,27 @@ taggingsRouter.post("/", async (req, res) => {
       return;
     }
 
+    if (parsed.entityType === "task") {
+      const [task] = await db
+        .select({ state: schema.tasks.state })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, parsed.entityId));
+      if (!task) {
+        sendError(res, 404, "not_found", "Task not found");
+        return;
+      }
+      const existingTags = await db
+        .select({ id: schema.taggings.id })
+        .from(schema.taggings)
+        .where(
+          and(
+            eq(schema.taggings.entityType, "task"),
+            eq(schema.taggings.entityId, parsed.entityId),
+          ),
+        );
+      assertTaskTagAdd(task.state, existingTags.length);
+    }
+
     await db.insert(schema.taggings).values({
       tagId: tag.id,
       entityType: parsed.entityType,
@@ -195,6 +217,18 @@ taggingsRouter.delete("/", async (req, res) => {
 
     const actorId = await getCurrentUserId(db);
     await assertCanAccessTaggableEntity(db, actorId, body.entityType, body.entityId, "write");
+
+    if (body.entityType === "task") {
+      const [task] = await db
+        .select({ state: schema.tasks.state })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.id, body.entityId));
+      if (!task) {
+        sendError(res, 404, "not_found", "Task not found");
+        return;
+      }
+      assertTaskTagRemove(task.state);
+    }
 
     const deleted = await db
       .delete(schema.taggings)
