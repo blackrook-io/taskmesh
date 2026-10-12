@@ -6,12 +6,13 @@ import { redactSecrets } from "./aiMinimize.js";
 import { getSystemProperties } from "../systemProperties.js";
 import {
   configuredChatModel,
+  providerEntryConfigured,
   resolvePluginApiKey,
   selectChatPlugin,
   type AiProvidersFile,
 } from "./aiProviderConfig.js";
 import { loadDecryptedInstanceKeys, listInstancePluginIds } from "./aiInstanceKeys.js";
-import { assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
+import { assertLocalProviderBaseUrl, assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
 import { getAiProvider, loadedAiProviders } from "./providerLoader.js";
 import { runAssistantWithTools } from "./runWithTools.js";
 import type { ChatMessage } from "./types.js";
@@ -43,12 +44,12 @@ function systemPrompt(webFetchEnabled: boolean): string {
 }
 
 export const ASSISTANT_UNCONFIGURED =
-  "Assistant is not configured. An Administrator must enable a chat provider and set an instance key, or the deprecated provider environment variable.";
+  "Assistant is not configured. An Administrator must enable a chat provider. Cloud providers also need an instance key, or the deprecated provider environment variable.";
 
 export type AssistantSession = {
   plugin: AiProviderPlugin;
   config: unknown;
-  apiKey: string;
+  apiKey: string | null;
   model: string;
 };
 
@@ -68,7 +69,11 @@ export function sessionFrom(
 ): AssistantSession | null {
   const plugins = loadedAiProviders();
   const id = selectChatPlugin({
-    plugins: plugins.map((plugin) => ({ id: plugin.id, chat: plugin.capabilities.chat })),
+    plugins: plugins.map((plugin) => ({
+      id: plugin.id,
+      chat: plugin.capabilities.chat,
+      local: plugin.capabilities.local,
+    })),
     file,
     hasKey: (pluginId) => Boolean(resolveKey(pluginId)),
     configValid: (pluginId, config) => {
@@ -79,8 +84,9 @@ export function sessionFrom(
   if (!id) return null;
   const plugin = getAiProvider(id);
   const entry = file[id];
-  const apiKey = resolveKey(id);
-  if (!plugin || !entry || !apiKey) return null;
+  if (!plugin || !entry) return null;
+  const apiKey = plugin.capabilities.local ? null : resolveKey(id);
+  if (!plugin.capabilities.local && !apiKey) return null;
   const parsed = plugin.configSchema.safeParse(entry.config);
   if (!parsed.success) return null;
   const model = configuredChatModel(parsed.data) ?? "gpt-4.1-mini";
@@ -112,9 +118,12 @@ export async function assistantStatus(db: Db): Promise<{
       id: plugin.id,
       displayName: plugin.displayName,
       enabled: Boolean(entry?.enabled),
-      configured: Boolean(
-        entry?.enabled && (instanceIds.has(plugin.id) || resolvePluginApiKey(plugin.id)),
-      ),
+      configured: providerEntryConfigured({
+        local: plugin.capabilities.local,
+        enabled: Boolean(entry?.enabled),
+        configValid: plugin.configSchema.safeParse(entry?.config ?? {}).success,
+        hasKey: instanceIds.has(plugin.id) || Boolean(resolvePluginApiKey(plugin.id)),
+      }),
       capabilities: plugin.capabilities,
     };
   });
@@ -178,7 +187,9 @@ export async function runConfiguredAssistant(args: {
     handlers: args.handlers,
     actorUserId: args.actorUserId,
     isAdministrator: args.isAdministrator,
-    assertBaseUrl: assertPublicProviderBaseUrl,
+    assertBaseUrl: session.plugin.capabilities.local
+      ? assertLocalProviderBaseUrl
+      : assertPublicProviderBaseUrl,
     webFetchEnabled: props.aiWebFetch,
   });
   return true;

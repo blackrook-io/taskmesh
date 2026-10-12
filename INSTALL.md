@@ -519,7 +519,7 @@ ASSISTANT_DEFAULT_MODEL=gpt-4.1-mini
 AI_CREDENTIALS_KEY=...
 ```
 
-`ASSISTANT_DEFAULT_MODEL` is only the model written into that first-boot plugin config (default `gpt-4.1-mini`). Provider base URLs must be public https. Restart the API after changing the key (`sudo systemctl restart taskmesh`). Status page: `/settings/assistant`. Administrators enable or disable plugins under Administration → System properties.
+`ASSISTANT_DEFAULT_MODEL` is only the model written into that first-boot plugin config (default `gpt-4.1-mini`). Cloud provider base URLs must be public https. Restart the API after changing the key (`sudo systemctl restart taskmesh`). Status page: `/settings/assistant`. Administrators enable or disable plugins under Administration → System properties.
 
 If the OpenAI plugin is disabled or the key is unset, the assistant panel shows as not configured.
 
@@ -540,6 +540,8 @@ The Azure OpenAI plugin is loaded from the same directory. Enable it under Admin
 ```env
 AZURE_OPENAI_API_KEY=...
 ```
+
+The Ollama plugin is loaded from the same directory. It does not use an API key. An Administrator sets the base URL (http on a private or loopback address is allowed only for this plugin), the chat model, and the embedding model under Administration → System properties. Link-local and cloud-metadata addresses stay blocked. It does not turn itself on at first boot. When OpenAI is enabled and has a key, chat still uses OpenAI.
 
 The assistant can also **fetch public http(s) URLs** for research (`fetch_url`) when an Administrator turns on **Allow assistant chat to fetch public web pages** under Administration → System properties. That switch is off by default. Fetching requires outbound access from this host to the target sites (not only the provider). Private/LAN addresses are blocked, and query strings are capped.
 

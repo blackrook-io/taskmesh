@@ -25,7 +25,7 @@ export type RunAssistantHandlers = ToolHandlers & {
  */
 export async function runAssistantWithTools(args: {
   plugin: AiProviderPlugin;
-  apiKey: string;
+  apiKey: string | null;
   config: unknown;
   messages: ChatMessage[];
   model?: string;
@@ -146,7 +146,7 @@ function readDefaultModel(config: unknown): string {
 async function readRound(
   args: {
     plugin: AiProviderPlugin;
-    apiKey: string;
+    apiKey: string | null;
     config: unknown;
     signal?: AbortSignal;
     assertBaseUrl: (url: string) => Promise<string>;

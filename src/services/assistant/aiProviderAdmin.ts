@@ -10,8 +10,13 @@ import {
   listInstanceCredentialPublic,
   readAiKeyMode,
 } from "./aiInstanceKeys.js";
-import { normalizeAiProviders, resolvePluginApiKey, type AiProvidersFile } from "./aiProviderConfig.js";
-import { assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
+import {
+  normalizeAiProviders,
+  providerEntryConfigured,
+  resolvePluginApiKey,
+  type AiProvidersFile,
+} from "./aiProviderConfig.js";
+import { assertLocalProviderBaseUrl, assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
 import { loadedAiProviders } from "./providerLoader.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -27,6 +32,7 @@ export type AiProviderPublicConfig = {
   defaultModel: string;
   chatDeployment: string;
   embeddingsDeployment: string;
+  embeddingModel: string;
   apiVersion: string;
 };
 
@@ -73,6 +79,7 @@ function publicConfig(plugin: AiProviderPlugin, raw: Record<string, unknown> | u
     defaultModel: stringField(data.defaultModel),
     chatDeployment: stringField(data.chatDeployment),
     embeddingsDeployment: stringField(data.embeddingsDeployment),
+    embeddingModel: stringField(data.embeddingModel),
     apiVersion: apiVersion || (plugin.id === "azure-openai" ? "2024-10-21" : ""),
   };
 }
@@ -91,9 +98,12 @@ export async function listAiProvidersForAdmin(db: Db): Promise<AiProviderAdminPa
         displayName: plugin.displayName,
         version: plugin.version,
         enabled: Boolean(entry?.enabled),
-        configured: Boolean(
-          entry?.enabled && (key?.keyHint || resolvePluginApiKey(plugin.id)),
-        ),
+        configured: providerEntryConfigured({
+          local: plugin.capabilities.local,
+          enabled: Boolean(entry?.enabled),
+          configValid: plugin.configSchema.safeParse(entry?.config ?? {}).success,
+          hasKey: Boolean(key?.keyHint || resolvePluginApiKey(plugin.id)),
+        }),
         capabilities: plugin.capabilities,
         config: publicConfig(plugin, entry?.config),
         keyHint: key?.keyHint ?? null,
@@ -122,7 +132,9 @@ export async function patchAiProvider(
     baseUrl?: string;
   };
   if (typeof parsed.baseUrl === "string") {
-    parsed.baseUrl = await assertPublicProviderBaseUrl(parsed.baseUrl);
+    parsed.baseUrl = plugin.capabilities.local
+      ? await assertLocalProviderBaseUrl(parsed.baseUrl)
+      : await assertPublicProviderBaseUrl(parsed.baseUrl);
   }
   const file = await readFile(db);
   const next: AiProvidersFile = {

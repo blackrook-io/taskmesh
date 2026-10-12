@@ -1,0 +1,66 @@
+# T0181 — Ollama local provider plugin
+
+**Task:** T0181 (id 196) — AI: Ollama local provider plugin
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Depends on:** T0180 complete (provider plugin contract). Gate is clear.
+**Required by (not blockers):** T0168 Mesh suggested links (ready), T0208 knowledge index (draft).
+**Branch (after approval):** `T0181-ollama-provider`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`). Config stays in `system_properties.ai_providers`.
+
+## Size
+
+One plugin package plus the local-URL and no-key wiring the contract left for this task. Mesh embeddings indexing stays in T0168 / T0208. Local-only project policy stays later; this task only sets `capabilities.local = true`. No split.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Wire protocol | Native Ollama HTTP, not the OpenAI-compatible `/v1` shim. `verifyKey` is `GET /` (health). `listModels` is `GET /api/tags`. `streamChat` is `POST /api/chat` with `stream: true` (NDJSON). `embed` is `POST /api/embed`. No SDK. |
+| 2 | Capabilities | `chat`, `streaming`, `tools`, `embeddings`, and `local` are all true. `id` is `ollama`. |
+| 3 | No key | Production calls pass `apiKey: null`. Requests omit `Authorization`. Admin has no key controls (already gated on `capabilities.local`). The plugin still forwards a non-null context key as `Authorization: Bearer …` so the shared contract kit can inject `bad` / `rate` / `quota` / `missing-model` / `offline`. |
+| 4 | Config | `baseUrl` default `http://127.0.0.1:11434`. `defaultModel` default `llama3.2` (chat). `embeddingModel` default `nomic-embed-text` (Mesh suggestions later). Both model fields required, max 120. |
+| 5 | Private URL | This plugin only. Allow `http` and `https`, no userinfo, no other schemes. Allow loopback, RFC1918, IPv6 ULA, and CGNAT (`100.64.0.0/10`), plus public hosts. Still reject link-local (`169.254.0.0/16`, `fe80::/10`) and cloud-metadata hostnames. Check at config parse, again on admin save, and again before each outbound request (DNS lookup, same as the public assert). Other plugins keep `assertPublicProviderBaseUrl`. |
+| 6 | Contract kit | Extend `contractMockFetch` for `/api/tags`, `/api/chat`, and `/api/embed` so `assertProviderContract` passes unchanged. Ollama-specific tests cover a null key, `http://127.0.0.1:11434`, rejection of metadata URLs, NDJSON deltas, a missing-model message, and a down host (`network`). |
+| 7 | Tool calls | Send `tools` when the caller provides them. Map Ollama `tool_calls` into contract calls; synthesize `call_N` when the payload has no id. A model that rejects tools becomes `unsupported` with the server message. |
+| 8 | Errors | Down host or connection failure → `network` (“Ollama is unreachable at {base}”). Model missing / not pulled (HTTP 404 or Ollama “not found”) → `model_not_found` with the server text. Other HTTP errors use the existing mapper where the body matches, otherwise `network` or `invalid_config`. |
+| 9 | App wiring | `selectChatPlugin` and `sessionFrom` treat a local plugin as ready without a key (`apiKey` may be `""` on the session only as a sentinel the plugin ignores — prefer passing `null` through and relaxing the `!apiKey` return). Admin `configured` and assistant status count an enabled local plugin with valid config as configured, and the status line says it does not use a key. Admin save and assistant requests use the local URL assert when `capabilities.local`. |
+| 10 | Admin UI | Ollama card: Base URL, Default chat model, Embedding model. Save sends `embeddingModel`. Other plugins stay as they are. |
+| 11 | Out of scope | No embeddings index, no Mesh suggestions, no project local-only policy, no install of the Ollama binary. |
+
+## Work items
+
+### 1. Local base URL helper
+
+In `plugins/ai-providers/contract` (shared so the plugin schema and the app agree):
+
+- `inspectLocalProviderBaseUrl` / `normalizeLocalProviderBaseUrl` / `localProviderBaseUrlSchema`.
+- App: `assertLocalProviderBaseUrl` in `src/services/assistant/providerBaseUrl.ts` (DNS pin). `patchAiProvider` and assistant call sites pick it when `plugin.capabilities.local`.
+
+### 2. Plugin package
+
+`plugins/ai-providers/ollama/` mirroring OpenAI: `package.json` (`@taskmesh/ai-provider-ollama`, `taskmesh.role: provider`), `tsconfig.json`, `src/index.ts`, `src/contract.test.ts`. Add the project reference on `plugins/ai-providers/tsconfig.json` and the test file to root `npm test`.
+
+### 3. Contract mock
+
+`contractMockFetch` returns Ollama JSON for `/api/tags`, `/api/chat`, and `/api/embed`, still keyed off the Bearer suffix the kit sets. `GET /` returns 200 text `Ollama is running`.
+
+### 4. Chat and status
+
+- `selectChatPlugin` / `sessionFrom`: local + enabled + valid config is enough.
+- `assistantStatus` and `listAiProvidersForAdmin`: `configured` true for that case.
+- `runConfiguredAssistant` passes the local assert for a local session.
+
+### 5. Admin form
+
+`AdminAiProvidersSection`: when `plugin.id === "ollama"`, show the embedding model field and include it in the PATCH body. Public config type gains `embeddingModel`.
+
+### 6. Docs
+
+Short INSTALL note: Ollama base URL may be a private `http` address; chat model and embedding model are set in Admin. No schema docs change.
+
+## Acceptance
+
+- `npm test` includes the Ollama suite and the shared kit passes.
+- Admin can save `http://127.0.0.1:11434` for Ollama and still cannot save that URL for OpenAI.
+- With Ollama enabled and no key, assistant status reports it configured. A stopped server or a model that is not pulled surfaces `network` or `model_not_found`.

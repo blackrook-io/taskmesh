@@ -25,6 +25,7 @@ type AiProviderRow = {
     defaultModel: string;
     chatDeployment: string;
     embeddingsDeployment: string;
+    embeddingModel: string;
     apiVersion: string;
   };
   keyHint: string | null;
@@ -43,6 +44,7 @@ type Draft = {
   defaultModel: string;
   chatDeployment: string;
   embeddingsDeployment: string;
+  embeddingModel: string;
   apiVersion: string;
 };
 
@@ -61,6 +63,7 @@ function emptyDraft(): Draft {
     defaultModel: "",
     chatDeployment: "",
     embeddingsDeployment: "",
+    embeddingModel: "",
     apiVersion: "",
   };
 }
@@ -108,6 +111,7 @@ export function AdminAiProvidersSection() {
           defaultModel: plugin.config.defaultModel,
           chatDeployment: plugin.config.chatDeployment,
           embeddingsDeployment: plugin.config.embeddingsDeployment,
+          embeddingModel: plugin.config.embeddingModel,
           apiVersion: plugin.config.apiVersion,
         };
       }
@@ -137,7 +141,13 @@ export function AdminAiProvidersSection() {
                   embeddingsDeployment: draft.embeddingsDeployment,
                   apiVersion: draft.apiVersion,
                 }
-              : { baseUrl: draft.baseUrl, defaultModel: draft.defaultModel },
+              : id === "ollama"
+                ? {
+                    baseUrl: draft.baseUrl,
+                    defaultModel: draft.defaultModel,
+                    embeddingModel: draft.embeddingModel,
+                  }
+                : { baseUrl: draft.baseUrl, defaultModel: draft.defaultModel },
         }),
       });
       return res.data;
@@ -282,7 +292,11 @@ export function AdminAiProvidersSection() {
             </h3>
             <p className="muted small" style={{ marginTop: 0 }}>
               {capabilityLine(plugin.capabilities)}
-              {plugin.configured ? " · key present" : " · no key"}
+              {plugin.capabilities.local
+                ? ` · ${plugin.configured ? "configured" : "not configured"} · does not use a key`
+                : plugin.configured
+                  ? " · key present"
+                  : " · no key"}
               {plugin.keyHint ? ` · ends in ${plugin.keyHint}` : ""}
               {plugin.keyVerifiedAt ? " · verified" : ""}
             </p>
@@ -327,6 +341,36 @@ export function AdminAiProvidersSection() {
                     value={draft.apiVersion}
                     onChange={(e) => update(plugin.id, { apiVersion: e.target.value })}
                     spellCheck={false}
+                  />
+                </label>
+              </>
+            ) : plugin.id === "ollama" ? (
+              <>
+                <label className="field">
+                  <span>Base URL</span>
+                  <input
+                    value={draft.baseUrl}
+                    onChange={(e) => update(plugin.id, { baseUrl: e.target.value })}
+                    spellCheck={false}
+                    placeholder="http://127.0.0.1:11434"
+                  />
+                </label>
+                <label className="field">
+                  <span>Default chat model</span>
+                  <input
+                    value={draft.defaultModel}
+                    onChange={(e) => update(plugin.id, { defaultModel: e.target.value })}
+                    spellCheck={false}
+                    placeholder="llama3.2"
+                  />
+                </label>
+                <label className="field">
+                  <span>Embedding model</span>
+                  <input
+                    value={draft.embeddingModel}
+                    onChange={(e) => update(plugin.id, { embeddingModel: e.target.value })}
+                    spellCheck={false}
+                    placeholder="nomic-embed-text"
                   />
                 </label>
               </>

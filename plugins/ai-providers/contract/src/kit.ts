@@ -42,6 +42,30 @@ function isAzure(init?: RequestInit): boolean {
   return headers.has("api-key") && !isGemini(init) && !isAnthropic(init);
 }
 
+function pathnameOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
+function isOllamaTags(url: string): boolean {
+  return pathnameOf(url).endsWith("/api/tags");
+}
+
+function isOllamaChat(url: string): boolean {
+  return pathnameOf(url).endsWith("/api/chat");
+}
+
+function isOllamaEmbed(url: string): boolean {
+  return pathnameOf(url).endsWith("/api/embed");
+}
+
+function isOllamaRoot(url: string): boolean {
+  return pathnameOf(url) === "/";
+}
+
 function isAzureDeploymentList(url: string, init?: RequestInit): boolean {
   if (!isAzure(init)) return false;
   if (url.includes("/chat/completions") || url.includes("/embeddings")) return false;
@@ -71,18 +95,24 @@ function geminiChat(tool: boolean): unknown {
  * Anthropic requests (`x-api-key`) get Messages API JSON.
  * Gemini requests (`x-goog-api-key`) get generateContent JSON.
  * Azure requests (`api-key`) list deployments and otherwise use chat-completions JSON.
+ * Ollama requests (`/api/tags`, `/api/chat`, `/api/embed`, or `GET /`) use the native API.
  * Key suffixes are shared.
  */
 export const contractMockFetch: ProviderFetch = async (input, init) => {
   const key = authKey(init);
   const url = String(input);
   if (key.endsWith("offline")) throw new TypeError("fetch failed");
-  if (url.endsWith("/models") || isAzureDeploymentList(url, init)) {
+  if (url.endsWith("/models") || isAzureDeploymentList(url, init) || isOllamaTags(url)) {
     if (key.endsWith("bad")) return jsonResponse(401, { error: { message: "invalid api key" } });
+    if (isOllamaTags(url)) return jsonResponse(200, { models: [{ name: CONTRACT_MODEL_ID }] });
     if (isGemini(init)) {
       return jsonResponse(200, { models: [{ name: `models/${CONTRACT_MODEL_ID}`, displayName: "GPT Test" }] });
     }
     return jsonResponse(200, { data: [{ id: CONTRACT_MODEL_ID }] });
+  }
+  if (isOllamaRoot(url)) {
+    if (key.endsWith("bad")) return jsonResponse(401, { error: { message: "invalid api key" } });
+    return new Response("Ollama is running", { status: 200, headers: { "Content-Type": "text/plain" } });
   }
   if (key.endsWith("rate")) return jsonResponse(429, { error: { message: "Rate limit reached" } });
   if (key.endsWith("quota")) {
@@ -92,16 +122,35 @@ export const contractMockFetch: ProviderFetch = async (input, init) => {
     return jsonResponse(404, { error: { message: "The model was not found" } });
   }
   const raw = typeof init?.body === "string" ? init.body : "{}";
+  const body = JSON.parse(raw) as { messages?: Array<{ content?: unknown }> };
+  const last = body.messages?.at(-1);
+  const tool = last?.content === "TOOL";
+  if (isOllamaEmbed(url)) {
+    return jsonResponse(200, { embeddings: [[0.1, 0.2]] });
+  }
   if (isGemini(init) && url.includes("embed")) {
     return jsonResponse(200, { embeddings: [{ values: [0.1, 0.2] }] });
   }
   if (isAzure(init) && url.includes("/embeddings")) {
     return jsonResponse(200, { data: [{ embedding: [0.1, 0.2], index: 0 }] });
   }
+  if (isOllamaChat(url)) {
+    const message = tool
+      ? {
+          role: "assistant",
+          content: "",
+          tool_calls: [{ function: { name: "search_records", arguments: { q: "mesh" } } }],
+        }
+      : { role: "assistant", content: CONTRACT_TEXT };
+    return jsonResponse(200, {
+      model: CONTRACT_MODEL_ID,
+      message,
+      done: true,
+      prompt_eval_count: 3,
+      eval_count: 4,
+    });
+  }
   if (isGemini(init)) return jsonResponse(200, geminiChat(geminiAskedForTool(raw)));
-  const body = JSON.parse(raw) as { messages?: Array<{ content?: unknown }> };
-  const last = body.messages?.at(-1);
-  const tool = last?.content === "TOOL";
   if (isAnthropic(init)) {
     if (tool) {
       return jsonResponse(200, {

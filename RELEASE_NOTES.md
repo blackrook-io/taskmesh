@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.65.1 — 2026-10-12
+
+### New Functionality
+- Administrators can enable Ollama for local assistant chat and embeddings. Set a private or loopback http address, a chat model, and an embedding model. No API key is required. Link-local and cloud-metadata addresses stay blocked. An enabled OpenAI plugin still handles chat.
+
 ## 0.65.0 — 2026-10-12
 
 ### New Functionality

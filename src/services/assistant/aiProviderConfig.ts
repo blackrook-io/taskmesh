@@ -62,8 +62,19 @@ export function resolvePluginApiKey(pluginId: string, env: NodeJS.ProcessEnv = p
   return key || null;
 }
 
+export function providerEntryConfigured(args: {
+  local: boolean;
+  enabled: boolean;
+  configValid: boolean;
+  hasKey: boolean;
+}): boolean {
+  if (!args.enabled) return false;
+  if (args.local) return args.configValid;
+  return args.hasKey;
+}
+
 export function selectChatPlugin(args: {
-  plugins: Array<{ id: string; chat: boolean }>;
+  plugins: Array<{ id: string; chat: boolean; local?: boolean }>;
   file: AiProvidersFile;
   hasKey: (id: string) => boolean;
   configValid: (id: string, config: Record<string, unknown>) => boolean;
@@ -72,7 +83,7 @@ export function selectChatPlugin(args: {
     if (!plugin.chat) return false;
     const entry = args.file[plugin.id];
     if (!entry?.enabled) return false;
-    if (!args.hasKey(plugin.id)) return false;
+    if (!plugin.local && !args.hasKey(plugin.id)) return false;
     return args.configValid(plugin.id, entry.config);
   });
   if (ready.some((plugin) => plugin.id === "openai")) return "openai";
