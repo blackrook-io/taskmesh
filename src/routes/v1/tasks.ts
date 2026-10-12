@@ -6,8 +6,10 @@ import * as schema from "../../db/schema.js";
 import {
   activitySourceFromRequest,
   shouldRecordHistory,
+  type ActivitySource,
 } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { sendMutation, type MutationResult } from "../../lib/mutationResult.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
@@ -18,6 +20,7 @@ import {
   taskPrioritySchema,
 } from "../../lib/taskFields.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
+import { assertCanAccessProject } from "../../services/ownership.js";
 import {
   afterTaskHierarchyChange,
   resolvePersistedState,
@@ -128,87 +131,101 @@ tasksRouter.get("/", async (req, res) => {
   }
 });
 
+export async function createProjectTask(args: {
+  projectId: number;
+  body: unknown;
+  actorId: number;
+  source: ActivitySource;
+  recordHistory: boolean;
+}): Promise<MutationResult> {
+  const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, args.projectId));
+  if (!proj) {
+    return { ok: false, status: 404, code: "not_found", message: "Project not found" };
+  }
+  await assertCanAccessProject(db, args.actorId, args.projectId, "write");
+  const parsed = taskBody.parse(args.body);
+
+  let phaseId: number | null = parsed.phaseId ?? null;
+  const parentId = parsed.parentId ?? null;
+  const parentOk = await assertParentCompatible(db, args.projectId, parentId);
+  if (!parentOk.ok) {
+    return { ok: false, status: 400, code: "invalid_parent", message: parentOk.message };
+  }
+
+  if (parentId != null) {
+    phaseId = await inheritPhaseFromParent(db, parentId);
+  } else {
+    const phaseOk = await assertPhaseForProject(db, args.projectId, phaseId);
+    if (!phaseOk.ok) {
+      return { ok: false, status: 400, code: "invalid_phase", message: phaseOk.message };
+    }
+  }
+
+  assertInitialState(parsed.state);
+  const nextSort = parsed.sortOrder ?? (await nextSiblingSortOrder(db, args.projectId, parentId));
+  const number = await allocateTaskNumber(db);
+  const dueDate = resolveDueDate(parsed) ?? null;
+  const initialState = parsed.state ?? "new";
+  const assigneeId = await resolveAssigneeId(db, {
+    projectId: args.projectId,
+    requested: parsed.assigneeId,
+    creating: true,
+  });
+
+  const [row] = await db
+    .insert(schema.tasks)
+    .values({
+      projectId: args.projectId,
+      phaseId,
+      parentId,
+      number,
+      title: parsed.title,
+      description: parsed.description ?? null,
+      state: initialState,
+      priority: parsed.priority ?? "none",
+      dueDate,
+      color: parsed.color ?? null,
+      sortOrder: nextSort,
+      createdById: args.actorId,
+      updatedById: args.actorId,
+      ownerId: args.actorId,
+      assigneeId,
+    })
+    .returning();
+  if (!row) {
+    return { ok: false, status: 500, code: "insert_failed", message: "Could not create task" };
+  }
+  await afterTaskHierarchyChange(db, row.id, null, {
+    actorId: args.actorId,
+    source: args.source,
+    recordHistory: args.recordHistory,
+  });
+  await syncMentionLinks(db, {
+    srcType: "task",
+    srcId: row.id,
+    markdown: row.description,
+    actorUserId: args.actorId,
+  });
+  await applyTaskGroupAutoTags(db, { projectId: args.projectId, taskId: row.id });
+  const created = await attachTaskActor(db, row);
+  const [data] = await attachAllowedNextStates(db, args.actorId, [created]);
+  return { ok: true, status: 201, data };
+}
+
 tasksRouter.post("/", async (req, res) => {
   try {
     const projectId = parseRouteId(req, "projectId");
-    const [proj] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId));
-    if (!proj) {
-      sendError(res, 404, "not_found", "Project not found");
-      return;
-    }
-    const parsed = taskBody.parse(req.body);
     const actorId = await getCurrentUserId(db);
-
-    let phaseId: number | null = parsed.phaseId ?? null;
-
-    const parentId = parsed.parentId ?? null;
-    const parentOk = await assertParentCompatible(db, projectId, parentId);
-    if (!parentOk.ok) {
-      sendError(res, 400, "invalid_parent", parentOk.message);
-      return;
-    }
-
-    if (parentId != null) {
-      phaseId = await inheritPhaseFromParent(db, parentId);
-    } else {
-      const phaseOk = await assertPhaseForProject(db, projectId, phaseId);
-      if (!phaseOk.ok) {
-        sendError(res, 400, "invalid_phase", phaseOk.message);
-        return;
-      }
-    }
-
-    assertInitialState(parsed.state);
-    const nextSort =
-      parsed.sortOrder ?? (await nextSiblingSortOrder(db, projectId, parentId));
-    const number = await allocateTaskNumber(db);
-    const dueDate = resolveDueDate(parsed) ?? null;
-    const initialState = parsed.state ?? "new";
-    const assigneeId = await resolveAssigneeId(db, {
-      projectId,
-      requested: parsed.assigneeId,
-      creating: true,
-    });
-
-    const [row] = await db
-      .insert(schema.tasks)
-      .values({
+    sendMutation(
+      res,
+      await createProjectTask({
         projectId,
-        phaseId,
-        parentId,
-        number,
-        title: parsed.title,
-        description: parsed.description ?? null,
-        state: initialState,
-        priority: parsed.priority ?? "none",
-        dueDate,
-        color: parsed.color ?? null,
-        sortOrder: nextSort,
-        createdById: actorId,
-        updatedById: actorId,
-        ownerId: actorId,
-        assigneeId,
-      })
-      .returning();
-    if (!row) {
-      sendError(res, 500, "insert_failed", "Could not create task");
-      return;
-    }
-    await afterTaskHierarchyChange(db, row.id, null, {
-      actorId,
-      source: activitySourceFromRequest(req),
-      recordHistory: shouldRecordHistory(req),
-    });
-    await syncMentionLinks(db, {
-      srcType: "task",
-      srcId: row.id,
-      markdown: row.description,
-      actorUserId: actorId,
-    });
-    await applyTaskGroupAutoTags(db, { projectId, taskId: row.id });
-    const created = await attachTaskActor(db, row);
-    const [data] = await attachAllowedNextStates(db, actorId, [created]);
-    res.status(201).json({ data });
+        body: req.body,
+        actorId,
+        source: activitySourceFromRequest(req),
+        recordHistory: shouldRecordHistory(req),
+      }),
+    );
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -312,163 +329,176 @@ tasksRouter.get("/:taskId", async (req, res) => {
   }
 });
 
+export async function patchProjectTask(args: {
+  projectId: number;
+  taskId: number;
+  body: unknown;
+  actorId: number;
+  source: ActivitySource;
+  recordHistory: boolean;
+}): Promise<MutationResult> {
+  await assertCanAccessProject(db, args.actorId, args.projectId, "write");
+  const parsed = taskPatch.parse(args.body);
+  const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, args.taskId));
+  if (!existing || existing.projectId !== args.projectId) {
+    return { ok: false, status: 404, code: "not_found", message: "Task not found" };
+  }
+  if (existing.state === "deleted") {
+    return {
+      ok: false,
+      status: 400,
+      code: "task_deleted",
+      message: "Cannot update a deleted task; restore it from Administration first",
+    };
+  }
+
+  const dueDate = resolveDueDate(parsed);
+  const hasFieldChange =
+    hasDefinedKeys(parsed, [
+      "title",
+      "description",
+      "dueDate",
+      "dueAt",
+      "color",
+      "phaseId",
+      "parentId",
+      "state",
+      "priority",
+      "sortOrder",
+      "assigneeId",
+    ]) || dueDate !== undefined;
+  if (!hasFieldChange) {
+    return { ok: false, status: 400, code: "empty_patch", message: "No updatable fields provided" };
+  }
+
+  const canReopen = await actorCanReopen(db, args.actorId, existing.projectId);
+  enforceTaskPatch({
+    fromState: existing.state,
+    canReopen,
+    patch: { ...parsed, dueDate },
+  });
+
+  const nextAssigneeId =
+    parsed.assigneeId !== undefined
+      ? await resolveAssigneeId(db, {
+          projectId: args.projectId,
+          requested: parsed.assigneeId,
+          previousAssigneeId: existing.assigneeId,
+        })
+      : existing.assigneeId;
+
+  if (parsed.parentId !== undefined) {
+    if (await wouldCreateParentCycle(db, args.taskId, parsed.parentId)) {
+      return { ok: false, status: 400, code: "invalid_parent", message: "Parent would create a cycle" };
+    }
+    const parentOk = await assertParentCompatible(db, args.projectId, parsed.parentId);
+    if (!parentOk.ok) {
+      return { ok: false, status: 400, code: "invalid_parent", message: parentOk.message };
+    }
+  }
+
+  const nextParentId = parsed.parentId !== undefined ? parsed.parentId : existing.parentId;
+  let nextPhaseId = parsed.phaseId !== undefined ? parsed.phaseId : existing.phaseId;
+  if (nextParentId != null) {
+    nextPhaseId = await inheritPhaseFromParent(db, nextParentId);
+  } else {
+    const phaseOk = await assertPhaseForProject(db, args.projectId, nextPhaseId);
+    if (!phaseOk.ok) {
+      return { ok: false, status: 400, code: "invalid_phase", message: phaseOk.message };
+    }
+  }
+
+  const completeGate = await rejectCompleteIfBlocked(args.taskId, parsed.state);
+  if (completeGate.blocked) {
+    return { ok: false, status: 400, code: "dependency_incomplete", message: completeGate.message };
+  }
+
+  const persistedState = await resolvePersistedState(db, args.taskId, parsed.state);
+  const previousParentId = existing.parentId;
+  const stateComment = parsed.stateComment?.trim() ?? "";
+
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(schema.tasks)
+      .set({
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+        ...(dueDate !== undefined ? { dueDate } : {}),
+        ...(parsed.color !== undefined ? { color: parsed.color } : {}),
+        ...(nextPhaseId !== existing.phaseId || parsed.phaseId !== undefined
+          ? { phaseId: nextPhaseId }
+          : {}),
+        ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
+        ...(persistedState !== undefined ? { state: persistedState } : {}),
+        ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
+        ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
+        ...(parsed.assigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
+        updatedAt: new Date(),
+        updatedById: args.actorId,
+      })
+      .where(eq(schema.tasks.id, args.taskId))
+      .returning();
+    if (updated && stateComment && updated.state !== existing.state) {
+      await tx.insert(schema.taskActivity).values({
+        taskId: args.taskId,
+        entityType: "task",
+        entityId: args.taskId,
+        kind: "comment",
+        body: stateComment,
+        createdById: args.actorId,
+        source: args.source,
+      });
+    }
+    return updated;
+  });
+
+  if (row && row.phaseId !== existing.phaseId) {
+    await syncDescendantPhases(db, args.taskId, row.phaseId, args.actorId);
+  }
+
+  const activityOpts = {
+    actorId: args.actorId,
+    source: args.source,
+    recordHistory: args.recordHistory,
+  };
+  if (row) {
+    await recordTaskChanges(db, args.taskId, existing, row, activityOpts);
+    await afterTaskHierarchyChange(db, args.taskId, previousParentId, activityOpts);
+    if (parsed.description !== undefined) {
+      await syncMentionLinks(db, {
+        srcType: "task",
+        srcId: row.id,
+        markdown: row.description,
+        actorUserId: args.actorId,
+      });
+    }
+    await applyTaskGroupAutoTags(db, { projectId: args.projectId, taskId: args.taskId });
+  }
+
+  if (!row) {
+    return { ok: true, status: 200, data: row };
+  }
+  const updated = await attachTaskActor(db, row);
+  const [data] = await attachAllowedNextStates(db, args.actorId, [updated]);
+  return { ok: true, status: 200, data };
+}
+
 tasksRouter.patch("/:taskId", async (req, res) => {
   try {
     const projectId = parseRouteId(req, "projectId");
     const taskId = parseRouteId(req, "taskId");
-    const parsed = taskPatch.parse(req.body);
     const actorId = await getCurrentUserId(db);
-    const [existing] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
-    if (!existing || existing.projectId !== projectId) {
-      sendError(res, 404, "not_found", "Task not found");
-      return;
-    }
-    if (existing.state === "deleted") {
-      sendError(
-        res,
-        400,
-        "task_deleted",
-        "Cannot update a deleted task; restore it from Administration first",
-      );
-      return;
-    }
-
-    const dueDate = resolveDueDate(parsed);
-    const hasFieldChange =
-      hasDefinedKeys(parsed, [
-        "title",
-        "description",
-        "dueDate",
-        "dueAt",
-        "color",
-        "phaseId",
-        "parentId",
-        "state",
-        "priority",
-        "sortOrder",
-        "assigneeId",
-      ]) || dueDate !== undefined;
-    if (!hasFieldChange) {
-      sendError(res, 400, "empty_patch", "No updatable fields provided");
-      return;
-    }
-
-    const canReopen = await actorCanReopen(db, actorId, existing.projectId);
-    enforceTaskPatch({
-      fromState: existing.state,
-      canReopen,
-      patch: { ...parsed, dueDate },
-    });
-
-    const nextAssigneeId =
-      parsed.assigneeId !== undefined
-        ? await resolveAssigneeId(db, {
-            projectId,
-            requested: parsed.assigneeId,
-            previousAssigneeId: existing.assigneeId,
-          })
-        : existing.assigneeId;
-
-    if (parsed.parentId !== undefined) {
-      if (await wouldCreateParentCycle(db, taskId, parsed.parentId)) {
-        sendError(res, 400, "invalid_parent", "Parent would create a cycle");
-        return;
-      }
-      const parentOk = await assertParentCompatible(db, projectId, parsed.parentId);
-      if (!parentOk.ok) {
-        sendError(res, 400, "invalid_parent", parentOk.message);
-        return;
-      }
-    }
-
-    const nextParentId = parsed.parentId !== undefined ? parsed.parentId : existing.parentId;
-    let nextPhaseId = parsed.phaseId !== undefined ? parsed.phaseId : existing.phaseId;
-    if (nextParentId != null) {
-      nextPhaseId = await inheritPhaseFromParent(db, nextParentId);
-    } else {
-      const phaseOk = await assertPhaseForProject(db, projectId, nextPhaseId);
-      if (!phaseOk.ok) {
-        sendError(res, 400, "invalid_phase", phaseOk.message);
-        return;
-      }
-    }
-
-    const completeGate = await rejectCompleteIfBlocked(taskId, parsed.state);
-    if (completeGate.blocked) {
-      sendError(res, 400, "dependency_incomplete", completeGate.message);
-      return;
-    }
-
-    const persistedState = await resolvePersistedState(db, taskId, parsed.state);
-    const previousParentId = existing.parentId;
-    const stateComment = parsed.stateComment?.trim() ?? "";
-    const activitySource = activitySourceFromRequest(req);
-
-    const row = await db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(schema.tasks)
-        .set({
-          ...(parsed.title !== undefined ? { title: parsed.title } : {}),
-          ...(parsed.description !== undefined ? { description: parsed.description } : {}),
-          ...(dueDate !== undefined ? { dueDate } : {}),
-          ...(parsed.color !== undefined ? { color: parsed.color } : {}),
-          ...(nextPhaseId !== existing.phaseId || parsed.phaseId !== undefined
-            ? { phaseId: nextPhaseId }
-            : {}),
-          ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
-          ...(persistedState !== undefined ? { state: persistedState } : {}),
-          ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
-          ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
-          ...(parsed.assigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
-          updatedAt: new Date(),
-          updatedById: actorId,
-        })
-        .where(eq(schema.tasks.id, taskId))
-        .returning();
-      if (updated && stateComment && updated.state !== existing.state) {
-        await tx.insert(schema.taskActivity).values({
-          taskId,
-          entityType: "task",
-          entityId: taskId,
-          kind: "comment",
-          body: stateComment,
-          createdById: actorId,
-          source: activitySource,
-        });
-      }
-      return updated;
-    });
-
-    if (row && row.phaseId !== existing.phaseId) {
-      await syncDescendantPhases(db, taskId, row.phaseId, actorId);
-    }
-
-    const activityOpts = {
-      actorId,
-      source: activitySource,
-      recordHistory: shouldRecordHistory(req),
-    };
-    if (row) {
-      await recordTaskChanges(db, taskId, existing, row, activityOpts);
-      await afterTaskHierarchyChange(db, taskId, previousParentId, activityOpts);
-      if (parsed.description !== undefined) {
-        await syncMentionLinks(db, {
-          srcType: "task",
-          srcId: row.id,
-          markdown: row.description,
-          actorUserId: actorId,
-        });
-      }
-      await applyTaskGroupAutoTags(db, { projectId, taskId });
-    }
-
-    if (!row) {
-      res.json({ data: row });
-      return;
-    }
-    const updated = await attachTaskActor(db, row);
-    const [data] = await attachAllowedNextStates(db, actorId, [updated]);
-    res.json({ data });
+    sendMutation(
+      res,
+      await patchProjectTask({
+        projectId,
+        taskId,
+        body: req.body,
+        actorId,
+        source: activitySourceFromRequest(req),
+        recordHistory: shouldRecordHistory(req),
+      }),
+    );
   } catch (err) {
     handleRouteError(res, err);
   }

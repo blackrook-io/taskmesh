@@ -117,7 +117,7 @@ export type TaskActivityEntry = {
   field: string | null;
   oldValue: string | null;
   newValue: string | null;
-  source?: "ui" | "api";
+  source?: "ui" | "api" | "ai";
   createdById?: number | null;
   createdBy?: UserRef | null;
   createdAt: string;

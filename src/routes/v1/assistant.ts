@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { sendMutation } from "../../lib/mutationResult.js";
+import { applyAssistantProposal } from "./assistantApply.js";
 import { assistantChatRateLimit } from "../../middleware/rateLimits.js";
 import {
   buildMessages,
@@ -47,6 +49,28 @@ const chatBody = z.object({
     .optional(),
   pageContext: z.string().max(16_000).nullable().optional(),
   model: z.string().min(1).max(120).optional(),
+});
+
+assistantRouter.post("/proposals/apply", async (req, res) => {
+  try {
+    const actorUserId = await getCurrentUserId(db);
+    const outcome = await applyAssistantProposal({ body: req.body ?? {}, actorId: actorUserId });
+    if (outcome.kind === "denied") {
+      res.status(403).json({
+        error: {
+          code: "ai_policy_denied",
+          message: outcome.decision.reason,
+          decision: outcome.decision.decision,
+          action: "apply",
+          tier: outcome.decision.tier,
+        },
+      });
+      return;
+    }
+    sendMutation(res, outcome.result);
+  } catch (err) {
+    handleRouteError(res, err);
+  }
 });
 
 assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {

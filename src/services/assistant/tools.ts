@@ -3,7 +3,19 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { ilikeEscaped } from "../../lib/ilike.js";
+import type { AiAuditSink } from "./aiAudit.js";
+import { writeAiAudit } from "./aiAudit.js";
+import {
+  check,
+  isFloorResource,
+  tierForAction,
+  type AiAction,
+  type PolicyCheckInput,
+  type PolicyDecision,
+  type PolicyLayerFns,
+} from "./aiPolicy.js";
 import { fetchUrlForAssistant } from "./fetchUrl.js";
+import { isEntityType, type EntityType } from "../../lib/entityType.js";
 import {
   assertCanAccessDualScoped,
   assertCanAccessOwned,
@@ -36,6 +48,22 @@ export type ToolHandlers = {
   /** Authenticated actor for ownership scoping (required for DB tools). */
   actorUserId?: number;
   isAdministrator?: boolean;
+  feature?: string;
+  provider?: string | null;
+  model?: string | null;
+  tokensIn?: number | null;
+  tokensOut?: number | null;
+  /** Test seam. Production uses `check` and `writeAiAudit`. */
+  checkPolicy?: (input: PolicyCheckInput, layers?: Partial<PolicyLayerFns>) => PolicyDecision;
+  recordAudit?: AiAuditSink;
+};
+
+type ToolPolicyTarget = {
+  action: AiAction;
+  entityType?: EntityType | null;
+  resource?: PolicyCheckInput["resource"];
+  entityId?: number | null;
+  projectId?: number | null;
 };
 
 /** OpenAI Chat Completions tool definitions */
@@ -246,45 +274,190 @@ function proposalId(): string {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function numField(args: unknown, key: string): number | null {
+  if (!args || typeof args !== "object") return null;
+  const value = (args as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+function policyTargetForTool(name: string, args: unknown): ToolPolicyTarget | null {
+  const entityTypeRaw =
+    args && typeof args === "object" ? (args as Record<string, unknown>).entityType : undefined;
+  const entityType = typeof entityTypeRaw === "string" && isEntityType(entityTypeRaw) ? entityTypeRaw : null;
+  const resource =
+    typeof entityTypeRaw === "string" && isFloorResource(entityTypeRaw) ? entityTypeRaw : null;
+
+  switch (name) {
+    case "search_records":
+      return { action: "read" };
+    case "get_entity":
+      return { action: "read", entityType, resource };
+    case "list_project_context":
+      return { action: "read", entityType: "project", projectId: numField(args, "projectId") };
+    case "fetch_url":
+      return { action: "web_fetch" };
+    case "propose_idea_update":
+      return { action: "propose_update", entityType: "idea", entityId: numField(args, "ideaId") };
+    case "propose_document_update":
+      return {
+        action: "propose_update",
+        entityType: "document",
+        entityId: numField(args, "documentId"),
+        projectId: numField(args, "projectId"),
+      };
+    case "propose_task_update":
+      return {
+        action: "propose_update",
+        entityType: "task",
+        entityId: numField(args, "taskId"),
+        projectId: numField(args, "projectId"),
+      };
+    case "propose_idea_create":
+      return { action: "propose_create", entityType: "idea" };
+    case "propose_document_create":
+      return {
+        action: "propose_create",
+        entityType: "document",
+        projectId: numField(args, "projectId"),
+      };
+    case "propose_task_create":
+      return {
+        action: "propose_create",
+        entityType: "task",
+        projectId: numField(args, "projectId"),
+      };
+    default:
+      return null;
+  }
+}
+
+function denialPayload(action: AiAction, decision: PolicyDecision): string {
+  return JSON.stringify({
+    denied: true,
+    decision: "deny",
+    action,
+    reason: decision.reason,
+    tier: decision.tier,
+  });
+}
+
+function ownerFields(args: unknown): Record<string, unknown> | null {
+  if (!args || typeof args !== "object" || !Object.prototype.hasOwnProperty.call(args, "ownerId")) {
+    return null;
+  }
+  return { ownerId: (args as Record<string, unknown>).ownerId };
+}
+
+async function auditTool(
+  handlers: ToolHandlers,
+  name: string,
+  target: ToolPolicyTarget,
+  decision: PolicyDecision,
+  startedAt: number,
+): Promise<void> {
+  await writeAiAudit(
+    {
+      userId: handlers.actorUserId ?? null,
+      feature: handlers.feature ?? "assistant",
+      provider: handlers.provider ?? null,
+      model: handlers.model ?? null,
+      tool: name,
+      action: target.action,
+      entityType: target.entityType ?? target.resource ?? null,
+      entityId: target.entityId ?? null,
+      projectId: target.projectId ?? null,
+      decision: decision.decision,
+      reason: decision.reason,
+      tier: decision.tier,
+      tokensIn: handlers.tokensIn ?? null,
+      tokensOut: handlers.tokensOut ?? null,
+      latencyMs: Date.now() - startedAt,
+    },
+    handlers.recordAudit,
+  );
+}
+
+async function dispatchTool(name: string, args: unknown, handlers: ToolHandlers): Promise<string> {
+  switch (name) {
+    case "search_records":
+      return await toolSearch(args, handlers);
+    case "get_entity":
+      return await toolGetEntity(args, handlers);
+    case "list_project_context":
+      return await toolListProject(args, handlers);
+    case "fetch_url":
+      return await toolFetchUrl(args, handlers.signal);
+    case "propose_idea_update":
+      return await toolProposeIdeaUpdate(args, handlers);
+    case "propose_document_update":
+      return await toolProposeDocumentUpdate(args, handlers);
+    case "propose_task_update":
+      return await toolProposeTaskUpdate(args, handlers);
+    case "propose_idea_create":
+      return await toolProposeIdeaCreate(args, handlers);
+    case "propose_document_create":
+      return await toolProposeDocumentCreate(args, handlers);
+    case "propose_task_create":
+      return await toolProposeTaskCreate(args, handlers);
+    default:
+      return JSON.stringify({ error: `Unknown tool: ${name}` });
+  }
+}
+
 export async function executeAssistantTool(
   name: string,
   argsJson: string,
   handlers: ToolHandlers = {},
 ): Promise<string> {
-  let args: unknown;
+  let args: unknown = {};
+  let invalidJson = false;
   try {
     args = argsJson ? JSON.parse(argsJson) : {};
   } catch {
-    return JSON.stringify({ error: "Invalid JSON arguments" });
+    invalidJson = true;
   }
+
+  const target = policyTargetForTool(name, invalidJson ? {} : args);
+  if (!target) {
+    return JSON.stringify({ error: `Unknown tool: ${name}` });
+  }
+
   handlers.onTool?.({ name, args });
+  const started = Date.now();
+
+  if (invalidJson) {
+    const decision: PolicyDecision = {
+      decision: "deny",
+      tier: tierForAction(target.action),
+      reason: "Invalid JSON arguments",
+    };
+    await auditTool(handlers, name, target, decision, started);
+    return denialPayload(target.action, decision);
+  }
+
+  const decide = handlers.checkPolicy ?? check;
+  const decision = decide({
+    actorUserId: handlers.actorUserId ?? 0,
+    feature: handlers.feature ?? "assistant",
+    action: target.action,
+    entityType: target.entityType,
+    resource: target.resource,
+    entityId: target.entityId,
+    projectId: target.projectId,
+    fields: ownerFields(args),
+  });
+
+  if (decision.decision === "deny") {
+    await auditTool(handlers, name, target, decision, started);
+    return denialPayload(target.action, decision);
+  }
 
   try {
-    switch (name) {
-      case "search_records":
-        return await toolSearch(args, handlers);
-      case "get_entity":
-        return await toolGetEntity(args, handlers);
-      case "list_project_context":
-        return await toolListProject(args, handlers);
-      case "fetch_url":
-        return await toolFetchUrl(args, handlers.signal);
-      case "propose_idea_update":
-        return await toolProposeIdeaUpdate(args, handlers);
-      case "propose_document_update":
-        return await toolProposeDocumentUpdate(args, handlers);
-      case "propose_task_update":
-        return await toolProposeTaskUpdate(args, handlers);
-      case "propose_idea_create":
-        return await toolProposeIdeaCreate(args, handlers);
-      case "propose_document_create":
-        return await toolProposeDocumentCreate(args, handlers);
-      case "propose_task_create":
-        return await toolProposeTaskCreate(args, handlers);
-      default:
-        return JSON.stringify({ error: `Unknown tool: ${name}` });
-    }
+    const result = await dispatchTool(name, args, handlers);
+    await auditTool(handlers, name, target, decision, started);
+    return result;
   } catch (err) {
+    await auditTool(handlers, name, target, decision, started);
     return JSON.stringify({
       error: err instanceof Error ? err.message : "Tool failed",
     });

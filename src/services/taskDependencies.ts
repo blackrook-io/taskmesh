@@ -1,6 +1,7 @@
 import { and, asc, eq, ne, notInArray, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import type { ActivitySource } from "../lib/activityRequest.js";
 import { formatTaskNumber } from "../lib/taskFields.js";
 import { ilikeEscaped } from "../lib/ilike.js";
 import { dualScopeListFilter } from "./ownership.js";
@@ -98,7 +99,7 @@ async function recordDepChange(
     oldValue: string | null;
     newValue: string | null;
     actorId?: number | null;
-    source?: "ui" | "api";
+    source?: ActivitySource;
   },
 ): Promise<void> {
   await db.insert(schema.taskActivity).values({
@@ -122,7 +123,7 @@ export async function addDependency(
   db: Db,
   taskId: number,
   dependsOnTaskId: number,
-  opts: { actorId?: number | null; source?: "ui" | "api" } = {},
+  opts: { actorId?: number | null; source?: ActivitySource } = {},
 ): Promise<AddDependencyResult> {
   if (taskId === dependsOnTaskId) {
     return {
@@ -210,7 +211,7 @@ export async function removeDependency(
   db: Db,
   taskId: number,
   dependsOnTaskId: number,
-  opts: { actorId?: number | null; source?: "ui" | "api" } = {},
+  opts: { actorId?: number | null; source?: ActivitySource } = {},
 ): Promise<RemoveDependencyResult> {
   const [dependent] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
   const [blocker] = await db

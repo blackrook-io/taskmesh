@@ -91,7 +91,7 @@ Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the 
 
 Every row also has `entity_type` and `entity_id`. `task_id` is set only for tasks. Mesh last-update fields are `state`, `progress`, `status`, and document `body` (no diff stored). A comment is separate from that update.
 
-`source`: `ui` when the SPA identifies itself; otherwise `api`.
+`source`: `ui` when the SPA identifies itself; `ai` when an assistant proposal is applied; otherwise `api`.
 
 ## Project role lists (T0127 / T0128)
 

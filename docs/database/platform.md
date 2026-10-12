@@ -32,6 +32,7 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 | `mesh_layouts` | Per-user saved Mesh pins and pan/zoom (T0165). One row per `(owner_id, root_type, root_id, view)`. `view` is `focus` or `plan`. `root_type` + `root_id` is the focused record (the same root as the graph), including `tag`. `positions` is a map of node key (`type:id`) to top-left `{ x, y }` for nodes the user dragged. Other nodes keep the computed layout. `viewport` is `{ x, y, zoom }` or null. Missing row means a fresh layout. Pins for records no longer in the graph are ignored. | FK `owner_id` → `users` · **CASCADE**. |
 | `project_overview_defaults` | Project default Overview canvas layout (T0136). One row per `project_id`; `layout` jsonb is ordered panel instances (seed = T0135 four panels). Editable by Owner/Manager/Admin (`settings`). Missing row is seeded on first read. | FKs `project_id` → `projects` · **CASCADE**; optional `updated_by_id` → `users` · **SET NULL**. |
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag, request/response byte counts). Indexed on `created_at` for retention prune (default **90** days via in-process job; override `API_REQUEST_LOG_RETENTION_DAYS`). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
+| `ai_audit_log` | Append-only assistant audit (T0178): user, feature, provider, model, tool, action, entity refs, allow/deny decision, reason, tier, token counts, and latency. Does not store prompts, tool arguments, or record text. No retention job yet (T0188). | Optional FKs `user_id` → `users` and `project_id` → `projects` · **SET NULL**. |
 | `db_stats_snapshots` | Periodic gauges of the connected app database (size, user table count) for Administration → Database charts. | Standalone; no FKs. |
 
 ## Minimal relationship sketch
@@ -52,6 +53,8 @@ erDiagram
   roles ||--o{ user_roles : granted
   users ||--o{ api_request_logs : "optional"
   api_keys ||--o{ api_request_logs : "optional"
+  users ||--o{ ai_audit_log : "assistant calls"
+  projects ||--o{ ai_audit_log : "optional"
   users }o--o| uploads : avatar
   entity_fields }|..|{ entity_fields : "field catalog"
   users {
@@ -111,6 +114,11 @@ erDiagram
   api_request_logs {
     int id PK
     text outcome
+  }
+  ai_audit_log {
+    int id PK
+    text action
+    text decision
   }
   db_stats_snapshots {
     int id PK

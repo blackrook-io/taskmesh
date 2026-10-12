@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.62.0 — 2026-10-12
+
+### Enhancements
+- The assistant checks a server-side policy before it reads records, proposes a change, or fetches a public page, and again when you confirm a proposal. Confirmed changes show an AI mark in History. The assistant cannot touch users, roles, groups, API keys, credentials, backups, ownership, or system settings.
+- Each assistant tool call and confirmed proposal is written to an audit log with the user, action, allow or deny decision, and token counts. The log does not store the prompt or the record text.
+
 ## 0.61.1 — 2026-10-12
 
 ### Enhancements

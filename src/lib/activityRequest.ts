@@ -1,6 +1,6 @@
 import type { Request } from "express";
 
-export type ActivitySource = "ui" | "api";
+export type ActivitySource = "ui" | "api" | "ai";
 
 /** SPA sends `X-TaskMesh-Client: ui`; anything else is treated as API. */
 export function activitySourceFromRequest(req: Request): ActivitySource {

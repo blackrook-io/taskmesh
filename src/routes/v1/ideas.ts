@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { sendMutation, type MutationResult } from "../../lib/mutationResult.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { allocateIdeaNumber, allocateProjectNumber } from "../../services/entityNumbers.js";
@@ -54,35 +55,41 @@ ideasRouter.get("/", async (_req, res) => {
   }
 });
 
+export async function createIdeaForActor(args: {
+  body: unknown;
+  actorId: number;
+}): Promise<MutationResult> {
+  const parsed = ideaBody.parse(args.body);
+  const number = await allocateIdeaNumber(db);
+  const assigneeId = resolveIdeaAssigneeId(parsed.assigneeId);
+  const sortOrder = await nextIdeaSortOrder(db);
+  const [row] = await db
+    .insert(schema.ideas)
+    .values({
+      number,
+      title: parsed.title,
+      body: parsed.body ?? null,
+      ownerId: args.actorId,
+      assigneeId,
+      sortOrder,
+    })
+    .returning();
+  if (!row) {
+    return { ok: false, status: 500, code: "insert_failed", message: "Could not create idea" };
+  }
+  await syncMentionLinks(db, {
+    srcType: "idea",
+    srcId: row.id,
+    markdown: row.body,
+    actorUserId: args.actorId,
+  });
+  return { ok: true, status: 201, data: await attachAssignee(db, row) };
+}
+
 ideasRouter.post("/", async (req, res) => {
   try {
-    const parsed = ideaBody.parse(req.body);
-    const number = await allocateIdeaNumber(db);
-    const ownerId = await getCurrentUserId(db);
-    const assigneeId = resolveIdeaAssigneeId(parsed.assigneeId);
-    const sortOrder = await nextIdeaSortOrder(db);
-    const [row] = await db
-      .insert(schema.ideas)
-      .values({
-        number,
-        title: parsed.title,
-        body: parsed.body ?? null,
-        ownerId,
-        assigneeId,
-        sortOrder,
-      })
-      .returning();
-    if (!row) {
-      sendError(res, 500, "insert_failed", "Could not create idea");
-      return;
-    }
-    await syncMentionLinks(db, {
-      srcType: "idea",
-      srcId: row.id,
-      markdown: row.body,
-      actorUserId: ownerId,
-    });
-    res.status(201).json({ data: await attachAssignee(db, row) });
+    const actorId = await getCurrentUserId(db);
+    sendMutation(res, await createIdeaForActor({ body: req.body, actorId }));
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -138,44 +145,48 @@ ideasRouter.get("/:id", async (req, res) => {
   }
 });
 
+export async function updateIdeaForActor(args: {
+  id: number;
+  body: unknown;
+  actorId: number;
+}): Promise<MutationResult> {
+  const parsed = ideaPatch.parse(args.body);
+  if (!hasDefinedKeys(parsed, ["title", "body", "assigneeId"])) {
+    return { ok: false, status: 400, code: "empty_patch", message: "Provide title and/or body" };
+  }
+  const [existing] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, args.id));
+  if (!existing) {
+    return { ok: false, status: 404, code: "not_found", message: "Idea not found" };
+  }
+  await assertCanAccessOwned(db, args.actorId, existing.ownerId);
+  const assigneeId =
+    parsed.assigneeId !== undefined ? resolveIdeaAssigneeId(parsed.assigneeId) : undefined;
+  const [row] = await db
+    .update(schema.ideas)
+    .set({
+      ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+      ...(parsed.body !== undefined ? { body: parsed.body } : {}),
+      ...(assigneeId !== undefined ? { assigneeId } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.ideas.id, args.id))
+    .returning();
+  if (row && parsed.body !== undefined) {
+    await syncMentionLinks(db, {
+      srcType: "idea",
+      srcId: row.id,
+      markdown: row.body,
+      actorUserId: args.actorId,
+    });
+  }
+  return { ok: true, status: 200, data: row ? await attachAssignee(db, row) : row };
+}
+
 ideasRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
-    const parsed = ideaPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["title", "body", "assigneeId"])) {
-      sendError(res, 400, "empty_patch", "Provide title and/or body");
-      return;
-    }
     const actorId = await getCurrentUserId(db);
-    const [existing] = await db.select().from(schema.ideas).where(eq(schema.ideas.id, id));
-    if (!existing) {
-      sendError(res, 404, "not_found", "Idea not found");
-      return;
-    }
-    await assertCanAccessOwned(db, actorId, existing.ownerId);
-    const assigneeId =
-      parsed.assigneeId !== undefined
-        ? resolveIdeaAssigneeId(parsed.assigneeId)
-        : undefined;
-    const [row] = await db
-      .update(schema.ideas)
-      .set({
-        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
-        ...(parsed.body !== undefined ? { body: parsed.body } : {}),
-        ...(assigneeId !== undefined ? { assigneeId } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.ideas.id, id))
-      .returning();
-    if (row && parsed.body !== undefined) {
-      await syncMentionLinks(db, {
-        srcType: "idea",
-        srcId: row.id,
-        markdown: row.body,
-        actorUserId: actorId,
-      });
-    }
-    res.json({ data: row ? await attachAssignee(db, row) : row });
+    sendMutation(res, await updateIdeaForActor({ id, body: req.body, actorId }));
   } catch (err) {
     handleRouteError(res, err);
   }
