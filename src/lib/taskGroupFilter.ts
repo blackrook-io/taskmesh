@@ -1,24 +1,10 @@
 /** Server-side validation of T0053 task-list filter JSON stored on task groups. */
 
-const FILTER_FIELDS = [
-  "state",
-  "priority",
-  "title",
-  "number",
-  "phase",
-  "tags",
-  "project",
-  "dueDate",
-] as const;
-const FILTER_OPERATORS = [
-  "is",
-  "is_not",
-  "contains",
-  "does_not_contain",
-  "starts_with",
-  "before",
-  "after",
-] as const;
+import {
+  TASK_LIST_FILTER_COMBINATIONS,
+  isAllowedFilterCombination,
+} from "./listFilterCombinations.js";
+
 const FILTER_JOINS = ["and", "or"] as const;
 
 export type TaskGroupFilter = {
@@ -26,12 +12,6 @@ export type TaskGroupFilter = {
   joins: string[];
 };
 
-function isField(v: string): boolean {
-  return (FILTER_FIELDS as readonly string[]).includes(v);
-}
-function isOperator(v: string): boolean {
-  return (FILTER_OPERATORS as readonly string[]).includes(v);
-}
 function isJoin(v: string): boolean {
   return (FILTER_JOINS as readonly string[]).includes(v);
 }
@@ -55,9 +35,8 @@ export function parseTaskGroupFilter(raw: unknown): TaskGroupFilter | null | "in
     const row = c as Record<string, unknown>;
     if (
       typeof row.field !== "string" ||
-      !isField(row.field) ||
       typeof row.operator !== "string" ||
-      !isOperator(row.operator) ||
+      !isAllowedFilterCombination(TASK_LIST_FILTER_COMBINATIONS, row.field, row.operator) ||
       typeof row.value !== "string"
     ) {
       return "invalid";

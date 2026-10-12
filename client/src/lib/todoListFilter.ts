@@ -1,6 +1,10 @@
 /** Client-side compound filters for To Do list views. */
 
 import {
+  TODO_LIST_FILTER_COMBINATIONS,
+  isAllowedFilterCombination,
+} from "../../../src/lib/listFilterCombinations.ts";
+import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
   TASK_STATE_LABELS,
@@ -137,13 +141,7 @@ export function defaultOperatorForTodoField(field: TodoFilterField): TodoFilterO
 }
 
 export function operatorsForTodoField(field: TodoFilterField): readonly TodoFilterOperator[] {
-  if (field === "dueDate") return ["is", "is_not", "before", "after"];
-  if (field === "tags") return ["contains", "does_not_contain", "starts_with"];
-  if (field === "title") return ["contains", "does_not_contain", "starts_with", "is", "is_not"];
-  if (field === "checked" || field === "entityType" || field === "state" || field === "priority") {
-    return ["is", "is_not"];
-  }
-  return ["is", "is_not"];
+  return TODO_LIST_FILTER_COMBINATIONS[field];
 }
 
 export function clauseValueUsesTodoPicker(field: TodoFilterField, operator: TodoFilterOperator): boolean {
@@ -456,6 +454,7 @@ function isValidClause(raw: unknown): raw is TodoFilterClause {
     isTodoFilterField(c.field) &&
     typeof c.operator === "string" &&
     isTodoFilterOperator(c.operator) &&
+    isAllowedFilterCombination(TODO_LIST_FILTER_COMBINATIONS, c.field, c.operator) &&
     typeof c.value === "string"
   );
 }

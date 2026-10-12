@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.61.0 — 2026-10-12
+
+### Fixes
+- A List View filter only keeps a field and operator pair that field's dropdown offers. Saving a Task Group with any other pair is rejected. Groups that had been saved as Tags is now use Tags contains for the same tag, so they still match the same tasks.
+
 ## 0.60.1 — 2026-10-12
 
 ### Enhancements

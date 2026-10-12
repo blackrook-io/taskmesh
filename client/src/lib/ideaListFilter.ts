@@ -1,3 +1,7 @@
+import {
+  IDEA_LIST_FILTER_COMBINATIONS,
+  isAllowedFilterCombination,
+} from "../../../src/lib/listFilterCombinations.ts";
 import type { Tag } from "../types";
 import { formatListDate } from "./listViewColumns";
 import type { IdeaListRow } from "./ideaListSort";
@@ -80,10 +84,7 @@ export function isIdeaFilterActive(filter: IdeaListFilter | null | undefined): b
 }
 
 export function operatorsForIdeaField(field: IdeaFilterField): readonly IdeaFilterOperator[] {
-  if (field === "title") return ["contains", "does_not_contain", "starts_with", "is", "is_not"];
-  if (field === "tags") return ["contains", "does_not_contain", "starts_with"];
-  if (field === "createdAt" || field === "updatedAt") return ["is", "is_not", "before", "after"];
-  return ["is", "is_not", "is_empty", "is_not_empty"];
+  return IDEA_LIST_FILTER_COMBINATIONS[field];
 }
 
 export function defaultOperatorForIdeaField(field: IdeaFilterField): IdeaFilterOperator {
@@ -292,8 +293,8 @@ export function parseStoredIdeaListFilter(raw: string | null): IdeaListFilter | 
     const row = c as Record<string, unknown>;
     if (typeof row.field !== "string" || !isIdeaFilterField(row.field)) return null;
     if (typeof row.operator !== "string" || !isIdeaFilterOperator(row.operator)) return null;
+    if (!isAllowedFilterCombination(IDEA_LIST_FILTER_COMBINATIONS, row.field, row.operator)) return null;
     if (typeof row.value !== "string") return null;
-    if (!operatorsForIdeaField(row.field).includes(row.operator)) return null;
     clauses.push({ field: row.field, operator: row.operator, value: row.value });
   }
   const joins: IdeaFilterJoin[] = [];

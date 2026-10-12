@@ -1,0 +1,77 @@
+---
+description: "T0294 — Reject filter field/operator pairs the UI does not offer, from one shared matrix"
+todos:
+  - id: shared-matrix
+    content: Add one field×operator matrix both the API parser and the task filter UI import
+  - id: api-reject
+    content: parseTaskGroupFilter returns invalid for disallowed pairs (existing 400 invalid_filter)
+  - id: tests
+    content: Unit tests for allowed and rejected combinations
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0294 — API allows invalid filters
+
+**Task:** T0294 · id `309` · Ready · project 4 (TaskMesh)
+**Parent:** none
+**Depends on:** none
+**Branch (after approval):** `T0294-invalid-filter-operators`
+
+## Goal
+
+Every List View filter (Tasks, Ideas, To Dos, including Task Group filters) must only accept field and operator pairs that list’s filter UI offers. Those pairs live in one module that the UI and the API share.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| A | **Which filters** | All List View filters: Tasks (list bar and Task Groups), Ideas, and To Dos. Mesh is not a List View and stays out. |
+| B | **Which pairs** | Any field/operator pair the List View dropdown does not offer is invalid. The API rejects it. One lookup lists the valid pairs for Tasks, Ideas, and To Dos, and both the UI and the API use that lookup. |
+| C | **One source** | One module per list type (task, idea, todo) that the dropdowns and the parsers both import. Task Group writes go through the task matrix. Idea and To Do filters are browser-only today; their parsers still use the same matrix so a stored clause cannot keep an operator the dropdown does not offer. |
+| D | **Writes** | Task Group create/update returns the existing `400 invalid_filter` when a clause’s operator is not allowed for that field. |
+| E | **Already stored rows** | Fix the three Task Groups listed below. Change `tags` + `is` to `tags` + `contains` (same tag id). That is the operator the Tasks UI uses for tag membership, and the matcher already treats those two the same. |
+| F | **Tag value shape** | Out of scope. Tag membership still stores a tag id string. `starts_with` still matches tag names. |
+
+## Stored filters to fix
+
+Checked every Task Group on this DEV database (9 groups, 8 with a filter). Five already use an operator the Tasks UI offers. Three do not:
+
+| Group | Project | Clause today | Fix |
+|-------|---------|--------------|-----|
+| AI (id 17) | TaskMesh | Tags **is** tag 32 (AI) | Tags **contains** 32 |
+| Mesh (id 18) | TaskMesh | Tags **is** tag 33 (Mesh) | Tags **contains** 33 |
+| Guide (id 20) | TaskMesh | Tags **is** tag 35 (Guide) | Tags **contains** 35 |
+
+Idea and To Do list filters are kept in the browser, not in the database, so there is no server row to list for those. |
+
+## Current vs desired
+
+`parseTaskGroupFilter` checks that `field` is a known field and `operator` is a known operator, independently. `tags` + `is`, or `dueDate` + `contains`, is stored and later matched.
+
+The UI (`operatorsForField` in `client/src/lib/taskListFilter.ts`) never offers those pairs.
+
+Desired: the parser uses the same allowed list as the operator dropdown.
+
+## Scope
+
+**In**
+
+- One field×operator matrix per List View (Tasks, Ideas, To Dos), shared by that view’s dropdown and parser
+- Task Group API rejects a disallowed pair (`400 invalid_filter`)
+- Rewrite the three Task Group clauses above from `tags` + `is` to `tags` + `contains`
+- Unit tests on the task parser, plus the idea and todo parsers
+
+**Out**
+
+- Mesh filters
+- Changing how a valid clause value is encoded or matched
+- New operators or fields
+
+## Tests
+
+- Accept `tags` + `contains` and `dueDate` + `before`
+- Reject `tags` + `is`, `tags` + `before`, and `dueDate` + `contains`
+- Still reject an unknown field or unknown operator
+- Empty `clauses` still parses as empty (`null`)
+- Idea and To Do catalogs reject pairs their dropdowns omit (Checked + contains, Assignee + contains)
