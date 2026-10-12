@@ -329,7 +329,7 @@ export async function applyTagAdd(
           eq(schema.taggings.entityId, entityId),
         ),
       );
-    if (dup) return { ok: true, status: 200, data: { id: tag.id, name: tag.name } };
+    if (dup) return { ok: true, status: 200, data: { id: tag.id, name: tag.name, created: false } };
     if (entityType === "task") {
       const [task] = await db
         .select({ state: schema.tasks.state })
@@ -342,9 +342,17 @@ export async function applyTagAdd(
         .where(and(eq(schema.taggings.entityType, "task"), eq(schema.taggings.entityId, entityId)));
       assertTaskTagAdd(task.state, existingTags.length);
     }
-    await db.insert(schema.taggings).values({ tagId: tag.id, entityType, entityId });
+    const [tagging] = await db
+      .insert(schema.taggings)
+      .values({ tagId: tag.id, entityType, entityId })
+      .returning({ id: schema.taggings.id });
+    if (!tagging) return fail(500, "insert_failed", "Could not add tag");
     if (entityType === "task") await applyTaskGroupAutoTagsForTask(db, entityId);
-    return { ok: true, status: 201, data: { id: tag.id, name: tag.name } };
+    return {
+      ok: true,
+      status: 201,
+      data: { id: tag.id, name: tag.name, taggingId: tagging.id, created: true },
+    };
   } catch (err) {
     const known = fromError(err);
     if (known) return known;
@@ -410,8 +418,13 @@ export async function applyTaskDependency(
     }
     return {
       ok: true,
-      status: 201,
-      data: { dependsOn: result.dependsOn, requiredBy: result.requiredBy },
+      status: result.created ? 201 : 200,
+      data: {
+        created: result.created,
+        dependsOnTaskId: parsed.dependsOnTaskId,
+        dependsOn: result.dependsOn,
+        requiredBy: result.requiredBy,
+      },
     };
   } catch (err) {
     const known = fromError(err);

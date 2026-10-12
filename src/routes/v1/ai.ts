@@ -7,6 +7,8 @@ import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
 import { listAiCapabilities } from "../../services/assistant/aiCapabilities.js";
 import { listUserCredentials, removeUserKey, replaceUserKey } from "../../services/assistant/aiUserKeys.js";
 import { AiRoutingError, listAiRouting, setUserRoutePreference } from "../../services/assistant/aiRouting.js";
+import { getSystemProperties } from "../../services/systemProperties.js";
+import { listAiActivity, undoJournalEntry } from "../../services/assistant/aiUndo.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 export const aiRouter = Router();
@@ -98,6 +100,53 @@ aiRouter.get("/capabilities", async (req, res) => {
     res.json({ data: await listAiCapabilities(db, { userId, projectId }) });
   } catch (err) {
     sendCredentialsError(res, err);
+  }
+});
+
+const undoBody = z.object({
+  force: z.boolean().optional(),
+  skip: z.boolean().optional(),
+});
+
+aiRouter.get("/activity", async (_req, res) => {
+  try {
+    const userId = await getCurrentUserId(db);
+    const props = await getSystemProperties(db);
+    const items = await listAiActivity(db, userId, new Date(), props.aiUndoWindowDays);
+    res.json({ data: { windowDays: props.aiUndoWindowDays, items } });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.post("/activity/:id/undo", async (req, res) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const body = undoBody.parse(req.body ?? {});
+    const userId = await getCurrentUserId(db);
+    const props = await getSystemProperties(db);
+    const outcome = await undoJournalEntry(db, {
+      id,
+      userId,
+      force: body.force === true,
+      skip: body.skip === true,
+      now: new Date(),
+      windowDays: props.aiUndoWindowDays,
+    });
+    if (!outcome.ok) {
+      res.status(outcome.status).json({
+        error: {
+          code: outcome.code,
+          message: outcome.message,
+          ...(outcome.change !== undefined ? { change: outcome.change } : {}),
+          ...(outcome.canForce !== undefined ? { canForce: outcome.canForce } : {}),
+        },
+      });
+      return;
+    }
+    res.json({ data: { id, status: outcome.status } });
+  } catch (err) {
+    handleRouteError(res, err);
   }
 });
 

@@ -15,6 +15,7 @@ export const SETTINGS_SECTIONS = [
   "tags",
   "import-export",
   "assistant",
+  "ai-activity",
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
@@ -25,6 +26,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   tags: "Tags",
   "import-export": "Import / Export",
   assistant: "Assistant",
+  "ai-activity": "AI activity",
 };
 
 export function isSettingsSection(value: string): value is SettingsSection {
@@ -37,6 +39,7 @@ export function sectionFromPath(pathname: string): SettingsSection | null {
   if (pathname === "/settings/tags") return "tags";
   if (pathname === "/settings/import-export") return "import-export";
   if (pathname === "/settings/assistant") return "assistant";
+  if (pathname === "/settings/ai-activity") return "ai-activity";
   return null;
 }
 

@@ -7,6 +7,7 @@ import { userIsAdministrator } from "../lib/roles";
 import { SettingsProvider } from "../lib/settings";
 import { AssistantAttachProvider } from "../lib/assistantAttach";
 import { useAssistantBlockedTitle } from "../lib/useAssistantAvailability";
+import { AiApplyToastHost } from "./AiApplyToast";
 import { AssistantPanel } from "./AssistantPanel";
 import { BlockedStateNotice } from "./BlockedStateNotice";
 import { CommandPalette } from "./CommandPalette";
@@ -76,6 +77,7 @@ export function Layout() {
               />
             ) : null}
             <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+            <AiApplyToastHost />
             <BlockedStateNotice />
           </AssistantAttachProvider>
         </AdministrationProvider>

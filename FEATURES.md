@@ -111,6 +111,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable Ollama for local assistant chat and embeddings. Set a private or loopback address, a chat model, and an embedding model. No API key is required
 - Set a project to full, read-only, or excluded from AI. Owners and managers can only narrow the Administrator default, and an excluded project is never sent to a model
 - Propose creates and edits that apply only after you confirm
+- Opt in so the assistant applies tags, links, comments, and task dependencies immediately, then undo them from a toast or the AI activity page for 7 days
 - Ask the assistant about todos, lists, links, tags, comments, task dependencies, and the records around one item. Proposed adds still wait for your confirmation
 - Rate an assistant reply with thumbs up or down and an optional note. Administrators see accept, dismiss, and thumb rates by feature and model
 

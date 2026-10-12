@@ -22,7 +22,7 @@ const DELTA_CHUNK = 48;
 
 export type RunAssistantHandlers = ToolHandlers & {
   onDelta: (text: string) => void;
-  onDone: (info?: { auditId: number | null }) => void;
+  onDone: (info?: { auditId: number | null }) => void | Promise<void>;
   onError: (message: string) => void;
 };
 
@@ -65,7 +65,7 @@ export async function runAssistantWithTools(args: {
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       if (args.signal?.aborted) {
-        args.handlers.onDone();
+        await args.handlers.onDone();
         return;
       }
       const roundStarted = Date.now();
@@ -149,7 +149,7 @@ export async function runAssistantWithTools(args: {
         if (args.signal?.aborted) break;
         args.handlers.onDelta(text.slice(i, i + DELTA_CHUNK));
       }
-      args.handlers.onDone({ auditId });
+      await args.handlers.onDone({ auditId });
       return;
     }
     args.handlers.onError("Too many tool rounds; try a simpler request.");
@@ -159,7 +159,7 @@ export async function runAssistantWithTools(args: {
       try {
         args.handlers.onError("Cancelled");
       } catch {
-        args.handlers.onDone();
+        await args.handlers.onDone();
       }
       return;
     }

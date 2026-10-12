@@ -1,6 +1,7 @@
 import type { AiProviderPlugin } from "@taskmesh/ai-provider-contract";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type * as schema from "../../db/schema.js";
+import { eq } from "drizzle-orm";
+import * as schema from "../../db/schema.js";
 import { describeAllowedPolicy } from "./aiPolicy.js";
 import { composeAssistantPrompt } from "./promptRegistry.js";
 import { redactSecrets } from "./aiMinimize.js";
@@ -79,8 +80,14 @@ export async function assistantStatus(
   configuredProviders: { openai: boolean };
   plugins: AssistantPluginStatus[];
   toolsEnabled: boolean;
+  tier1OptIn: boolean;
+  tier1Enabled: boolean;
 }> {
   const props = await getSystemProperties(db);
+  const [actor] = await db
+    .select({ aiTier1OptIn: schema.users.aiTier1OptIn })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
   const keys = await loadResolvedKeys(db, userId, env);
   const session = await resolveAssistantSession(db, userId, env);
   const plugins = loadedAiProviders().map((plugin) => {
@@ -107,6 +114,8 @@ export async function assistantStatus(
     keyMode: keys.mode,
     plugins,
     toolsEnabled: true,
+    tier1OptIn: actor?.aiTier1OptIn === true,
+    tier1Enabled: props.aiPermissionTiers.tier1Enabled,
   };
 }
 

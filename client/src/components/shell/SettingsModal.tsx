@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NavIcon } from "./NavIcon";
 import { shellIcons } from "./shellIcons";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { AiActivityPanel } from "../settings/AiActivityPanel";
 import { AssistantSettingsPage } from "../../pages/AssistantSettingsPage";
 import { ImportExportPage } from "../../pages/ImportExportPage";
 import { ProfileSettingsPage } from "../../pages/ProfileSettingsPage";
@@ -25,6 +26,7 @@ const SECTION_ICONS: Record<SettingsSection, IconDefinition> = {
   tags: shellIcons.tags,
   "import-export": shellIcons.filesystem,
   assistant: shellIcons.assistant,
+  "ai-activity": shellIcons.assistant,
 };
 
 function AppearancePanel() {
@@ -190,6 +192,7 @@ export function SettingsModal() {
             {section === "tags" ? <TagsSettingsPanel /> : null}
             {section === "import-export" ? <ImportExportPage embedded /> : null}
             {section === "assistant" ? <AssistantSettingsPage embedded /> : null}
+            {section === "ai-activity" ? <AiActivityPanel /> : null}
           </div>
         </div>
       </div>

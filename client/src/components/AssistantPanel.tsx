@@ -9,6 +9,7 @@ import {
 } from "../api/assistant";
 import { apiJson } from "../api/client";
 import { useAssistantAttachTarget } from "../lib/assistantAttach";
+import { showAiAppliedToast, showAiApplyFailedToast } from "../lib/aiApplyToast";
 import { dispatchOpenSettings } from "../lib/settings";
 
 const TRANSCRIPT_KEY = "taskmesh.assistant.transcript";
@@ -278,6 +279,12 @@ export function AssistantPanel({ open, onClose }: Props) {
               if (list.some((x) => x.id === proposal.id)) return list;
               return [...list, proposal];
             });
+          },
+          onApplied: (applied) => {
+            showAiAppliedToast(applied);
+          },
+          onApplyFailed: (failed) => {
+            showAiApplyFailedToast(failed);
           },
         });
         if (!ac.signal.aborted) {

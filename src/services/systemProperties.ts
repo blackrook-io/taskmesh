@@ -63,6 +63,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "ai_providers",
   "ai_web_fetch",
   "ai_permission_tiers",
+  "ai_undo_window_days",
   "ai_project_access_default",
   "ai_key_mode",
   "ai_feature_routes",
@@ -90,6 +91,8 @@ export type SystemProperties = {
   aiProjectAccessDefault: AiAccess;
   /** Administrator tier matrix and blast-radius thresholds. User opt-in is not stored here. */
   aiPermissionTiers: StoredAiPermissionTiers;
+  /** Days an auto-applied change stays undoable. Default 7. */
+  aiUndoWindowDays: number;
   /** Who may spend an instance provider key. Changed only through the billing-risk route. */
   aiKeyMode: AiKeyMode;
   /** Per-feature model defaults, fallbacks, and model-profile overrides (T0205). */
@@ -124,6 +127,7 @@ const DEFAULTS: {
   mesh_appearance: MeshAppearance;
   ai_web_fetch: boolean;
   ai_permission_tiers: StoredAiPermissionTiers;
+  ai_undo_window_days: number;
   ai_project_access_default: AiAccess;
   ai_key_mode: AiKeyMode;
   ai_feature_routes: AiFeatureRoutesFile;
@@ -142,6 +146,7 @@ const DEFAULTS: {
   mesh_appearance: MESH_APPEARANCE_DEFAULTS,
   ai_web_fetch: false,
   ai_permission_tiers: defaultStoredAiPermissionTiers(),
+  ai_undo_window_days: 7,
   ai_project_access_default: "full",
   ai_key_mode: "instance_only",
   ai_feature_routes: { features: {}, profiles: [] },
@@ -299,6 +304,12 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
     ),
     aiPermissionTiers: parseStoredAiPermissionTiers(
       map.get("ai_permission_tiers")?.value ?? DEFAULTS.ai_permission_tiers,
+    ),
+    aiUndoWindowDays: asIntInRange(
+      map.get("ai_undo_window_days")?.value,
+      DEFAULTS.ai_undo_window_days,
+      1,
+      90,
     ),
     aiKeyMode: parseAiKeyMode(map.get("ai_key_mode")?.value ?? DEFAULTS.ai_key_mode),
     aiFeatureRoutes: normalizeAiFeatureRoutes(

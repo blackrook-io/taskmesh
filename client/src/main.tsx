@@ -54,6 +54,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="settings/import-export" element={<SettingsHubPage />} />
                 <Route path="settings/backups" element={<AdminHubPage />} />
                 <Route path="settings/assistant" element={<SettingsHubPage />} />
+                <Route path="settings/ai-activity" element={<SettingsHubPage />} />
                 <Route path="admin" element={<AdminHubPage />} />
                 <Route path="admin/users" element={<AdminHubPage />} />
                 <Route path="admin/groups" element={<AdminHubPage />} />

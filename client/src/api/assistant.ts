@@ -22,6 +22,8 @@ export type AssistantStatus = {
   configuredProviders: { openai: boolean };
   plugins?: AssistantPluginStatus[];
   toolsEnabled?: boolean;
+  tier1OptIn?: boolean;
+  tier1Enabled?: boolean;
 };
 
 export type AiFeedbackKind = "thumb_up" | "thumb_down" | "accept" | "dismiss" | "undo";
@@ -73,6 +75,8 @@ export async function streamAssistantChat(args: {
   onMeta?: (meta: { provider: string; model: string }) => void;
   onTool?: (info: { name: string; args: unknown }) => void;
   onProposal?: (proposal: AssistantProposal) => void;
+  onApplied?: (applied: { journalId: number; summary: string }) => void;
+  onApplyFailed?: (failed: { summary: string; message: string }) => void;
 }): Promise<{ auditId: number | null }> {
   const headers = new Headers({
     "Content-Type": "application/json",
@@ -147,6 +151,17 @@ export async function streamAssistantChat(args: {
           args.onTool?.(data as { name: string; args: unknown });
         } else if (eventName === "proposal") {
           args.onProposal?.(data as AssistantProposal);
+        } else if (eventName === "applied") {
+          const applied = data as { journalId?: unknown; summary?: unknown };
+          if (typeof applied.journalId === "number" && typeof applied.summary === "string") {
+            args.onApplied?.({ journalId: applied.journalId, summary: applied.summary });
+          }
+        } else if (eventName === "apply_failed") {
+          const failed = data as { summary?: unknown; message?: unknown };
+          args.onApplyFailed?.({
+            summary: typeof failed.summary === "string" ? failed.summary : "Change",
+            message: typeof failed.message === "string" ? failed.message : "Could not apply",
+          });
         } else if (eventName === "error") {
           throw new Error((data as { message?: string }).message ?? "Assistant error");
         } else if (eventName === "done") {
