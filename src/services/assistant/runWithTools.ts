@@ -1,6 +1,7 @@
 import type { AiChatMessage, AiProviderPlugin, AiToolCall } from "@taskmesh/ai-provider-contract";
 import { AiProviderError } from "@taskmesh/ai-provider-contract";
 import { writeAiAudit } from "./aiAudit.js";
+import { redactSecrets } from "./aiMinimize.js";
 import type { ChatMessage } from "./types.js";
 import {
   assistantToolDefinitions,
@@ -32,9 +33,13 @@ export async function runAssistantWithTools(args: {
   actorUserId: number;
   isAdministrator: boolean;
   assertBaseUrl: (url: string) => Promise<string>;
+  webFetchEnabled?: boolean;
+  /** Test seam. Production calls `executeAssistantTool`. */
+  executeTool?: typeof executeAssistantTool;
 }): Promise<void> {
   const model = args.model?.trim() || readDefaultModel(args.config);
-  const tools = assistantToolDefinitions();
+  const tools = assistantToolDefinitions({ webFetchEnabled: args.webFetchEnabled === true });
+  const execute = args.executeTool ?? executeAssistantTool;
   const messages: AiChatMessage[] = args.messages.map((message) => ({
     role: message.role,
     content: message.content,
@@ -47,7 +52,7 @@ export async function runAssistantWithTools(args: {
         return;
       }
       const roundStarted = Date.now();
-      const outcome = await readRound(args, messages, tools, model);
+      const outcome = await readRound(args, sanitizeProviderMessages(messages), tools, model);
       const roundLatency = Date.now() - roundStarted;
       if (outcome.toolCalls.length > 0) {
         messages.push({
@@ -56,7 +61,7 @@ export async function runAssistantWithTools(args: {
           toolCalls: outcome.toolCalls,
         });
         for (const call of outcome.toolCalls) {
-          const result = await executeAssistantTool(call.name, call.arguments || "{}", {
+          const result = await execute(call.name, call.arguments || "{}", {
             onTool: args.handlers.onTool,
             onProposal: args.handlers.onProposal,
             signal: args.signal,
@@ -67,8 +72,9 @@ export async function runAssistantWithTools(args: {
             model,
             tokensIn: outcome.usage?.inputTokens ?? null,
             tokensOut: outcome.usage?.outputTokens ?? null,
+            webFetchEnabled: args.webFetchEnabled === true,
           });
-          messages.push({ role: "tool", toolCallId: call.id, content: result });
+          messages.push({ role: "tool", toolCallId: call.id, content: redactSecrets(result) });
         }
         continue;
       }
@@ -114,6 +120,22 @@ export async function runAssistantWithTools(args: {
           : "Assistant failed";
     args.handlers.onError(message);
   }
+}
+
+function sanitizeProviderMessages(messages: AiChatMessage[]): AiChatMessage[] {
+  return messages.map((message) => {
+    if (message.role === "assistant") {
+      return {
+        ...message,
+        content: message.content == null ? null : redactSecrets(message.content),
+        toolCalls: message.toolCalls?.map((call) => ({
+          ...call,
+          arguments: redactSecrets(call.arguments),
+        })),
+      };
+    }
+    return { ...message, content: redactSecrets(message.content) };
+  });
 }
 
 function readDefaultModel(config: unknown): string {

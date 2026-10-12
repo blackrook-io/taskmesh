@@ -845,6 +845,7 @@ export const apiRequestLogs = pgTable(
 /**
  * Append-only log of assistant tool calls, replies, and proposal applies (T0178).
  * Stores the decision and token counts, not prompts, arguments, or record text.
+ * A web_fetch allow row stores `Fetched` plus the capped URL in `reason`.
  */
 export const aiAuditLog = pgTable(
   "ai_audit_log",

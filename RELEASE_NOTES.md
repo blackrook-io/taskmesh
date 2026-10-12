@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.62.3 — 2026-10-12
+
+### Enhancements
+- The assistant sends a model a smaller record: title, a short excerpt, state, priority, dates, tag names, and display number. Secret-shaped text such as API keys, tokens, private keys, and connection strings is removed before it leaves the server.
+- Assistant chat can fetch a public web page only after an Administrator turns that on under System properties. The switch is off by default, private addresses stay blocked, and each fetch is written to the audit log with the URL.
+
 ## 0.62.2 — 2026-10-12
 
 ### New Functionality

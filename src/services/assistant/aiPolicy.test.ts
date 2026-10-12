@@ -90,7 +90,15 @@ describe("aiPolicy.check", () => {
   it("allows the assistant actions that exist today", () => {
     assert.equal(check(base({ action: "read" })).decision, "allow");
     assert.equal(check(base({ action: "read", entityType: "document" })).decision, "allow");
-    assert.equal(check(base({ action: "web_fetch" })).decision, "allow");
+    assert.equal(check(base({ action: "web_fetch" })).decision, "deny");
+    assert.equal(
+      check(base({ action: "web_fetch", webFetchEnabled: true })).decision,
+      "allow",
+    );
+    assert.equal(
+      check(base({ action: "web_fetch", webFetchEnabled: true, feature: "mesh" })).decision,
+      "deny",
+    );
     assert.equal(
       check(base({ action: "propose_create", entityType: "task", projectId: 4 })).decision,
       "allow",
@@ -112,6 +120,12 @@ describe("describeAllowedPolicy", () => {
     assert.match(text, /server enforces/i);
     assert.match(text, /API keys/);
     assert.match(text, /users/);
+    assert.doesNotMatch(text, /fetch public web pages/);
+  });
+
+  it("mentions web fetch only when the administrator switch is on", () => {
+    const text = describeAllowedPolicy("assistant", { webFetchEnabled: true });
+    assert.match(text, /fetch public web pages/);
   });
 });
 

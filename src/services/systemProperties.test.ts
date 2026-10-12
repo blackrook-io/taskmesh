@@ -25,6 +25,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
     mfaTrustedDeviceMax: 5,
     meshAppearance: MESH_APPEARANCE_DEFAULTS,
     aiProviders: {},
+    aiWebFetch: false,
     updatedAt: null,
     ...overrides,
   };
@@ -79,5 +80,11 @@ describe("system properties patch schema", () => {
         false,
       );
     }
+  });
+
+  it("accepts the assistant web-fetch switch", () => {
+    assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: true }).success, true);
+    assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: false }).success, true);
+    assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: "yes" }).success, false);
   });
 });

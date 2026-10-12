@@ -22,6 +22,7 @@ type SystemProperties = {
   mfaGraceDays?: number;
   mfaTrustedDeviceDays?: number;
   mfaTrustedDeviceMax?: number;
+  aiWebFetch?: boolean;
   updatedAt: string | null;
 };
 
@@ -73,6 +74,7 @@ export function AdminSystemPropertiesPanel() {
   const [mfaGraceDays, setMfaGraceDays] = useState("7");
   const [mfaTrustedDeviceDays, setMfaTrustedDeviceDays] = useState("15");
   const [mfaTrustedDeviceMax, setMfaTrustedDeviceMax] = useState("5");
+  const [aiWebFetch, setAiWebFetch] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -122,6 +124,7 @@ export function AdminSystemPropertiesPanel() {
       if (typeof propsQuery.data.mfaTrustedDeviceMax === "number") {
         setMfaTrustedDeviceMax(String(propsQuery.data.mfaTrustedDeviceMax));
       }
+      setAiWebFetch(propsQuery.data.aiWebFetch === true);
     }
   }
 
@@ -196,6 +199,7 @@ export function AdminSystemPropertiesPanel() {
         mfaGraceDays: number;
         mfaTrustedDeviceDays: number;
         mfaTrustedDeviceMax: number;
+        aiWebFetch: boolean;
       } = {
         apiRateLimitPerMinute,
         loginFailureThreshold,
@@ -204,6 +208,7 @@ export function AdminSystemPropertiesPanel() {
         mfaGraceDays: graceDays,
         mfaTrustedDeviceDays: trustDays,
         mfaTrustedDeviceMax: trustMax,
+        aiWebFetch,
       };
       if (supportsGlobalRate) {
         body.globalApiRateLimitPerMinute = globalApiRateLimitPerMinute;
@@ -416,6 +421,20 @@ export function AdminSystemPropertiesPanel() {
 
       {error ? <p className="error-text">{error}</p> : null}
       {saved ? <p className="ok-text">Saved.</p> : null}
+
+      <h2>Assistant web access</h2>
+      <label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <input
+          type="checkbox"
+          checked={aiWebFetch}
+          onChange={(e) => setAiWebFetch(e.target.checked)}
+        />
+        <span>Allow assistant chat to fetch public web pages</span>
+      </label>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Off by default. Background AI features cannot fetch the web. Private and local addresses
+        stay blocked. Save with the button below.
+      </p>
 
       <button
         type="button"
