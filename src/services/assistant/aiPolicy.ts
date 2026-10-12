@@ -63,6 +63,8 @@ export type PolicyCheckInput = {
   targetOwnerId?: number | null;
   /** Chat web fetch is allowed only when the Administrator has turned it on. */
   webFetchEnabled?: boolean;
+  /** This turn already included private record, page, or file text. */
+  privateRecordsInTurn?: boolean;
   /** Ignored. The model cannot choose a tier. */
   tier?: unknown;
 };
@@ -94,6 +96,21 @@ export function tierForAction(action: AiAction): AiTier {
 
 export function isFloorResource(value: string): value is FloorResource {
   return (FLOOR_RESOURCES as readonly string[]).includes(value);
+}
+
+function privateFetchDecision(input: PolicyCheckInput): PolicyDecision | null {
+  if (
+    input.action === "web_fetch" &&
+    input.feature !== "assistant" &&
+    input.privateRecordsInTurn === true
+  ) {
+    return {
+      decision: "deny",
+      tier: tierForAction("web_fetch"),
+      reason: "web_fetch denied after private records",
+    };
+  }
+  return null;
 }
 
 function floorDecision(input: PolicyCheckInput): PolicyDecision | null {
@@ -224,6 +241,8 @@ export function check(
 ): PolicyDecision {
   const floor = floorDecision(input);
   if (floor) return floor;
+  const privateFetch = privateFetchDecision(input);
+  if (privateFetch) return privateFetch;
 
   const classified = classifyOperation(
     {

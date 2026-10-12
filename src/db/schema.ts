@@ -959,6 +959,7 @@ export const userAiRoutePrefs = pgTable(
  * Stores the decision and token counts, not prompts, arguments, or record text.
  * A respond row may store prompt id, version, and a composed ref (T0212). It does not store prompt text.
  * A web_fetch allow row stores `Fetched` plus the capped URL in `reason`.
+ * A write or web_fetch that follows private record text in the same turn appends `untrusted-followup` (T0201).
  */
 export const aiAuditLog = pgTable(
   "ai_audit_log",

@@ -4,6 +4,7 @@ import type * as schema from "../../db/schema.js";
 import { describeAllowedPolicy } from "./aiPolicy.js";
 import { composeAssistantPrompt } from "./promptRegistry.js";
 import { redactSecrets } from "./aiMinimize.js";
+import { wrapUntrusted } from "./untrustedContent.js";
 import { getSystemProperties } from "../systemProperties.js";
 import { providerEntryConfigured } from "./aiProviderConfig.js";
 import type { AiKeyMode } from "./aiKeyMode.js";
@@ -146,10 +147,10 @@ export function buildMessages(args: {
     },
   ];
   if (args.pageContext?.trim()) {
-    const redacted = redactSecrets(args.pageContext.trim());
+    const redacted = redactSecrets(args.pageContext.trim()).slice(0, 12_000);
     messages.push({
       role: "system",
-      content: `Current page context:\n${redacted.slice(0, 12_000)}`,
+      content: `Current page context:\n${wrapUntrusted(redacted, "page")}`,
     });
   }
   for (const m of args.history.slice(-20)) {
