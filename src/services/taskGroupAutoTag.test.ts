@@ -108,6 +108,30 @@ describe("collectAutoTagAttachments", () => {
     ]);
   });
 
+  it("does not add a tag past the cap of 3", () => {
+    const out = collectAutoTagAttachments(
+      [
+        {
+          autoTagId: 5,
+          filter: { clauses: [{ field: "priority", operator: "is", value: "high" }], joins: [] },
+        },
+      ],
+      [task],
+      new Map([
+        [
+          1,
+          [
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+            { id: 3, name: "c" },
+          ],
+        ],
+      ]),
+      { tagNames: new Map([[5, "hot"]]) },
+    );
+    assert.deepEqual(out, []);
+  });
+
   it("skips deleted tasks", () => {
     const out = collectAutoTagAttachments(
       [

@@ -14,6 +14,7 @@ import {
   projectOwnedListFilter,
   OwnershipAccessError,
 } from "../ownership.js";
+import { actorCanReopen, enforceTaskPatch, TaskWorkflowError } from "../taskWorkflow.js";
 
 export type AssistantProposal = {
   id: string;
@@ -139,7 +140,7 @@ export const OPENAI_TOOLS = [
     function: {
       name: "propose_task_update",
       description:
-        "Propose updating an existing task. Does not save; the user must confirm in the UI.",
+        "Propose updating an existing task. Does not save; the user must confirm in the UI. State changes must follow the task workflow. Cancel and reopen require stateComment. Pending and Deleted cannot be set. Complete, Canceled, and Deleted tasks reject field edits.",
       parameters: {
         type: "object",
         properties: {
@@ -149,7 +150,15 @@ export const OPENAI_TOOLS = [
           description: { type: "string" },
           dueDate: { type: "string", description: "YYYY-MM-DD or null to clear" },
           color: { type: "string" },
-          state: { type: "string" },
+          state: {
+            type: "string",
+            description:
+              "Next state only: Draft to Ready or Canceled; Ready to In Progress or Canceled; In Progress to On Hold or Complete; On Hold to In Progress or Complete; Complete or Canceled to Ready for a project Owner, Manager, or Administrator.",
+          },
+          stateComment: {
+            type: "string",
+            description: "Required when canceling or reopening.",
+          },
           priority: { type: "string" },
           summary: { type: "string" },
         },
@@ -577,6 +586,7 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
       dueDate: z.string().nullable().optional(),
       color: z.string().max(64).optional().nullable(),
       state: z.string().optional(),
+      stateComment: z.string().max(50_000).optional(),
       priority: z.string().optional(),
       summary: z.string().min(1).max(500),
     })
@@ -598,9 +608,29 @@ async function toolProposeTaskUpdate(args: unknown, handlers: ToolHandlers): Pro
   if (parsed.dueDate !== undefined) fields.dueDate = parsed.dueDate;
   if (parsed.color !== undefined) fields.color = parsed.color;
   if (parsed.state !== undefined) fields.state = parsed.state;
+  if (parsed.stateComment !== undefined) fields.stateComment = parsed.stateComment;
   if (parsed.priority !== undefined) fields.priority = parsed.priority;
-  if (Object.keys(fields).length === 0) {
+  if (Object.keys(fields).every((key) => key === "stateComment")) {
     return JSON.stringify({ error: "Provide at least one field to update" });
+  }
+  try {
+    const canReopen = await actorCanReopen(db, requireActor(handlers).actorUserId, existing.projectId);
+    enforceTaskPatch({
+      fromState: existing.state,
+      canReopen,
+      patch: {
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+        ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
+        ...(parsed.color !== undefined ? { color: parsed.color } : {}),
+        ...(parsed.state !== undefined ? { state: parsed.state } : {}),
+        ...(parsed.stateComment !== undefined ? { stateComment: parsed.stateComment } : {}),
+        ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
+      },
+    });
+  } catch (err) {
+    if (err instanceof TaskWorkflowError) return JSON.stringify({ error: err.message });
+    throw err;
   }
   const proposal: AssistantProposal = {
     id: proposalId(),

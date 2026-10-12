@@ -22,6 +22,7 @@ import {
 import { userHasAdministrator } from "../../services/roles.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { getCurrentUserId } from "../../services/users.js";
+import { assertImportedInitialState, TaskWorkflowError } from "../../services/taskWorkflow.js";
 import {
   objectsToCsv,
   objectsToXlsxBuffer,
@@ -549,6 +550,16 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
         .from(schema.tasks)
         .where(eq(schema.tasks.projectId, projectId));
       sortOrder = existing.length ? Math.max(...existing.map((r) => r.m)) + 1 : 0;
+    }
+
+    try {
+      assertImportedInitialState(raw.state);
+    } catch (err) {
+      if (err instanceof TaskWorkflowError) {
+        discarded.push({ row: rowNum, code: "invalid_data", reason: err.message });
+        continue;
+      }
+      throw err;
     }
 
     try {

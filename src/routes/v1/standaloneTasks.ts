@@ -10,6 +10,7 @@ import {
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
+import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import {
   dueDateSchema,
   selectableTaskStateSchema,
@@ -46,6 +47,12 @@ import {
 import { applyTaskGroupAutoTags } from "../../services/taskGroupAutoTag.js";
 import { resolveAssigneeId } from "../../services/assignees.js";
 import {
+  actorCanReopen,
+  assertInitialState,
+  attachAllowedNextStates,
+  enforceTaskPatch,
+} from "../../services/taskWorkflow.js";
+import {
   rejectCompleteIfBlocked,
   rejectDeleteIfBlocked,
   rejectDeleteIfHasChildren,
@@ -75,6 +82,12 @@ const patchBody = z.object({
   projectId: z.number().int().positive().nullable().optional(),
   phaseId: z.number().int().positive().nullable().optional(),
   assigneeId: z.number().int().positive().nullable().optional(),
+  stateComment: z
+    .string()
+    .max(50_000)
+    .optional()
+    .nullable()
+    .transform((value) => (value == null ? undefined : sanitizeMarkdown(value))),
 });
 
 const listQuery = z.object({
@@ -133,7 +146,8 @@ standaloneTasksRouter.get("/", async (req, res) => {
       .from(schema.tasks)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(schema.tasks.updatedAt), desc(schema.tasks.id));
-    res.json({ data: await attachTaskActors(db, rows) });
+    const withActors = await attachTaskActors(db, rows);
+    res.json({ data: await attachAllowedNextStates(db, actorId, withActors) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -149,7 +163,9 @@ standaloneTasksRouter.get("/:taskId", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     await assertCanAccessDualScoped(db, actorId, row);
-    res.json({ data: await attachTaskActor(db, row) });
+    const task = await attachTaskActor(db, row);
+    const [data] = await attachAllowedNextStates(db, actorId, [task]);
+    res.json({ data });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -165,6 +181,7 @@ standaloneTasksRouter.post("/", async (req, res) => {
       sendError(res, 400, "invalid_parent", parentOk.message);
       return;
     }
+    assertInitialState(parsed.state);
     const number = await allocateTaskNumber(db);
     const sortOrder = await nextSiblingSortOrder(db, null, parentId);
     const assigneeId = await resolveAssigneeId(db, {
@@ -207,7 +224,9 @@ standaloneTasksRouter.post("/", async (req, res) => {
       markdown: row.description,
       actorUserId: actorId,
     });
-    res.status(201).json({ data: await attachTaskActor(db, row) });
+    const created = await attachTaskActor(db, row);
+    const [data] = await attachAllowedNextStates(db, actorId, [created]);
+    res.status(201).json({ data });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -251,6 +270,13 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
     }
+
+    const canReopen = await actorCanReopen(db, actorId, existing.projectId);
+    enforceTaskPatch({
+      fromState: existing.state,
+      canReopen,
+      patch: parsed,
+    });
 
     let nextProjectId =
       parsed.projectId !== undefined ? parsed.projectId : existing.projectId;
@@ -312,37 +338,52 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
 
     const persistedState = await resolvePersistedState(db, taskId, parsed.state);
     const previousParentId = existing.parentId;
+    const stateComment = parsed.stateComment?.trim() ?? "";
+    const activitySource = activitySourceFromRequest(req);
 
-    const [row] = await db
-      .update(schema.tasks)
-      .set({
-        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
-        ...(parsed.description !== undefined ? { description: parsed.description } : {}),
-        ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
-        ...(parsed.color !== undefined ? { color: parsed.color } : {}),
-        ...(persistedState !== undefined ? { state: persistedState } : {}),
-        ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
-        ...(parsed.projectId !== undefined || nextProjectId !== existing.projectId
-          ? { projectId: nextProjectId }
-          : {}),
-        ...(parsed.phaseId !== undefined || nextPhaseId !== existing.phaseId
-          ? { phaseId: nextPhaseId }
-          : {}),
-        ...(parsed.parentId !== undefined || nextParentId !== existing.parentId
-          ? { parentId: nextParentId }
-          : {}),
-        ...(parsed.assigneeId !== undefined ||
-        nextAssigneeId !== existing.assigneeId
-          ? { assigneeId: nextAssigneeId }
-          : {}),
-        updatedAt: new Date(),
-        updatedById: actorId,
-      })
-      .where(eq(schema.tasks.id, taskId))
-      .returning();
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(schema.tasks)
+        .set({
+          ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+          ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+          ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
+          ...(parsed.color !== undefined ? { color: parsed.color } : {}),
+          ...(persistedState !== undefined ? { state: persistedState } : {}),
+          ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
+          ...(parsed.projectId !== undefined || nextProjectId !== existing.projectId
+            ? { projectId: nextProjectId }
+            : {}),
+          ...(parsed.phaseId !== undefined || nextPhaseId !== existing.phaseId
+            ? { phaseId: nextPhaseId }
+            : {}),
+          ...(parsed.parentId !== undefined || nextParentId !== existing.parentId
+            ? { parentId: nextParentId }
+            : {}),
+          ...(parsed.assigneeId !== undefined || nextAssigneeId !== existing.assigneeId
+            ? { assigneeId: nextAssigneeId }
+            : {}),
+          updatedAt: new Date(),
+          updatedById: actorId,
+        })
+        .where(eq(schema.tasks.id, taskId))
+        .returning();
+      if (updated && stateComment && updated.state !== existing.state) {
+        await tx.insert(schema.taskActivity).values({
+          taskId,
+          entityType: "task",
+          entityId: taskId,
+          kind: "comment",
+          body: stateComment,
+          createdById: actorId,
+          source: activitySource,
+        });
+      }
+      return updated;
+    });
     const activityOpts = {
       actorId,
-      source: activitySourceFromRequest(req),
+      source: activitySource,
       recordHistory: shouldRecordHistory(req),
     };
     if (row) {
@@ -363,7 +404,13 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         await applyTaskGroupAutoTags(db, { projectId: row.projectId, taskId });
       }
     }
-    res.json({ data: row ? await attachTaskActor(db, row) : row });
+    if (!row) {
+      res.json({ data: row });
+      return;
+    }
+    const updatedTask = await attachTaskActor(db, row);
+    const [data] = await attachAllowedNextStates(db, actorId, [updatedTask]);
+    res.json({ data });
   } catch (err) {
     handleRouteError(res, err);
   }

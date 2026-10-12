@@ -77,20 +77,31 @@ export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
   urgent: "Urgent",
 };
 
-/** Checkbox cycle order matching feature_list. */
-export const TASK_STATE_CYCLE: TaskState[] = [
-  "new",
+/** Preference when several next states are allowed. The API decides which are allowed. */
+export const TASK_NEXT_STATE_ORDER: TaskState[] = [
   "ready",
   "in_progress",
+  "on_hold",
   "complete",
   "canceled",
-  "on_hold",
 ];
 
-export function nextTaskState(current: TaskState): TaskState {
-  if (current === "pending") return "complete";
-  const i = TASK_STATE_CYCLE.indexOf(current);
-  return TASK_STATE_CYCLE[(i + 1) % TASK_STATE_CYCLE.length] ?? "new";
+export function isClosedTaskState(state: string): boolean {
+  return state === "complete" || state === "canceled" || state === "deleted";
+}
+
+export function allowedTaskStates(allowed: readonly string[] | undefined): TaskState[] {
+  const set = new Set(allowed ?? []);
+  return TASK_NEXT_STATE_ORDER.filter((state) => set.has(state));
+}
+
+export function nextAllowedTaskState(allowed: readonly string[] | undefined): TaskState | null {
+  return allowedTaskStates(allowed)[0] ?? null;
+}
+
+export function stateChangeNeedsComment(from: string, to: string): boolean {
+  if (to === "canceled") return true;
+  return to === "ready" && (from === "complete" || from === "canceled");
 }
 
 export function formatTaskNumber(n: number): string {

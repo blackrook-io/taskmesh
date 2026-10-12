@@ -10,6 +10,7 @@ import {
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
+import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   dueDateSchema,
@@ -43,6 +44,12 @@ import {
 } from "./taskDependencies.js";
 import { applyTaskGroupAutoTags } from "../../services/taskGroupAutoTag.js";
 import { resolveAssigneeId } from "../../services/assignees.js";
+import {
+  actorCanReopen,
+  assertInitialState,
+  attachAllowedNextStates,
+  enforceTaskPatch,
+} from "../../services/taskWorkflow.js";
 
 const taskBody = z.object({
   title: plainTitle(2000),
@@ -71,6 +78,12 @@ const taskPatch = z.object({
   priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
   assigneeId: z.number().int().positive().nullable().optional(),
+  stateComment: z
+    .string()
+    .max(50_000)
+    .optional()
+    .nullable()
+    .transform((value) => (value == null ? undefined : sanitizeMarkdown(value))),
 });
 
 const reorderBody = z.object({
@@ -102,12 +115,14 @@ tasksRouter.get("/", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
+    const actorId = await getCurrentUserId(db);
     const rows = await db
       .select()
       .from(schema.tasks)
       .where(and(eq(schema.tasks.projectId, projectId), ne(schema.tasks.state, "deleted")))
       .orderBy(asc(schema.tasks.sortOrder), asc(schema.tasks.id));
-    res.json({ data: await attachTaskActors(db, rows) });
+    const withActors = await attachTaskActors(db, rows);
+    res.json({ data: await attachAllowedNextStates(db, actorId, withActors) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -143,6 +158,7 @@ tasksRouter.post("/", async (req, res) => {
       }
     }
 
+    assertInitialState(parsed.state);
     const nextSort =
       parsed.sortOrder ?? (await nextSiblingSortOrder(db, projectId, parentId));
     const number = await allocateTaskNumber(db);
@@ -190,7 +206,9 @@ tasksRouter.post("/", async (req, res) => {
       actorUserId: actorId,
     });
     await applyTaskGroupAutoTags(db, { projectId, taskId: row.id });
-    res.status(201).json({ data: await attachTaskActor(db, row) });
+    const created = await attachTaskActor(db, row);
+    const [data] = await attachAllowedNextStates(db, actorId, [created]);
+    res.status(201).json({ data });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -269,7 +287,8 @@ tasksRouter.patch("/reorder", async (req, res) => {
     if (parsed.phaseId !== undefined) {
       await applyTaskGroupAutoTags(db, { projectId });
     }
-    res.json({ data: await attachTaskActors(db, rows) });
+    const withActors = await attachTaskActors(db, rows);
+    res.json({ data: await attachAllowedNextStates(db, actorId, withActors) });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -284,7 +303,10 @@ tasksRouter.get("/:taskId", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
-    res.json({ data: await attachTaskActor(db, row) });
+    const actorId = await getCurrentUserId(db);
+    const task = await attachTaskActor(db, row);
+    const [data] = await attachAllowedNextStates(db, actorId, [task]);
+    res.json({ data });
   } catch (err) {
     handleRouteError(res, err);
   }
@@ -331,6 +353,13 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       return;
     }
 
+    const canReopen = await actorCanReopen(db, actorId, existing.projectId);
+    enforceTaskPatch({
+      fromState: existing.state,
+      canReopen,
+      patch: { ...parsed, dueDate },
+    });
+
     const nextAssigneeId =
       parsed.assigneeId !== undefined
         ? await resolveAssigneeId(db, {
@@ -372,27 +401,43 @@ tasksRouter.patch("/:taskId", async (req, res) => {
 
     const persistedState = await resolvePersistedState(db, taskId, parsed.state);
     const previousParentId = existing.parentId;
+    const stateComment = parsed.stateComment?.trim() ?? "";
+    const activitySource = activitySourceFromRequest(req);
 
-    const [row] = await db
-      .update(schema.tasks)
-      .set({
-        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
-        ...(parsed.description !== undefined ? { description: parsed.description } : {}),
-        ...(dueDate !== undefined ? { dueDate } : {}),
-        ...(parsed.color !== undefined ? { color: parsed.color } : {}),
-        ...(nextPhaseId !== existing.phaseId || parsed.phaseId !== undefined
-          ? { phaseId: nextPhaseId }
-          : {}),
-        ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
-        ...(persistedState !== undefined ? { state: persistedState } : {}),
-        ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
-        ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
-        ...(parsed.assigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
-        updatedAt: new Date(),
-        updatedById: actorId,
-      })
-      .where(eq(schema.tasks.id, taskId))
-      .returning();
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(schema.tasks)
+        .set({
+          ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+          ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+          ...(dueDate !== undefined ? { dueDate } : {}),
+          ...(parsed.color !== undefined ? { color: parsed.color } : {}),
+          ...(nextPhaseId !== existing.phaseId || parsed.phaseId !== undefined
+            ? { phaseId: nextPhaseId }
+            : {}),
+          ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
+          ...(persistedState !== undefined ? { state: persistedState } : {}),
+          ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
+          ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
+          ...(parsed.assigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
+          updatedAt: new Date(),
+          updatedById: actorId,
+        })
+        .where(eq(schema.tasks.id, taskId))
+        .returning();
+      if (updated && stateComment && updated.state !== existing.state) {
+        await tx.insert(schema.taskActivity).values({
+          taskId,
+          entityType: "task",
+          entityId: taskId,
+          kind: "comment",
+          body: stateComment,
+          createdById: actorId,
+          source: activitySource,
+        });
+      }
+      return updated;
+    });
 
     if (row && row.phaseId !== existing.phaseId) {
       await syncDescendantPhases(db, taskId, row.phaseId, actorId);
@@ -400,7 +445,7 @@ tasksRouter.patch("/:taskId", async (req, res) => {
 
     const activityOpts = {
       actorId,
-      source: activitySourceFromRequest(req),
+      source: activitySource,
       recordHistory: shouldRecordHistory(req),
     };
     if (row) {
@@ -417,7 +462,13 @@ tasksRouter.patch("/:taskId", async (req, res) => {
       await applyTaskGroupAutoTags(db, { projectId, taskId });
     }
 
-    res.json({ data: row ? await attachTaskActor(db, row) : row });
+    if (!row) {
+      res.json({ data: row });
+      return;
+    }
+    const updated = await attachTaskActor(db, row);
+    const [data] = await attachAllowedNextStates(db, actorId, [updated]);
+    res.json({ data });
   } catch (err) {
     handleRouteError(res, err);
   }

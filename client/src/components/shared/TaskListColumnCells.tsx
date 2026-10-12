@@ -7,6 +7,7 @@ import {
   TASK_PRIORITY_LABELS,
   TASK_STATE_LABELS,
   formatTaskNumber,
+  isClosedTaskState,
   taskPriorityClass,
   taskStateClass,
   type TaskPriority,
@@ -180,6 +181,7 @@ export function renderTaskColumnCell(
           key="priority"
           className={taskPriorityClass("task-list-row__priority", task.priority)}
           value={task.priority}
+          disabled={isClosedTaskState(task.state)}
           data-ctx-field="priority"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
@@ -204,6 +206,7 @@ export function renderTaskColumnCell(
           type="date"
           className="task-list-row__date"
           value={taskDue(task) ?? ""}
+          disabled={isClosedTaskState(task.state)}
           data-ctx-field="dueDate"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
