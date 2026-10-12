@@ -4,6 +4,7 @@
     { "path": "./contract" },
     { "path": "./stub" },
     { "path": "./openai" },
-    { "path": "./openai-compatible" }
+    { "path": "./openai-compatible" },
+    { "path": "./anthropic" }
   ]
 }

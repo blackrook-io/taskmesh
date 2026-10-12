@@ -137,6 +137,7 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | `BACKUP_SCHEDULE_PATH` | Backup schedule JSON path (default `./data/backup-schedule.json`) |
 | `PROD_RELEASE_PATH` | Sidecar JSON with the last production-host deploy stamp (default `./data/prod-release.json`; written by `deploy:prod` on that host) |
 | `OPENAI_API_KEY` | Deprecated. Enables the OpenAI provider plugin on first boot and remains that plugin's key until instance keys exist |
+| `ANTHROPIC_API_KEY` | Optional. Key for the Anthropic plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
 | `ASSISTANT_DEFAULT_MODEL` | Default model seeded for the OpenAI plugin (default `gpt-4.1-mini`) |
 
 Back up **Postgres** and the uploads directory together. Commands and scheduling notes are in [INSTALL.md § Backups](INSTALL.md#18-backups).

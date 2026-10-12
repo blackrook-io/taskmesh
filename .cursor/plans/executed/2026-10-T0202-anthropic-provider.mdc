@@ -1,0 +1,49 @@
+# T0202 — Anthropic provider plugin
+
+**Task:** T0202 (id 217) — AI: Anthropic provider plugin
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0193 AI: Providers and keys (group). Design decisions are in epic T0177.
+**Depends on:** T0180 (complete). No open blockers.
+**Branch (after approval):** `T0202-anthropic-provider`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`).
+
+## Size
+
+One plugin package plus a small contract-kit mock branch so that plugin can pass the existing kit. No schema, no new admin screen, no routing (T0205), no instance-key store (T0182). Fits one session.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Package | `plugins/ai-providers/anthropic/`, npm name `@taskmesh/ai-provider-anthropic`, export `plugin` with `id: "anthropic"`. `"taskmesh": { "role": "provider" }`. Workspace glob already covers it. Add the package to `plugins/ai-providers/tsconfig.json` project references. |
+| 2 | Wire | Anthropic Messages API via `fetch` inside this package (same style as the OpenAI plugin). No official SDK. Header `x-api-key` plus `anthropic-version: 2023-06-01`. Paths `{baseUrl}/v1/messages` and `{baseUrl}/v1/models`. |
+| 3 | Config | Zod schema matches the admin form: `baseUrl` (default `https://api.anthropic.com`) and `defaultModel` (default `claude-sonnet-4-5`). Public https only, same schema helper as OpenAI. `max_tokens` is a fixed 8192 on each request, not an admin field. |
+| 4 | Capabilities | `chat`, `streaming`, and `tools` true. `embeddings` and `local` false. No `embed` method. |
+| 5 | Chat | Map contract messages onto Anthropic: system text is the top-level `system` string; `tool` results are user `tool_result` blocks; assistant tool calls are `tool_use` blocks. Tools use `input_schema`. When `tools` is an array (the contract kit, and tool rounds), send one JSON message and emit `delta` or `tool_calls`, then `usage`, then `done`. When `tools` is omitted, stream SSE (`content_block_delta` text, tool JSON assembled into `tool_calls`, usage from `message_start` / `message_delta`). |
+| 6 | Models and verify | `GET /v1/models`. `verifyKey` is that list. Missing key is `auth`. |
+| 7 | Errors and usage | Reuse `mapProviderHttpError`: 401/403 `auth`, 404 `model_not_found`, 429 with quota/billing/credit wording `quota`, other 429 `rate_limit`, network/`overloaded` 529 `network`. Usage is `{ inputTokens, outputTokens }` from Anthropic `input_tokens` / `output_tokens`. |
+| 8 | Contract kit | Extend `contractMockFetch` only: if the request sends `x-api-key`, read that key for the existing suffixes (`bad`, `rate`, `quota`, `missing-model`, `offline`) and return Anthropic JSON (`content` text or `tool_use`, usage 3/4, model id `gpt-test`) instead of Chat Completions JSON. OpenAI requests stay on the bearer path. Assertions in `assertProviderContract` do not change. |
+| 9 | Key until T0182 | Read `ANTHROPIC_API_KEY` at call time in `resolvePluginApiKey`. Do not store it, do not first-boot seed `ai_providers`, and do not log a deprecation line (this variable is new, not a legacy path). `selectChatPlugin` still prefers an enabled OpenAI plugin. Anthropic is the chat plugin only when it is enabled, its config is valid, the env key is set, and OpenAI is not the selected plugin. |
+| 10 | Tests and docs | `plugins/ai-providers/anthropic/src/contract.test.ts`: shared kit, rejected base URLs, one SSE fixture. Add that file to the root `npm test` explicit list. Note `ANTHROPIC_API_KEY` in `README.md`, `INSTALL.md`, and `SECURITY.md` as optional and not stored. |
+
+## Work items
+
+1. **Mock** — Anthropic branch in `plugins/ai-providers/contract/src/kit.ts` as in decision 8.
+2. **Plugin** — `index.ts` implementing list, verify, JSON chat, and SSE chat. Messages API client stays in this package (do not fold it into `openaiWire.ts`).
+3. **Key resolver** — `ANTHROPIC_API_KEY` for id `anthropic` only. Update `aiProviderConfig` tests.
+4. **Build graph** — tsconfig project reference so `npm run build:plugins` emits `dist/index.js` (the loader reads `dist`, not `src`).
+5. **Docs** — env-var notes only.
+
+## Out of scope
+
+- Encrypted instance keys, key modes, billing-risk acknowledgement (T0182).
+- Making Anthropic the preferred provider over OpenAI, or model fallback (T0205).
+- Embeddings, prompt caching, vision blocks, or a custom `max_tokens` field.
+- Gemini, Azure, Ollama.
+
+## QA checklist (after implementation)
+
+1. `npm test` includes the Anthropic contract file and it passes with the shared kit.
+2. Restart the DEV API after `npm run build:plugins`. Administration → System properties lists **Anthropic** with base URL `https://api.anthropic.com` and default model `claude-sonnet-4-5`. Saving `http://…` or a private host is rejected.
+3. With `OPENAI_API_KEY` set and OpenAI enabled, chat still uses OpenAI even if `ANTHROPIC_API_KEY` is also set and Anthropic is enabled.
+4. Disable OpenAI, enable Anthropic, set `ANTHROPIC_API_KEY`, restart, and confirm a short assistant reply streams. Unset the key, restart, and confirm Anthropic shows as not configured.

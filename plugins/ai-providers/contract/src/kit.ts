@@ -20,10 +20,17 @@ function jsonResponse(status: number, body: unknown): Response {
 
 function authKey(init?: RequestInit): string {
   const headers = new Headers(init?.headers);
-  return headers.get("authorization") ?? "";
+  return headers.get("x-api-key") ?? headers.get("authorization") ?? "";
 }
 
-/** Mock Chat Completions / models server keyed by the bearer token the kit uses. */
+function isAnthropic(init?: RequestInit): boolean {
+  return new Headers(init?.headers).has("x-api-key");
+}
+
+/**
+ * Mock models and chat server. OpenAI requests use `Authorization`.
+ * Anthropic requests (`x-api-key`) get Messages API JSON. Key suffixes are shared.
+ */
 export const contractMockFetch: ProviderFetch = async (input, init) => {
   const key = authKey(init);
   const url = String(input);
@@ -40,9 +47,26 @@ export const contractMockFetch: ProviderFetch = async (input, init) => {
     return jsonResponse(404, { error: { message: "The model was not found" } });
   }
   const raw = typeof init?.body === "string" ? init.body : "{}";
-  const body = JSON.parse(raw) as { messages?: Array<{ content?: string }> };
+  const body = JSON.parse(raw) as { messages?: Array<{ content?: unknown }> };
   const last = body.messages?.at(-1);
-  if (last?.content === "TOOL") {
+  const tool = last?.content === "TOOL";
+  if (isAnthropic(init)) {
+    if (tool) {
+      return jsonResponse(200, {
+        content: [
+          { type: "tool_use", id: "call_1", name: "search_records", input: { q: "mesh" } },
+        ],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 3, output_tokens: 4 },
+      });
+    }
+    return jsonResponse(200, {
+      content: [{ type: "text", text: CONTRACT_TEXT }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 3, output_tokens: 4 },
+    });
+  }
+  if (tool) {
     return jsonResponse(200, {
       choices: [
         {

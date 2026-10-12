@@ -81,5 +81,36 @@ describe("ai provider config", () => {
   it("reads the OpenAI env key and no other plugin secret", () => {
     assert.equal(resolvePluginApiKey("openai", { OPENAI_API_KEY: " sk-live " }), "sk-live");
     assert.equal(resolvePluginApiKey("openai-compatible", { OPENAI_API_KEY: "sk-live" }), null);
+    assert.equal(resolvePluginApiKey("anthropic", { ANTHROPIC_API_KEY: " sk-ant " }), "sk-ant");
+    assert.equal(resolvePluginApiKey("anthropic", { OPENAI_API_KEY: "sk-live" }), null);
+    assert.equal(resolvePluginApiKey("openai", { ANTHROPIC_API_KEY: "sk-ant" }), null);
+  });
+
+  it("keeps OpenAI ahead of an enabled Anthropic plugin", () => {
+    const file = {
+      anthropic: { enabled: true, config: { baseUrl: "https://api.anthropic.com" } },
+      openai: { enabled: true, config: { baseUrl: "https://api.openai.com/v1" } },
+    };
+    assert.equal(
+      selectChatPlugin({
+        plugins: [
+          { id: "anthropic", chat: true },
+          { id: "openai", chat: true },
+        ],
+        file,
+        hasKey: () => true,
+        configValid: () => true,
+      }),
+      "openai",
+    );
+    assert.equal(
+      selectChatPlugin({
+        plugins: [{ id: "anthropic", chat: true }],
+        file: { anthropic: file.anthropic },
+        hasKey: (id) => id === "anthropic",
+        configValid: () => true,
+      }),
+      "anthropic",
+    );
   });
 });
