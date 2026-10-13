@@ -1,0 +1,55 @@
+# T0332 — List view state waiting popover
+
+**Task:** T0332 (id `348`) — List View State Modal explanation  
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)  
+**Branch (after approval):** `T0332-list-state-waiting`
+
+## Context
+
+Task list rows render State through `renderTaskColumnCell` in `client/src/components/shared/TaskListColumnCells.tsx`. That cell is used by the project task list (`TaskBoard`) and the global Tasks list (`TasksListPage`). Pending and Blocked already have product meanings:
+
+- **Blocked** — waiting on open Depends-on tasks (`isDependencyBlockingState`: not complete, canceled, deleted, or pending).
+- **Pending** — own work is done, waiting on unfinished direct children (`isFinishedChildState` is only complete, canceled, or deleted).
+
+The list payload does not include those related tasks. Depends-on can live in another project, so the popover should load them on hover rather than from the rows already on screen. No schema change. Depends-on is empty.
+
+## Size / split
+
+One hover panel on the shared State cell, plus a small read endpoint. Suitable as a single worktask. No split.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Hover panel, not a blocking dialog.** Pointer hover over the State control opens a small panel beside it. Moving into the panel keeps it open so the list can be scrolled. Leaving both hides it. Other states show nothing.
+2. **Who is listed.** Blocked lists open Depends-on only. Pending lists unfinished direct children only. Satisfied dependencies and finished children stay off the list.
+3. **Each line.** `T####`, title, and state label, one task per line. About ten lines visible; further tasks scroll inside the panel. No cap that hides the rest. Lines are not links and do not open the task.
+4. **Touch.** Hover does not exist on a phone. The same panel opens while the State control has keyboard focus. A touch tap still uses the state dropdown; say if you also want a separate tap target on small screens.
+
+## Goal
+
+Hovering Pending or Blocked on a task list row shows the tasks that record is waiting on: number, title, and state, with a ten-line viewport and a vertical scrollbar when there are more.
+
+## Scope
+
+**In scope**
+
+1. `GET /api/v1/tasks/:id/waiting-on` returns `{ kind: "blocked" | "pending" | null, tasks: { id, number, title, state }[] }`. Blocked uses open Depends-on. Pending uses unfinished direct children. Any other state returns `kind: null` and an empty list.
+2. Hover (and keyboard focus) on the State cell in `TaskListColumnCells` fetches that endpoint and renders the panel. Delay ~200ms so a pass over the column does not fire a request.
+3. Panel layout: one row per task (`T####`, title, state), `max-height` of ten lines, `overflow-y: auto`.
+4. Empty result (state is Pending or Blocked but nothing matches) shows a single line: “Nothing waiting”.
+5. Listed tasks are display-only. Clicks inside the panel do not open a task.
+
+**Out of scope**
+
+- Board cards, mesh, to-do lists, and task editor dependency panels.
+- Changing how Pending or Blocked is assigned.
+- A separate mobile-only control beyond focus.
+
+## Verification
+
+- Blocked row: hover lists only open Depends-on, with number, title, and state.
+- Pending row: hover lists only unfinished direct children.
+- Ready / In Progress / Complete: no panel.
+- Eleven or more entries: ten visible, vertical scroll reaches the rest.
+- Clicking a listed task does not open it.
+- Leave the cell and the panel: the panel closes.
+- `npm run lint` clean for touched client files.

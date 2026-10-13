@@ -2331,6 +2331,77 @@ textarea.raw-md {
   color: var(--task-state-deleted);
 }
 
+.task-state-waiting-anchor {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-state-waiting-anchor:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent));
+  outline-offset: 2px;
+}
+
+.task-state-waiting-anchor .task-list-row__menu:disabled {
+  pointer-events: none;
+}
+
+.task-state-waiting {
+  position: fixed;
+  z-index: 85;
+  margin: 0;
+  padding: 0.35rem 0 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.task-state-waiting__label {
+  margin: 0;
+  padding: 0.1rem 0.6rem 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.task-state-waiting__list {
+  --waiting-row: 1.75rem;
+  max-height: calc(var(--waiting-row) * 10);
+  overflow-y: auto;
+}
+
+.task-state-waiting__row {
+  display: grid;
+  grid-template-columns: 4.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  height: var(--waiting-row);
+  padding: 0 0.6rem;
+}
+
+.task-state-waiting__num,
+.task-state-waiting__state {
+  white-space: nowrap;
+}
+
+.task-state-waiting__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-state-waiting__empty {
+  margin: 0;
+  height: var(--waiting-row);
+  padding: 0 0.6rem;
+  line-height: var(--waiting-row);
+  color: var(--text-muted);
+}
+
 .task-phase-header {
   display: flex;
   align-items: center;
