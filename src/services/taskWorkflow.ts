@@ -26,7 +26,7 @@ const NEXT_STATES: Record<string, readonly string[]> = {
   new: ["ready", "canceled"],
   blocked: ["new", "canceled"],
   ready: ["in_progress", "canceled"],
-  in_progress: ["on_hold", "complete"],
+  in_progress: ["ready", "on_hold", "complete"],
   on_hold: ["in_progress", "complete"],
   complete: ["ready"],
   canceled: ["ready"],
@@ -86,7 +86,7 @@ function allowedPhrase(from: string, canReopen: boolean): string {
 
 function needsStateComment(from: string, to: string): boolean {
   if (to === "canceled") return true;
-  return to === "ready" && (from === "complete" || from === "canceled");
+  return to === "ready" && (from === "complete" || from === "canceled" || from === "in_progress");
 }
 
 export function assertTransition(input: {
@@ -114,7 +114,12 @@ export function assertTransition(input: {
     );
   }
   if (needsStateComment(input.from, to) && !input.stateComment?.trim()) {
-    const action = to === "canceled" ? "Canceling a task" : "Reopening a task";
+    const action =
+      to === "canceled"
+        ? "Canceling a task"
+        : input.from === "in_progress"
+          ? "Returning a task to Ready"
+          : "Reopening a task";
     throw new TaskWorkflowError(400, "state_comment_required", `${action} requires a comment.`);
   }
 }

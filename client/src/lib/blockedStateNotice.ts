@@ -17,7 +17,7 @@ export function dismissBlockedNotice(): void {
   }
 }
 
-/** Tell the shell to explain a Draft → Ready attempt that the server stored as Blocked. */
+/** Tell the shell to explain a Ready request that the server stored as Blocked. */
 export function maybeNotifyBlockedReady(requested: unknown, savedState: string): void {
   if (requested !== "ready" || savedState !== "blocked") return;
   if (blockedNoticeDismissed()) return;

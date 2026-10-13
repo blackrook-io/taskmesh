@@ -83,7 +83,7 @@ Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the 
 
 **Pending:** Completing a task that still has unfinished direct children is stored as `pending` instead of `complete`. When every direct child is `complete`, `canceled`, or `deleted`, a Pending parent is set to `complete` (ancestors too). Pending does not block Depends-on.
 
-**Blocked:** A user request to move Draft (`new`) to Ready is stored as `blocked` when any Depends-on task is still blocking (`new`, `blocked`, `ready`, `in_progress`, or `on_hold`). Users may move Blocked only to Draft or Canceled. The system sets Blocked to Ready when every Depends-on is `complete`, `canceled`, `deleted`, or `pending`, including after a dependency link is removed. Adding a dependency does not pull a later state back to Blocked. Blocked stays in working lists. It is not a choice on create or in state menus.
+**Blocked:** A user request to move Draft (`new`) or In Progress (`in_progress`) to Ready is stored as `blocked` when any Depends-on task is still blocking (`new`, `blocked`, `ready`, `in_progress`, or `on_hold`). Users may move Blocked only to Draft or Canceled. The system sets Blocked to Ready when every Depends-on is `complete`, `canceled`, `deleted`, or `pending`, including after a dependency link is removed. Adding a dependency does not pull a later state back to Blocked. Blocked stays in working lists. It is not a choice on create or in state menus.
 
 ## Task priority
 

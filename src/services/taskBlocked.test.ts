@@ -11,6 +11,12 @@ describe("blocked task state", () => {
     assert.equal(coerceReadyToBlocked("new", "canceled", true), "canceled");
   });
 
+  it("stores In Progress → Ready as Blocked when a dependency is still open", () => {
+    assert.equal(coerceReadyToBlocked("in_progress", "ready", true), "blocked");
+    assert.equal(coerceReadyToBlocked("in_progress", "ready", false), "ready");
+    assert.equal(coerceReadyToBlocked("in_progress", "on_hold", true), "on_hold");
+  });
+
   it("promotes dependents only when a blocking state becomes satisfied", () => {
     assert.equal(shouldPromoteBlockedDependents("in_progress", "complete"), true);
     assert.equal(shouldPromoteBlockedDependents("in_progress", "pending"), true);

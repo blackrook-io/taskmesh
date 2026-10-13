@@ -79,12 +79,12 @@ export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
   urgent: "Urgent",
 };
 
-/** Preference when several next states are allowed. The API decides which are allowed. */
+/** Preference when several next states are allowed. Ready follows On Hold so an In Progress click still advances. */
 export const TASK_NEXT_STATE_ORDER: TaskState[] = [
   "new",
-  "ready",
   "in_progress",
   "on_hold",
+  "ready",
   "complete",
   "canceled",
 ];
@@ -116,7 +116,32 @@ export function nextAllowedTaskState(allowed: readonly string[] | undefined): Ta
 
 export function stateChangeNeedsComment(from: string, to: string): boolean {
   if (to === "canceled") return true;
-  return to === "ready" && (from === "complete" || from === "canceled");
+  return to === "ready" && (from === "complete" || from === "canceled" || from === "in_progress");
+}
+
+export function stateReasonPrompt(
+  from: string,
+  to: string,
+): { title: string; message: string; confirmLabel: string } {
+  if (to === "canceled") {
+    return {
+      title: "Cancel task",
+      message: "Add a comment explaining why this task is canceled.",
+      confirmLabel: "Cancel task",
+    };
+  }
+  if (from === "in_progress" && to === "ready") {
+    return {
+      title: "Return to Ready",
+      message: "Add a comment explaining why this work is stopping.",
+      confirmLabel: "Return to Ready",
+    };
+  }
+  return {
+    title: "Reopen task",
+    message: "Add a comment explaining why this task is reopened.",
+    confirmLabel: "Reopen",
+  };
 }
 
 export function formatTaskNumber(n: number): string {

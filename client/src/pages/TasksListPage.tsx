@@ -37,6 +37,7 @@ import {
   formatTaskNumber,
   nextAllowedTaskState,
   stateChangeNeedsComment,
+  stateReasonPrompt,
   type TaskState,
 } from "../lib/taskFields";
 import {
@@ -586,13 +587,9 @@ export function TasksListPage() {
 
       <StateReasonDialog
         open={stateReason != null}
-        title={stateReason?.to === "canceled" ? "Cancel task" : "Reopen task"}
-        message={
-          stateReason?.to === "canceled"
-            ? "Add a comment explaining why this task is canceled."
-            : "Add a comment explaining why this task is reopened."
-        }
-        confirmLabel={stateReason?.to === "canceled" ? "Cancel task" : "Reopen"}
+        {...(stateReason != null
+          ? stateReasonPrompt(stateReason.task.state, stateReason.to)
+          : { title: "", message: "", confirmLabel: "" })}
         onCancel={() => setStateReason(null)}
         onConfirm={(comment) => {
           const pending = stateReason;

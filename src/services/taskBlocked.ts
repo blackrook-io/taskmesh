@@ -10,13 +10,14 @@ import { recordTaskChanges, type RecordTaskChangesOpts } from "./tasks.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
-/** Draft → Ready is stored as Blocked while any Depends-on task is still open. */
+/** Draft or In Progress → Ready is stored as Blocked while any Depends-on task is still open. */
 export function coerceReadyToBlocked(
   from: string,
   requested: string,
   hasOpenDependsOn: boolean,
 ): string {
-  if (from === "new" && requested === "ready" && hasOpenDependsOn) return "blocked";
+  const returningToReady = from === "new" || from === "in_progress";
+  if (returningToReady && requested === "ready" && hasOpenDependsOn) return "blocked";
   return requested;
 }
 
