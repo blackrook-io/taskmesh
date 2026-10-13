@@ -44,7 +44,8 @@ function expectedCode(
   const reopen = to === "ready" && (from === "complete" || from === "canceled");
   if (reopen && !canReopen) return "reopen_forbidden";
   if (!allowedNextStates(from, canReopen).includes(to)) return "invalid_transition";
-  const needsComment = to === "canceled" || reopen;
+  const returnToReady = to === "ready" && from === "in_progress";
+  const needsComment = to === "canceled" || reopen || returnToReady;
   if (needsComment && !comment?.trim()) return "state_comment_required";
   return null;
 }
@@ -158,7 +159,18 @@ describe("task workflow call sites", () => {
         patch: { state: "ready" },
       }),
     );
-    assert.equal(refused?.code, "invalid_transition");
+    assert.equal(refused?.code, "state_comment_required");
+    assert.match(refused?.message ?? "", /Returning a task to Ready/);
+    assert.equal(
+      capture(() =>
+        enforceTaskPatch({
+          fromState: "in_progress",
+          canReopen: false,
+          patch: { state: "ready", stateComment: "work stopped" },
+        }),
+      ),
+      null,
+    );
   });
 
   it("import uses the Draft-only initial state check", () => {

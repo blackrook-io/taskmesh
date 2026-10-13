@@ -1,0 +1,63 @@
+# T0333 — In Progress can return to Ready
+
+**Task:** T0333 (id `349`) — Task workflow: allow In Progress to go back to Ready  
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)  
+**Depends-on:** none  
+**Branch (after approval):** `T0333-in-progress-to-ready`
+
+## Context
+
+`NEXT_STATES.in_progress` is `["on_hold", "complete"]`. A return to Ready is `invalid_transition`. That blocked T0151 (id `164`, Project Export and Import Capability), which is still In Progress and needs to go back to Ready.
+
+The shared gate is `assertTransition` / `needsStateComment` in `src/services/taskWorkflow.ts`. Project PATCH, standalone PATCH, and Assistant proposals all call `enforceTaskPatch`. The client shows whatever `allowedNextStates` returns, and asks for a comment when `stateChangeNeedsComment` is true (`client/src/lib/taskFields.ts`).
+
+Draft → Ready with an open Depends-on is stored as Blocked by `coerceReadyToBlocked`, but only when `from === "new"`. `resolvePersistedState` has the same `fromState === "new"` guard.
+
+Project Kanban card moves change column and lane only. They do not change task state, and there is no Ready / In Progress column board. No MCP server lives in this repo. Assistant tool text hardcodes the old transition list.
+
+No schema change. Depends-on is empty. Suitable as one worktask.
+
+## Interview (proposed — confirm or adjust)
+
+1. **One-click cycle stays forward.** `TASK_NEXT_STATE_ORDER` currently prefers Ready before On Hold. After Ready is allowed from In Progress, the state checkbox would open the reason prompt for Ready instead of advancing to On Hold. Move Ready to sit after On Hold in that preference list so the click still advances to On Hold. Menus still list Ready.
+2. **Reason copy is “return to Ready”, not “reopen”.** Reopen stays Complete or Canceled → Ready, and stays limited to Owner, Manager, or Administrator. In Progress → Ready is any writer. Dialog title “Return to Ready”, message asks why the work is stopping, confirm label “Return to Ready”. API error: “Returning a task to Ready requires a comment.”
+3. **Kanban is not a task-state surface.** No new mapping from board columns to workflow states. State menu, list state dropdown, and list context menu are the UI. REST and standalone PATCH share the service, so they follow the same rule.
+4. **T0151 after the code is on this DEV server.** Once the transition works, PATCH T0151 (id `164`) to Ready with a comment that work stopped and the task needs to be picked up again. That is a data step on `:3001`, not a production deploy.
+
+## Goal
+
+An In Progress task can move back to Ready when work stops or needs to be rewritten. The move requires a comment. If a Depends-on is still open, the stored state is Blocked and promotes to Ready when the blocker clears.
+
+## Implementation
+
+1. **Workflow** — `NEXT_STATES.in_progress` becomes `["ready", "on_hold", "complete"]`. `needsStateComment` is true for In Progress → Ready. `assertTransition` does not treat that move as a reopen (no role gate). Error text distinguishes return-to-Ready from reopen and cancel.
+2. **Blocked coerce** — `coerceReadyToBlocked` also returns `blocked` when `from === "in_progress"`, `requested === "ready"`, and a Depends-on is open. `resolvePersistedState` runs that check for In Progress as well as Draft. The required comment is still stored because the state did change.
+3. **Tests**
+   - Matrix helper in `src/services/taskWorkflow.test.ts` expects `state_comment_required` for In Progress → Ready with no comment, and success with a comment. Members and managers both succeed (not `reopen_forbidden`).
+   - Assistant call-site test that currently expects `invalid_transition` for In Progress → Ready is updated to the comment rule.
+   - `src/services/taskBlocked.test.ts`: In Progress → Ready with an open Depends-on stores Blocked; without one it stays Ready.
+   - `client/src/lib/taskFields.workflow.test.ts`: `stateChangeNeedsComment("in_progress", "ready")` is true. Cycle preference still picks On Hold when Ready, On Hold, and Complete are all allowed.
+4. **Client** — `stateChangeNeedsComment` matches the server. `StateReasonDialog` callers in `TaskBoard.tsx` (editor and list) and `TasksListPage.tsx` use the return-to-Ready copy when the source state is In Progress. Menus already render `allowedNextStates`, so Ready appears once the API allows it.
+5. **Assistant** — `propose_task_update` state and `stateComment` descriptions mention In Progress → Ready and that the comment is required. Cancel and reopen wording stays.
+6. **Glossary** — `docs/database/glossary.md` Blocked paragraph includes In Progress → Ready, then `npm run docs:sync-schema`.
+7. **`/worktask` skill** — In the start path (`.cursor/skills/worktask/SKILL.md`, near the state gate / branch step): a task returned to Ready may already have a `T####-*` branch. Detect it and ask whether to reuse or replace it before creating another branch.
+
+## Out of scope
+
+- On Hold → Ready (On Hold still resumes via In Progress).
+- Mapping Kanban columns to task states.
+- Role gate or Administrator bypass for this move.
+
+## Acceptance
+
+- In Progress → Ready succeeds with a comment and is refused without one (`state_comment_required`).
+- The same move with an open Depends-on stores Blocked.
+- A member can make the move; it is not `reopen_forbidden`.
+- State menu, list dropdown, and context menu show Ready and open the reason prompt. The state checkbox on an In Progress task still targets On Hold.
+- `npm test`, `npm run lint`, and `npm run build:all` pass.
+- After the DEV API is running the change, T0151 is Ready and has the stop comment.
+- Version bump and `RELEASE_NOTES.md` happen on finish-up (PATCH; no migration).
+
+## Shipped
+
+QA approved 2026-10-13 with no follow-ups. T0151 was returned to Ready on this DEV server during implementation, with the comment that work stopped so it can be picked up again. Version **0.73.2**.

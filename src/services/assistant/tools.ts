@@ -224,7 +224,7 @@ export const OPENAI_TOOLS = [
     function: {
       name: "propose_task_update",
       description:
-        "Propose updating an existing task. Does not save; the user must confirm in the UI. State changes must follow the task workflow. Cancel and reopen require stateComment. Pending and Deleted cannot be set. Complete, Canceled, and Deleted tasks reject field edits.",
+        "Propose updating an existing task. Does not save; the user must confirm in the UI. State changes must follow the task workflow. Cancel, reopen, and returning In Progress to Ready require stateComment. Pending and Deleted cannot be set. Complete, Canceled, and Deleted tasks reject field edits.",
       parameters: {
         type: "object",
         properties: {
@@ -237,11 +237,11 @@ export const OPENAI_TOOLS = [
           state: {
             type: "string",
             description:
-              "Next state only: Draft to Ready or Canceled; Ready to In Progress or Canceled; In Progress to On Hold or Complete; On Hold to In Progress or Complete; Complete or Canceled to Ready for a project Owner, Manager, or Administrator.",
+              "Next state only: Draft to Ready or Canceled; Ready to In Progress or Canceled; In Progress to Ready, On Hold, or Complete; On Hold to In Progress or Complete; Complete or Canceled to Ready for a project Owner, Manager, or Administrator.",
           },
           stateComment: {
             type: "string",
-            description: "Required when canceling or reopening.",
+            description: "Required when canceling, reopening, or returning In Progress to Ready.",
           },
           priority: { type: "string" },
           summary: { type: "string" },

@@ -41,7 +41,7 @@ export async function resolvePersistedState(
   if (requested === undefined) return undefined;
   const unfinished = await hasUnfinishedDirectChildren(db, taskId);
   const afterChildren = coerceCompleteIfUnfinishedChildren(requested, unfinished);
-  if (fromState === "new" && afterChildren === "ready") {
+  if ((fromState === "new" || fromState === "in_progress") && afterChildren === "ready") {
     const blockers = await openDependsOnBlockers(db, taskId);
     return coerceReadyToBlocked(fromState, afterChildren, blockers.length > 0);
   }

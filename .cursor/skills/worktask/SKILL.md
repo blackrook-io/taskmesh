@@ -105,7 +105,7 @@ After load (and as part of the sizing assessment):
 
 Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still being written up; Ready = enough info to execute.
 
-- If `state` is `ready`: proceed (interview / plan).
+- If `state` is `ready`: proceed (interview / plan). Before creating a branch, check for an existing local or remote `T####-*` branch. A task moved back to Ready may already have one from earlier work. If it exists, ask whether to reuse or replace it. Do not create a second branch by default.
 - If `state` is `in_progress`: **Resume** path — alert with current state / branch / plan hints; ask whether to continue, resume, or abort. Do not create a duplicate branch by default.
 - If `state` is `new` (Draft): **Alert** that the task is still Draft, not Ready. Ask whether to continue anyway, wait until they mark Ready, or abort. Do not mark In Progress or create a branch until they decide.
 - Any other state (`complete`, `canceled`, `pending`, `on_hold`, …): **Alert** with current state (and any existing worktask comments / branch hints). Ask whether to continue, resume, or abort. Do not mark In Progress or create a branch until they decide.
@@ -126,7 +126,7 @@ Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still bein
 
 Only after the user approves the plan:
 
-1. `git switch main && git pull` (**SSH only** — see [reference.md](reference.md) § Git ops), then `git switch -c T####-<slug>`.
+1. `git switch main && git pull` (**SSH only** — see [reference.md](reference.md) § Git ops), then `git switch -c T####-<slug>`. If a `T####-*` branch already exists because the task was returned to Ready, ask whether to reuse or replace it instead of creating another.
 2. SetActiveBranch to that branch.
 3. DEV API: `PATCH /api/v1/tasks/{id}` → `{ "state": "in_progress" }`.
 4. DEV API: post a comment summarizing branch + plan (path + short summary). Template in [reference.md](reference.md).
@@ -171,3 +171,5 @@ Do not use `phase-N-` prefixes for `/worktask` workstreams.
 ## Resume
 
 If re-invoked on a task already `in_progress` with a matching local branch / plan: alert, then resume on that branch after user confirmation rather than inventing a duplicate plan/branch by default.
+
+If the task is `ready` again but a `T####-*` branch already exists, ask whether to reuse or replace that branch before creating a new one.
