@@ -38,6 +38,7 @@ type JobSummary = {
   queues: QueueCounts[];
   series: ActivityPoint[];
   failedJobs: FailedJob[];
+  knowledgeIndex?: { status: "idle" | "running" };
 };
 
 const EMPTY_SERIES: ActivityPoint[] = [];
@@ -54,6 +55,7 @@ export function AdminJobsPanel() {
   const [range, setRange] = useState<UsageRange>("1d");
   const [error, setError] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
 
   const summaryQuery = useQuery({
     queryKey: ["admin", "jobs", range],
@@ -87,10 +89,23 @@ export function AdminJobsPanel() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const rebuildMutation = useMutation({
+    mutationFn: async () => {
+      await apiJson("/api/v1/admin/jobs/knowledge/rebuild", { method: "POST" });
+    },
+    onSuccess: async () => {
+      setRebuildOpen(false);
+      setError(null);
+      await qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const series = summaryQuery.data?.series ?? EMPTY_SERIES;
   const queues = summaryQuery.data?.queues ?? [];
   const failedJobs = summaryQuery.data?.failedJobs ?? [];
   const pendingDelete = failedJobs.find((job) => job.id === deleteId) ?? null;
+  const knowledgeStatus = summaryQuery.data?.knowledgeIndex?.status ?? "idle";
 
   return (
     <div className="settings-panel admin-panel">
@@ -115,6 +130,22 @@ export function AdminJobsPanel() {
 
       {summaryQuery.data ? (
         <>
+          <h4 className="admin-db-heading">Knowledge index</h4>
+          <p className="muted">
+            {knowledgeStatus === "running" ? "Rebuild in progress." : "Idle."}
+          </p>
+          <button
+            type="button"
+            className="btn small primary"
+            disabled={knowledgeStatus === "running" || rebuildMutation.isPending}
+            onClick={() => {
+              setError(null);
+              setRebuildOpen(true);
+            }}
+          >
+            Rebuild knowledge index
+          </button>
+
           <h4 className="admin-db-heading">Queue depth</h4>
           <table className="admin-table">
             <thead>
@@ -206,6 +237,15 @@ export function AdminJobsPanel() {
         </>
       ) : null}
 
+      <ConfirmDialog
+        open={rebuildOpen}
+        title="Rebuild knowledge index?"
+        message="Walk every record and refresh full-text and embeddings. A rebuild already in progress keeps going from where it left off."
+        confirmLabel={rebuildMutation.isPending ? "Starting…" : "Rebuild"}
+        confirmDisabled={rebuildMutation.isPending}
+        onConfirm={() => rebuildMutation.mutate()}
+        onCancel={() => setRebuildOpen(false)}
+      />
       <ConfirmDialog
         open={pendingDelete != null}
         title="Delete failed job?"

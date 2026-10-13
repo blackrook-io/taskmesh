@@ -5,6 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { getUploadDir } from "../../lib/paths.js";
 import { enqueue, registerJob } from "../jobs/queue.js";
+import { scheduleKnowledgeIndex } from "../knowledge/schedule.js";
 import type { JobDefinition } from "../jobs/definitions.js";
 import { extractEpub } from "./extractEpub.js";
 import { extractPdf } from "./extractPdf.js";
@@ -129,6 +130,7 @@ async function extractDocumentJob(data: object): Promise<void> {
       charCount: 0,
       truncated: false,
     });
+    await scheduleKnowledgeIndex("document", documentId);
     return;
   }
 
@@ -175,6 +177,8 @@ async function extractDocumentJob(data: object): Promise<void> {
       truncated: false,
     });
     if (!isDeterministicExtractError(err)) throw err;
+  } finally {
+    await scheduleKnowledgeIndex("document", documentId);
   }
 }
 

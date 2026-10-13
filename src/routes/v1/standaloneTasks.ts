@@ -17,6 +17,7 @@ import {
   taskPrioritySchema,
   taskStateSchema,
 } from "../../lib/taskFields.js";
+import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import {
   allocateTaskNumber,
@@ -228,6 +229,7 @@ standaloneTasksRouter.post("/", async (req, res) => {
       markdown: row.description,
       actorUserId: actorId,
     });
+    await scheduleKnowledgeIndex("task", row.id);
     const created = await attachTaskActor(db, row);
     const [data] = await attachAllowedNextStates(db, actorId, [created]);
     res.status(201).json({ data });
@@ -410,6 +412,8 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       if (row.projectId != null) {
         await applyTaskGroupAutoTags(db, { projectId: row.projectId, taskId });
       }
+      if (row.state === "deleted") await forgetKnowledge("task", row.id);
+      else await scheduleKnowledgeIndex("task", row.id);
     }
     if (!row) {
       res.json({ data: row });
@@ -474,6 +478,7 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
     if (shouldPromoteBlockedDependents(existing.state, row.state)) {
       await promoteBlockedDependents(db, taskId, activityOpts);
     }
+    await forgetKnowledge("task", taskId);
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);

@@ -8,6 +8,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { NotFoundError } from "../../lib/notFound.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import { NOT_ADMINISTRATOR_MESSAGE } from "../../middleware/requireAdministrator.js";
+import { scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { assertCanAccessDualScoped, type ProjectAccessLevel } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId, loadUserMap } from "../../services/users.js";
@@ -128,6 +129,7 @@ export function registerCommentRoutes(
         return;
       }
       const [serialized] = await serializeActivityRows([row]);
+      await scheduleKnowledgeIndex(entityType, entityId);
       res.status(201).json({ data: serialized });
     } catch (err) {
       handleRouteError(res, err);
@@ -163,6 +165,7 @@ export function registerCommentRoutes(
         return;
       }
       const [serialized] = await serializeActivityRows([row]);
+      await scheduleKnowledgeIndex(entityType, entityId);
       res.json({ data: serialized });
     } catch (err) {
       handleRouteError(res, err);
@@ -192,6 +195,7 @@ export function registerCommentRoutes(
         return;
       }
       await db.delete(schema.taskActivity).where(eq(schema.taskActivity.id, entryId));
+      await scheduleKnowledgeIndex(entityType, entityId);
       res.status(204).end();
     } catch (err) {
       handleRouteError(res, err);

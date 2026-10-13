@@ -23,7 +23,7 @@ Self-contained **app + PostgreSQL + TLS proxy** via [`compose.yaml`](compose.yam
 
 | Component | Role |
 |-----------|------|
-| **`db` service** | Official [`postgres:16-alpine`](https://hub.docker.com/_/postgres) image (digest-pinned); data in volume `taskmesh_pg` |
+| **`db` service** | [`pgvector/pgvector:pg16`](https://hub.docker.com/r/pgvector/pgvector) (Postgres 16 with the `vector` extension); data in volume `taskmesh_pg` |
 | **`app` service** | Multi-stage Node **22** build of Express API + Vite SPA (digest-pinned base images); data in volume `taskmesh_data` (`uploads`, backups, schedule file); process drops to non-root uid **10001** |
 | **`proxy` service** | [`nginx:alpine`](https://hub.docker.com/_/nginx) TLS terminator; host **:80** → HTTPS redirect, **:443** → `app:3000` |
 | **Published ports** | Host `TASKMESH_HTTP_PORT` / `TASKMESH_HTTPS_PORT` (defaults **80** / **443**). App listens only on the Compose network. |
@@ -361,6 +361,12 @@ sudo apt-get install -y \
   build-essential \
   postgresql \
   postgresql-contrib
+```
+
+The knowledge index needs the `vector` extension. Install the package that matches the PostgreSQL major version (`SELECT version();`), for example `postgresql-18-pgvector` on PostgreSQL 18 or `postgresql-16-pgvector` on PostgreSQL 16:
+
+```bash
+sudo apt-get install -y postgresql-18-pgvector
 ```
 
 References: [Ubuntu package management](https://ubuntu.com/server/docs/package-management), [PostgreSQL on Ubuntu](https://ubuntu.com/server/docs/databases-postgresql).

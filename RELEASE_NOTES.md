@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.73.0 — 2026-10-13
+
+### New Functionality
+- TaskMesh indexes titles, notes, comments, and extracted PDF and EPUB text. Global search uses that index for prose and still finds a record by its number, such as T0208. When Ollama is enabled, the same text is embedded locally so later AI features can search by meaning. A project excluded from AI is not embedded and does not appear in that search. Administrators can rebuild the index from Administration → Jobs. PostgreSQL needs the pgvector extension (`postgresql-18-pgvector` on this host, or the pgvector Postgres 16 image in Compose).
+
 ## 0.72.0 — 2026-10-12
 
 ### New Functionality

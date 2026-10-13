@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -1399,6 +1400,79 @@ export const documentTextSpans = pgTable(
     documentLocatorIdx: index("document_text_spans_document_locator_idx").on(
       t.documentId,
       t.locator,
+    ),
+  }),
+);
+
+/** pgvector column. Embeddings are 768-d (`nomic-embed-text`). */
+export const vector768 = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return "vector(768)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: string): number[] {
+    const trimmed = value.trim().replace(/^\[/, "").replace(/\]$/, "");
+    if (!trimmed) return [];
+    return trimmed.split(",").map((part) => Number(part));
+  },
+});
+
+/** Stored `tsvector`. Written as `to_tsvector('simple', content)` on insert. */
+export const tsvector = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "tsvector";
+  },
+});
+
+/**
+ * Full-text and embedding chunks for search (T0208).
+ * No FK to the source record: deletes remove rows in the app, and the nightly sweep drops orphans.
+ * `source_id` is 0 for the record's own title or body, an activity id for a comment, or a text-span id.
+ */
+export const knowledgeChunks = pgTable(
+  "knowledge_chunks",
+  {
+    id: serial("id").primaryKey(),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+    /** `title` | `body` | `comment` | `extraction` */
+    source: text("source").notNull(),
+    sourceId: integer("source_id").notNull().default(0),
+    chunkIndex: integer("chunk_index").notNull(),
+    heading: text("heading"),
+    /** 1-based PDF page or EPUB spine index. Null for Markdown and titles. */
+    locator: integer("locator"),
+    startOffset: integer("start_offset").notNull().default(0),
+    endOffset: integer("end_offset").notNull().default(0),
+    content: text("content").notNull(),
+    contentTsv: tsvector("content_tsv").notNull(),
+    contentHash: text("content_hash").notNull(),
+    embedding: vector768("embedding"),
+    embeddingModel: text("embedding_model"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    entitySourceUniq: unique("knowledge_chunks_entity_source_uidx").on(
+      t.entityType,
+      t.entityId,
+      t.source,
+      t.sourceId,
+      t.chunkIndex,
+    ),
+    entityIdx: index("knowledge_chunks_entity_idx").on(t.entityType, t.entityId),
+    projectIdx: index("knowledge_chunks_project_idx").on(t.projectId),
+    entityTypeCheck: check(
+      "knowledge_chunks_entity_type_chk",
+      sql`${t.entityType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board')`,
+    ),
+    sourceCheck: check(
+      "knowledge_chunks_source_chk",
+      sql`${t.source} in ('title', 'body', 'comment', 'extraction')`,
     ),
   }),
 );

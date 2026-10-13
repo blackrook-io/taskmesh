@@ -1,0 +1,100 @@
+# T0208 — Knowledge index (full-text and embeddings)
+
+**Task:** T0208 (id 223) — AI: knowledge index (full-text and embeddings)
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Parent:** T0194 AI: Knowledge and context foundations (group) — still Draft; this child’s description is the brief
+**Depends on:** T0181 Ollama plugin, T0184 project AI access, T0206 job queue, T0207 text extraction — all `complete`
+**Required by (unchanged, not this work):** T0168 Mesh suggestions, T0199 auto-tagging, T0200 duplicate detection, T0209 context assembly, T0219 answer service
+**Branch (after approval):** `T0208-knowledge-index`
+**Version on finish-up:** MINOR (new `drizzle/*.sql`)
+
+## Size / dependencies
+
+One migration, one chunk table, two pg-boss jobs, a hybrid search API, and a full-text path for the existing global search. Depends-on is satisfied. No split and no new deferred Task. Consumers stay on their own tasks.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | What is indexed | Titles/names, descriptions, and Markdown bodies for ideas, projects, tasks, todos, documents, todo lists, boards, canvases, and image boards. Wiki node titles. User comment bodies (`task_activity.kind = comment`) attached to the parent record. PDF/EPUB text from `document_text_spans` (ready extractions only). Display numbers are included in the title chunk (`T0208`, `P0004`, …) so code search still hits |
+| 2 | What is not indexed | Change-log activity, canvas and image-board scene JSON, soft-deleted tasks and todos (`state = deleted`), description templates, uploads that are not documents |
+| 3 | Full-text | `tsvector` generated with the `simple` dictionary plus a GIN index. Queries prefix the last token (`taskm:*`) so partial words match. English stemming is not used, so names and task codes stay literal |
+| 4 | Embeddings | Ollama only, via the existing plugin `embed()` and the instance’s configured embedding model (default `nomic-embed-text`). Column is `vector(768)`. A vector of any other length is not stored; full-text still is. A later model with a different dimension needs its own migration |
+| 5 | Excluded projects | Effective AI access is the narrower of the project setting and the instance ceiling (T0184). `excluded` rows are never embedded (embedding stays null; a later inclusion re-embeds). `read_only` is embedded. Global search still returns excluded projects. The hybrid API omits them |
+| 6 | Visibility | Ownership and project access are applied at query time with the same helpers global search uses today. The index does not copy ACLs |
+| 7 | Chunks | About 1,200 characters, split on Markdown headings when present, otherwise on paragraph boundaries, with a short overlap. Extracted PDF/EPUB text is chunked per page or chapter and keeps `locator`, label, and character offsets. Each chunk stores `content_hash` and `embedding_model` so unchanged text is not re-embedded |
+| 8 | Incremental | `scheduleKnowledgeIndex(entityType, entityId)` enqueues `knowledge-index-record` with `singletonKey` = that record. Call it from the create/update/delete paths for the indexed types, from comment create/edit/delete, when extraction becomes ready or is replaced, and when a project’s AI access changes (reindex that project’s records) |
+| 9 | Resumable rebuild | `knowledge-reindex` walks entity types in id order, one batch per job, writes the cursor to `system_properties`, and re-enqueues itself until finished. Singleton so two rebuilds cannot run. Startup enqueues one rebuild only when the index is empty. Administrators can start one from Administration → Jobs |
+| 10 | Nightly sweep | Cron job deletes orphan chunks (source row gone), drops chunks for records now excluded from indexing (soft-delete), and enqueues records whose source `updated_at` is newer than their chunks or whose embedding is missing while the project is eligible. This is the consistency net, including deletes that bypass a call site |
+| 11 | Deletion | Record delete and soft-delete remove that record’s chunks in the same request, then the sweep catches stragglers. No AI-suggestion tables exist yet (T0168, T0199, T0200). This task does not add them. Those tasks must delete their own rows when a record or user goes away |
+| 12 | Hybrid API | `POST /api/v1/knowledge/search` with `{ q, projectId?, entityTypes?, limit? }`. Keyword candidates from `ts_rank`, semantic candidates from cosine distance on non-null embeddings, merged with reciprocal rank fusion. Each hit returns entity type and id, chunk text, heading, locator, offsets, and the fused score. Same auth as the rest of `/api/v1`. Results the caller cannot see, and excluded projects, are omitted |
+| 13 | Global search | Text `q` matches records that have a chunk hit, still grouped and capped as today, still filtered by ownership, still excluding soft-deleted tasks and todos. Tag and tagId filters stay as they are. Display-number ILIKE on tasks and todos stays so `T0208` matches even before that record is indexed. Other ILIKE prose scans go away |
+| 14 | pgvector | Migration runs `CREATE EXTENSION IF NOT EXISTS vector`. This DEV host is PostgreSQL 18 and does not have the extension yet: install `postgresql-18-pgvector` before migrate. `INSTALL.md` gains that package. Compose `db` image changes from stock `postgres:16-alpine` to the pgvector Postgres 16 image so `CREATE EXTENSION` works in the container |
+| 15 | Docs | `docs/database/content-and-modules.md`, glossary, and overview when the new table is a main-domain store. Then `npm run docs:sync-schema` |
+
+## Work items
+
+### 1. Schema
+
+`knowledge_chunks`:
+
+- `entity_type`, `entity_id`, optional `project_id` (null for ideas and other non-project records)
+- `source` `title` \| `body` \| `comment` \| `extraction`
+- `source_id` nullable (activity id or text-span id)
+- `chunk_index`, `heading`, `locator`, `start_offset`, `end_offset`
+- `content`, generated `content_tsv`, `content_hash`
+- `embedding vector(768)` nullable, `embedding_model` nullable
+- Unique on `(entity_type, entity_id, source, source_id, chunk_index)`
+- GIN on `content_tsv`, HNSW on `embedding` using cosine ops (partial: embedding not null)
+
+Drizzle custom type for `vector`. No foreign key across entity types; deletion is explicit plus the sweep.
+
+### 2. Indexer
+
+`src/services/knowledge/chunk.ts` — split text, stable hashes.
+`src/services/knowledge/indexRecord.ts` — load one record, replace its chunks in a transaction, embed eligible chunks in batches through the Ollama plugin. If Ollama is disabled or the embed call fails, keep the text chunks and leave embeddings null so a later sweep can fill them.
+`src/services/knowledge/schedule.ts` — enqueue helper safe to call when the queue is up.
+
+### 3. Jobs
+
+- `knowledge-index-record` — one record, retries with backoff, concurrency 2, expires in 120 seconds.
+- `knowledge-reindex` — resumable cursor, concurrency 1, singleton.
+- `knowledge-index-sweep` — nightly cron, also one delayed run after worker start.
+
+Register before the queue starts, same as document extraction.
+
+### 4. API and global search
+
+- Hybrid route as in decision 12. Rate-limit it with the existing search limiter.
+- Global search text path reads chunk matches, then loads the same entity rows it returns today.
+
+### 5. Admin
+
+Administration → Jobs: button **Rebuild knowledge index** (confirm). Shows the cursor property only as a short status line (idle, or “in progress”).
+
+### 6. Tests
+
+No live Postgres and no live Ollama.
+
+- Chunker keeps heading and page locator, and overlaps long text.
+- Hash skips re-embed when content is unchanged.
+- Excluded effective access does not call embed.
+- Reciprocal rank fusion order matches a fixed fixture.
+- Display-number query text includes the formatted number.
+
+## Out of scope
+
+- Assistant, Ask a project, auto-tagging, duplicate detection, and Mesh suggestions calling this API (later tasks).
+- OCR, or indexing canvas/scene JSON.
+- A second embedding provider (Gemini, Azure) or a dimension other than 768.
+- Suggestion-row deletion (no such tables yet).
+
+## Acceptance
+
+- Saving a task, idea, document, or comment enqueues indexing. After the job, hybrid search finds that text for a user who can see the record and does not return it for a user who cannot.
+- A project set to excluded (or under an excluded ceiling) has full-text chunks and null embeddings, appears in global search, and does not appear in hybrid search.
+- A ready PDF/EPUB extraction is chunked with page or chapter locators. Replacing the file replaces those chunks.
+- Deleting a record removes its chunks. The nightly sweep removes a chunk whose source row is already gone.
+- A full rebuild resumes from the stored cursor after a restart and does not run twice at once.
+- Global search still returns the same groups. A prose query uses the index. `T0208`-style numbers still resolve.
+- `docs/database/` describes `knowledge_chunks`. Migrate succeeds only after pgvector is installed.

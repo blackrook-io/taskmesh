@@ -15,6 +15,7 @@ import {
   taskStateSchema,
 } from "../../lib/taskFields.js";
 import { allocateTodoNumber } from "../../services/entityNumbers.js";
+import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import {
   assertCanAccessDualScoped,
@@ -250,6 +251,7 @@ todosRouter.post("/", async (req, res) => {
     if (parentId != null) {
       await recomputeAncestorChain(db, parentId, actorId, activitySourceFromRequest(req));
     }
+    await scheduleKnowledgeIndex("todo", row.id);
     res.status(201).json({ data: await presentTodo(await attachAssignee(db, row), false) });
   } catch (err) {
     handleRouteError(res, err);
@@ -422,6 +424,8 @@ todosRouter.patch("/:id", async (req, res) => {
         actorUserId: actorId,
       });
     }
+    if (row?.state === "deleted") await forgetKnowledge("todo", row.id);
+    else if (row) await scheduleKnowledgeIndex("todo", row.id);
     res.json({ data: row ? await presentTodo(await attachAssignee(db, row), true) : row });
   } catch (err) {
     handleRouteError(res, err);
@@ -460,6 +464,7 @@ todosRouter.delete("/:id", async (req, res) => {
       activitySourceFromRequest(req),
     );
     await recomputeAncestorChain(db, existing.parentId, actorId, activitySourceFromRequest(req));
+    await forgetKnowledge("todo", id);
     res.json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -524,6 +529,7 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
       markdown: todo.description,
       actorUserId: actorId,
     });
+    await scheduleKnowledgeIndex("todo", todo.id);
     res.status(201).json({ data: await attachAssignee(db, todo) });
   } catch (err) {
     handleRouteError(res, err);
@@ -595,6 +601,7 @@ todosRouter.post("/:id/convert-to-task", async (req, res) => {
       markdown: task.description,
       actorUserId: actorId,
     });
+    await scheduleKnowledgeIndex("task", task.id);
     res.status(201).json({ data: await attachTaskActor(db, task) });
   } catch (err) {
     handleRouteError(res, err);

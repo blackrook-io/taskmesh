@@ -19,6 +19,7 @@ erDiagram
   uploads ||--o| project_documents : "binary file"
   project_documents ||--o| document_extractions : extraction
   project_documents ||--o{ document_text_spans : "page or chapter"
+  projects ||--o{ knowledge_chunks : "optional project"
   tags ||--o{ taggings : has
   todo_lists ||--o{ todo_list_items : has
   boards ||--o{ board_columns : has
@@ -196,6 +197,47 @@ One row per PDF page or EPUB spine item that contained text, in reading order. `
 - **UNIQUE:** (`document_id`, `ordinal`)
 - **INDEX:** (`document_id`, `locator`)
 - **FK:** `document_id` → `project_documents.id` · **ON DELETE CASCADE**
+
+---
+
+## `knowledge_chunks`
+
+Full-text and optional embedding pieces for ideas, projects, tasks, todos, documents, todo lists, boards, canvases, wiki nodes, and image boards. A chunk is a slice of a title, a Markdown body, a comment, or one extracted PDF page / EPUB chapter. Search checks who can see the source record at query time. Projects whose effective AI access is excluded keep full-text rows and store no embedding.
+
+There is no foreign key to the source record (the link is `entity_type` + `entity_id`). Deleting a record removes its chunks in the app, and a nightly job drops rows whose source is gone. `project_id` does cascade when that project is deleted. `source_id` is `0` for the record’s own title or body, an activity id for a comment, or a `document_text_spans.id` for extracted text.
+
+Embeddings are 768-dimensional vectors from the configured Ollama embedding model. The `vector` extension has to be installed (`postgresql-<major>-pgvector` on Ubuntu; the Compose database image includes it).
+
+### Columns
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `entity_type` | text | no | — | Same entity types as other polymorphic links |
+| `entity_id` | integer | no | — | Source record id |
+| `project_id` | integer | yes | — | FK → `projects.id` when the record belongs to a project |
+| `source` | text | no | — | `title` \| `body` \| `comment` \| `extraction` |
+| `source_id` | integer | no | `0` | `0` for title/body; activity or span id otherwise |
+| `chunk_index` | integer | no | — | Order within that source |
+| `heading` | text | yes | — | Markdown heading or extraction label |
+| `locator` | integer | yes | — | 1-based page or chapter; null for Markdown |
+| `start_offset` | integer | no | `0` | Character offset in the source text |
+| `end_offset` | integer | no | `0` | Character offset in the source text |
+| `content` | text | no | — | Chunk text |
+| `content_tsv` | tsvector | no | — | `simple` dictionary, for keyword search |
+| `content_hash` | text | no | — | Hash of `content`; unchanged text is not re-embedded |
+| `embedding` | vector(768) | yes | — | Null when the project is excluded from AI, or when embedding has not run |
+| `embedding_model` | text | yes | — | Ollama model name that produced `embedding` |
+| `updated_at` | timestamptz | no | `now()` | |
+
+### Constraints
+
+- **PK:** `id`
+- **UNIQUE:** (`entity_type`, `entity_id`, `source`, `source_id`, `chunk_index`)
+- **INDEX:** (`entity_type`, `entity_id`), `project_id`, GIN on `content_tsv`, HNSW cosine on `embedding` where it is not null
+- **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
+- **CHECK:** `entity_type` is a canonical entity type
+- **CHECK:** `source` in `title`, `body`, `comment`, `extraction`
 
 ---
 
