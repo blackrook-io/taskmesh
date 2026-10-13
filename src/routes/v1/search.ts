@@ -13,6 +13,7 @@ import {
   projectOwnedListFilter,
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
+import { knowledgeEntityIds } from "../../services/knowledge/search.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 export const searchRouter = Router();
@@ -138,6 +139,47 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
     }
 
     const q = qRaw || null;
+    const textIds = q
+      ? await Promise.all([
+          knowledgeEntityIds("idea", q),
+          knowledgeEntityIds("project", q),
+          knowledgeEntityIds("task", q),
+          knowledgeEntityIds("todo", q),
+          knowledgeEntityIds("document", q),
+          knowledgeEntityIds("board", q),
+          knowledgeEntityIds("canvas", q),
+          knowledgeEntityIds("todo_list", q),
+          knowledgeEntityIds("wiki_node", q),
+        ]).then(([idea, project, task, todo, document, board, canvas, todoList, wiki]) => ({
+          idea,
+          project,
+          task,
+          todo,
+          document,
+          board,
+          canvas,
+          todoList,
+          wiki,
+        }))
+      : null;
+
+    function proseFilter(
+      column:
+        | typeof schema.ideas.id
+        | typeof schema.projects.id
+        | typeof schema.tasks.id
+        | typeof schema.todos.id
+        | typeof schema.projectDocuments.id
+        | typeof schema.boards.id
+        | typeof schema.canvases.id
+        | typeof schema.todoLists.id
+        | typeof schema.wikiNodes.id,
+      ids: number[] | undefined,
+    ) {
+      if (!textIds || !ids) return sql`true`;
+      if (ids.length === 0) return sql`false`;
+      return inArray(column, ids);
+    }
 
     async function idsForType(entityType: string): Promise<number[] | null> {
       if (filterTagId == null) return null;
@@ -184,12 +226,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
             .where(
               and(
                 ideaIds != null ? inArray(schema.ideas.id, ideaIds) : sql`true`,
-                q
-                  ? or(
-                      ilikeEscaped(schema.ideas.title, q),
-                      ilikeEscaped(schema.ideas.body, q),
-                    )
-                  : sql`true`,
+                proseFilter(schema.ideas.id, textIds?.idea),
                 ideaScope
               ),
             )
@@ -207,12 +244,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                 projectIds != null
                   ? inArray(schema.projects.id, projectIds)
                   : sql`true`,
-                q
-                  ? or(
-                      ilikeEscaped(schema.projects.name, q),
-                      ilikeEscaped(schema.projects.description, q),
-                    )
-                  : sql`true`,
+                proseFilter(schema.projects.id, textIds?.project),
                 projectScope
               ),
             )
@@ -231,8 +263,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                 taskIds != null ? inArray(schema.tasks.id, taskIds) : sql`true`,
                 q
                   ? or(
-                      ilikeEscaped(schema.tasks.title, q),
-                      ilikeEscaped(schema.tasks.description, q),
+                      proseFilter(schema.tasks.id, textIds?.task),
                       ilikeEscaped(sql`CAST(${schema.tasks.number} AS TEXT)`, q),
                       ilikeEscaped(
                         sql`('T' || LPAD(CAST(${schema.tasks.number} AS TEXT), 4, '0'))`,
@@ -258,8 +289,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                 todoIds != null ? inArray(schema.todos.id, todoIds) : sql`true`,
                 q
                   ? or(
-                      ilikeEscaped(schema.todos.title, q),
-                      ilikeEscaped(schema.todos.description, q),
+                      proseFilter(schema.todos.id, textIds?.todo),
                       ilikeEscaped(sql`CAST(${schema.todos.number} AS TEXT)`, q),
                       ilikeEscaped(
                         sql`('D' || LPAD(CAST(${schema.todos.number} AS TEXT), 4, '0'))`,
@@ -284,12 +314,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                 documentIds != null
                   ? inArray(schema.projectDocuments.id, documentIds)
                   : sql`true`,
-                q
-                  ? or(
-                      ilikeEscaped(schema.projectDocuments.title, q),
-                      ilikeEscaped(schema.projectDocuments.body, q),
-                    )
-                  : sql`true`,
+                proseFilter(schema.projectDocuments.id, textIds?.document),
                 documentScope
               ),
             )
@@ -305,7 +330,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
             .where(
               and(
                 boardIds != null ? inArray(schema.boards.id, boardIds) : sql`true`,
-                q ? ilikeEscaped(schema.boards.name, q) : sql`true`,
+                proseFilter(schema.boards.id, textIds?.board),
                 boardScope
               ),
             )
@@ -328,7 +353,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
             .where(
               and(
                 canvasIds != null ? inArray(schema.canvases.id, canvasIds) : sql`true`,
-                q ? ilikeEscaped(schema.canvases.title, q) : sql`true`,
+                proseFilter(schema.canvases.id, textIds?.canvas),
                 canvasScope
               ),
             )
@@ -346,7 +371,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                 todoListIds != null
                   ? inArray(schema.todoLists.id, todoListIds)
                   : sql`true`,
-                q ? ilikeEscaped(schema.todoLists.title, q) : sql`true`,
+                proseFilter(schema.todoLists.id, textIds?.todoList),
                 todoListScope
               ),
             )
@@ -397,7 +422,7 @@ searchRouter.get("/", searchRateLimit, async (req, res) => {
                 wikiNodeIdFilter != null
                   ? inArray(schema.wikiNodes.id, wikiNodeIdFilter)
                   : sql`true`,
-                q ? ilikeEscaped(schema.wikiNodes.title, q) : sql`true`,
+                proseFilter(schema.wikiNodes.id, textIds?.wiki),
                 wikiScope,
               ),
             )

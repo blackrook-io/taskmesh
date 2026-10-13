@@ -19,6 +19,7 @@ import { getAiProjectAccessCeiling } from "../../services/assistant/projectAiAcc
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId, attachAssignees, attachAssignee } from "../../services/users.js";
 import { resolveIdeaAssigneeId } from "../../services/assignees.js";
+import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 
 const ideaBody = z.object({
   title: plainTitle(500),
@@ -84,6 +85,7 @@ export async function createIdeaForActor(args: {
     markdown: row.body,
     actorUserId: args.actorId,
   });
+  await scheduleKnowledgeIndex("idea", row.id);
   return { ok: true, status: 201, data: await attachAssignee(db, row) };
 }
 
@@ -180,6 +182,7 @@ export async function updateIdeaForActor(args: {
       actorUserId: args.actorId,
     });
   }
+  if (row) await scheduleKnowledgeIndex("idea", row.id);
   return { ok: true, status: 200, data: row ? await attachAssignee(db, row) : row };
 }
 
@@ -204,6 +207,7 @@ ideasRouter.delete("/:id", async (req, res) => {
     }
     await assertCanAccessOwned(db, actorId, existing.ownerId);
     await db.delete(schema.ideas).where(eq(schema.ideas.id, id));
+    await forgetKnowledge("idea", id);
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);
@@ -243,6 +247,7 @@ ideasRouter.post("/:id/convert-to-project", async (req, res) => {
       return;
     }
 
+    await scheduleKnowledgeIndex("project", project.id);
     res.status(201).json({ data: project });
   } catch (err) {
     handleRouteError(res, err);

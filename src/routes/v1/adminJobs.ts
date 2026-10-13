@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { isUsageRange } from "../../lib/usageRange.js";
+import { readKnowledgeCursor, type KnowledgeCursor } from "../../services/knowledge/cursor.js";
+import { startKnowledgeRebuild } from "../../services/knowledge/jobs.js";
 import {
   deleteFailedJob,
   getJobAdminSummary,
@@ -18,7 +20,19 @@ export function registerAdminJobRoutes(adminRouter: Router): void {
         sendError(res, 400, "invalid_range", "range must be 1h, 1d, 1w, or 1m");
         return;
       }
-      res.json({ data: await getJobAdminSummary(raw) });
+      const summary = await getJobAdminSummary(raw);
+      res.json({ data: { ...summary, knowledgeIndex: knowledgeStatus(await readKnowledgeCursor()) } });
+    } catch (err) {
+      if (serviceError(res, err)) return;
+      handleRouteError(res, err);
+    }
+  });
+
+  adminRouter.post("/jobs/knowledge/rebuild", async (_req, res) => {
+    try {
+      const result = await startKnowledgeRebuild();
+      const cursor = await readKnowledgeCursor();
+      res.json({ data: { result, knowledgeIndex: knowledgeStatus(cursor) } });
     } catch (err) {
       if (serviceError(res, err)) return;
       handleRouteError(res, err);
@@ -46,6 +60,10 @@ export function registerAdminJobRoutes(adminRouter: Router): void {
       handleRouteError(res, err);
     }
   });
+}
+
+function knowledgeStatus(cursor: KnowledgeCursor): { status: "idle" | "running" } {
+  return { status: cursor.status };
 }
 
 function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boolean {

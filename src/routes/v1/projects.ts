@@ -16,6 +16,7 @@ import {
 } from "../../services/ownership.js";
 import { nextProjectSortOrder } from "../../services/projectSortOrder.js";
 import { ensureProjectModules } from "../../services/projectModules.js";
+import { forgetKnowledge, scheduleKnowledgeIndex, scheduleProjectKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { attachMemberTaskIds } from "../../services/taskGroupMembers.js";
 import {
@@ -139,6 +140,7 @@ projectsRouter.post("/", async (req, res) => {
       return;
     }
     await ensureProjectModules(db, row.id);
+    await scheduleKnowledgeIndex("project", row.id);
     res.status(201).json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -301,6 +303,8 @@ projectsRouter.patch("/:id", async (req, res) => {
         activitySourceFromRequest(req),
       );
     }
+    if (parsed.aiAccess !== undefined) await scheduleProjectKnowledgeIndex(id);
+    else if (row) await scheduleKnowledgeIndex("project", id);
     if (parsed.aiLocalOnly !== undefined) {
       await recordProjectAiLocalOnlyChange(
         db,
@@ -393,6 +397,7 @@ projectsRouter.delete("/:id", async (req, res) => {
       sendError(res, 404, "not_found", "Project not found");
       return;
     }
+    await forgetKnowledge("project", id);
     res.status(204).end();
   } catch (err) {
     handleRouteError(res, err);

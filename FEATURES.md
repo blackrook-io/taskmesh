@@ -86,7 +86,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Search & navigation
 
 - Administrators jump anywhere with ⌘K / Ctrl+K: recent items, live search hits, and quick actions
-- Full-text search across ideas, projects, tasks, documents, boards, canvases, wiki, and lists
+- Search titles, notes, comments, and extracted PDF or EPUB text, and still find a record by its number such as T0208
 - Browse by tag; collapse or hide the left rail for more canvas space
 
 
@@ -109,6 +109,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Enable Google Gemini for assistant chat and embeddings. An environment key remains the fallback when no instance key is stored
 - Enable Azure OpenAI for assistant chat and embeddings. Set the resource endpoint, deployment names, and API version. An environment key remains the fallback when no instance key is stored
 - Enable Ollama for local assistant chat and embeddings. Set a private or loopback address, a chat model, and an embedding model. No API key is required
+- Index record text for keyword and meaning with the local Ollama model. Projects excluded from AI are not embedded, and Administrators can rebuild the index from Jobs
 - Set a project to full, read-only, or excluded from AI. Owners and managers can only narrow the Administrator default, and an excluded project is never sent to a model
 - Mark a project so AI uses local models only. Owners and managers can only turn that on, an Administrator can require it for every project, and a local error does not fall through to a cloud model
 - Confirm ordinary assistant edits one at a time. Riskier or bulk changes open a review list where you check each item before anything is saved, and an edit expires if the record changed

@@ -11,6 +11,7 @@ import { attachApiVersionMeta } from "./middleware/apiVersionMeta.js";
 import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
 import { registerDocumentExtractJob, sweepDocumentExtractions } from "./services/documents/extractJob.js";
+import { registerKnowledgeJobs, resumeKnowledgeRebuild } from "./services/knowledge/jobs.js";
 import { startJobQueue, stopJobQueue } from "./services/jobs/queue.js";
 import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
 import { assertConfiguredEnvKeys } from "./lib/envKeys.js";
@@ -23,6 +24,7 @@ warnIfRateLimitDisableIgnored();
 ensureUploadDir();
 ensureBackupDir();
 registerDocumentExtractJob();
+registerKnowledgeJobs();
 
 const app = express();
 app.set("trust proxy", parseTrustProxy());
@@ -124,6 +126,11 @@ const server = app.listen(port, host, () => {
         await sweepDocumentExtractions();
       } catch (err) {
         console.error("[jobs] document extraction sweep failed", err);
+      }
+      try {
+        await resumeKnowledgeRebuild();
+      } catch (err) {
+        console.error("[jobs] knowledge index resume failed", err);
       }
     })
     .catch((err) => {

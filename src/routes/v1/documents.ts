@@ -18,6 +18,7 @@ import {
   deleteUploadById,
 } from "../../services/documents.js";
 import { queueDocumentExtraction } from "../../services/documents/extractJob.js";
+import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { recordDocumentBodyChange } from "../../services/entityActivity.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { assertCanAccessOwned, assertCanAccessProject } from "../../services/ownership.js";
@@ -159,6 +160,7 @@ export async function createDocumentForActor(args: {
   if ((row.kind === "pdf" || row.kind === "epub") && row.uploadId != null) {
     await queueDocumentExtraction(row.id, row.uploadId);
   }
+  await scheduleKnowledgeIndex("document", row.id);
   return { ok: true, status: 201, data: await attachDocumentActor(db, row) };
 }
 
@@ -348,6 +350,7 @@ export async function updateDocumentForActor(args: {
   if (oldUploadToDelete != null) {
     await deleteUploadById(db, oldUploadToDelete);
   }
+  if (row) await scheduleKnowledgeIndex("document", row.id);
 
   return { ok: true, status: 200, data: await attachDocumentActor(db, row!) };
 }
@@ -386,6 +389,7 @@ documentsRouter.delete("/:docId", async (req, res) => {
     }
     const uploadId = existing.uploadId;
     await db.delete(schema.projectDocuments).where(eq(schema.projectDocuments.id, docId));
+    await forgetKnowledge("document", docId);
     if (uploadId != null) {
       await deleteUploadById(db, uploadId);
     }
