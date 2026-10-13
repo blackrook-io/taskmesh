@@ -1,7 +1,9 @@
 /* eslint-disable react-refresh/only-export-components -- header component + cell renderer helpers */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { RowTagChips } from "./RowTagChips";
+import { stateWaitingDescribedBy } from "./stateWaitingDescribedBy";
+import { StateWaitingHint } from "./StateWaitingHint";
 import { TaskListSortHeaderBtn } from "./TaskListSortHeaderBtn";
 import {
   TASK_PRIORITIES,
@@ -86,6 +88,19 @@ export type TaskColumnCellContext = {
   childIndentPx?: number;
 };
 
+function TaskStateReadout({ state }: { state: TaskState }) {
+  const describedBy = useContext(stateWaitingDescribedBy);
+  return (
+    <span
+      className={taskStateClass("task-list-row__state", state)}
+      data-ctx-field="state"
+      aria-describedby={describedBy}
+    >
+      {TASK_STATE_LABELS[state]}
+    </span>
+  );
+}
+
 function taskDue(task: Task): string | null {
   return task.dueDate ?? (task.dueAt ? task.dueAt.slice(0, 10) : null);
 }
@@ -118,6 +133,7 @@ function ListRowSelect({
   const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
+  const describedBy = useContext(stateWaitingDescribedBy);
   const current = options.find((option) => option.value === value) ?? options[0];
 
   useEffect(() => {
@@ -174,6 +190,7 @@ function ListRowSelect({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-describedby={describedBy}
         data-ctx-field={field}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
@@ -299,9 +316,8 @@ export function renderTaskColumnCell(
         (state) => state !== task.state,
       );
       const stateOptions = [task.state, ...nextStates];
-      return onRequestState ? (
+      const control = onRequestState ? (
         <ListRowSelect
-          key="state"
           value={task.state}
           disabled={nextStates.length === 0}
           className={taskStateClass("task-list-row__state", task.state)}
@@ -315,13 +331,12 @@ export function renderTaskColumnCell(
           onChange={(next) => onRequestState(next as TaskState)}
         />
       ) : (
-        <span
-          key="state"
-          className={taskStateClass("task-list-row__state", task.state)}
-          data-ctx-field="state"
-        >
-          {TASK_STATE_LABELS[task.state]}
-        </span>
+        <TaskStateReadout state={task.state} />
+      );
+      return (
+        <StateWaitingHint key="state" taskId={task.id} state={task.state}>
+          {control}
+        </StateWaitingHint>
       );
     }
     case "assignee":

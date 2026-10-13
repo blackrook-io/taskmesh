@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.73.3 — 2026-10-13
+
+### Enhancements
+- Hovering Pending or Blocked on a task list State shows the tasks that row is waiting on, with number, title, and state. Blocked lists open Depends-on tasks. Pending lists unfinished child tasks. About ten lines stay visible and the rest scroll. The list does not open those tasks.
+
 ## 0.73.2 — 2026-10-13
 
 ### Enhancements

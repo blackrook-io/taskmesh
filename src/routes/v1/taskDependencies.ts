@@ -16,6 +16,7 @@ import {
   searchTasksForDependency,
 } from "../../services/taskDependencies.js";
 import { promoteBlockedTaskIfClear } from "../../services/taskBlocked.js";
+import { listWaitingOn } from "../../services/taskWaitingOn.js";
 import { assertCanAccessDualScoped } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -47,6 +48,31 @@ taskDependenciesRouter.get("/dependency-search", async (req, res) => {
       { userId: actorId, isAdministrator: await userHasAdministrator(db, actorId) },
       { excludeIds },
     );
+    res.json({ data });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+taskDependenciesRouter.get("/:taskId/waiting-on", async (req, res) => {
+  try {
+    const taskId = idParam.parse(req.params.taskId);
+    const [task] = await db
+      .select({
+        id: schema.tasks.id,
+        projectId: schema.tasks.projectId,
+        ownerId: schema.tasks.ownerId,
+        state: schema.tasks.state,
+      })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.id, taskId));
+    if (!task) {
+      sendError(res, 404, "not_found", "Task not found");
+      return;
+    }
+    const actorId = await getCurrentUserId(db);
+    await assertCanAccessDualScoped(db, actorId, task);
+    const data = await listWaitingOn(db, taskId, task.state);
     res.json({ data });
   } catch (err) {
     handleRouteError(res, err);
