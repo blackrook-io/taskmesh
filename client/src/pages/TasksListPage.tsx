@@ -527,6 +527,7 @@ export function TasksListPage() {
                   collapsed: collapsedParents.has(task.id),
                   onToggleCollapse: () => toggleParentCollapse(task.id),
                   onPatch: (patch) => void patchTask.mutateAsync({ id: task.id, patch }),
+                  onRequestState: (next) => requestTaskState(task, next),
                   projectName: projectLabel,
                   phaseName: phaseNameFn,
                   showTagsInTitle,

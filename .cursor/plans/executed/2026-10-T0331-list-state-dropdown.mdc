@@ -1,0 +1,70 @@
+---
+description: "T0331 — Editable State dropdown on task list rows, limited to allowed next states"
+todos:
+  - id: cell
+    content: Render a State select in the shared list cell, current state plus allowed next states
+  - id: wire
+    content: Route changes through the existing requestTaskState path on Tasks and project list views
+  - id: style
+    content: Theme open select menus to the dark surface; keep priority and state accent text; widen State if the label clips
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0331 — List View State dropdown
+
+**Task:** T0331 · id `347` · Ready · project 4 (TaskMesh)
+**Parent:** none
+**Depends on:** none
+**Branch (after approval):** `T0331-list-state-dropdown`
+
+## Goal
+
+On task list rows, State is a dropdown like Priority. The options are the current state plus the next states the workflow already allows for that row. Choosing a state uses the same comment and dependency checks the editor and the row context menu already use.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| A | **Which lists** | Both surfaces that share `renderTaskColumnCell`: the global Tasks list and the project task list. |
+| B | **Options** | Current state, then `allowedTaskStates(task.allowedNextStates)` with the current state removed. That is the same set as the task editor. Pending, Blocked, and Deleted are never offered as destinations unless the row is already in that state. |
+| C | **No moves** | When `allowedNextStates` is empty (Pending, Deleted, or Complete/Canceled without reopen permission), the select stays visible, shows the current label, and is disabled. |
+| D | **Side effects** | The select calls the page’s existing `requestTaskState`. Cancel and reopen still open the comment dialog. Complete still checks open Depends-on blockers. A same-state choice does nothing. |
+| E | **Checkbox** | The row state checkbox stays. It still cycles to the first allowed next state. |
+| F | **Context menu** | The existing “Set state” submenu stays. |
+| G | **Menu background** | Open list dropdowns use the theme surface, not the browser’s white menu. Priority and State option text keep their accent colors. The highlighted row uses an accent mix on that surface when the browser honors option highlight styles. |
+
+## Current vs desired
+
+`renderTaskColumnCell` prints State as a colored label. Priority and due date are controls and call `onPatch`. State changes already go through `requestTaskState` on `TasksListPage` and `TaskBoard` (checkbox cycle, context menu, and the task editor).
+
+Desired: the State cell is a `<select>` with the same stop-propagation behavior as Priority, colored with the existing `task-list-row__state--*` classes. Parents pass `onRequestState` into the cell so the dropdown does not skip the comment and blocker checks by calling `onPatch` directly.
+
+The open Priority menu is a white native popup. The closed control is transparent (`.task-list-row__priority { background: transparent }`), so Chromium paints the option list in the light system menu even though form selects set `color-scheme: dark`. The open menu for Priority and the new State select should use `--surface` (and the active theme’s accent for the highlighted row). Option text stays on the priority and state accent colors.
+
+## Scope
+
+**In**
+
+- `client/src/components/shared/TaskListColumnCells.tsx` — State select when `onRequestState` is provided
+- `client/src/pages/TasksListPage.tsx` and `client/src/components/TaskBoard.tsx` — pass `requestTaskState`
+- `client/src/index.css` and `client/src/lib/listViewColumns.ts` — themed option list for the list-row selects; widen the State track only if “In Progress” clips at `7rem`
+
+**Out**
+
+- Workflow rules in `src/services/taskWorkflow.ts` (unchanged; the API still rejects illegal transitions)
+- To Do list state dropdown (already its own control)
+- Task editor State field (already a dropdown)
+- Removing the checkbox or the context-menu submenu
+
+## QA
+
+- Ready task: dropdown offers In Progress and Canceled, not Draft or Complete
+- In Progress: On Hold and Complete; Complete with an open Depends-on stays blocked
+- Cancel prompts for a comment; without a comment the state does not change
+- Complete or Canceled with reopen permission: Ready prompts for a comment
+- Pending, or Complete without reopen permission: dropdown disabled
+- Global Tasks list and a project task list both behave the same
+- Checkbox cycle and “Set state” still work
+- Changing Priority or due date on the same row still works
+- Open Priority and State menus use the theme surface, with accent-colored option text, on the default theme and one other theme (for example blue)

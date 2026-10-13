@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.73.1 — 2026-10-13
+
+### Enhancements
+- Task list State is a dropdown limited to the next states the workflow already allows. Cancel and reopen still ask for a comment, and Complete still stops when an open Depends-on remains.
+- Priority and State menus on task lists use the theme surface, and each option keeps its own color.
+
 ## 0.73.0 — 2026-10-13
 
 ### New Functionality

@@ -29,7 +29,7 @@ export type ListViewSurface = "project" | "global" | "ideas" | "todos";
 const TASK_TRACK: Record<string, string> = {
   number: "8.25rem",
   title: "minmax(8rem, 1.4fr)",
-  state: "7rem",
+  state: "9rem",
   assignee: "6.5rem",
   priority: "6.5rem",
   dueDate: "8rem",
