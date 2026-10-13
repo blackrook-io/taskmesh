@@ -1,16 +1,19 @@
 /* eslint-disable react-refresh/only-export-components -- header component + cell renderer helpers */
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { RowTagChips } from "./RowTagChips";
 import { TaskListSortHeaderBtn } from "./TaskListSortHeaderBtn";
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
   TASK_STATE_LABELS,
+  allowedTaskStates,
   formatTaskNumber,
   isClosedTaskState,
   taskPriorityClass,
   taskStateClass,
   type TaskPriority,
+  type TaskState,
 } from "../../lib/taskFields";
 import { formatListDate, type ResolvedListColumn } from "../../lib/listViewColumns";
 import type { Task } from "../../types";
@@ -76,6 +79,7 @@ export type TaskColumnCellContext = {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onPatch?: (patch: { priority?: TaskPriority; dueDate?: string | null }) => void;
+  onRequestState?: (next: TaskState) => void;
   projectName?: (id: number | null) => string;
   phaseName?: (id: number | null) => string;
   showTagsInTitle?: boolean;
@@ -84,6 +88,140 @@ export type TaskColumnCellContext = {
 
 function taskDue(task: Task): string | null {
   return task.dueDate ?? (task.dueAt ? task.dueAt.slice(0, 10) : null);
+}
+
+type ListRowOption = {
+  value: string;
+  label: string;
+  className: string;
+};
+
+/** Themed list menu. Native `<select>` popups stay on the light system background. */
+function ListRowSelect({
+  value,
+  options,
+  disabled,
+  className,
+  ariaLabel,
+  field,
+  onChange,
+}: {
+  value: string;
+  options: ListRowOption[];
+  disabled?: boolean;
+  className: string;
+  ariaLabel: string;
+  field: "state" | "priority";
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const current = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (btnRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (disabled) return;
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const estimated = options.length * 34 + 10;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top =
+      spaceBelow < estimated && rect.top > estimated ? rect.top - estimated - 4 : rect.bottom + 4;
+    setPos({
+      top,
+      left: Math.max(8, rect.left),
+      minWidth: Math.max(rect.width, 136),
+    });
+    setOpen(true);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={btnRef}
+        className={`task-list-row__menu ${className}`}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        data-ctx-field={field}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggle();
+        }}
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <span className="task-list-row__menu-label">{current?.label ?? ""}</span>
+        <span className="task-list-row__menu-chevron" aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open && pos
+        ? createPortal(
+            <ul
+              ref={menuRef}
+              className="task-list-row__menu-list"
+              role="listbox"
+              aria-label={ariaLabel}
+              style={{ top: pos.top, left: pos.left, minWidth: pos.minWidth }}
+            >
+              {options.map((option) => (
+                <li key={option.value} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={option.value === value}
+                    className={`task-list-row__menu-option ${option.className}${
+                      option.value === value ? " is-selected" : ""
+                    }`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setOpen(false);
+                      if (option.value !== value) onChange(option.value);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                </li>
+              ))}
+            </ul>,
+            document.body,
+          )
+        : null}
+    </>
+  );
 }
 
 export function renderTaskColumnCell(
@@ -99,6 +237,7 @@ export function renderTaskColumnCell(
     collapsed,
     onToggleCollapse,
     onPatch,
+    onRequestState,
     projectName,
     phaseName,
     showTagsInTitle = false,
@@ -155,8 +294,27 @@ export function renderTaskColumnCell(
           {showTagsInTitle ? <RowTagChips entityType="task" entityId={task.id} /> : null}
         </span>
       );
-    case "state":
-      return (
+    case "state": {
+      const nextStates = allowedTaskStates(task.allowedNextStates).filter(
+        (state) => state !== task.state,
+      );
+      const stateOptions = [task.state, ...nextStates];
+      return onRequestState ? (
+        <ListRowSelect
+          key="state"
+          value={task.state}
+          disabled={nextStates.length === 0}
+          className={taskStateClass("task-list-row__state", task.state)}
+          ariaLabel="State"
+          field="state"
+          options={stateOptions.map((state) => ({
+            value: state,
+            label: TASK_STATE_LABELS[state],
+            className: taskStateClass("task-list-row__state", state),
+          }))}
+          onChange={(next) => onRequestState(next as TaskState)}
+        />
+      ) : (
         <span
           key="state"
           className={taskStateClass("task-list-row__state", task.state)}
@@ -165,6 +323,7 @@ export function renderTaskColumnCell(
           {TASK_STATE_LABELS[task.state]}
         </span>
       );
+    }
     case "assignee":
       return (
         <span
@@ -177,23 +336,20 @@ export function renderTaskColumnCell(
       );
     case "priority":
       return onPatch ? (
-        <select
+        <ListRowSelect
           key="priority"
-          className={taskPriorityClass("task-list-row__priority", task.priority)}
           value={task.priority}
           disabled={isClosedTaskState(task.state)}
-          data-ctx-field="priority"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => onPatch({ priority: e.target.value as TaskPriority })}
-          aria-label="Priority"
-        >
-          {TASK_PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {TASK_PRIORITY_LABELS[p]}
-            </option>
-          ))}
-        </select>
+          className={taskPriorityClass("task-list-row__priority", task.priority)}
+          ariaLabel="Priority"
+          field="priority"
+          options={TASK_PRIORITIES.map((priority) => ({
+            value: priority,
+            label: TASK_PRIORITY_LABELS[priority],
+            className: taskPriorityClass("task-list-row__priority", priority),
+          }))}
+          onChange={(next) => onPatch({ priority: next as TaskPriority })}
+        />
       ) : (
         <span key="priority" className={taskPriorityClass("task-list-row__priority", task.priority)}>
           {TASK_PRIORITY_LABELS[task.priority]}

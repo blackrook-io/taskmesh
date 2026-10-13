@@ -1050,6 +1050,7 @@ function SortableTaskRow({
   onOpen,
   onCycleState,
   onPatch,
+  onRequestState,
   onContextMenu,
   visibleColumns,
   phaseName,
@@ -1066,6 +1067,7 @@ function SortableTaskRow({
   onOpen: () => void;
   onCycleState: () => void;
   onPatch: (patch: TaskPatch) => void;
+  onRequestState: (next: TaskState) => void;
   onContextMenu: (e: React.MouseEvent, task: Task) => void;
   visibleColumns: ResolvedListColumn[];
   phaseName: (id: number | null) => string;
@@ -1115,6 +1117,7 @@ function SortableTaskRow({
           collapsed,
           onToggleCollapse,
           onPatch,
+          onRequestState,
           phaseName,
           showTagsInTitle,
           childIndentPx: CHILD_TITLE_INDENT_PX,
@@ -1769,6 +1772,7 @@ export function TaskBoard({
       onOpen={() => setModalTaskId(row.task.id)}
       onCycleState={() => cycleTaskState(row.task)}
       onPatch={(patch) => void onPatchTask(row.task.id, patch)}
+      onRequestState={(next) => requestTaskState(row.task, next)}
       visibleColumns={visibleColumns}
       phaseName={phaseName}
       gridTemplate={gridTemplate}
