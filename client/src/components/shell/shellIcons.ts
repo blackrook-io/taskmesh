@@ -1,4 +1,5 @@
 import {
+  faBell,
   faBook,
   faCalendarDays,
   faChartLine,
@@ -39,6 +40,7 @@ export const shellIcons = {
   settings: faGear,
   projectSettings: faWrench,
   tasks: faClipboardList,
+  digest: faBell,
   kanban: faColumns,
   canvas: faDrawPolygon,
   mesh: faCircleNodes,

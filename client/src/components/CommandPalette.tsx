@@ -46,6 +46,7 @@ const STATIC_COMMANDS: PaletteItem[] = [
   { id: "nav-filesystem", group: "Go to", label: "Filesystem", path: "/filesystem" },
   { id: "nav-image-board", group: "Go to", label: "Image board", path: "/image-board" },
   { id: "nav-calendar", group: "Go to", label: "Calendar", path: "/calendar" },
+  { id: "nav-digest", group: "Go to", label: "Digest", path: "/digest" },
   { id: "nav-search", group: "Go to", label: "Search page", path: "/search" },
   {
     id: "open-assistant",

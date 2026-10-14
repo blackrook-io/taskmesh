@@ -113,6 +113,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Open Quick capture from the command palette or Ctrl/Cmd+Shift+K, type one or more sentences, and confirm a task, todo, or idea. Dates, priority, and matching records are filled in; unclear fields stay as questions until you answer or leave them unset
 - Suggest tags when a record's text changes, using tags already on similar records. High-confidence tags apply with Undo when you opt in; otherwise Accept or Dismiss them. New tag names stay off unless you allow them
 - While you create a task or todo, warn when the title looks like a task or todo you can already see. Open it, link it as a duplicate, or ignore the pair. Ignored pairs stay quiet, and nothing is merged or deleted
+- Read a daily or weekly attention digest on Home and the Digest page. Snooze or dismiss an item, and a rail dot marks a digest you have not opened yet
 - The assistant picks a model that can use tools and falls back to the next provider when the first is rate-limited, over quota, unreachable, or rejects the key
 - Enable Anthropic for assistant chat. An environment key remains the fallback when no instance key is stored
 - Enable Google Gemini for assistant chat and embeddings. An environment key remains the fallback when no instance key is stored
