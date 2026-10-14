@@ -37,6 +37,7 @@ type CellChoice = "inherit" | "off" | "0" | "1" | "2" | "3";
 type PolicyDraft = {
   cells: Record<string, CellChoice>;
   featuresOff: string[];
+  allowInventTags: boolean;
 };
 
 function isTier(value: unknown): value is AiTier {
@@ -72,13 +73,14 @@ function draftFromPolicy(policy: UserAiPolicyView): PolicyDraft {
   for (const feature of policy.features) {
     if (feature.locked) featuresOff.add(feature.id);
   }
-  return { cells, featuresOff: [...featuresOff] };
+  return { cells, featuresOff: [...featuresOff], allowInventTags: policy.allowInventTags === true };
 }
 
 function draftToBody(policy: UserAiPolicyView, draft: PolicyDraft): {
   raised: Record<string, AiTier>;
   off: string[];
   featuresOff: string[];
+  allowInventTags: boolean;
 } {
   const locked = new Set(policy.locked);
   const raised: Record<string, AiTier> = {};
@@ -91,12 +93,13 @@ function draftToBody(policy: UserAiPolicyView, draft: PolicyDraft): {
       if (isTier(tier) && tier > ceilingTier(policy, key)) raised[key] = tier;
     }
   }
-  return { raised, off, featuresOff: draft.featuresOff };
+  return { raised, off, featuresOff: draft.featuresOff, allowInventTags: draft.allowInventTags };
 }
 
 function featureLabel(id: string): string {
   if (id === "assistant") return "Assistant";
   if (id === "capture") return "Capture";
+  if (id === "tagging") return "Tagging";
   return id;
 }
 
@@ -280,16 +283,31 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
             ))
           : null}
         {policy && draft ? (
-          <p>
-            <button
-              type="button"
-              className="btn small primary"
-              disabled={savePolicy.isPending || !policyDraft}
-              onClick={() => savePolicy.mutate(draftToBody(policy, draft))}
-            >
-              {savePolicy.isPending ? "Saving…" : "Save AI limits"}
-            </button>
-          </p>
+          <>
+            <label className="appearance-separate">
+              <input
+                type="checkbox"
+                checked={draft.allowInventTags}
+                disabled={savePolicy.isPending}
+                onChange={(event) => {
+                  const base = policyDraft ?? draftFromPolicy(policy);
+                  setPolicyDraft({ ...base, allowInventTags: event.target.checked });
+                }}
+              />
+              <span>Allow tagging to suggest new tag names</span>
+            </label>
+            <p className="muted">Off by default. Tagging otherwise uses only tags you already have.</p>
+            <p>
+              <button
+                type="button"
+                className="btn small primary"
+                disabled={savePolicy.isPending || !policyDraft}
+                onClick={() => savePolicy.mutate(draftToBody(policy, draft))}
+              >
+                {savePolicy.isPending ? "Saving…" : "Save AI limits"}
+              </button>
+            </p>
+          </>
         ) : null}
       </section>
 

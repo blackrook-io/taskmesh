@@ -18,6 +18,12 @@ export function contentHash(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
+/** True when the multiset of chunk hashes changed. Order does not matter. */
+export function indexedTextChanged(before: string[], after: string[]): boolean {
+  const key = (values: string[]) => [...values].sort().join("\n");
+  return key(before) !== key(after);
+}
+
 export function titleChunkText(entityType: EntityType, number: number, title: string): string {
   return `${formatEntityRef(entityType, number)} ${title}`.trim();
 }

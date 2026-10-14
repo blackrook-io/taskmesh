@@ -18,6 +18,14 @@ import { listUserCredentials, removeUserKey, replaceUserKey } from "../../servic
 import { AiRoutingError, listAiRouting, setUserRoutePreference } from "../../services/assistant/aiRouting.js";
 import { getSystemProperties } from "../../services/systemProperties.js";
 import { listAiActivity, undoJournalEntry } from "../../services/assistant/aiUndo.js";
+import {
+  acceptTagSuggestion,
+  dismissTagSuggestion,
+  listTagSuggestions,
+  TagSuggestionError,
+} from "../../services/assistant/tagging/service.js";
+import { isTaggableEntityType } from "../../services/entities.js";
+import { assertCanAccessTaggableEntity } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
 
 export const aiRouter = Router();
@@ -114,6 +122,7 @@ async function userPolicyView(userId: number) {
     raised: policy.raised,
     off: policy.off,
     featuresOff: policy.featuresOff,
+    allowInventTags: policy.allowInventTags,
     ceiling: props.aiPermissionTiers,
     locked: lockedUserPolicyKeys(props.aiWebFetch),
     webFetchEnabled: props.aiWebFetch,
@@ -319,6 +328,56 @@ aiRouter.put("/routing/:feature", async (req, res) => {
     res.json({ data: { feature, preference } });
   } catch (err) {
     if (err instanceof AiRoutingError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.get("/tag-suggestions", async (req, res) => {
+  try {
+    const entityType = z.string().parse(req.query.entityType);
+    const entityId = z.coerce.number().int().positive().parse(req.query.entityId);
+    if (!isTaggableEntityType(entityType)) {
+      sendError(res, 400, "validation_error", "That record cannot be tagged.");
+      return;
+    }
+    const userId = await getCurrentUserId(db);
+    await assertCanAccessTaggableEntity(db, userId, entityType, entityId);
+    const props = await getSystemProperties(db);
+    const data = await listTagSuggestions(db, userId, entityType, entityId, new Date(), props.aiUndoWindowDays);
+    res.json({ data });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.post("/tag-suggestions/:id/accept", async (req, res) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = `AI tag suggestion accept ${id}`;
+    const tag = await acceptTagSuggestion(db, userId, id);
+    res.status(201).json({ data: tag });
+  } catch (err) {
+    if (err instanceof TagSuggestionError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.post("/tag-suggestions/:id/dismiss", async (req, res) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = `AI tag suggestion dismiss ${id}`;
+    await dismissTagSuggestion(db, userId, id);
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof TagSuggestionError) {
       sendError(res, err.status, err.code, err.message);
       return;
     }

@@ -30,6 +30,14 @@ export const AI_FEATURES: Record<string, AiFeatureNeeds> = {
     localOnly: false,
     size: "small",
   },
+  tagging: {
+    id: "tagging",
+    tools: false,
+    longContext: false,
+    embeddings: false,
+    localOnly: false,
+    size: "small",
+  },
 };
 
 export function aiFeatureNeeds(id: string): AiFeatureNeeds | null {

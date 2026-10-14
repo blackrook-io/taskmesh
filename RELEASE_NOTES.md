@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.80.0 — 2026-10-14
+
+### New Functionality
+- When a record's text changes, TaskMesh suggests tags from tags you already use on similar records. If you opted into automatic changes, high-confidence tags are applied and one Undo removes that batch. Otherwise each tag is Accept or Dismiss. Excluded projects are never tagged.
+
+### Enhancements
+- Settings → Assistant lists Tagging beside Capture, including its model. New tag names stay off unless you allow them there.
+
 ## 0.79.1 — 2026-10-14
 
 ### New Functionality

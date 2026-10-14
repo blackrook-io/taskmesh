@@ -29,12 +29,15 @@ const putSchema = z.object({
   raised: z.record(z.string(), tierSchema),
   off: z.array(z.string()),
   featuresOff: z.array(z.string()),
+  allowInventTags: z.boolean().optional(),
 });
 
 export type UserAiPolicy = {
   raised: Record<string, AiTier>;
   off: string[];
   featuresOff: string[];
+  /** When true, auto-tagging may propose tag names this user does not already have. */
+  allowInventTags: boolean;
 };
 
 export class UserAiPolicyError extends Error {
@@ -49,7 +52,7 @@ export class UserAiPolicyError extends Error {
 }
 
 export function emptyUserAiPolicy(): UserAiPolicy {
-  return { raised: {}, off: [], featuresOff: [] };
+  return { raised: {}, off: [], featuresOff: [], allowInventTags: false };
 }
 
 export function parseUserAiPolicy(value: unknown): UserAiPolicy {
@@ -63,6 +66,7 @@ export function parseUserAiPolicy(value: unknown): UserAiPolicy {
     raised,
     off: unique((parsed.data.off ?? []).filter(isAiMatrixKey)),
     featuresOff: unique((parsed.data.featuresOff ?? []).filter((id) => aiFeatureNeeds(id) != null)),
+    allowInventTags: parsed.data.allowInventTags === true,
   };
 }
 
@@ -169,7 +173,12 @@ export function validateUserAiPolicyPut(
       throw new UserAiPolicyError(400, "forbidden", "Disabled by your Administrator.");
     }
   }
-  return { raised, off: unique(off), featuresOff: normalizedOff };
+  return {
+    raised,
+    off: unique(off),
+    featuresOff: normalizedOff,
+    allowInventTags: parsed.data.allowInventTags === true,
+  };
 }
 
 function signature(policy: UserAiPolicy): string {
@@ -180,18 +189,26 @@ function signature(policy: UserAiPolicy): string {
     raised,
     off: [...policy.off].sort(),
     featuresOff: [...policy.featuresOff].sort(),
+    allowInventTags: policy.allowInventTags === true,
   });
 }
 
 function changeReason(before: UserAiPolicy, after: UserAiPolicy): string {
   const parts: string[] = [];
-  if (signature({ ...before, off: [], featuresOff: [] }) !== signature({ ...after, off: [], featuresOff: [] })) {
+  const raisedOnly = (policy: UserAiPolicy): UserAiPolicy => ({
+    ...policy,
+    off: [],
+    featuresOff: [],
+    allowInventTags: false,
+  });
+  if (signature(raisedOnly(before)) !== signature(raisedOnly(after))) {
     parts.push("raised");
   }
   if ([...before.off].sort().join() !== [...after.off].sort().join()) parts.push("off");
   if ([...before.featuresOff].sort().join() !== [...after.featuresOff].sort().join()) {
     parts.push("featuresOff");
   }
+  if (before.allowInventTags !== after.allowInventTags) parts.push("allowInventTags");
   return parts.length > 0 ? parts.join(", ") : "unchanged";
 }
 
@@ -246,6 +263,11 @@ export async function saveUserAiPolicy(
     adminLockedFeatures: args.adminLockedFeatures,
   });
   const before = await loadUserAiPolicy(db, userId);
+  const raw =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as { allowInventTags?: unknown })
+      : {};
+  if (typeof raw.allowInventTags !== "boolean") next.allowInventTags = before.allowInventTags;
   await db
     .update(schema.users)
     .set({ aiPolicy: next, updatedAt: new Date() })

@@ -45,6 +45,7 @@ export type UserAiPolicyView = {
   raised: Record<string, AiTier>;
   off: string[];
   featuresOff: string[];
+  allowInventTags: boolean;
   ceiling: {
     matrix: Record<string, AiTier>;
     tier1Enabled: boolean;
@@ -100,6 +101,7 @@ export function putUserAiPolicy(body: {
   raised: Record<string, AiTier>;
   off: string[];
   featuresOff: string[];
+  allowInventTags: boolean;
 }): Promise<UserAiPolicyView> {
   return apiJson<{ data: UserAiPolicyView }>("/api/v1/ai/policy", {
     method: "PUT",
