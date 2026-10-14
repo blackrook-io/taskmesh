@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import { isFinishedChildState } from "../lib/taskFields.js";
-import { coerceReadyToBlocked } from "./taskBlocked.js";
+import { blockReadyTaskIfOpenPrerequisites, coerceReadyToBlocked } from "./taskBlocked.js";
 import { openDependsOnBlockers } from "./taskDependencies.js";
 import { recomputeTaskRollups } from "./taskRollup.js";
 import { recordTaskChanges, type RecordTaskChangesOpts } from "./tasks.js";
@@ -119,4 +119,9 @@ export async function afterTaskHierarchyChange(
   const starts = [persistedId];
   if (previousParentId != null) starts.push(previousParentId);
   await recomputeTaskRollups(db, starts, opts);
+  const checkIds = new Set<number>([persistedId]);
+  if (previousParentId != null) checkIds.add(previousParentId);
+  for (const id of checkIds) {
+    await blockReadyTaskIfOpenPrerequisites(db, id, opts);
+  }
 }

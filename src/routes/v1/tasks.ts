@@ -25,7 +25,10 @@ import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledg
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { assertCanAccessProject } from "../../services/ownership.js";
 import {
+  blockReadyDependents,
+  blockReadyTaskIfOpenPrerequisites,
   promoteBlockedDependents,
+  shouldBlockReadyDependents,
   shouldPromoteBlockedDependents,
 } from "../../services/taskBlocked.js";
 import {
@@ -334,7 +337,12 @@ tasksRouter.get("/:taskId", async (req, res) => {
       return;
     }
     const actorId = await getCurrentUserId(db);
-    const task = await attachTaskActor(db, row);
+    await blockReadyTaskIfOpenPrerequisites(db, taskId, {
+      actorId,
+      source: activitySourceFromRequest(req),
+    });
+    const [fresh] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
+    const task = await attachTaskActor(db, fresh ?? row);
     const [data] = await attachAllowedNextStates(db, actorId, [task]);
     res.json({ data });
   } catch (err) {
@@ -494,6 +502,9 @@ export async function patchProjectTask(args: {
     if (shouldPromoteBlockedDependents(existing.state, row.state)) {
       await promoteBlockedDependents(db, args.taskId, activityOpts);
     }
+    if (shouldBlockReadyDependents(existing.state, row.state)) {
+      await blockReadyDependents(db, args.taskId, activityOpts);
+    }
     if (parsed.description !== undefined) {
       await syncMentionLinks(db, {
         srcType: "task",
@@ -587,6 +598,9 @@ tasksRouter.delete("/:taskId", async (req, res) => {
     await afterTaskHierarchyChange(db, taskId, existing.parentId, activityOpts);
     if (shouldPromoteBlockedDependents(existing.state, row.state)) {
       await promoteBlockedDependents(db, taskId, activityOpts);
+    }
+    if (shouldBlockReadyDependents(existing.state, row.state)) {
+      await blockReadyDependents(db, taskId, activityOpts);
     }
     await forgetKnowledge("task", taskId);
     res.status(204).end();

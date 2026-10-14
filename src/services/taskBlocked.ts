@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
+import { isDerivedTaskStatus } from "../lib/taskRollup.js";
 import {
   isDependencyBlockingState,
   listRequiredBy,
@@ -25,6 +26,69 @@ export function coerceReadyToBlocked(
 /** A task that just became a satisfied prerequisite can release Blocked dependents. */
 export function shouldPromoteBlockedDependents(before: string, after: string): boolean {
   return before !== after && isDependencyBlockingState(before) && !isDependencyBlockingState(after);
+}
+
+/** A prerequisite that leaves a satisfied state can re-block Ready dependents. */
+export function shouldBlockReadyDependents(before: string, after: string): boolean {
+  return before !== after && !isDependencyBlockingState(before) && isDependencyBlockingState(after);
+}
+
+/** Ready, not derived from children, and at least one Depends-on is still open. */
+export function readyTaskShouldBlock(task: {
+  state: string;
+  stateManual: boolean;
+  rollupTotal: number | null;
+  hasOpenDependsOn: boolean;
+}): boolean {
+  if (task.state !== "ready") return false;
+  if (isDerivedTaskStatus(task)) return false;
+  return task.hasOpenDependsOn;
+}
+
+/** Ready → Blocked while any Depends-on task is still open. No-op otherwise. */
+export async function blockReadyTaskIfOpenPrerequisites(
+  db: Db,
+  taskId: number,
+  opts: RecordTaskChangesOpts,
+): Promise<void> {
+  const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
+  if (!task || task.state !== "ready" || isDerivedTaskStatus(task)) return;
+  const blockers = await openDependsOnBlockers(db, taskId);
+  if (
+    !readyTaskShouldBlock({
+      state: task.state,
+      stateManual: task.stateManual,
+      rollupTotal: task.rollupTotal,
+      hasOpenDependsOn: blockers.length > 0,
+    })
+  ) {
+    return;
+  }
+  const [updated] = await db
+    .update(schema.tasks)
+    .set({
+      state: "blocked",
+      updatedAt: new Date(),
+      ...(opts.actorId != null ? { updatedById: opts.actorId } : {}),
+    })
+    .where(eq(schema.tasks.id, task.id))
+    .returning();
+  if (updated) {
+    await recordTaskChanges(db, task.id, task, updated, { ...opts, recordHistory: true });
+  }
+}
+
+/** After a prerequisite becomes open again, block each Ready task that required it. */
+export async function blockReadyDependents(
+  db: Db,
+  taskId: number,
+  opts: RecordTaskChangesOpts,
+): Promise<void> {
+  const requiredBy = await listRequiredBy(db, taskId);
+  for (const dependent of requiredBy) {
+    if (dependent.state !== "ready") continue;
+    await blockReadyTaskIfOpenPrerequisites(db, dependent.id, opts);
+  }
 }
 
 /** Blocked → Ready when every Depends-on is satisfied. No-op otherwise. */

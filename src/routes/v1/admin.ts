@@ -84,6 +84,7 @@ import {
   listAdminTemplates,
   patchAdminTemplate,
 } from "../../services/taskDescriptionTemplates.js";
+import { blockReadyDependents, shouldBlockReadyDependents } from "../../services/taskBlocked.js";
 import { recomputeTaskRollups } from "../../services/taskRollup.js";
 import { recordTaskChanges } from "../../services/tasks.js";
 import {
@@ -1045,6 +1046,9 @@ adminRouter.post("/deleted-tasks/:id/restore", async (req, res) => {
     };
     await recordTaskChanges(db, id, existing, row, activityOpts);
     await recomputeTaskRollups(db, [id], activityOpts);
+    if (shouldBlockReadyDependents(existing.state, row.state)) {
+      await blockReadyDependents(db, id, activityOpts);
+    }
     const [fresh] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
     res.json({ data: await attachTaskActor(db, fresh ?? row) });
   } catch (err) {

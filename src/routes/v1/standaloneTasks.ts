@@ -39,7 +39,10 @@ import {
 } from "../../services/ownership.js";
 import { userHasAdministrator } from "../../services/roles.js";
 import {
+  blockReadyDependents,
+  blockReadyTaskIfOpenPrerequisites,
   promoteBlockedDependents,
+  shouldBlockReadyDependents,
   shouldPromoteBlockedDependents,
 } from "../../services/taskBlocked.js";
 import {
@@ -173,7 +176,12 @@ standaloneTasksRouter.get("/:taskId", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     await assertCanAccessDualScoped(db, actorId, row);
-    const task = await attachTaskActor(db, row);
+    await blockReadyTaskIfOpenPrerequisites(db, taskId, {
+      actorId,
+      source: activitySourceFromRequest(req),
+    });
+    const [fresh] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
+    const task = await attachTaskActor(db, fresh ?? row);
     const [data] = await attachAllowedNextStates(db, actorId, [task]);
     res.json({ data });
   } catch (err) {
@@ -421,6 +429,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       if (shouldPromoteBlockedDependents(existing.state, row.state)) {
         await promoteBlockedDependents(db, taskId, activityOpts);
       }
+      if (shouldBlockReadyDependents(existing.state, row.state)) {
+        await blockReadyDependents(db, taskId, activityOpts);
+      }
       if (parsed.description !== undefined) {
         await syncMentionLinks(db, {
           srcType: "task",
@@ -498,6 +509,9 @@ standaloneTasksRouter.delete("/:taskId", async (req, res) => {
     await afterTaskHierarchyChange(db, taskId, existing.parentId, activityOpts);
     if (shouldPromoteBlockedDependents(existing.state, row.state)) {
       await promoteBlockedDependents(db, taskId, activityOpts);
+    }
+    if (shouldBlockReadyDependents(existing.state, row.state)) {
+      await blockReadyDependents(db, taskId, activityOpts);
     }
     await forgetKnowledge("task", taskId);
     res.status(204).end();
