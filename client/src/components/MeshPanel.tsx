@@ -23,6 +23,13 @@ import {
 } from "react";
 import "@xyflow/react/dist/style.css";
 import { apiJson } from "../api/client";
+import {
+  acceptLinkSuggestion,
+  dismissLinkSuggestion,
+  fetchLinkSuggestions,
+  linkSuggestionsEnabled,
+  type LinkSuggestion,
+} from "../api/linkSuggestions";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { AiProposalCard } from "./shared/AiProposalCard";
 import {
@@ -159,6 +166,44 @@ function parseEntityKey(key: string): { entityType: EntityType; id: number } | n
   const id = Number(key.slice(colon + 1));
   if (!isEntityType(entityType) || !Number.isInteger(id) || id <= 0) return null;
   return { entityType, id };
+}
+
+function toMeshSuggestion(row: LinkSuggestion): MeshSuggestion {
+  return {
+    id: row.id,
+    sourceKey: `${row.source.entityType}:${row.source.id}`,
+    targetKey: `${row.target.entityType}:${row.target.id}`,
+    confidence: row.matchPercent,
+    reason: row.reason,
+    source: {
+      type: row.source.entityType,
+      id: row.source.id,
+      referenceId: row.source.referenceId,
+      title: row.source.title,
+      projectId: row.source.projectId,
+    },
+  };
+}
+
+function withSuggestionNodes(
+  nodes: MeshGraphNode[],
+  suggestions: readonly MeshSuggestion[],
+): MeshGraphNode[] {
+  const seen = new Set(nodes.map((node) => node.key));
+  const extra: MeshGraphNode[] = [];
+  for (const item of suggestions) {
+    if (!item.source || seen.has(item.sourceKey)) continue;
+    seen.add(item.sourceKey);
+    extra.push({
+      key: item.sourceKey,
+      type: item.source.type,
+      id: item.source.id,
+      referenceId: item.source.referenceId,
+      title: item.source.title,
+      projectId: item.source.projectId,
+    });
+  }
+  return extra.length > 0 ? [...nodes, ...extra] : nodes;
 }
 
 type MeshDepth = 1 | 2 | 3;
@@ -768,7 +813,7 @@ function RestoreViewport({
 
 export function MeshPanel({
   projectId,
-  suggestions = EMPTY_SUGGESTIONS,
+  suggestions: suggestionOverride = EMPTY_SUGGESTIONS,
 }: {
   projectId: number;
   suggestions?: readonly MeshSuggestion[];
@@ -927,6 +972,17 @@ export function MeshPanel({
     const placed = placeMeshCard(canvas, card, key);
     card.style.visibility = placed ? "visible" : "hidden";
   }, []);
+  const focusSuggestion = parseEntityKey(focusKey);
+  const suggestionQuery = useQuery({
+    queryKey: ["link-suggestions", focusSuggestion?.entityType, focusSuggestion?.id],
+    enabled: focusSuggestion != null && linkSuggestionsEnabled(focusSuggestion.entityType),
+    queryFn: () => fetchLinkSuggestions(focusSuggestion!.entityType, focusSuggestion!.id),
+  });
+  const fetchedSuggestions = useMemo(
+    () => (suggestionQuery.data ?? []).map(toMeshSuggestion),
+    [suggestionQuery.data],
+  );
+  const suggestions = suggestionOverride.length > 0 ? suggestionOverride : fetchedSuggestions;
   const droppedIds = droppedFor.focus === focusKey ? droppedFor.ids : EMPTY_IDS;
   const liveSuggestions = useMemo(
     () => suggestions.filter((item) => !droppedIds.has(suggestionIdentity(item))),
@@ -936,13 +992,13 @@ export function MeshPanel({
   const filteredGraph = useMemo(() => {
     if (!graphQuery.data) return null;
     return filterMeshGraph({
-      nodes: graphQuery.data.nodes,
+      nodes: withSuggestionNodes(graphQuery.data.nodes, shownSuggestions),
       edges: graphQuery.data.edges,
       focusKey,
       hideDone,
       hiddenTypes,
     });
-  }, [focusKey, graphQuery.data, hiddenTypes, hideDone]);
+  }, [focusKey, graphQuery.data, hiddenTypes, hideDone, shownSuggestions]);
   const layoutQuery = useQuery({
     queryKey: ["mesh-layout", focusKey, view] as const,
     queryFn: async () => {
@@ -1126,6 +1182,10 @@ export function MeshPanel({
 
   const acceptLink = useMutation({
     mutationFn: async (item: MeshSuggestion) => {
+      if (item.id != null) {
+        await acceptLinkSuggestion(item.id);
+        return item;
+      }
       const src = parseEntityKey(item.sourceKey);
       const dst = parseEntityKey(item.targetKey);
       if (!src || !dst) throw new Error("That suggestion does not name two records.");
@@ -1146,6 +1206,21 @@ export function MeshPanel({
         (row) => row.sourceKey === item.sourceKey && row.targetKey === item.targetKey,
       );
       void queryClient.invalidateQueries({ queryKey: ["graph"] });
+      void queryClient.invalidateQueries({ queryKey: ["link-suggestions"] });
+      void queryClient.invalidateQueries({ queryKey: ["entity-links"] });
+    },
+  });
+
+  const dismissLink = useMutation({
+    mutationFn: async (item: MeshSuggestion) => {
+      if (item.id != null) await dismissLinkSuggestion(item.id);
+      return item;
+    },
+    onSuccess: (item) => {
+      hideSuggestions(
+        (row) => row.sourceKey === item.sourceKey && row.targetKey === item.targetKey,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["link-suggestions"] });
     },
   });
 
@@ -1737,8 +1812,14 @@ export function MeshPanel({
             <MeshSuggestionCard
               cardRef={cardRef}
               model={suggestionCard}
-              pending={acceptLink.isPending}
-              error={acceptLink.isError ? (acceptLink.error as Error).message : null}
+              pending={acceptLink.isPending || dismissLink.isPending}
+              error={
+                acceptLink.isError
+                  ? (acceptLink.error as Error).message
+                  : dismissLink.isError
+                    ? (dismissLink.error as Error).message
+                    : null
+              }
               onAccept={(targetKey) => {
                 const item = liveSuggestions.find(
                   (row) => row.sourceKey === cardKey && row.targetKey === targetKey,
@@ -1746,13 +1827,14 @@ export function MeshPanel({
                 if (item) acceptLink.mutate(item);
               }}
               onDismiss={(item) => {
-                hideSuggestions(
-                  (row) =>
-                    row.sourceKey === cardKey &&
-                    row.targetKey === item.targetKey &&
-                    row.confidence === item.confidence &&
-                    row.reason === item.reason,
+                const row = liveSuggestions.find(
+                  (candidate) =>
+                    candidate.sourceKey === cardKey &&
+                    candidate.targetKey === item.targetKey &&
+                    candidate.confidence === item.confidence &&
+                    candidate.reason === item.reason,
                 );
+                if (row) dismissLink.mutate(row);
               }}
               onPointerEnter={() => {
                 clearShow();

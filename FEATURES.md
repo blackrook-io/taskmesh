@@ -13,6 +13,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Hover a Mesh record to read its state, due date, last change, contents, blockers, and links without leaving the cascade
 - Administrators set Mesh colors and readability for everyone: record colors, suggestion and signal colors, line weight, size, label halo, overdue pulse, and how soon a quiet record counts as stale
 - On a Task, To Do, Idea, or Document, see what it links to and what links to it, and add or remove a manual link
+- See suggested links for a record, with a match percent and a reason, then accept one References link or dismiss the pair
 - Single left rail with projects and nested modules under the active project; pick projects quickly from a compact picker when the rail is collapsed
 - Optional per-project color themes on top of the global accent theme
 - Assign users to Managers, Members, and Viewers per project — Managers and Owners get Settings; Members write; Viewers read-only

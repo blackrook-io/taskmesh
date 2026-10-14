@@ -28,6 +28,14 @@ import {
 } from "../../services/assistant/duplicates/service.js";
 import { isDuplicateEntityType } from "../../services/assistant/duplicates/match.js";
 import {
+  acceptLinkSuggestion,
+  dismissLinkSuggestion,
+  LinkSuggestionError,
+  listLinkSuggestions,
+} from "../../services/assistant/links/service.js";
+import { isLinkSubjectType } from "../../services/assistant/links/plan.js";
+import { userHasAdministrator } from "../../services/roles.js";
+import {
   acceptTagSuggestion,
   dismissTagSuggestion,
   listTagSuggestions,
@@ -465,6 +473,55 @@ aiRouter.post("/duplicate-pairs/ignore", async (req, res) => {
     res.status(204).end();
   } catch (err) {
     if (err instanceof DuplicateActionError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+const linkSubjectSchema = z.string().refine(isLinkSubjectType, "Tasks, ToDos, ideas, and documents only.");
+
+aiRouter.get("/link-suggestions", async (req, res) => {
+  try {
+    const entityType = linkSubjectSchema.parse(req.query.entityType);
+    const entityId = z.coerce.number().int().positive().parse(req.query.entityId);
+    const userId = await getCurrentUserId(db);
+    const isAdministrator = await userHasAdministrator(db, userId);
+    const suggestions = await listLinkSuggestions(db, { userId, isAdministrator }, entityType, entityId);
+    res.json({ data: { suggestions } });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.post("/link-suggestions/:id/accept", async (req, res) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const userId = await getCurrentUserId(db);
+    const isAdministrator = await userHasAdministrator(db, userId);
+    res.locals.logMessage = `AI link suggestion accept ${id}`;
+    await acceptLinkSuggestion(db, { userId, isAdministrator }, id);
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof LinkSuggestionError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.post("/link-suggestions/:id/dismiss", async (req, res) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const userId = await getCurrentUserId(db);
+    const isAdministrator = await userHasAdministrator(db, userId);
+    res.locals.logMessage = `AI link suggestion dismiss ${id}`;
+    await dismissLinkSuggestion(db, { userId, isAdministrator }, id);
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof LinkSuggestionError) {
       sendError(res, err.status, err.code, err.message);
       return;
     }

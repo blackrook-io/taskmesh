@@ -1,0 +1,55 @@
+# T0168 — Mesh suggested links
+
+**Task:** T0168 (id `181`) — Mesh: suggested links (tags/titles first, embeddings later)
+**Parent:** T0159 (id `172`) — Mesh: relationship graph, backlinks and focus view (epic)
+**Depends on:** T0160, T0162, T0178, T0179, T0181, T0183, T0184, T0208 — all complete
+**Required by:** T0300 golden sets (blocked) — record accept/dismiss only; do not build the corpus
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch (after approval):** `T0168-suggested-links`
+
+Propose links the user accepts or rejects. Never create a link until Accept. Embeddings already live in the knowledge index (T0208); this task does not add pgvector or a new model host.
+
+## Decisions
+
+1. **Own table, not `entity_links`.** `entity_links.origin` is only `manual` | `mention`, and a suggestion is not a graph edge. New `ai_link_suggestions`: per user, directed source and target (entity type + id), score `0..1`, one-line reason, status `pending` | `accepted` | `dismissed` | `rejected`, optional `audit_id`. Unique on user + both ends. A dismissed or rejected pair is never suggested again for that user, in either direction. An accepted pair is not suggested again either. Existing `entity_links` between the two records (any relation or origin) suppress the pair.
+2. **Candidates, deterministic, visibility-scoped.** For the open record, SQL over records that user can see:
+   - shared tags
+   - the other record’s title or description contains this record’s display number or a distinctive title token, and there is no `#` mention link already
+   - same ToDo list item parent, or same board
+   - best cosine similarity from `knowledge_chunks` via the existing `semanticEntityScores` helper
+   Cap the pending list (about 8). Subject types are the ones that already mount the links panel: task, todo, idea, document. The other end may be any linkable entity type.
+3. **Score.** Register feature `links` (small, no tools). When the user’s route can run, send a small batch of minimized pairs (display number, title, short excerpt, tag names) through the policy, redaction, and audit path. The model returns a match percent and one one-line reason. A model “no” is stored `rejected`. When the route cannot run (no key, feature off, budget, project AI ceiling), still show heuristic hits with a fixed reason (`shared tags`, `mentioned by title`, `same list`, `same board`, `similar text`) and a deterministic score. Embedding and model calls skip a pair when either project is excluded from AI. Heuristics that stay in SQL still run.
+4. **Accept and dismiss.** Accept inserts a manual `references` link from the suggestion source to its target (same direction the Mesh prototype already posts) and sets `accepted`. Dismiss sets `dismissed`. Both write `ai_output_feedback` when the row has an audit id. Suggestions themselves never write `entity_links`.
+5. **UI.** A Suggestions block on `EntityLinksPanel`: display number, title, match percent, reason, Accept, Dismiss. Empty block stays quiet (no heading clutter when there is nothing pending). The same rows feed `MeshPanel`, which already draws the dashed suggestion card. Mesh Accept and Dismiss call this API so a dismiss survives reload; today Mesh only hides a card locally and posts a link with no dismissal row.
+6. **When it runs.** On demand when the links panel or the Mesh tab loads that record, not a whole-instance sweep. Refresh is the same request. No new job type.
+7. **Schema.** One Drizzle migration. Update `docs/database/` and run `npm run docs:sync-schema`. Finish-up is a MINOR bump. `FEATURES.md` gets one line. `RELEASE_NOTES.md` gets a New Functionality bullet.
+
+## Scope
+
+1. Migration, service, and routes: list for one record, accept, dismiss.
+2. Prompt `links` v1, feature route entry, audit feature id `links`.
+3. Panel section and Mesh wiring.
+4. Tests for candidate filtering (already linked, dismissed, invisible) and for accept creating exactly one manual `references` row.
+5. `npm run lint` clean.
+
+## Out
+
+- A second embeddings stack or Ollama install (T0208).
+- Golden-set sentences (T0300).
+- Auto-accept, or any write to `entity_links` except the user’s Accept.
+- New record drawers. Suggestions for project, board, canvas, wiki, image board, and to-do list appear only when that record is the other end of a suggestion on a task, todo, idea, or document, or as a Mesh ghost.
+
+## Acceptance
+
+- Opening a Task, ToDo, Idea, or Document can show suggested records with a match percent and a reason. Nothing is linked until Accept.
+- Accept adds one manual References link and the suggestion leaves the list. Dismiss removes it and it does not return on reload.
+- A pair that is already linked is not suggested.
+- With AI unavailable, heuristic suggestions still appear. With AI available, the stored reason can be the model’s one-line reason and the call is audited.
+- The Mesh suggestion card for the focused record uses the same rows, and Dismiss there also sticks.
+- `npm run lint` is clean.
+
+## Confirm before implementation
+
+1. Heuristic suggestions still show when the model route cannot run.
+2. Dismiss (and reject) is permanent for that user and that pair, even if the text later changes.
+3. Mesh cards are wired in this task, not left for a follow-up.

@@ -3354,6 +3354,10 @@ textarea.raw-md {
   border-color: var(--accent);
 }
 
+.entity-links__row--suggestion {
+  border-style: dashed;
+}
+
 .entity-links__ref {
   display: flex;
   gap: 0.45rem;

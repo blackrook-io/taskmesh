@@ -63,6 +63,12 @@ There is **no database FK** enforcing that `entity_id` exists in the target tabl
 
 `entity_links.origin`: `manual` (API create/delete) · `mention` (reserved for markdown sync). The same pair may exist once per origin. Soft-deleted tasks and todos keep their link rows; list APIs hide those ends until the record is restored.
 
+## Suggested links (T0168)
+
+`ai_link_suggestions.status`: `pending` (shown, not a graph edge) · `accepted` (user created a manual `references` link) · `dismissed` (user no; not suggested again) · `rejected` (model no; not suggested again).
+
+`ai_link_suggestions.signal`: `shared_tags` · `mention` · `same_list` · `same_board` · `similar_text`.
+
 ## Task states
 
 Stored on `tasks.state` (text). API values and typical UI labels:

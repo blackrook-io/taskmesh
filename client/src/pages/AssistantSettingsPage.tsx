@@ -101,6 +101,7 @@ function featureLabel(id: string): string {
   if (id === "capture") return "Capture";
   if (id === "tagging") return "Tagging";
   if (id === "duplicates") return "Duplicate detection";
+  if (id === "links") return "Suggested links";
   return id;
 }
 
