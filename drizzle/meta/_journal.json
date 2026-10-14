@@ -512,6 +512,13 @@
       "when": 1791938453587,
       "tag": "0072_early_lockheed",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1791939547612,
+      "tag": "0073_smart_caretaker",
+      "breakpoints": true
     }
   ]
 }

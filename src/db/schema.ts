@@ -891,6 +891,8 @@ export const aiInstanceCredentials = pgTable(
     secretEnc: text("secret_enc").notNull(),
     hint: text("hint").notNull(),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    /** Redacted provider rejection (max 500). Set when Verify or a live call rejects the key. */
+    lastError: text("last_error"),
     updatedById: integer("updated_by_id").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -902,6 +904,10 @@ export const aiInstanceCredentials = pgTable(
     hintCheck: check(
       "ai_instance_credentials_hint_chk",
       sql`char_length(${t.hint}) between 1 and 4`,
+    ),
+    errorCheck: check(
+      "ai_instance_credentials_error_chk",
+      sql`${t.lastError} is null or char_length(${t.lastError}) between 1 and 500`,
     ),
   }),
 );

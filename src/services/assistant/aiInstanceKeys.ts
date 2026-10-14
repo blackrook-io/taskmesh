@@ -3,6 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AiProviderPlugin, ProviderFetch } from "@taskmesh/ai-provider-contract";
 import * as schema from "../../db/schema.js";
 import { decryptAiSecret, encryptAiSecret } from "../../lib/aiCredentialsCrypto.js";
+import { capStoredKeyError } from "./aiCredentialHealth.js";
 import { invalidateSystemPropertiesCache } from "../systemProperties.js";
 import { writeAiAudit } from "./aiAudit.js";
 import {
@@ -35,22 +36,26 @@ export type InstanceKeyPublic = {
   pluginId: string;
   keyHint: string | null;
   keyVerifiedAt: string | null;
+  keyLastError: string | null;
 };
 
 const EMPTY_KEY: Omit<InstanceKeyPublic, "pluginId"> = {
   keyHint: null,
   keyVerifiedAt: null,
+  keyLastError: null,
 };
 
 function publicFromRow(row: {
   pluginId: string;
   hint: string;
   verifiedAt: Date | null;
+  lastError: string | null;
 }): InstanceKeyPublic {
   return {
     pluginId: row.pluginId,
     keyHint: row.hint,
     keyVerifiedAt: row.verifiedAt?.toISOString() ?? null,
+    keyLastError: row.lastError,
   };
 }
 
@@ -92,6 +97,7 @@ export async function listInstanceCredentialPublic(db: Db): Promise<Map<string, 
       pluginId: schema.aiInstanceCredentials.pluginId,
       hint: schema.aiInstanceCredentials.hint,
       verifiedAt: schema.aiInstanceCredentials.verifiedAt,
+      lastError: schema.aiInstanceCredentials.lastError,
     })
     .from(schema.aiInstanceCredentials);
   return new Map(rows.map((row) => [row.pluginId, publicFromRow(row)]));
@@ -142,6 +148,7 @@ export async function replaceInstanceKey(
       secretEnc,
       hint,
       verifiedAt: null,
+      lastError: null,
       updatedById: args.actorUserId,
       updatedAt: now,
     })
@@ -151,6 +158,7 @@ export async function replaceInstanceKey(
         secretEnc,
         hint,
         verifiedAt: null,
+        lastError: null,
         updatedById: args.actorUserId,
         updatedAt: now,
       },
@@ -159,6 +167,7 @@ export async function replaceInstanceKey(
       pluginId: schema.aiInstanceCredentials.pluginId,
       hint: schema.aiInstanceCredentials.hint,
       verifiedAt: schema.aiInstanceCredentials.verifiedAt,
+      lastError: schema.aiInstanceCredentials.lastError,
     });
   if (!row) throw new AiCredentialsError(500, "internal", "Instance key was not stored.");
   return publicFromRow(row);
@@ -218,24 +227,24 @@ export async function verifyInstanceKey(
   });
   const now = new Date();
   if (!result.ok) {
-    await db
-      .update(schema.aiInstanceCredentials)
-      .set({ verifiedAt: null, updatedById: args.actorUserId, updatedAt: now })
-      .where(eq(schema.aiInstanceCredentials.pluginId, args.pluginId));
-    throw new AiCredentialsError(
-      400,
-      "instance_key_verify_failed",
+    const message = capStoredKeyError(
       redactSecret(result.error.message, plain) || "Provider rejected the instance key.",
     );
+    await db
+      .update(schema.aiInstanceCredentials)
+      .set({ verifiedAt: null, lastError: message, updatedById: args.actorUserId, updatedAt: now })
+      .where(eq(schema.aiInstanceCredentials.pluginId, args.pluginId));
+    throw new AiCredentialsError(400, "instance_key_verify_failed", message);
   }
   const [row] = await db
     .update(schema.aiInstanceCredentials)
-    .set({ verifiedAt: now, updatedById: args.actorUserId, updatedAt: now })
+    .set({ verifiedAt: now, lastError: null, updatedById: args.actorUserId, updatedAt: now })
     .where(eq(schema.aiInstanceCredentials.pluginId, args.pluginId))
     .returning({
       pluginId: schema.aiInstanceCredentials.pluginId,
       hint: schema.aiInstanceCredentials.hint,
       verifiedAt: schema.aiInstanceCredentials.verifiedAt,
+      lastError: schema.aiInstanceCredentials.lastError,
     });
   if (!row) throw new AiCredentialsError(500, "internal", "Instance key was not updated.");
   return publicFromRow(row);

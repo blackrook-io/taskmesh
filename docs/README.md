@@ -8,6 +8,12 @@ Administrator and developer reference docs for this repository. These files are 
 |------|----------|
 | [OAuth / OIDC setup](OAUTH_SETUP.md) | Administrator guide: Google, Apple, and GitHub — accounts/fees, console steps, TaskMesh Admin fields, troubleshooting |
 
+## AI provider keys
+
+| Page | Contents |
+|------|----------|
+| [AI credentials](AI_CREDENTIALS.md) | Administrator guide: `AI_CREDENTIALS_KEY`, rotation, backup restore, and rejected provider keys |
+
 ## Database schema
 
 Authoritative Drizzle definitions live in [`src/db/schema.ts`](../src/db/schema.ts). Human-readable schema docs:

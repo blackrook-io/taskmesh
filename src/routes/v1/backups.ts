@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { hasAiCredentialsKey } from "../../lib/aiCredentialsCrypto.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { heavyWriteRateLimit, uploadRateLimit } from "../../middleware/rateLimits.js";
 import { requireAdministrator } from "../../middleware/requireAdministrator.js";
@@ -25,6 +26,7 @@ backupsRouter.get("/", (_req, res) => {
       data: {
         health: overallBackupHealth(items),
         freshHours: 36,
+        aiCredentialsKeyConfigured: hasAiCredentialsKey(),
         items,
       },
     });

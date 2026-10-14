@@ -30,6 +30,7 @@ type AiProviderRow = {
   };
   keyHint: string | null;
   keyVerifiedAt: string | null;
+  keyLastError: string | null;
 };
 
 type ProvidersPayload = {
@@ -446,6 +447,11 @@ export function AdminAiProvidersSection() {
                     Remove
                   </button>
                 </div>
+                {plugin.keyLastError ? (
+                  <p className="error-text" role="alert">
+                    {plugin.keyLastError}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>

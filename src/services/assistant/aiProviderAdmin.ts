@@ -46,6 +46,7 @@ export type AiProviderAdminRow = {
   config: AiProviderPublicConfig;
   keyHint: string | null;
   keyVerifiedAt: string | null;
+  keyLastError: string | null;
 };
 
 export type AiProviderAdminPayload = {
@@ -110,6 +111,7 @@ export async function listAiProvidersForAdmin(db: Db): Promise<AiProviderAdminPa
         config: publicConfig(plugin, entry?.config),
         keyHint: key?.keyHint ?? null,
         keyVerifiedAt: key?.keyVerifiedAt ?? null,
+        keyLastError: key?.keyLastError ?? null,
       };
     });
   const props = await getSystemProperties(db);

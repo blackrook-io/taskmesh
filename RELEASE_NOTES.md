@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.77.0 — 2026-10-14
+
+### New Functionality
+- Rotate the key that encrypts stored AI provider keys without replacing those keys. A dry run reports the rows and writes nothing. The update runs only when every stored key decrypts.
+- A provider that rejects a stored key during Verify or a live assistant call shows a redacted message on Administration → AI for an instance key, or on Assistant settings for a user key. A later successful check clears it.
+
+### Enhancements
+- Backups state that the encryption key is not in the archive, and warn when that key is not set. Restoring provider keys requires the key that was current when the backup was taken. Administrator steps are in `docs/AI_CREDENTIALS.md`.
+
 ## 0.76.0 — 2026-10-14
 
 ### New Functionality

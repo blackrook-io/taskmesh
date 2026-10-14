@@ -1,0 +1,58 @@
+# T0213 — AI key rotation and backup guidance
+
+**Task:** T0213 (id 228) — AI: key rotation and backup guidance
+**Parent:** T0195 (id 210) — AI: Quality and operations (group), still Draft
+**Depends on:** T0182 and T0183, both `complete`
+**Branch:** `T0213-ai-key-rotation`
+**State at plan:** `ready`
+**Schema:** yes — `last_error` on `ai_instance_credentials` (MINOR on finish-up)
+
+## Goal
+
+Operators can rotate `AI_CREDENTIALS_KEY` without losing stored provider keys, backups say that a restore needs the matching encryption key, and a provider key that the vendor rejects on a real call is shown to the user who owns it or to the Administrator for an instance key.
+
+## Current state
+
+- Instance keys (`ai_instance_credentials`) and per-user keys (`user_ai_credentials`) are AES-256-GCM under `AI_CREDENTIALS_KEY` (`src/lib/aiCredentialsCrypto.ts`). There is no re-encrypt script.
+- User keys already store a redacted `last_error` when **Verify** fails, and Assistant settings shows it. Instance keys clear `verified_at` on a failed Verify and throw; they do not keep the message.
+- Live chat and feature calls throw `AiProviderError` (`auth` for 401 / rejected keys). That failure is not written back onto the stored credential.
+- Backups dump the database (ciphertext included) and uploads. The encryption key lives only in the environment. The Backups page does not mention it.
+
+## Decisions (approved)
+
+1. **Rotation is a script, not an Admin button.** `npm run ai:rotate-credentials-key`. Current key stays `AI_CREDENTIALS_KEY`. Next key is `AI_CREDENTIALS_KEY_NEXT` (at least 32 characters, different from the current key). Dry run is the default. `--apply` writes. The script does not edit `.env`; after a successful apply the operator copies the next value into `AI_CREDENTIALS_KEY`, unsets `AI_CREDENTIALS_KEY_NEXT`, and restarts.
+2. **Instance revoked-key message is stored.** Add nullable `last_error` (1–500 characters) on `ai_instance_credentials`, same shape as user keys. Administrators see it under System properties next to that provider’s instance key.
+3. **Backup UI.** A standing sentence that the encryption key is not inside the archive. A warning (`role="alert"`) only when `AI_CREDENTIALS_KEY` is not set.
+4. **Administrator guide.** Full operator steps live in `docs/AI_CREDENTIALS.md` (same style as `docs/OAUTH_SETUP.md`), linked from `docs/README.md`. INSTALL.md, SECURITY.md, and UPGRADES.md keep a short pointer to that file rather than repeating the procedure.
+
+## Scope
+
+1. **Rotate script** — Load every instance and user credential. Decrypt with the current key and re-encrypt with the next key. Dry run prints counts and writes nothing. `--apply` updates `secret_enc` only, in one transaction. `hint`, `verified_at`, and `last_error` stay as they are (the provider secret itself does not change). If any row fails to decrypt, exit non-zero and roll back; log plugin id and user id only, never plaintext or ciphertext. Unit tests cover dry run, apply round-trip, and a decrypt failure that leaves rows unchanged.
+2. **Backup guidance** — `GET /api/v1/backups` includes `aiCredentialsKeyConfigured`. Backups page shows the standing note and the unset-key warning. The Administrator guide states that a restored dump still needs the `AI_CREDENTIALS_KEY` that encrypted those rows, and that a later rotation means the restored ciphertext needs the key from backup time (or both keys, if rotating again after restore).
+3. **Rejected keys on use** — When a live provider call fails with `AiProviderError` code `auth` (rejected, expired, or revoked key), record a redacted message and clear `verified_at`. User-key calls update `user_ai_credentials` (Assistant settings already shows `lastError`). Instance-key calls update `ai_instance_credentials.last_error` and System properties shows it. Rate limit, quota, network, and model-not-found do not clear the key. A later successful Verify or successful use clears `last_error`. The caller still receives the existing error.
+4. **Administrator guide** — `docs/AI_CREDENTIALS.md`, indexed under Authentication (or a new AI section) in `docs/README.md`. Contents for Administrators:
+   - What `AI_CREDENTIALS_KEY` protects (instance keys and per-user provider keys), how to generate it (`openssl rand -base64 48`), and that it must be at least 32 characters before any key is stored.
+   - Where instance keys are set (Administration → System properties) and where users set their own keys.
+   - Rotation: set `AI_CREDENTIALS_KEY_NEXT`, dry run, `--apply`, copy the next value into `AI_CREDENTIALS_KEY`, unset the next key, restart. What a decrypt failure means and that `.env` is not edited by the script.
+   - Backups and restore: the key is not in the archive; after restore, use the key that was current when the backup was taken. If the key was rotated after that backup, the restored ciphertext needs the older key.
+   - Rejected, expired, or revoked provider keys: the message on System properties (instance) or Assistant settings (user), and that Verify clears it after a replacement key works.
+5. **Other docs** — `docs/database/platform.md` for the new column, then `npm run docs:sync-schema`. INSTALL.md, SECURITY.md, and UPGRADES.md get a short pointer to `docs/AI_CREDENTIALS.md` plus the existing one-line key requirement.
+
+## Out of scope
+
+- Rewriting `.env` or restarting the process from the script
+- An Administration button that rotates the key
+- Rotating `OAUTH_CREDENTIALS_KEY` or `MFA_TOTP_KEY`
+- Calling the provider during rotation
+- Email or other notification when a key is rejected
+
+## QA checklist (after implementation)
+
+- Dry run with both env keys set reports instance and user row counts and does not change `secret_enc`.
+- `--apply` then swap `AI_CREDENTIALS_KEY` to the next value: existing keys still decrypt and Verify succeeds.
+- A row that cannot decrypt aborts apply and leaves every `secret_enc` unchanged.
+- Backups page shows the archive note, and the alert only when `AI_CREDENTIALS_KEY` is unset.
+- A user-key chat call that returns provider auth failure shows `lastError` on Assistant settings and clears it after a successful Verify.
+- An instance-key auth failure shows the message on System properties for that provider and clears it after a successful Verify.
+- Rate-limit failures do not set `last_error`.
+- `docs/AI_CREDENTIALS.md` covers generating the key, rotation, restore, and where rejected keys show up, and `docs/README.md` links to it.

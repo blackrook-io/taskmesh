@@ -15,6 +15,11 @@ export class AiCredentialsKeyError extends Error {
   }
 }
 
+/** SHA-256 of a passphrase. Callers must already enforce the minimum length. */
+export function aiCredentialsKeyFromPassphrase(raw: string): Buffer {
+  return createHash("sha256").update(raw, "utf8").digest();
+}
+
 /** Derive a 32-byte AES key from AI_CREDENTIALS_KEY (min 32 chars when set). */
 export function getAiCredentialsKey(): Buffer {
   let raw: string | null;
@@ -28,7 +33,7 @@ export function getAiCredentialsKey(): Buffer {
       "Set AI_CREDENTIALS_KEY (at least 32 characters) before storing a provider key.",
     );
   }
-  return createHash("sha256").update(raw, "utf8").digest();
+  return aiCredentialsKeyFromPassphrase(raw);
 }
 
 export function hasAiCredentialsKey(): boolean {
@@ -39,9 +44,8 @@ export function hasAiCredentialsKey(): boolean {
   }
 }
 
-/** Encrypt plaintext → base64url(iv || tag || ciphertext). */
-export function encryptAiSecret(plaintext: string): string {
-  const key = getAiCredentialsKey();
+/** Encrypt plaintext → base64url(iv || tag || ciphertext) under an explicit key. */
+export function encryptAiSecretWithKey(plaintext: string, key: Buffer): string {
   const iv = randomBytes(IV_LEN);
   const cipher = createCipheriv(ALGO, key, iv);
   const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
@@ -49,8 +53,12 @@ export function encryptAiSecret(plaintext: string): string {
   return Buffer.concat([iv, tag, enc]).toString("base64url");
 }
 
-export function decryptAiSecret(payload: string): string {
-  const key = getAiCredentialsKey();
+/** Encrypt plaintext → base64url(iv || tag || ciphertext). */
+export function encryptAiSecret(plaintext: string): string {
+  return encryptAiSecretWithKey(plaintext, getAiCredentialsKey());
+}
+
+export function decryptAiSecretWithKey(payload: string, key: Buffer): string {
   const buf = Buffer.from(payload, "base64url");
   if (buf.length < IV_LEN + TAG_LEN + 1) {
     throw new AiCredentialsKeyError("Invalid encrypted secret payload.");
@@ -61,4 +69,8 @@ export function decryptAiSecret(payload: string): string {
   const decipher = createDecipheriv(ALGO, key, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
+}
+
+export function decryptAiSecret(payload: string): string {
+  return decryptAiSecretWithKey(payload, getAiCredentialsKey());
 }
