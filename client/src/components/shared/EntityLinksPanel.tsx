@@ -2,6 +2,13 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { apiJson } from "../../api/client";
+import {
+  acceptLinkSuggestion,
+  dismissLinkSuggestion,
+  fetchLinkSuggestions,
+  linkSuggestionsEnabled,
+  type LinkSuggestion,
+} from "../../api/linkSuggestions";
 import { ENTITY_TYPES, isEntityType, type EntityType } from "../../lib/entityType";
 import { ConfirmDialog } from "../ConfirmDialog";
 
@@ -100,6 +107,7 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
   const [pendingRemove, setPendingRemove] = useState<LinkListItem | null>(null);
 
   const linksKey = ["entity-links", entityType, entityId] as const;
+  const suggestionsKey = ["link-suggestions", entityType, entityId] as const;
 
   const linksQuery = useQuery({
     queryKey: linksKey,
@@ -109,6 +117,12 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
       );
       return res.data;
     },
+  });
+
+  const suggestionsQuery = useQuery({
+    queryKey: suggestionsKey,
+    enabled: linkSuggestionsEnabled(entityType),
+    queryFn: () => fetchLinkSuggestions(entityType, entityId),
   });
 
   const suggestQ = query.trim();
@@ -136,8 +150,27 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["entity-links"] });
+    void qc.invalidateQueries({ queryKey: ["link-suggestions"] });
     void qc.invalidateQueries({ queryKey: ["graph"] });
   };
+
+  const acceptSuggestion = useMutation({
+    mutationFn: (id: number) => acceptLinkSuggestion(id),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const dismissSuggestion = useMutation({
+    mutationFn: (id: number) => dismissLinkSuggestion(id),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
 
   const add = useMutation({
     mutationFn: async (hit: ReferenceHit) => {
@@ -183,6 +216,10 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
   const incoming = linksQuery.data?.incoming ?? [];
   const outgoing = linksQuery.data?.outgoing ?? [];
   const hits = suggestQuery.data ?? [];
+  const suggestions = suggestionsQuery.data ?? [];
+
+  const otherEnd = (row: LinkSuggestion) =>
+    row.source.entityType === entityType && row.source.id === entityId ? row.target : row.source;
 
   const renderRow = (row: LinkListItem) => {
     const end = row.entity;
@@ -247,6 +284,45 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
           {renderList(outgoing)}
         </div>
       </div>
+
+      {suggestions.length > 0 ? (
+        <div className="entity-links__section">
+          <span className="entity-links__label">Suggestions</span>
+          <ul className="entity-links__list">
+            {suggestions.map((row) => {
+              const end = otherEnd(row);
+              const busy = acceptSuggestion.isPending || dismissSuggestion.isPending;
+              return (
+                <li key={row.id} className="entity-links__row entity-links__row--suggestion">
+                  <Link className="entity-links__ref" to={end.href}>
+                    <span className="entity-links__num muted">{end.referenceId}</span>
+                    <span className="entity-links__title">{end.title}</span>
+                  </Link>
+                  <span className="entity-links__relation muted">
+                    {row.matchPercent}% · {row.reason}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn small entity-links__suggest-action"
+                    disabled={busy}
+                    onClick={() => acceptSuggestion.mutate(row.id)}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="btn small ghost entity-links__suggest-action"
+                    disabled={busy}
+                    onClick={() => dismissSuggestion.mutate(row.id)}
+                  >
+                    Dismiss
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="entity-links__add">
         <span className="entity-links__label" id={`${searchId}-label`}>
@@ -354,6 +430,11 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
       {linksQuery.isError ? (
         <p role="alert" className="tag-input__error">
           {(linksQuery.error as Error).message}
+        </p>
+      ) : null}
+      {suggestionsQuery.isError ? (
+        <p role="alert" className="tag-input__error">
+          {(suggestionsQuery.error as Error).message}
         </p>
       ) : null}
       {error ? (

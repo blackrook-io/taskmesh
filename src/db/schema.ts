@@ -1271,6 +1271,70 @@ export const aiDuplicatePairs = pgTable(
 );
 
 /**
+ * Proposed record links for one user (T0168).
+ * `src` would reference `dst`. Nothing is written to `entity_links` until Accept.
+ * `dismissed` and `rejected` are not suggested again for that pair.
+ * `accepted` means the user created the manual references link.
+ */
+export const aiLinkSuggestions = pgTable(
+  "ai_link_suggestions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    srcType: text("src_type").notNull(),
+    srcId: integer("src_id").notNull(),
+    dstType: text("dst_type").notNull(),
+    dstId: integer("dst_id").notNull(),
+    score: real("score").notNull(),
+    reason: text("reason").notNull(),
+    /** shared_tags | mention | same_list | same_board | similar_text */
+    signal: text("signal").notNull(),
+    /** pending | accepted | dismissed | rejected */
+    status: text("status").notNull().default("pending"),
+    auditId: integer("audit_id").references(() => aiAuditLog.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pairUidx: uniqueIndex("ai_link_suggestions_pair_uidx").on(
+      t.userId,
+      t.srcType,
+      t.srcId,
+      t.dstType,
+      t.dstId,
+    ),
+    srcIdx: index("ai_link_suggestions_src_idx").on(t.userId, t.srcType, t.srcId),
+    dstIdx: index("ai_link_suggestions_dst_idx").on(t.userId, t.dstType, t.dstId),
+    statusCheck: check(
+      "ai_link_suggestions_status_chk",
+      sql`${t.status} in ('pending', 'accepted', 'dismissed', 'rejected')`,
+    ),
+    scoreCheck: check(
+      "ai_link_suggestions_score_chk",
+      sql`${t.score} >= 0 and ${t.score} <= 1`,
+    ),
+    reasonCheck: check(
+      "ai_link_suggestions_reason_chk",
+      sql`char_length(${t.reason}) between 1 and 160`,
+    ),
+    signalCheck: check(
+      "ai_link_suggestions_signal_chk",
+      sql`${t.signal} in ('shared_tags', 'mention', 'same_list', 'same_board', 'similar_text')`,
+    ),
+    typeCheck: check(
+      "ai_link_suggestions_type_chk",
+      sql`${t.srcType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board') and ${t.dstType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board')`,
+    ),
+    notSelf: check(
+      "ai_link_suggestions_not_self",
+      sql`not (${t.srcType} = ${t.dstType} and ${t.srcId} = ${t.dstId})`,
+    ),
+  }),
+);
+
+/**
  * One stored attention digest per user and period (T0216).
  * Facts are deterministic. `summary` is an optional model paragraph.
  */

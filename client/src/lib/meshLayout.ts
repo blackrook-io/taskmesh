@@ -291,10 +291,18 @@ export function meshCorridorPoints(
 
 /** A proposed link. The source is the suggested record; the target is already on the canvas. */
 export type MeshSuggestion = {
+  id?: number;
   sourceKey: string;
   targetKey: string;
   confidence: number;
   reason: string;
+  source?: {
+    type: string;
+    id: number;
+    referenceId: string | null;
+    title: string;
+    projectId: number | null;
+  };
 };
 
 export type MeshAncestor = {
