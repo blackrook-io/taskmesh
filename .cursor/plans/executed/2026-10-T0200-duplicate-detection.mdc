@@ -1,0 +1,62 @@
+---
+description: T0200 — warn on likely duplicate records at create time and from a periodic sweep, without merging or deleting
+---
+
+# T0200 — AI duplicate detection
+
+**Task:** T0200 · id `215` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0177 AI: per-user keys, provider plugins and guardrails (id `192`).
+**Depends on:** T0185, T0187, T0208 — all complete. No open blockers.
+**Required by:** T0300 golden sets (Draft). This task records ignore / link. It does not build the golden corpus.
+**Branch (after approval):** `T0200-duplicate-detection`
+**Version on finish-up:** MINOR (new `ai_duplicate_pairs` table, plus `duplicate_of` on `entity_links`).
+
+## Goal
+
+When someone creates a record, and again on a periodic sweep, find likely duplicates among records that person can see. Show a non-blocking warning (“Looks like T0201 Video course: VPC and networking”) with Open, Link as duplicate, and Ignore. Periodic hits are stored for the attention digest. Linking is an explicit click. Merging and deleting stay out of this task.
+
+## Current state
+
+- Knowledge search is ownership-scoped and drops excluded-project embeddings (T0208). Tagging (T0199) is the pattern for a post-index job, a small prompt, and a feature flag.
+- Create is uneven. Ideas and documents have title fields. New tasks on the task list still use `window.prompt`, which cannot host buttons.
+- `entity_links.relation` is `relates_to | references | supports | part_of`. There is no duplicate relation. Origin is `manual | mention`.
+- The digest engine (T0216) is Ready and not built. There is no digest table yet. T0216’s scope already says it will list “AI suggestions and duplicates waiting.”
+- Tier 3 review (T0187) exists for destructive plans. This task does not propose merges or deletes.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Which records | **Task and todo only**, including a task matched to a todo. Ideas, documents, projects, boards, wiki, canvases, and lists stay out. |
+| 2 | Who sees a hit | The signed-in user on create, and the record owner on the sweep. Candidates are records that user can see. Another user’s Ignore does not hide the pair. |
+| 3 | Signals | Normalized title (case, punctuation, extra space), then knowledge-index keyword rank and embedding similarity. No `pg_trgm`. Exact normalized title is enough on its own. |
+| 4 | Model | Feature `duplicates`, prompt `prompts/duplicates/v1.md`, small, no tools. Called only when the best hit is ambiguous and a key resolves. Input is two titles and short excerpts. Output is yes/no plus a confidence. Invalid JSON leaves the deterministic hit in place. Excluded-project text is never sent. Exact title matches skip the model. |
+| 5 | No key / feature off | Title and index hits still surface. No model call. `featuresOff` includes `duplicates` → no check, no rows. |
+| 6 | Create warning | Debounced title check on the ToDo-list create row (ToDo or Task). Actions: **Open** (leave the draft), **Link as duplicate** (save, then add the link), **Ignore** (save, then store the pair so it is not raised again). The task-list `window.prompt` cannot show this inline; after that create the same warning sits on the open task. A model “no” is stored as `rejected` so that pair is not raised again. |
+| 7 | Link | New relation `duplicate_of`, origin `manual`, only when the user clicks. Undirected in spirit: one directed row, canonical source = lower `(type, id)`. AI never inserts the link itself. |
+| 8 | Ignore | Pair row `status = ignored` for that user. Same pair is not suggested again, including after later edits. |
+| 9 | Periodic | Nightly job, same signals, writes `pending` rows for the owner. Those rows are what T0216 will list. Until that digest ships, the same pending row renders on the open record. No digest page in this task. |
+| 10 | Merge | Not in this task. No Tier 3 merge plan, no delete. |
+
+## Work items
+
+1. Migration: `ai_duplicate_pairs` (user, entity type, entity id, match type, match id, score, reason, status `pending | linked | ignored`, `content_hash`) with a canonical pair unique index. Extend `entity_links` relation check with `duplicate_of`. Update `docs/database/` and run `npm run docs:sync-schema`.
+2. Register `duplicates` on `AI_FEATURES`. Pure matcher (title normalize, index scores, ignore filter, ambiguous-band rule) with unit tests and no network.
+3. Check service and `GET /api/v1/ai/duplicate-check` for a draft title. `GET/POST` for open-record pairs: list, link, ignore. Visibility filter on every read.
+4. Enqueue a check after a successful knowledge index when the title or body hash changed, and a nightly sweep. Skip when the feature is off.
+5. Optional model confirmation for the ambiguous band only.
+6. Client: inline warning on todo title forms; banner on the open task and the open todo for pending pairs. Open / Link / Ignore. A task may point at a todo and the reverse.
+7. Tests: ignore sticks, excluded text is not sent to the model, a user cannot see another user’s records in the candidate list, link writes one `duplicate_of` row, exact title skips the model.
+
+## Out of scope
+
+- Digest page, email, or home panel (T0216–T0218). This task only stores the rows they will read.
+- Merging two records into one.
+- Live-model golden sentences (T0300).
+- Replacing `window.prompt` task create with a full form.
+- Ideas, documents, and every other record type.
+- Matching a task or todo to an idea or a document.
+
+## QA follow-ups
+
+- The duplicate warning used the pill radius (`--radius-chip`). It now uses `--radius` (8px), the same corner radius as text fields.

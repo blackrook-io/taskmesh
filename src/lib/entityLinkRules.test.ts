@@ -10,11 +10,12 @@ import {
 } from "./entityLinkRules.js";
 
 describe("entity link rules", () => {
-  it("accepts the four relations and both origins", () => {
+  it("accepts the five relations and both origins", () => {
     assert.equal(isLinkRelation("relates_to"), true);
     assert.equal(isLinkRelation("references"), true);
     assert.equal(isLinkRelation("supports"), true);
     assert.equal(isLinkRelation("part_of"), true);
+    assert.equal(isLinkRelation("duplicate_of"), true);
     assert.equal(isLinkRelation("depends_on"), false);
     assert.equal(isLinkOrigin("manual"), true);
     assert.equal(isLinkOrigin("mention"), true);

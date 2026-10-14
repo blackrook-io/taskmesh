@@ -71,6 +71,48 @@ export async function searchKnowledge(args: {
   });
 }
 
+/** Best cosine similarity per entity, visibility-scoped. Empty when embeddings are off. */
+export async function semanticEntityScores(args: {
+  actorId: number;
+  isAdmin: boolean;
+  text: string;
+  entityTypes: EntityType[];
+  exclude?: { entityType: EntityType; entityId: number };
+}): Promise<Map<string, number>> {
+  const embedded = await embedTexts([args.text]);
+  const vector = embedded?.vectors?.[0];
+  if (!vector || vector.length === 0) return new Map();
+  const filter = await chunkFilter({
+    actorId: args.actorId,
+    isAdmin: args.isAdmin,
+    entityTypes: args.entityTypes,
+  });
+  const literal = `[${vector.join(",")}]`;
+  const exclude =
+    args.exclude != null
+      ? sql`AND NOT (entity_type = ${args.exclude.entityType} AND entity_id = ${args.exclude.entityId})`
+      : sql``;
+  const result = await db.execute<{ entity_type: string; entity_id: number; similarity: number }>(sql`
+    SELECT entity_type, entity_id, (1 - (embedding <=> ${literal}::vector))::float AS similarity
+    FROM knowledge_chunks
+    WHERE embedding IS NOT NULL
+      AND ${filter}
+      ${exclude}
+    ORDER BY embedding <=> ${literal}::vector
+    LIMIT 15
+  `);
+  const scores = new Map<string, number>();
+  for (const row of result.rows) {
+    const similarity = Number(row.similarity);
+    if (!Number.isFinite(similarity)) continue;
+    const key = `${row.entity_type}:${row.entity_id}`;
+    const prev = scores.get(key);
+    const next = Math.min(1, Math.max(0, similarity));
+    if (prev == null || next > prev) scores.set(key, next);
+  }
+  return scores;
+}
+
 type ChunkRow = {
   id: number;
   entity_type: EntityType;

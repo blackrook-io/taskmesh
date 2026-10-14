@@ -5,7 +5,7 @@ import { apiJson } from "../../api/client";
 import { ENTITY_TYPES, isEntityType, type EntityType } from "../../lib/entityType";
 import { ConfirmDialog } from "../ConfirmDialog";
 
-const RELATIONS = ["relates_to", "references", "supports", "part_of"] as const;
+const RELATIONS = ["relates_to", "references", "supports", "part_of", "duplicate_of"] as const;
 type LinkRelation = (typeof RELATIONS)[number];
 type LinkOrigin = "manual" | "mention";
 
@@ -27,6 +27,7 @@ const RELATION_LABELS: Record<LinkRelation, string> = {
   references: "References",
   supports: "Supports",
   part_of: "Part of",
+  duplicate_of: "Duplicate of",
 };
 
 type LinkEnd = {

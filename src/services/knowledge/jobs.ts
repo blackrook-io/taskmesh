@@ -3,6 +3,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { isEntityType, type EntityType } from "../../lib/entityType.js";
 import { isTaggableEntityType } from "../entities.js";
+import { scheduleDuplicateCheck } from "../assistant/duplicates/schedule.js";
 import { scheduleAutoTag } from "../assistant/tagging/schedule.js";
 import type { JobDefinition } from "../jobs/definitions.js";
 import { enqueue, registerJob } from "../jobs/queue.js";
@@ -148,6 +149,7 @@ async function indexRecordJob(data: object): Promise<void> {
   if (indexed.textChanged && isTaggableEntityType(entityType)) {
     await scheduleAutoTag(entityType, entityId, indexed.contentHash ?? "empty");
   }
+  if (indexed.textChanged) await scheduleDuplicateCheck(entityType, entityId);
 }
 
 async function reindexBatch(): Promise<void> {

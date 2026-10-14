@@ -17,6 +17,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { compareEstimateHours } from "../../../src/lib/estimateHours.ts";
 import { apiJson } from "../api/client";
+import { DuplicateWarning } from "./shared/DuplicateWarning";
 import { useUndoStack } from "../hooks/useUndoStack";
 import {
   discardTaskEditSession,
@@ -803,6 +804,7 @@ export function TaskEditorFields({
             }
           }}
         />
+        <DuplicateWarning entityType="task" title={title} entityId={task.id} projectId={projectId} />
       </div>
       <div className="task-editor-grid">
         <div className="field">

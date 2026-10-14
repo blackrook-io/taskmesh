@@ -367,6 +367,7 @@ describe("user provider keys", { concurrency: false }, () => {
       { id: "assistant", available: false, reason: "no_key" },
       { id: "capture", available: false, reason: "no_key" },
       { id: "tagging", available: false, reason: "no_key" },
+      { id: "duplicates", available: false, reason: "no_key" },
     ]);
     assert.equal(JSON.stringify(missing).includes("budget_reached"), false);
 

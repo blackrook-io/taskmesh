@@ -125,7 +125,10 @@ export function TodoListsPage() {
         </div>
       ) : activeId != null ? (
         <div style={{ marginTop: "1rem" }}>
-          <TodoListView listId={activeId} />
+          <TodoListView
+            listId={activeId}
+            openEntityId={Number(searchParams.get("todo")) || null}
+          />
         </div>
       ) : (
         <p className="muted">No lists yet.</p>

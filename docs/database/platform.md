@@ -39,6 +39,7 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 | `user_ai_route_prefs` | One model choice per user and AI feature (T0205). Unique on `(user_id, feature)`. `plugin_id` and `model` are the user's pin for that feature. Distinct from `user_ai_credentials.default_model`, which is the per-plugin default. Rows are deleted with the user. | FK `user_id` → `users` · **CASCADE**. |
 | `ai_output_feedback` | One user's quality signal for an AI audit row (T0211): `thumb_up`, `thumb_down`, `accept`, `dismiss`, or `undo`. Optional `note` (max 500 characters) is for thumbs only. One thumb per `(audit_id, user_id)` — a later thumb replaces it. Accept, dismiss, and undo are one row per `(audit_id, kind)`; repeats are ignored. Does not store the prompt or the model output. Auto-tagging (T0199) writes `accept` when a tag is auto-applied or clicked, `dismiss` when a suggestion is dismissed, and `undo` when that batch is undone. | FK `audit_id` → `ai_audit_log` · **CASCADE**. Optional FK `user_id` → `users` · **SET NULL**. |
 | `ai_tag_suggestions` | One surfaced tag for a record (T0199). `pending` waits for Accept or Dismiss. `applied` was auto-applied and points at the undo journal row. `accepted` and `dismissed` are the click outcomes. `confidence` is 0–1. Either `tag_id` (an existing tag) or `proposed_name` (only when the user allows new names) is set. `content_hash` is a hash of the indexed chunk hashes, not the record text. A new text hash clears pending and dismissed rows. | FK `user_id` → `users` · **CASCADE**. Optional FKs `tag_id` → `tags` · **CASCADE**, `audit_id` → `ai_audit_log` · **SET NULL**, `journal_id` → `ai_undo_journal` · **SET NULL**. |
+| `ai_duplicate_pairs` | One likely duplicate pair of a task and/or todo for one user (T0200). Ends are stored in canonical order (`a_type`, `a_id` before `b_type`, `b_id`) so a task matched to a todo is a single row. `pending` is a warning for the attention digest and the open record. `linked` means the user added a `duplicate_of` link. `ignored` is not raised again. `rejected` is a model “no” and is not raised again. `score` is 0–1. `content_hash` identifies the titles compared, not a copy of the text. | FK `user_id` → `users` · **CASCADE**. |
 | `db_stats_snapshots` | Periodic gauges of the connected app database (size, user table count) for Administration → Database charts. A pg-boss job (`stats-sample-db`) writes a row every 5 minutes. | Standalone; no FKs. |
 
 ## Minimal relationship sketch
@@ -69,6 +70,7 @@ erDiagram
   ai_audit_log ||--o{ ai_output_feedback : "quality signals"
   users ||--o{ ai_output_feedback : "optional"
   users ||--o{ ai_tag_suggestions : "tag suggestions"
+  users ||--o{ ai_duplicate_pairs : "duplicate warnings"
   ai_audit_log ||--o{ ai_tag_suggestions : "optional"
   ai_undo_journal ||--o{ ai_tag_suggestions : "optional"
   users }o--o| uploads : avatar
@@ -161,6 +163,11 @@ erDiagram
     text kind
   }
   ai_tag_suggestions {
+    int id PK
+    int user_id FK
+    text status
+  }
+  ai_duplicate_pairs {
     int id PK
     int user_id FK
     text status

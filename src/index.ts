@@ -12,6 +12,7 @@ import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
 import { registerDocumentExtractJob, sweepDocumentExtractions } from "./services/documents/extractJob.js";
 import { registerKnowledgeJobs, resumeKnowledgeRebuild } from "./services/knowledge/jobs.js";
+import { registerDuplicateJobs } from "./services/assistant/duplicates/jobs.js";
 import { registerTaggingJobs } from "./services/assistant/tagging/jobs.js";
 import { startJobQueue, stopJobQueue } from "./services/jobs/queue.js";
 import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
@@ -27,6 +28,7 @@ ensureBackupDir();
 registerDocumentExtractJob();
 registerKnowledgeJobs();
 registerTaggingJobs();
+registerDuplicateJobs();
 
 const app = express();
 app.set("trust proxy", parseTrustProxy());

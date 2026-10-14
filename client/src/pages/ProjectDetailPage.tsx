@@ -135,6 +135,8 @@ export function ProjectDetailPage() {
   const initialCanvasId = parseIdParam(searchParams.get("canvas"));
   const initialNodeId = parseIdParam(searchParams.get("node"));
   const openTaskId = parseIdParam(searchParams.get("open"));
+  const listParam = parseIdParam(searchParams.get("list"));
+  const todoOpenId = parseIdParam(searchParams.get("todo"));
 
   const clearSearchParam = useCallback(
     (key: string) => {
@@ -296,6 +298,14 @@ export function ProjectDetailPage() {
     () => todoListsQuery.data ?? [],
     [todoListsQuery.data],
   );
+  if (
+    tab === "todo_lists" &&
+    listParam != null &&
+    projectListId !== listParam &&
+    projectTodoLists.some((list) => list.id === listParam)
+  ) {
+    setProjectListId(listParam);
+  }
 
   const todoListItemCountQueries = useQueries({
     queries: projectTodoLists.map((l) => ({
@@ -1128,6 +1138,7 @@ export function ProjectDetailPage() {
             <TodoListView
               listId={(projectListId ?? projectTodoLists[0]!.id)!}
               defaultProjectId={projectId}
+              openEntityId={todoOpenId}
             />
           ) : (
             <p className="muted">Click +New to create a To Do list for this project.</p>
