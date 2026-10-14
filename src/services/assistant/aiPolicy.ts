@@ -67,6 +67,8 @@ export type PolicyCheckInput = {
   privateRecordsInTurn?: boolean;
   /** Ignored. The model cannot choose a tier. */
   tier?: unknown;
+  /** Action keys this user turned off (`action` or `action:entityType`). */
+  userOff?: readonly string[];
 };
 
 export type PolicyLayerFns = {
@@ -217,13 +219,20 @@ export function projectPolicyLayer(input: PolicyCheckInput): PolicyDecision {
   return { decision: "allow", tier, reason: "Allowed by project AI access" };
 }
 
-/** T0190 replaces this. A user can only narrow the ceiling. */
+function userTurnedOff(input: PolicyCheckInput): boolean {
+  const off = input.userOff;
+  if (!off || off.length === 0) return false;
+  if (off.includes(input.action)) return true;
+  return input.entityType != null && off.includes(`${input.action}:${input.entityType}`);
+}
+
+/** A user can only narrow the ceiling. Off keys deny; they cannot enable a denied action. */
 export function userPolicyLayer(input: PolicyCheckInput): PolicyDecision {
-  return {
-    decision: "allow",
-    tier: tierForAction(input.action),
-    reason: "User layer allows all until T0190",
-  };
+  const tier = tierForAction(input.action);
+  if (userTurnedOff(input)) {
+    return { decision: "deny", tier, reason: "Turned off by the user" };
+  }
+  return { decision: "allow", tier, reason: "Allowed by the user" };
 }
 
 const DEFAULT_LAYERS: PolicyLayerFns = {

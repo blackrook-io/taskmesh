@@ -26,8 +26,8 @@ import {
   classifyChangePlan,
   classifyOperation,
   operationFromProposal,
-  resolveAiPermissionSettings,
 } from "../../services/assistant/aiTiers.js";
+import { loadActorAiPermission } from "../../services/assistant/aiUserPolicy.js";
 import {
   insertUndoJournal,
   journalDraftFromMutation,
@@ -214,6 +214,12 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
       localOnly = (await resolveEffectiveLocalOnly(db, parsed.projectId)) === true;
     }
     const props = await getSystemProperties(db);
+    const permission = await loadActorAiPermission(db, actorUserId);
+    if (permission.policy.featuresOff.includes("assistant")) {
+      sendError(res, 403, "ai_turned_off", "You turned the assistant off in Your AI settings.");
+      return;
+    }
+    const tierSettings = permission.settings;
     const messages = buildMessages({
       history: parsed.history ?? [],
       userMessage: parsed.message,
@@ -246,13 +252,6 @@ assistantRouter.post("/chat", assistantChatRateLimit, async (req, res) => {
     });
 
     const isAdministrator = await userHasAdministrator(db, actorUserId);
-    const [actor] = await db
-      .select({ aiTier1OptIn: schema.users.aiTier1OptIn })
-      .from(schema.users)
-      .where(eq(schema.users.id, actorUserId));
-    const tierSettings = resolveAiPermissionSettings(props.aiPermissionTiers, {
-      tier1OptIn: actor?.aiTier1OptIn === true,
-    });
     const proposals: AssistantProposal[] = [];
 
     const ran = await runConfiguredAssistant({

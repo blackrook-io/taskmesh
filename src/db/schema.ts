@@ -254,6 +254,15 @@ export const users = pgTable("users", {
    * Ignored when the Administrator ceiling has `tier1Enabled` false.
    */
   aiTier1OptIn: boolean("ai_tier1_opt_in").notNull().default(false),
+  /**
+   * User narrowing of the AI ceiling (T0190).
+   * `{ raised, off, featuresOff }`. Empty or invalid JSON inherits the ceiling.
+   */
+  aiPolicy: jsonb("ai_policy").$type<{
+    raised?: Record<string, 0 | 1 | 2 | 3>;
+    off?: string[];
+    featuresOff?: string[];
+  }>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

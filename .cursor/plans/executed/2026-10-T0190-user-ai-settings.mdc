@@ -1,0 +1,67 @@
+---
+description: T0190 — user AI settings page for keys, models, feature toggles, and a narrowing policy matrix
+---
+
+# T0190 — User AI settings page
+
+**Task:** T0190 (id 205) — AI: user AI settings page
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0177 AI: per-user keys, provider plugins and guardrails (epic)
+**Depends on:** T0183 and T0189, both `complete`. No open blockers.
+**Branch (after approval):** `T0190-user-ai-settings`
+**Version on finish-up:** MINOR (one new `drizzle/*.sql` for `users.ai_policy`)
+
+## Size
+
+One Settings page. Credentials, routing, usage, Tier 1 opt-in, and the activity feed already have APIs. This task stores the user’s narrowing policy, wires it into `check`, and replaces the Assistant settings panel. No split.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Where it lives | Keep Settings → **Assistant** and `AssistantSettingsPage`. Retitle the panel **Your AI**. The status list and the `.env` setup steps go away. Usage, the Tier 1 checkbox, and the link to AI activity stay |
+| 2 | Keys | One block per Administrator-enabled **non-local** plugin. Write-only key field, last-4 hint, optional default model, Save (existing `PUT /api/v1/ai/credentials/:pluginId`, which verifies), and Remove. Local plugins (Ollama) show “No key — this provider runs on your network.” Disabled plugins are omitted. The response never shows the key |
+| 3 | Default model vs feature model | The credential `defaultModel` stays the per-plugin default from T0183. A separate control per feature (today only **assistant**) uses `GET` / `PUT /api/v1/ai/routing/:feature`. Choices are **Automatic** or one eligible model. Automatic clears the pin |
+| 4 | Right-size | The recommendation is the first eligible model whose `size` matches the feature’s `needs.size`, otherwise the first eligible model. The select labels it **Recommended**. It is not auto-selected |
+| 5 | Feature toggles | Each registered feature has a switch, default on. Off is stored on the user and makes `GET /api/v1/ai/capabilities` return `available: false` with reason `turned_off`, which also disables the top-bar AI button. A feature the Administrator cannot serve stays locked, switch off, with “Disabled by your Administrator”, and the server rejects turning it on |
+| 6 | User policy document | New `users.ai_policy` jsonb, default `{}`. Shape: `{ raised: Record<string, 0\|1\|2\|3>, off: string[], featuresOff: string[] }`. Keys are `action` or `action:entityType`, same grammar as the Administrator matrix. Empty means inherit. Invalid JSON is treated as empty |
+| 7 | Raise or switch off | The user may set a cell to a **higher** tier than the Administrator ceiling, or mark it **Off**. A lower tier is rejected and, if already stored, ignored by the classifier (existing `userOverrides` rule). **Off** makes `userPolicyLayer` deny that action (and that record type when the key is specific). The user cannot edit blast radius, `tier1Enabled`, web access, or the floor list |
+| 8 | Locked cells | A cell the instance layer already denies, or `web_fetch` while Assistant web access is off, is not a control. It shows a lock and “Disabled by your Administrator”. The floor list stays a locked “Denied — no toggle” list, same as Administration. The server rejects a save that clears **Off** or lowers a tier on a locked cell |
+| 9 | Tier 1 | Keep the existing opt-in checkbox and `PATCH` on the assistant route. When the Administrator has `tier1Enabled` false, the checkbox stays disabled with the current explanation. Opt-in still cannot create a Tier 1 the ceiling forbids |
+| 10 | API | `GET /api/v1/ai/policy` returns the ceiling, locked keys, the caller’s document, and feature rows (`id`, `available`, `reason`, `enabled`). `PUT /api/v1/ai/policy` replaces `raised`, `off`, and `featuresOff` after validation. Own user only. No key material in the body, response, or logs |
+| 11 | Enforcement | Chat and apply load `ai_policy` and pass `raised` into `resolveAiPermissionSettings`. `userPolicyLayer` denies `off` keys. A stored document cannot enable a locked cell. Acceptance test: a user cannot enable an action or feature the Administrator disabled, and a lower tier does not stick |
+| 12 | Audit | One `ai_audit_log` row per policy save: feature `user`, action `settings`, decision `allow`, tier `0`, reason a short list of changed fields (`raised`, `off`, `featuresOff`). No matrix values that include record text, and no keys |
+
+## Work items
+
+### 1. Migration and docs
+
+- Add `users.ai_policy` jsonb not null default `'{}'`.
+- Update `docs/database/platform.md` and the glossary line for the user policy document. Run `npm run docs:sync-schema`.
+
+### 2. Policy service and routes
+
+- Parse and validate the document. Compare each `raised` value to the Administrator ceiling and each `off` / `featuresOff` entry to the instance layer, web-access switch, and capability reason `disabled_by_administrator`.
+- `GET` and `PUT /api/v1/ai/policy`.
+- Add `turned_off` to the capability reason enum and honor `featuresOff` in `listAiCapabilities`.
+- Load the document in the assistant chat path and in `check`’s user layer.
+
+### 3. Settings page
+
+- Rebuild `AssistantSettingsPage`: keys, per-feature model select with the recommendation, feature switches, the user’s matrix (inherit / higher tier / Off, locked cells), usage, Tier 1 opt-in, link to AI activity.
+- Reuse the Administrator matrix’s action and record-type lists so the grids match.
+
+### 4. Tests
+
+- PUT that lowers a tier returns 400 and leaves the row unchanged.
+- PUT that turns on a locked action or a feature the Administrator disabled returns 400.
+- `check` denies an action the user switched off, and still denies an instance-denied action if the stored document claims it is on.
+- A raised tier is what `classifyOperation` returns. Capability reason is `turned_off` when the user disables the assistant, and the policy response contains no secret.
+
+## Out of scope
+
+- Administrator matrix, budgets, web access, and provider enablement (T0189).
+- Installing plugins, or editing another user’s key.
+- Project AI access and local-only (T0184, T0320).
+- New features beyond the existing registry (only `assistant` until later tasks register more).
+- Changing Tier 2 / Tier 3 review UX (T0187).

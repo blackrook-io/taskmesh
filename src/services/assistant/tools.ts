@@ -14,6 +14,8 @@ import {
   type PolicyDecision,
   type PolicyLayerFns,
 } from "./aiPolicy.js";
+import { loadActorAiPermission } from "./aiUserPolicy.js";
+import type { AiPermissionSettings } from "./aiTiers.js";
 import {
   attachProjectAiAccess,
   documentsVisibleToAi,
@@ -805,7 +807,14 @@ async function executeAssistantToolInner(
     if (projectId != null) resolvedTarget = { ...resolvedTarget, projectId };
   }
 
-  const decide = handlers.checkPolicy ?? check;
+  let actorSettings: AiPermissionSettings | undefined;
+  let actorOff: readonly string[] | undefined;
+  if (!handlers.checkPolicy && handlers.actorUserId) {
+    const loaded = await loadActorAiPermission(db, handlers.actorUserId);
+    actorSettings = loaded.settings;
+    actorOff = loaded.off;
+  }
+  const decide = handlers.checkPolicy ?? ((input: PolicyCheckInput) => check(input, undefined, actorSettings));
   const policyInput = await attachProjectAiAccess(db, {
     actorUserId: handlers.actorUserId ?? 0,
     feature: handlers.feature ?? "assistant",
@@ -817,6 +826,7 @@ async function executeAssistantToolInner(
     fields: policyFields(args),
     webFetchEnabled: handlers.webFetchEnabled === true,
     privateRecordsInTurn: handlers.privateRecordsInTurn === true,
+    userOff: actorOff,
   });
   const localDenial = await localOnlyRouteDenial(handlers, policyInput);
   if (localDenial) {

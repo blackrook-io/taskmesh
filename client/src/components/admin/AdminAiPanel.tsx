@@ -4,43 +4,20 @@ import { apiJson, applySpaClientHeaders, maybeNotifySessionExpired } from "../..
 import { AdminAiProvidersSection } from "./AdminAiProvidersSection";
 import { AdminAiQualitySection } from "./AdminAiQualitySection";
 import { AdminAiUsageSection } from "./AdminAiUsageSection";
+import {
+  AI_POLICY_ACTIONS,
+  AI_POLICY_FLOOR,
+  AI_POLICY_RECORD_TYPES,
+  aiPolicyCellKey,
+  type AiTier,
+} from "../../lib/aiPolicyMatrix";
 
-type Tier = 0 | 1 | 2 | 3;
+type Tier = AiTier;
 type AiAccess = "full" | "read_only" | "excluded";
 
-const ACTIONS: Array<{ id: string; label: string; tier: Tier }> = [
-  { id: "read", label: "Read", tier: 0 },
-  { id: "web_fetch", label: "Web fetch", tier: 0 },
-  { id: "link", label: "Link", tier: 1 },
-  { id: "tag", label: "Tag", tier: 1 },
-  { id: "comment", label: "Comment", tier: 1 },
-  { id: "propose_create", label: "Propose create", tier: 2 },
-  { id: "propose_update", label: "Propose update", tier: 2 },
-  { id: "apply", label: "Apply", tier: 2 },
-  { id: "propose_delete", label: "Propose delete", tier: 3 },
-  { id: "bulk", label: "Bulk", tier: 3 },
-];
-
-const RECORD_TYPES: Array<{ id: string; label: string }> = [
-  { id: "idea", label: "Idea" },
-  { id: "project", label: "Project" },
-  { id: "task", label: "Task" },
-  { id: "document", label: "Document" },
-  { id: "todo", label: "Todo" },
-  { id: "todo_list", label: "Todo list" },
-];
-
-const FLOOR = [
-  "Users",
-  "Roles",
-  "Groups",
-  "API keys",
-  "AI credentials",
-  "Backups",
-  "Ownership",
-  "System properties",
-  "AI policy",
-];
+const ACTIONS = AI_POLICY_ACTIONS;
+const RECORD_TYPES = AI_POLICY_RECORD_TYPES;
+const FLOOR = AI_POLICY_FLOOR;
 
 type PermissionTiers = {
   matrix: Record<string, Tier>;
@@ -83,7 +60,7 @@ function isTier(value: unknown): value is Tier {
 }
 
 function cellKey(action: string, recordType?: string): string {
-  return recordType ? `${action}:${recordType}` : action;
+  return aiPolicyCellKey(action, recordType);
 }
 
 function defaultMatrix(): Record<string, Tier> {

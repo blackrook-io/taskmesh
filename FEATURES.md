@@ -104,7 +104,8 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Administrators enable AI providers from Administration → AI and set each provider's public https address and default model
 - Set assistant permission tiers, web access, the project AI default, and usage budgets in Administration → AI, and review the AI audit log with filters and a CSV export
 - Store an encrypted instance key per provider. Choose instance only, user only, or user preferred with instance fallback. On a multi-user instance, a mode that spends the instance key requires a typed confirmation
-- The assistant uses your own provider key when the key mode says so. The AI button stays visible and says why AI is off: no provider key, turned off by an Administrator, or this project is excluded
+- The assistant uses your own provider key when the key mode says so. The AI button stays visible and says why AI is off: no provider key, turned off by an Administrator, you turned it off, or this project is excluded
+- In Settings → Assistant, save your own provider key, pick a model with a right-size recommendation, turn the assistant off, and raise or switch off permission cells. You cannot enable anything an Administrator has disabled
 - The assistant picks a model that can use tools and falls back to the next provider when the first is rate-limited, over quota, unreachable, or rejects the key
 - Enable Anthropic for assistant chat. An environment key remains the fallback when no instance key is stored
 - Enable Google Gemini for assistant chat and embeddings. An environment key remains the fallback when no instance key is stored
