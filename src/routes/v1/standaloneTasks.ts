@@ -53,6 +53,7 @@ import {
   afterTaskHierarchyChange,
   resolvePersistedState,
 } from "../../services/taskPending.js";
+import { assertParentChangeRespectsPlans } from "../../services/plans.js";
 import {
   attachTaskActor,
   attachTaskActors,
@@ -389,6 +390,9 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         sendError(res, 400, "invalid_parent", parentOk.message);
         return;
       }
+    }
+    if (nextParentId != null && nextParentId !== existing.parentId) {
+      await assertParentChangeRespectsPlans(db, "task", taskId, nextParentId);
     }
 
     const nextStartDate = parsed.startDate !== undefined ? parsed.startDate : existing.startDate;

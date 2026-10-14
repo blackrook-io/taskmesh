@@ -29,7 +29,7 @@ import {
   OwnershipAccessError,
 } from "../ownership.js";
 import { userHasAdministrator } from "../roles.js";
-import { addDependency } from "../taskDependencies.js";
+import { addDependency, dependencyErrorStatus } from "../taskDependencies.js";
 import { applyTaskGroupAutoTagsForTask } from "../taskGroupAutoTag.js";
 import { assertTaskTagAdd, TaskWorkflowError } from "../taskWorkflow.js";
 import { syncTodoMembershipChecked } from "../todoProgress.js";
@@ -418,8 +418,7 @@ export async function applyTaskDependency(
       source: "ai",
     });
     if (!result.ok) {
-      const status = result.code === "not_found" ? 404 : 400;
-      return fail(status, result.code, result.message);
+      return fail(dependencyErrorStatus(result.code), result.code, result.message);
     }
     return {
       ok: true,

@@ -7,6 +7,7 @@ import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import {
   addDependency,
+  dependencyErrorStatus,
   formatBlockersMessage,
   listDependsOn,
   listRequiredBy,
@@ -140,8 +141,7 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
       source: activitySourceFromRequest(req),
     });
     if (!result.ok) {
-      const status = result.code === "not_found" ? 404 : 400;
-      sendError(res, status, result.code, result.message);
+      sendError(res, dependencyErrorStatus(result.code), result.code, result.message);
       return;
     }
     res.status(201).json({ data: { dependsOn: result.dependsOn, requiredBy: result.requiredBy } });

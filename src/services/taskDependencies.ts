@@ -9,6 +9,7 @@ import {
 import { formatTaskNumber } from "../lib/taskFields.js";
 import { ilikeEscaped } from "../lib/ilike.js";
 import { dualScopeListFilter } from "./ownership.js";
+import { assertDependencyRespectsPlans, PlanRuleError } from "./plans.js";
 
 export { isDependencySatisfied, SATISFIED_DEPENDENCY_STATES };
 
@@ -30,6 +31,12 @@ export function isOpenTaskState(state: string): boolean {
 
 export function isDependencyBlockingState(state: string): boolean {
   return !isDependencySatisfied(state);
+}
+
+export function dependencyErrorStatus(code: string): number {
+  if (code === "not_found") return 404;
+  if (code === "plan_order_conflict") return 409;
+  return 400;
 }
 
 function depLabel(task: Pick<TaskDepSummary, "number" | "title">): string {
@@ -172,6 +179,15 @@ export async function addDependency(
       dependsOn: await listDependsOn(db, taskId),
       requiredBy: await listRequiredBy(db, taskId),
     };
+  }
+
+  try {
+    await assertDependencyRespectsPlans(db, taskId, dependsOnTaskId);
+  } catch (err) {
+    if (err instanceof PlanRuleError) {
+      return { ok: false, code: err.code, message: err.message };
+    }
+    throw err;
   }
 
   await db.insert(schema.taskDependencies).values({ taskId, dependsOnTaskId });

@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.1 — 2026-10-14
+
+### Enhancements
+- Adding a task dependency, or changing a Task or ToDo parent, is refused when a plan that already holds both items would put a dependent above its prerequisite or split a parent from its children. The error names each conflicting plan. Removing a dependency or clearing a parent still saves.
+
 ## 0.87.0 — 2026-10-14
 
 ### Enhancements

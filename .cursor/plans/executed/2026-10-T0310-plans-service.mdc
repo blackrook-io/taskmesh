@@ -1,0 +1,48 @@
+# T0310 — plans service for order, rollups, and parent enclosure
+
+**Task:** T0310 (id `325`) — Plans: plans service for order validation, rollups and parent enclosure
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0302, T0308, T0309 — all `complete`. **Required by:** T0311 (REST). Stays blocked until this is complete.
+**Branch (after approval):** `T0310-plans-service`
+**Design:** `docs/design/plans-feature-design.pdf` (effort math p.4–5, ordering p.5–7)
+
+## Context
+
+Schema, hours, and start dates already exist. This task is the one rule set later slices call. No REST, board, drag UI, finish-date projection, or `schedulePlan` (T0311–T0318).
+
+## Decisions (confirm or adjust)
+
+1. **Pure rules in `src/services/plans.ts`, DB only at the edges.** `validatePlanOrder`, `computePlanRollup`, `previewFixOrder`, and `assertPlanRevision` take plain data and return results. A small loader finds plans that contain both ends of a new task dependency or a parent change and runs the same pure check. Routes, assistant, and MCP stay callers of this module (T0311+).
+2. **Order.** Flatten a plan by phase `sortOrder`, then item `sortOrder`. For every in-plan task dependency, the prerequisite’s index is strictly above the dependent’s. An edge with either end outside the plan is ignored. A cycle among in-plan edges is a violation (no legal order).
+3. **Parent enclosure.** A parent Task or ToDo that is in the plan encloses its in-plan direct children as one contiguous block in that same phase, starting immediately under the parent. Nested parents nest their blocks inside the ancestor block. A child whose parent is not in the plan is an ordinary row. A child in another phase than its in-plan parent is a violation. Dragging is later; this task only accepts or rejects a proposed layout.
+4. **Leaf hours.** An item’s own `estimateHours` count only when none of its direct children are in the plan. In-plan children count on their own. A skipped generation (parent and grandchild in the plan, middle child not) counts both, matching the design’s direct-child wording.
+5. **Done fraction.** Canceled and deleted items drop out of hours and counts. Task `complete` or `pending` → 1; any other task state → 0. ToDo `complete` or `pending` → 1; any other ToDo state → `progress / 100`. Null hours count as an item and as unestimated, not as hours. Hours progress is done÷total. When counted hours are 0, progress falls back to fully-done items ÷ counted items.
+6. **Writes outside the plan board use `plan_order_conflict`.** Before `addDependency` inserts, and before a Task or ToDo `parentId` change is saved (project tasks, standalone tasks, and ToDos), reject when any plan that holds both items would become illegal. The error names each plan (`PL####`). Removing a dependency or clearing a parent is allowed. “Add and move” is the later board, not this task. Layout edits (reorder, phase move, add) are not persisted here; `validatePlanOrder` reports `plan_order_violation` with each offending pair for those later callers.
+7. **Fix order is a preview.** Per phase, Kahn’s algorithm, current index as the tiebreak, with enclosure constraints so a legal phase becomes parent-then-contiguous-children. Items are not moved across phases. Cross-phase conflicts and cycles are listed and that phase is left unchanged. Nothing is written and `revision` is not incremented.
+8. **Revision lock is a pure assert.** `assertPlanRevision(current, submitted)` fails with `plan_revision_stale` (409) when they differ. The reorder writer that increments `plans.revision` is T0311/T0313.
+
+## Goal
+
+One tested service that says whether a plan order is legal, what its effort rollup is, how to fix order inside a phase, and whether a new dependency or parent link contradicts a plan that already holds both items.
+
+## Scope
+
+**In scope**
+
+1. `src/services/plans.ts` and `src/services/plans.test.ts` (node:test, no database).
+2. `PlanRuleError` (`status`, `code`, details) handled by `handleRouteError` so dependency and parent routes return the code.
+3. Call the conflict check from `addDependency`, project-task parent updates, standalone-task parent updates, and ToDo parent updates.
+
+**Out of scope**
+
+- REST, permissions, board payload, drag, keyboard moves, add-items picker, “Add and move”.
+- Persisting a reorder or bumping `plans.revision`.
+- Baseline projection and `schedulePlan`.
+- Version bump (no migration → PATCH on finish-up).
+
+## Acceptance
+
+- Unit tests cover a cycle, a prerequisite below its dependent, a cross-phase dependency, a child outside its parent’s phase, a non-contiguous or non-nested enclosure, a legal nested block, leaf-rule rollups (parent hours dropped, unestimated warning, zero-hours count fallback, ToDo `progress`), Fix order preview (stable within a phase, cross-phase left listed), and a new edge that conflicts in two plans but not a third.
+- `addDependency` and the three parent-update paths return `plan_order_conflict` without writing when the pure check fails.
+- `npm run lint` passes.
