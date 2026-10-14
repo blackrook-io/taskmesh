@@ -83,7 +83,7 @@ function TodoFilterClauseValueInput({
       </select>
     );
   }
-  if (clause.field === "dueDate") {
+  if (clause.field === "dueDate" || clause.field === "startDate") {
     return (
       <select aria-label="Filter value" value={clause.value} onChange={(e) => onChange(e.target.value)}>
         {DUE_PRESETS.map((p) => (

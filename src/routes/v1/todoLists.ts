@@ -159,6 +159,7 @@ async function hydrateUnsortedItems(
       virtual: true,
       state: todo.state,
       dueDate: todo.dueDate,
+      startDate: todo.startDate,
       estimateHours: todo.estimateHours,
       priority: todo.priority,
       actionBy: todo.actionBy?.toISOString() ?? null,
@@ -183,6 +184,7 @@ async function hydrateUnsortedItems(
       virtual: true,
       state: task.state,
       dueDate: task.dueDate,
+      startDate: task.startDate,
       estimateHours: task.estimateHours,
       priority: task.priority,
     });
@@ -227,6 +229,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
     let href: string | null = null;
     let state: string | undefined;
     let dueDate: string | null | undefined;
+    let startDate: string | null | undefined;
     let estimateHours: number | null | undefined;
     let priority: string | undefined;
     let actionBy: string | null | undefined;
@@ -245,6 +248,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
         href = null;
         state = todo.state;
         dueDate = todo.dueDate;
+        startDate = todo.startDate;
         estimateHours = todo.estimateHours;
         priority = todo.priority;
         actionBy = todo.actionBy?.toISOString() ?? null;
@@ -261,6 +265,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
         href = task.projectId != null ? `/projects/${task.projectId}?tab=tasks` : null;
         state = task.state;
         dueDate = task.dueDate;
+        startDate = task.startDate;
         estimateHours = task.estimateHours;
         priority = task.priority;
       }
@@ -271,6 +276,7 @@ async function hydrateItems(listId: number, actorId: number, isAdmin: boolean) {
       href,
       state,
       dueDate,
+      startDate,
       estimateHours,
       priority,
       actionBy,
@@ -793,6 +799,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
     let priority = "none";
     let state = "new";
     let dueDate: string | null = null;
+    let startDate: string | null = null;
     let estimateHours: number | null = null;
     let color: string | null = null;
     let sourceType: "idea" | "todo" = "idea";
@@ -823,6 +830,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
       priority = todo.priority;
       state = todo.state;
       dueDate = todo.dueDate;
+      startDate = todo.startDate;
       estimateHours = todo.estimateHours;
       color = todo.color;
       sourceType = "todo";
@@ -840,6 +848,7 @@ todoListsRouter.post("/:id/items/:itemId/convert-to-task", async (req, res) => {
         priority,
         state,
         dueDate,
+        startDate,
         estimateHours,
         color,
         sortOrder: 0,

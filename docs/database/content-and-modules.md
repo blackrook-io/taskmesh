@@ -368,6 +368,7 @@ Hierarchy is `parent_id` on the ToDo (same idea as tasks). A parent with any non
 | `state` | text | no | `'new'` | Same values as `tasks.state` |
 | `priority` | text | no | `'none'` | Same values as `tasks.priority` |
 | `due_date` | date | yes | — | Date-only due |
+| `start_date` | date | yes | — | Schedule hint (`YYYY-MM-DD`). Does not block In Progress. Null means no constraint. Must be on or before `due_date` when both are set |
 | `estimate_hours` | numeric(6,2) | yes | — | Effort estimate in hours. Null = not estimated. 0 = trivial. Quarter-hour steps only. Drizzle `mode: "number"` maps the driver string to a JSON number |
 | `action_by` | timestamptz | yes | — | When to act |
 | `color` | text | yes | — | |
@@ -382,7 +383,7 @@ Hierarchy is `parent_id` on the ToDo (same idea as tasks). A parent with any non
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `number`; CHECK `todos_progress_range` (`progress` between 0 and 100); CHECK `todos_estimate_hours_quarter` (`estimate_hours >= 0` and a whole number of quarter hours; null passes; the API also caps the value at 999.75); FKs as above (`assignee_id` · **ON DELETE SET NULL**); `parent_id` → `todos.id` · **ON DELETE SET NULL**; index `todos_parent_id_idx`.
+**Constraints:** PK `id`; UNIQUE `number`; CHECK `todos_progress_range` (`progress` between 0 and 100); CHECK `todos_estimate_hours_quarter` (`estimate_hours >= 0` and a whole number of quarter hours; null passes; the API also caps the value at 999.75); CHECK `todos_start_not_after_due` (`start_date` is null, `due_date` is null, or `start_date <= due_date`); FKs as above (`assignee_id` · **ON DELETE SET NULL**); `parent_id` → `todos.id` · **ON DELETE SET NULL**; index `todos_parent_id_idx`.
 
 ---
 
@@ -469,6 +470,8 @@ An ordered, phased sequence of Tasks and ToDos (T0309). Display number → **PL#
 | `description` | text | yes | — | |
 | `status` | text | no | `draft` | `draft` · `active` · `complete` · `archived` |
 | `target_date` | date | yes | — | |
+| `start_date` | date | yes | — | Schedule anchor. Null means a later schedule treats the anchor as today. Must be on or before `target_date` when both are set |
+| `workday_hours` | numeric(4,2) | no | `8` | Working-day length for later duration (hours ÷ workday). Quarter-hours from 0.25 through 24 |
 | `capacity_hours_per_week` | numeric(5,2) | yes | — | Used when completion history is too short to project a finish |
 | `revision` | integer | no | `0` | Optimistic lock for later reorders |
 | `owner_id` | integer | no | — | FK → `users.id` · RESTRICT |
@@ -504,7 +507,7 @@ An ordered, phased sequence of Tasks and ToDos (T0309). Display number → **PL#
 ### Constraints
 
 - **UNIQUE:** `plans.number`. `plan_items` unique on `(plan_id, entity_type, entity_id)` — `plan_items_plan_entity_uidx`.
-- **CHECK:** `plans.status` is `draft`, `active`, `complete`, or `archived`. `plan_items.entity_type` is `task` or `todo`.
+- **CHECK:** `plans.status` is `draft`, `active`, `complete`, or `archived`. `plans_start_not_after_target` requires `start_date` null, `target_date` null, or `start_date <= target_date`. `plans_workday_hours_quarter` requires `workday_hours` from 0.25 through 24 in quarter-hour steps. `plan_items.entity_type` is `task` or `todo`.
 - **INDEX:** `plan_items_order_idx` on `(plan_id, phase_id, sort_order)`. `plan_items_entity_idx` on `(entity_type, entity_id)`.
 - **DELETE:** Removing a plan cascades to its phases and items, and triggers purge matching `task_activity` and `entity_links` rows. Removing a phase is refused while it still has items. Hard-deleting a Task or ToDo removes its `plan_items` rows. Soft-deleted items stay in the plan.
 

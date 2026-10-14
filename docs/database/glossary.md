@@ -188,7 +188,10 @@ Exact FK lists are on the domain pages.
 ## Timestamps and dates
 
 - `created_at` / `updated_at` — `timestamptz`
-- `tasks.due_date` — calendar date only
+- `tasks.due_date` and `tasks.start_date` — calendar dates only. Start date is a schedule hint and does not block workflow. When both are set, start is on or before due. The same pair exists on `todos`
+- `projects.start_date` — optional default anchor for a new plan
+- `plans.start_date` — schedule anchor. Null means a later schedule treats the anchor as today. When both are set, start is on or before `target_date`
+- `plans.workday_hours` — required working-day length, default 8, quarter-hours from 0.25 through 24
 - `tasks.estimate_hours` and `todos.estimate_hours` — optional quarter-hour effort estimate. Null means not estimated. 0 means trivial
 - `tasks.due_at` — deprecated timestamp; prefer `due_date`
 

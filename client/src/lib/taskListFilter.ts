@@ -25,6 +25,7 @@ export const FILTER_FIELDS = [
   "tags",
   "project",
   "dueDate",
+  "startDate",
   "estimateHours",
 ] as const;
 export type FilterField = (typeof FILTER_FIELDS)[number];
@@ -68,6 +69,7 @@ export const FILTER_FIELD_LABELS: Record<FilterField, string> = {
   tags: "Tags",
   project: "Project",
   dueDate: "Due date",
+  startDate: "Start date",
   estimateHours: "Hours",
 };
 
@@ -93,13 +95,13 @@ export const FILTER_JOIN_LABELS: Record<FilterJoin, string> = {
 export function defaultValueForField(field: FilterField): string {
   if (field === "state") return "new";
   if (field === "priority") return "none";
-  if (field === "dueDate") return new Date().toISOString().slice(0, 10);
+  if (field === "dueDate" || field === "startDate") return new Date().toISOString().slice(0, 10);
   return "";
 }
 
 export function defaultOperatorForField(field: FilterField): FilterOperator {
   if (field === "tags") return "contains";
-  if (field === "dueDate") return "before";
+  if (field === "dueDate" || field === "startDate") return "before";
   return "is";
 }
 
@@ -202,13 +204,20 @@ function taskDueDateYmd(task: Task): string | null {
   return null;
 }
 
-function matchDueDate(task: Task, clause: FilterClause): boolean {
-  const due = taskDueDateYmd(task);
+function matchYmd(
+  ymd: string | null | undefined,
+  clause: FilterClause,
+): boolean {
   const value = clause.value.trim().slice(0, 10);
-  if (!due || !value) return false;
-  if (clause.operator === "before") return due < value;
-  if (clause.operator === "after") return due > value;
+  const date = ymd ? ymd.slice(0, 10) : "";
+  if (!date || !value) return false;
+  if (clause.operator === "before") return date < value;
+  if (clause.operator === "after") return date > value;
   return false;
+}
+
+function matchDueDate(task: Task, clause: FilterClause): boolean {
+  return matchYmd(taskDueDateYmd(task), clause);
 }
 
 /** Parse `53`, `T53`, `T0053` → integer; otherwise null. */
@@ -266,6 +275,8 @@ function fieldHaystacks(task: Task, field: FilterField, ctx?: FilterMatchContext
       const due = taskDueDateYmd(task);
       return due ? [due] : [];
     }
+    case "startDate":
+      return task.startDate ? [task.startDate.slice(0, 10)] : [];
     case "estimateHours":
       return task.estimateHours == null ? [] : [String(task.estimateHours)];
   }
@@ -341,6 +352,9 @@ export function clauseMatchesTask(
   const value = clause.value.trim();
   if (clause.field === "dueDate") {
     return matchDueDate(task, clause);
+  }
+  if (clause.field === "startDate") {
+    return matchYmd(task.startDate, clause);
   }
   if (clause.field === "estimateHours") {
     return estimateHoursMatches(task.estimateHours, clause.operator, clause.value);

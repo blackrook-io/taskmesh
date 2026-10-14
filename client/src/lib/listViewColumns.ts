@@ -33,6 +33,7 @@ const TASK_TRACK: Record<string, string> = {
   assignee: "6.5rem",
   priority: "6.5rem",
   dueDate: "8rem",
+  startDate: "8rem",
   estimateHours: "5.5rem",
   project: "minmax(5rem, 8rem)",
   phase: "7rem",
@@ -50,6 +51,7 @@ const TODO_TRACK: Record<string, string> = {
   state: "7rem",
   priority: "6.5rem",
   dueDate: "8.5rem",
+  startDate: "8.5rem",
   estimateHours: "5.5rem",
   checked: "5.5rem",
 };

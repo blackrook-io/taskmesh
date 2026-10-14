@@ -13,9 +13,11 @@ import { sendMutation, type MutationResult } from "../../lib/mutationResult.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
+import { dateOrderViolation } from "../../lib/dateOrder.js";
 import {
   dueDateSchema,
   estimateHoursSchema,
+  startDateSchema,
   selectableTaskStateSchema,
   taskPrioritySchema,
   taskStateSchema,
@@ -76,6 +78,7 @@ const createBody = z.object({
   title: plainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  startDate: startDateSchema,
   estimateHours: estimateHoursSchema,
   color: z.string().max(64).optional().nullable(),
   state: selectableTaskStateSchema.optional(),
@@ -88,6 +91,7 @@ const patchBody = z.object({
   title: optionalPlainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  startDate: startDateSchema,
   estimateHours: estimateHoursSchema,
   color: z.string().max(64).optional().nullable(),
   state: selectableTaskStateSchema.optional(),
@@ -204,6 +208,12 @@ export async function createStandaloneTask(args: {
     return { ok: false, status: 400, code: "invalid_parent", message: parentOk.message };
   }
   assertInitialState(parsed.state);
+  const dueDate = parsed.dueDate ?? null;
+  const startDate = parsed.startDate ?? null;
+  const dateOrder = dateOrderViolation(startDate, dueDate);
+  if (dateOrder) {
+    return { ok: false, status: 400, code: "invalid_dates", message: dateOrder };
+  }
   const number = await allocateTaskNumber(db);
   const sortOrder = await nextSiblingSortOrder(db, null, parentId);
   const assigneeId = await resolveAssigneeId(db, {
@@ -222,7 +232,8 @@ export async function createStandaloneTask(args: {
       description: parsed.description ?? null,
       state: parsed.state ?? "new",
       priority: parsed.priority ?? "none",
-      dueDate: parsed.dueDate ?? null,
+      dueDate,
+      startDate,
       estimateHours: parsed.estimateHours ?? null,
       color: parsed.color ?? null,
       sortOrder,
@@ -295,6 +306,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         "title",
         "description",
         "dueDate",
+        "startDate",
         "estimateHours",
         "color",
         "state",
@@ -379,6 +391,14 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       }
     }
 
+    const nextStartDate = parsed.startDate !== undefined ? parsed.startDate : existing.startDate;
+    const nextDueDate = parsed.dueDate !== undefined ? parsed.dueDate : existing.dueDate;
+    const dateOrder = dateOrderViolation(nextStartDate, nextDueDate);
+    if (dateOrder) {
+      sendError(res, 400, "invalid_dates", dateOrder);
+      return;
+    }
+
     const completeGate = await rejectCompleteIfBlocked(taskId, parsed.state);
     if (completeGate.blocked) {
       sendError(res, 400, "dependency_incomplete", completeGate.message);
@@ -397,6 +417,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
           ...(parsed.title !== undefined ? { title: parsed.title } : {}),
           ...(parsed.description !== undefined ? { description: parsed.description } : {}),
           ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
+          ...(parsed.startDate !== undefined ? { startDate: parsed.startDate } : {}),
           ...(parsed.estimateHours !== undefined ? { estimateHours: parsed.estimateHours } : {}),
           ...(parsed.color !== undefined ? { color: parsed.color } : {}),
           ...(persistedState !== undefined ? { state: persistedState } : {}),

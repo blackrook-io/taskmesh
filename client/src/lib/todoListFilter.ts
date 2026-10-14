@@ -19,6 +19,7 @@ export const TODO_FILTER_FIELDS = [
   "state",
   "priority",
   "dueDate",
+  "startDate",
   "estimateHours",
   "tags",
   "title",
@@ -63,6 +64,7 @@ export const TODO_FILTER_FIELD_LABELS: Record<TodoFilterField, string> = {
   state: "State",
   priority: "Priority",
   dueDate: "Due",
+  startDate: "Start date",
   estimateHours: "Hours",
   tags: "Tags",
   title: "Title",
@@ -138,7 +140,7 @@ export function isTodoFilterActive(filter: TodoListFilter | null | undefined): b
 export function defaultValueForTodoField(field: TodoFilterField): string {
   if (field === "state") return "new";
   if (field === "priority") return "none";
-  if (field === "dueDate") return "today";
+  if (field === "dueDate" || field === "startDate") return "today";
   if (field === "checked") return "true";
   if (field === "entityType") return "todo";
   return "";
@@ -147,7 +149,7 @@ export function defaultValueForTodoField(field: TodoFilterField): string {
 export function defaultOperatorForTodoField(field: TodoFilterField): TodoFilterOperator {
   if (field === "tags") return "contains";
   if (field === "title") return "contains";
-  if (field === "dueDate") return "is";
+  if (field === "dueDate" || field === "startDate") return "is";
   return "is";
 }
 
@@ -156,7 +158,14 @@ export function operatorsForTodoField(field: TodoFilterField): readonly TodoFilt
 }
 
 export function clauseValueUsesTodoPicker(field: TodoFilterField, operator: TodoFilterOperator): boolean {
-  if (field === "state" || field === "priority" || field === "dueDate" || field === "checked" || field === "entityType") {
+  if (
+    field === "state" ||
+    field === "priority" ||
+    field === "dueDate" ||
+    field === "startDate" ||
+    field === "checked" ||
+    field === "entityType"
+  ) {
     return true;
   }
   if (field === "tags") return operator === "contains" || operator === "does_not_contain";
@@ -324,6 +333,9 @@ export function clauseMatchesTodoItem(
   if (clause.field === "dueDate") {
     return matchDue(item.dueDate, clause, todayKey);
   }
+  if (clause.field === "startDate") {
+    return matchDue(item.startDate, clause, todayKey);
+  }
   if (clause.field === "estimateHours") {
     return estimateHoursMatches(item.estimateHours, clause.operator, clause.value);
   }
@@ -409,7 +421,7 @@ function clauseValueLabel(clause: TodoFilterClause, ctx?: TodoFilterMatchContext
   if (clause.field === "priority" && (TASK_PRIORITIES as readonly string[]).includes(clause.value)) {
     return TASK_PRIORITY_LABELS[clause.value as TaskPriority];
   }
-  if (clause.field === "dueDate" && isDuePreset(clause.value)) {
+  if ((clause.field === "dueDate" || clause.field === "startDate") && isDuePreset(clause.value)) {
     return DUE_PRESET_LABELS[clause.value];
   }
   if (clause.field === "checked") {

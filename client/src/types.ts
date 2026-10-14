@@ -29,6 +29,8 @@ export type Project = {
   /** Project AI instructions. Null when unset. */
   aiInstructions?: string | null;
   sortOrder: number;
+  /** Default schedule anchor for a new plan. Null when unset. */
+  startDate?: string | null;
   sourceIdeaId: number | null;
   ownerId?: number;
   /** Actor's effective role on this project (T0128). */
@@ -110,6 +112,8 @@ export type Task = {
     | "deleted";
   priority: "none" | "low" | "medium" | "high" | "urgent";
   dueDate: string | null;
+  /** Schedule hint. Null when unset. Does not block In Progress. */
+  startDate?: string | null;
   /** Quarter-hour effort estimate. Null when not estimated. */
   estimateHours?: number | null;
   /** @deprecated Prefer dueDate */
@@ -210,6 +214,8 @@ export type Todo = {
   state: string;
   priority: string;
   dueDate: string | null;
+  /** Schedule hint. Null when unset. Does not block In Progress. */
+  startDate?: string | null;
   /** Quarter-hour effort estimate. Null when not estimated. */
   estimateHours?: number | null;
   actionBy: string | null;
@@ -268,6 +274,7 @@ export type TodoListItem = {
   href: string | null;
   state?: string;
   dueDate?: string | null;
+  startDate?: string | null;
   estimateHours?: number | null;
   priority?: string;
   actionBy?: string | null;

@@ -173,6 +173,7 @@ export function ProjectDetailPage() {
 
   const [name, setName] = useState("");
   const [status, setStatus] = useState("idea");
+  const [startDate, setStartDate] = useState("");
   const [description, setDescription] = useState("");
   const [aiAccess, setAiAccess] = useState<AiAccess>("full");
   const [aiLocalOnly, setAiLocalOnly] = useState(false);
@@ -544,6 +545,7 @@ export function ProjectDetailPage() {
     if (project) {
       setName(project.name);
       setStatus(project.status);
+      setStartDate(project.startDate ?? "");
       setDescription(project.description ?? "");
       setAiAccess(project.aiAccess ?? "full");
       setAiLocalOnly(project.aiLocalOnly === true);
@@ -556,6 +558,7 @@ export function ProjectDetailPage() {
     if (project) {
       setName(project.name);
       setStatus(project.status);
+      setStartDate(project.startDate ?? "");
       setDescription(project.description ?? "");
       setAiAccess(project.aiAccess ?? "full");
       setAiLocalOnly(project.aiLocalOnly === true);
@@ -566,7 +569,7 @@ export function ProjectDetailPage() {
 
   const saveMeta = useMutation({
     mutationFn: async () => {
-      const body: Record<string, unknown> = { name, status };
+      const body: Record<string, unknown> = { name, status, startDate: startDate || null };
       if (canManageSettings) {
         body.description = description;
         if (project && aiAccess !== (project.aiAccess ?? "full")) {
@@ -774,6 +777,7 @@ export function ProjectDetailPage() {
                 {!overviewEdit ? (
                   <span className="overview-meta__status muted">
                     {projectStatusLabel(project.status)}
+                    {project.startDate ? ` · Start date ${project.startDate}` : ""}
                   </span>
                 ) : null}
                 {aiAccessBadge(project.aiAccessEffective) ? (
@@ -826,6 +830,15 @@ export function ProjectDetailPage() {
                 <div className="field">
                   <label htmlFor="proj-name">Name</label>
                   <input id="proj-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label htmlFor="proj-start">Start date</label>
+                  <input
+                    id="proj-start"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor="proj-status">Status</label>

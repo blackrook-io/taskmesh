@@ -59,11 +59,25 @@ function hoursLabel(value: number | null | undefined): string {
 }
 
 export function trackedTodoChanges(
-  before: { state: string; progress: number; estimateHours?: number | null },
-  after: { state: string; progress: number; estimateHours?: number | null },
-): Array<{ field: "state" | "progress" | "estimateHours"; oldValue: string; newValue: string }> {
+  before: {
+    state: string;
+    progress: number;
+    estimateHours?: number | null;
+    startDate?: string | null;
+  },
+  after: {
+    state: string;
+    progress: number;
+    estimateHours?: number | null;
+    startDate?: string | null;
+  },
+): Array<{
+  field: "state" | "progress" | "estimateHours" | "startDate";
+  oldValue: string;
+  newValue: string;
+}> {
   const changes: Array<{
-    field: "state" | "progress" | "estimateHours";
+    field: "state" | "progress" | "estimateHours" | "startDate";
     oldValue: string;
     newValue: string;
   }> = [];
@@ -90,6 +104,17 @@ export function trackedTodoChanges(
       field: "estimateHours",
       oldValue: hoursLabel(before.estimateHours),
       newValue: hoursLabel(after.estimateHours),
+    });
+  }
+  if (
+    before.startDate !== undefined &&
+    after.startDate !== undefined &&
+    before.startDate !== after.startDate
+  ) {
+    changes.push({
+      field: "startDate",
+      oldValue: before.startDate && before.startDate !== "" ? before.startDate : "none",
+      newValue: after.startDate && after.startDate !== "" ? after.startDate : "none",
     });
   }
   return changes;
