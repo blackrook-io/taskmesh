@@ -274,6 +274,18 @@ export const users = pgTable("users", {
   }>().notNull().default(sql`'{}'::jsonb`),
   /** Per-user AI instructions (T0209). Not indexed in knowledge_chunks. */
   aiInstructions: text("ai_instructions"),
+  /**
+   * Attention digest settings (T0216). Empty JSON uses daily, all sections,
+   * summary on, timezone UTC, and delivery at or after 07:00 local.
+   * `{ frequency, sections, summary, timeZone, hour }`.
+   */
+  digestPrefs: jsonb("digest_prefs").$type<{
+    frequency?: "daily" | "weekly";
+    sections?: Partial<Record<string, boolean>>;
+    summary?: boolean;
+    timeZone?: string;
+    hour?: number;
+  }>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1252,6 +1264,47 @@ export const aiDuplicatePairs = pgTable(
     orderCheck: check(
       "ai_duplicate_pairs_order_chk",
       sql`${t.aType} < ${t.bType} or (${t.aType} = ${t.bType} and ${t.aId} < ${t.bId})`,
+    ),
+  }),
+);
+
+/**
+ * One stored attention digest per user and period (T0216).
+ * Facts are deterministic. `summary` is an optional model paragraph.
+ */
+export const attentionDigests = pgTable(
+  "attention_digests",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Local date `YYYY-MM-DD` or ISO week `YYYY-Www`. */
+    periodKey: text("period_key").notNull(),
+    /** daily | weekly */
+    frequency: text("frequency").notNull(),
+    timeZone: text("time_zone").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+    sections: jsonb("sections").notNull(),
+    counts: jsonb("counts").notNull(),
+    enabled: jsonb("enabled").notNull(),
+    summary: text("summary"),
+    /** model | null */
+    summarySource: text("summary_source"),
+    excludedProjects: jsonb("excluded_projects").notNull().default(sql`'[]'::jsonb`),
+  },
+  (t) => ({
+    userPeriodUidx: uniqueIndex("attention_digests_user_period_uidx").on(t.userId, t.periodKey),
+    userGeneratedIdx: index("attention_digests_user_generated_idx").on(t.userId, t.generatedAt),
+    frequencyCheck: check(
+      "attention_digests_frequency_chk",
+      sql`${t.frequency} in ('daily', 'weekly')`,
+    ),
+    summarySourceCheck: check(
+      "attention_digests_summary_source_chk",
+      sql`${t.summarySource} is null or ${t.summarySource} = 'model'`,
     ),
   }),
 );
