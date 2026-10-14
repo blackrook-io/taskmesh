@@ -29,6 +29,7 @@ Most user-facing entities store an app-wide unique integer `number` and format i
 | W | `wiki_nodes` | W0008 |
 | C | `canvases` | C0004 |
 | M | `image_boards` | M0002 |
+| PL | `plans` | PL0001 |
 
 Internal joins still use surrogate `id` primary keys. Display numbers are for humans and stable references in conversation (for example `/worktask T0065`).
 
@@ -50,10 +51,11 @@ Several tables store **`entity_type`** (text) + **`entity_id`** (integer) instea
 - `board_cards`
 - `wiki_nodes`
 - `entity_links` (`src_type` / `src_id` and `dst_type` / `dst_id`)
+- `plan_items` (`task` or `todo` only)
 
 Canonical `entity_type` values (`EntityType`):
 
-`idea` · `project` · `task` · `todo` · `document` · `todo_list` · `board` · `canvas` · `wiki_node` · `image_board`
+`idea` · `project` · `task` · `todo` · `document` · `todo_list` · `board` · `canvas` · `wiki_node` · `image_board` · `plan`
 
 There is **no database FK** enforcing that `entity_id` exists in the target table; integrity is an application concern. Unique indexes usually prevent duplicate attachments of the same entity in the same parent (tag, list, board, or project wiki). `entity_links` is unique on the full directed pair plus relation and origin. Hard-deleting either end purges matching rows via triggers.
 

@@ -13,6 +13,8 @@ export const ENTITY_REF_PREFIXES = {
   canvas: "C",
   wiki_node: "W",
   image_board: "M",
+  /** Two letters. The one-letter mention parser does not resolve PL####. */
+  plan: "PL",
 } as const satisfies Record<EntityType, string>;
 
 export type EntityRefPrefix = (typeof ENTITY_REF_PREFIXES)[EntityType];

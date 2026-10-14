@@ -95,6 +95,13 @@ async function idForDisplayNumber(
         .where(eq(schema.imageBoards.number, number));
       return row?.id ?? null;
     }
+    case "plan": {
+      const [row] = await db
+        .select({ id: schema.plans.id })
+        .from(schema.plans)
+        .where(eq(schema.plans.number, number));
+      return row?.id ?? null;
+    }
     default: {
       const _exhaustive: never = entityType;
       return _exhaustive;

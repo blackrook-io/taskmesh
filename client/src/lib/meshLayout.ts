@@ -82,6 +82,7 @@ const TYPE_PLURAL: Record<string, string> = {
   canvas: "canvases",
   wiki_node: "wiki pages",
   image_board: "image boards",
+  plan: "plans",
   tag: "tags",
 };
 

@@ -6,6 +6,7 @@ export const PROJECT_MODULE_KEYS = [
   "wiki",
   "canvases",
   "mesh",
+  "plans",
 ] as const;
 
 export type ProjectModuleKey = (typeof PROJECT_MODULE_KEYS)[number];
@@ -18,6 +19,7 @@ export const MODULE_LABELS: Record<ProjectModuleKey, string> = {
   wiki: "Wiki",
   canvases: "Canvases",
   mesh: "Mesh",
+  plans: "Plans",
 };
 
 export const MODULE_BLURBS: Record<ProjectModuleKey, string> = {
@@ -28,6 +30,7 @@ export const MODULE_BLURBS: Record<ProjectModuleKey, string> = {
   wiki: "Nested wiki TOC for Markdown pages.",
   canvases: "Freeform diagrams and mood boards (Excalidraw).",
   mesh: "Cascade of this project's records and the links around the one in focus.",
+  plans: "Ordered phases of Tasks and ToDos with effort totals.",
 };
 
 /** Modules that already have full UI in the project hub. */

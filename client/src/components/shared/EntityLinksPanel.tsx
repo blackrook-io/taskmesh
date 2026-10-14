@@ -27,6 +27,7 @@ const TYPE_LABELS: Record<EntityType, string> = {
   canvas: "Canvas",
   wiki_node: "Wiki",
   image_board: "Image board",
+  plan: "Plan",
 };
 
 const RELATION_LABELS: Record<LinkRelation, string> = {

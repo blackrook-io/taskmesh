@@ -29,6 +29,7 @@ export const MESH_APPEARANCE_DEFAULTS: MeshAppearance = {
     canvas: "#d4a0c8",
     wiki_node: "#9bbf8a",
     image_board: "#e7a3a3",
+    plan: "#3dbe9a",
   },
   suggestion: "#e86aae",
   depDone: "#6a7582",
@@ -69,6 +70,7 @@ export const meshAppearanceSchema = z
         canvas: hexColor,
         wiki_node: hexColor,
         image_board: hexColor,
+        plan: hexColor,
       })
       .strict(),
     suggestion: hexColor,

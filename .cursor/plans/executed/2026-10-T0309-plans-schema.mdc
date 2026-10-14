@@ -1,0 +1,54 @@
+# T0309 — schema and migration for plans, phases, and items
+
+**Task:** T0309 (id `324`) — Plans: schema and migration for plans, phases and items
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** none. **Required by:** T0310 (plans service), T0317 (start date). Both stay blocked until this is complete.
+**Branch (after approval):** `T0309-plans-schema`
+**Design:** `docs/design/plans-feature-design.pdf` (Data model, pages 2–3)
+
+## Context
+
+T0308 already shipped `estimate_hours` on `tasks` and `todos`. This task is the tables those later slices sit on. No plan service, REST, or board UI.
+
+Hours, ordering rules, and the board are later children. `start_date` is T0317 and is not a column in this migration.
+
+## Decisions (confirm or adjust)
+
+1. **Columns match the design DDL.** `plans`: `number` (unique, displayed PL####), nullable `project_id` → `projects` ON DELETE CASCADE, `title`, `description`, `status` default `draft` check (`draft` | `active` | `complete` | `archived`), `target_date`, `capacity_hours_per_week` numeric(5,2) with no quarter-hour check, `revision` integer default 0, `owner_id` / `created_by_id` / `updated_by_id` → `users` ON DELETE RESTRICT, timestamps. `plan_phases`: `plan_id` CASCADE, `name`, `color`, `sort_order`, timestamps. `plan_items`: `plan_id` CASCADE, `phase_id` → `plan_phases` ON DELETE RESTRICT, `entity_type` check (`task` | `todo`), `entity_id`, `sort_order`, timestamp. Unique `(plan_id, entity_type, entity_id)`. Indexes `(plan_id, phase_id, sort_order)` and `(entity_type, entity_id)`.
+2. **No `start_date`.** That column is T0317.
+3. **Purge hard-deleted items.** An `AFTER DELETE` trigger on `todos` and on `tasks` removes matching `plan_items` rows (same shape as `purge_entity_activity` in migration 0053). The task names ToDos; tasks get the same trigger so a hard delete cannot leave an orphan membership. Soft-deleted rows stay in the plan.
+4. **Plan row cleanup.** Deleting a plan cascades phases and items. Triggers on `plans` purge `task_activity` and `entity_links` for `entity_type = 'plan'`, matching the other entity tables.
+5. **`plan` joins the canonical type list** in `EntityType` (server and client), `task_activity` entity check, `ENTITY_LINK_TYPES_SQL`, and the other checks that enumerate that same list: `knowledge_chunks`, `ai_link_suggestions`, and `mesh_layouts.root_type` (still plus `tag`). Exhaustive maps that typecheck against `EntityType` get a `plan` entry: display prefix `PL`, mesh color, link/admin labels, number allocator. Switches that are not exhaustive stay untouched unless `tsc` requires an arm; those arms are “not built yet,” not a plan API.
+6. **Mentions stay one letter.** `formatEntityRef` emits `PL0001`. The existing one-letter parser does not resolve `PL####`. Mention support waits for a later slice.
+7. **`plans` module, default off.** Add `plans` to `PROJECT_MODULE_KEYS` (server and client) after `mesh`, sort order 7, `enabled: false`. Migration inserts that row for existing projects. Settings lists it. It is not in `IMPLEMENTED_MODULES` and not in the project nav (that rail entry is T0314). The Settings **Open** button stays hidden for modules that are not implemented, so turning Plans on does not open a blank tab.
+8. **Apply on a copy of DEV data**, then migrate the DEV database only after that copy succeeds. Additive only.
+
+## Goal
+
+Persist plans, their phases, and task/todo membership so later tasks can enforce order and render a board. Display numbers are PL####. A project can turn the Plans module on.
+
+## Scope
+
+**In scope**
+
+1. Drizzle tables in `src/db/schema.ts` and a generated migration (`0082_…`). Hand-append the purge triggers and the `project_modules` backfill in that SQL file.
+2. `EntityType` plus the checks and compile-required maps in decision 5. `allocateEntityNumber` / `allocatePlanNumber` for `plans.number`.
+3. Project module key, labels, and blurbs. Hide Settings **Open** when the module is not in `IMPLEMENTED_MODULES`.
+4. Schema docs: glossary display prefix and entity type, overview inventory and diagram, physical tables (content-and-modules, next to boards). Then `npm run docs:sync-schema`.
+5. Prove the migration on a copy of the DEV database.
+
+**Out of scope**
+
+- `src/services/plans.ts`, REST, board, drag reorder, projection, assistant tools (T0310–T0316).
+- `start_date` (T0317).
+- Plan create/edit UI, Mesh node rendering, knowledge indexing of plan bodies.
+- Version bump. New `drizzle/*.sql` → **MINOR** on finish-up, from current `package.json`.
+
+## Acceptance
+
+- Migration applies on a copy of DEV data, then on DEV.
+- `plans`, `plan_phases`, and `plan_items` match decision 1, including the unique key, both indexes, and `phase_id` RESTRICT.
+- Hard-deleting a ToDo (and a Task) removes its `plan_items` rows. Deleting a phase that still has items fails. Deleting a plan removes its phases, items, activity, and links.
+- `plan` is a legal `EntityType` for activity and entity links. New projects and existing projects have a `plans` module row, off by default.
+- `npm run lint` passes. Schema docs are synced to the TaskMesh project Documents.

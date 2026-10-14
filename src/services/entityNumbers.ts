@@ -15,6 +15,7 @@ type NumberTable =
   | typeof schema.canvases
   | typeof schema.wikiNodes
   | typeof schema.imageBoards
+  | typeof schema.plans
   | typeof schema.tasks;
 
 const TABLE_BY_TYPE = {
@@ -27,6 +28,7 @@ const TABLE_BY_TYPE = {
   canvas: () => schema.canvases,
   wiki_node: () => schema.wikiNodes,
   image_board: () => schema.imageBoards,
+  plan: () => schema.plans,
   task: () => schema.tasks,
 } as const satisfies Partial<Record<EntityType, () => NumberTable>>;
 
@@ -77,4 +79,7 @@ export async function allocateWikiNodeNumber(db: Db): Promise<number> {
 }
 export async function allocateImageBoardNumber(db: Db): Promise<number> {
   return allocateEntityNumber(db, "image_board");
+}
+export async function allocatePlanNumber(db: Db): Promise<number> {
+  return allocateEntityNumber(db, "plan");
 }

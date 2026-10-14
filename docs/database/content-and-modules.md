@@ -1,6 +1,6 @@
 # Content and modules
 
-Project content surfaces: documents, uploads, tags, todo lists, module toggles, Kanban boards, wiki TOC, Excalidraw canvases, and image boards. Source: [`src/db/schema.ts`](../../src/db/schema.ts).
+Project content surfaces: documents, uploads, tags, todo lists, module toggles, plans, Kanban boards, wiki TOC, Excalidraw canvases, and image boards. Source: [`src/db/schema.ts`](../../src/db/schema.ts).
 
 Related: [overview](overview.md) · [projects and ideas](projects-and-ideas.md) · [glossary](glossary.md)
 
@@ -11,6 +11,10 @@ erDiagram
   projects ||--o{ project_documents : has
   projects ||--o{ todo_lists : "optional"
   projects ||--o{ project_modules : has
+  projects ||--o{ plans : "optional"
+  plans ||--o{ plan_phases : has
+  plans ||--o{ plan_items : has
+  plan_phases ||--o{ plan_items : has
   projects ||--o{ boards : has
   projects ||--o{ wiki_nodes : has
   projects ||--o{ canvases : has
@@ -70,6 +74,20 @@ erDiagram
   project_modules {
     int id PK
     text module_key
+  }
+  plans {
+    int id PK
+    int number UK
+    text status
+  }
+  plan_phases {
+    int id PK
+    text name
+  }
+  plan_items {
+    int id PK
+    text entity_type
+    int entity_id
   }
   boards {
     int id PK
@@ -431,6 +449,64 @@ Per-project enablement and ordering of hub modules (tasks, wiki, boards, …).
 - **PK:** `id`
 - **UNIQUE:** `(project_id, module_key)` — `project_modules_project_key_uidx`
 - **FK:** `project_id` → `projects.id` · **ON DELETE CASCADE**
+
+Known `module_key` values include `tasks`, `documents`, `todo_lists`, `boards`, `wiki`, `canvases`, `mesh`, and `plans`. New projects receive a `plans` row with `enabled` false. Existing projects receive that row from the T0309 migration.
+
+---
+
+## Plans (`plans`, `plan_phases`, `plan_items`)
+
+An ordered, phased sequence of Tasks and ToDos (T0309). Display number → **PL####**. A plan may belong to a project or stand alone (`project_id` null). Phases belong to the plan. `tasks.phase_id` is the separate project-level phase and is not used here. An item may be in any number of plans, once per plan.
+
+### `plans`
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `number` | integer | no | — | Display number (PL####), app-wide unique |
+| `project_id` | integer | yes | — | FK → `projects.id` · CASCADE. Null = standalone |
+| `title` | text | no | — | |
+| `description` | text | yes | — | |
+| `status` | text | no | `draft` | `draft` · `active` · `complete` · `archived` |
+| `target_date` | date | yes | — | |
+| `capacity_hours_per_week` | numeric(5,2) | yes | — | Used when completion history is too short to project a finish |
+| `revision` | integer | no | `0` | Optimistic lock for later reorders |
+| `owner_id` | integer | no | — | FK → `users.id` · RESTRICT |
+| `created_by_id` | integer | no | — | FK → `users.id` · RESTRICT |
+| `updated_by_id` | integer | no | — | FK → `users.id` · RESTRICT |
+| `created_at` | timestamptz | no | `now()` | |
+| `updated_at` | timestamptz | no | `now()` | |
+
+### `plan_phases`
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `plan_id` | integer | no | — | FK → `plans.id` · CASCADE |
+| `name` | text | no | — | |
+| `color` | text | yes | — | |
+| `sort_order` | integer | no | `0` | |
+| `created_at` | timestamptz | no | `now()` | |
+| `updated_at` | timestamptz | no | `now()` | |
+
+### `plan_items`
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `id` | serial | no | — | Primary key |
+| `plan_id` | integer | no | — | FK → `plans.id` · CASCADE |
+| `phase_id` | integer | no | — | FK → `plan_phases.id` · RESTRICT |
+| `entity_type` | text | no | — | `task` or `todo` |
+| `entity_id` | integer | no | — | No foreign key; hard deletes are purged by trigger |
+| `sort_order` | integer | no | `0` | |
+| `created_at` | timestamptz | no | `now()` | |
+
+### Constraints
+
+- **UNIQUE:** `plans.number`. `plan_items` unique on `(plan_id, entity_type, entity_id)` — `plan_items_plan_entity_uidx`.
+- **CHECK:** `plans.status` is `draft`, `active`, `complete`, or `archived`. `plan_items.entity_type` is `task` or `todo`.
+- **INDEX:** `plan_items_order_idx` on `(plan_id, phase_id, sort_order)`. `plan_items_entity_idx` on `(entity_type, entity_id)`.
+- **DELETE:** Removing a plan cascades to its phases and items, and triggers purge matching `task_activity` and `entity_links` rows. Removing a phase is refused while it still has items. Hard-deleting a Task or ToDo removes its `plan_items` rows. Soft-deleted items stay in the plan.
 
 ---
 

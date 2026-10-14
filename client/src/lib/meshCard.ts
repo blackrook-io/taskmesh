@@ -16,6 +16,7 @@ const TYPE_LABELS: Record<string, string> = {
   canvas: "Canvas",
   wiki_node: "Wiki",
   image_board: "Image board",
+  plan: "Plan",
   tag: "Tag",
 };
 

@@ -282,6 +282,29 @@ async function loadEndRows(
       );
   }
 
+  if (entityType === "plan") {
+    return db
+      .select({
+        id: schema.plans.id,
+        number: schema.plans.number,
+        title: schema.plans.title,
+        projectId: schema.plans.projectId,
+      })
+      .from(schema.plans)
+      .where(
+        and(
+          inArray(schema.plans.id, ids),
+          dualScopeListFilter(
+            db,
+            schema.plans.projectId,
+            schema.plans.ownerId,
+            userId,
+            isAdministrator,
+          ) ?? sql`true`,
+        ),
+      );
+  }
+
   const _exhaustive: never = entityType;
   return _exhaustive;
 }

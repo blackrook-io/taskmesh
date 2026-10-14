@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ENTITY_TYPES } from "./entityType.js";
 
 const ROOT_TYPES = [...ENTITY_TYPES, "tag"] as const;
-const PIN_KEY = /^(idea|project|task|todo|document|todo_list|board|canvas|wiki_node|image_board|tag):\d+$/;
+const PIN_KEY = /^(idea|project|task|todo|document|todo_list|board|canvas|wiki_node|image_board|plan|tag):\d+$/;
 
 export const MAX_MESH_PINS = 500;
 
@@ -12,7 +12,7 @@ const pinSchema = z.object({
 });
 
 export const meshLayoutQuerySchema = z.object({
-  root: z.string().regex(/^(idea|project|task|todo|document|todo_list|board|canvas|wiki_node|image_board|tag):\d+$/),
+  root: z.string().regex(/^(idea|project|task|todo|document|todo_list|board|canvas|wiki_node|image_board|plan|tag):\d+$/),
   view: z.enum(["focus", "plan"]),
 });
 
