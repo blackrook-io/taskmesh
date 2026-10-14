@@ -12,13 +12,22 @@ export function projectIdFromPath(pathname: string): number | null {
 
 /** Null when the assistant can open. A sentence when the AI button should stay disabled. */
 export function useAssistantBlockedTitle(): string | null {
+  return useFeatureBlockedTitle("assistant");
+}
+
+/** Null when quick capture can open. */
+export function useCaptureBlockedTitle(): string | null {
+  return useFeatureBlockedTitle("capture");
+}
+
+function useFeatureBlockedTitle(featureId: string): string | null {
   const { pathname } = useLocation();
   const projectId = useMemo(() => projectIdFromPath(pathname), [pathname]);
   const query = useQuery({
     queryKey: ["ai-capabilities", projectId],
     queryFn: () => fetchAiCapabilities(projectId),
   });
-  const assistant = query.data?.find((row) => row.id === "assistant");
-  if (!assistant || assistant.available) return null;
-  return aiUnavailableTitle(assistant.reason);
+  const feature = query.data?.find((row) => row.id === featureId);
+  if (!feature || feature.available) return null;
+  return aiUnavailableTitle(feature.reason);
 }

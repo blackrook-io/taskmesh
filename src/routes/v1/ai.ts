@@ -5,6 +5,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ENTITY_TYPES } from "../../lib/entityType.js";
 import { assembleContext, ContextAssemblyError } from "../../services/assistant/contextAssembly.js";
 import { CaptureError, proposeCapture } from "../../services/assistant/capture/service.js";
+import { confirmCaptureRequest } from "./captureConfirm.js";
 import { redactSecret } from "../../services/assistant/aiKeyMode.js";
 import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
 import { listAiCapabilities, readUserAiUsage } from "../../services/assistant/aiCapabilities.js";
@@ -270,6 +271,21 @@ const captureBody = z
     timeZone: z.string().trim().min(1).max(80).optional(),
   })
   .strict();
+
+aiRouter.post("/capture/confirm", async (req, res) => {
+  try {
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = "AI capture confirm";
+    const data = await confirmCaptureRequest(userId, req.body ?? {});
+    res.status(201).json({ data });
+  } catch (err) {
+    if (err instanceof CaptureError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
 
 aiRouter.post("/capture", async (req, res) => {
   try {

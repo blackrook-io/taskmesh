@@ -43,6 +43,9 @@ export type CaptureLookup = (phrase: string) => CaptureHit[];
 export type CaptureChoice = {
   ref: string;
   title: string;
+  /** Set when the choice is an existing record. Date choices omit both. */
+  entityType?: CaptureLookupType;
+  id?: number;
 };
 
 export type CaptureQuestion = {

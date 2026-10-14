@@ -6,8 +6,10 @@ import * as schema from "../../db/schema.js";
 import {
   activitySourceFromRequest,
   shouldRecordHistory,
+  type ActivitySource,
 } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { sendMutation, type MutationResult } from "../../lib/mutationResult.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
@@ -189,64 +191,79 @@ standaloneTasksRouter.get("/:taskId", async (req, res) => {
   }
 });
 
+export async function createStandaloneTask(args: {
+  body: unknown;
+  actorId: number;
+  source: ActivitySource;
+  recordHistory: boolean;
+}): Promise<MutationResult> {
+  const parsed = createBody.parse(args.body);
+  const parentId = parsed.parentId ?? null;
+  const parentOk = await assertParentCompatible(db, null, parentId);
+  if (!parentOk.ok) {
+    return { ok: false, status: 400, code: "invalid_parent", message: parentOk.message };
+  }
+  assertInitialState(parsed.state);
+  const number = await allocateTaskNumber(db);
+  const sortOrder = await nextSiblingSortOrder(db, null, parentId);
+  const assigneeId = await resolveAssigneeId(db, {
+    projectId: null,
+    requested: parsed.assigneeId,
+    creating: true,
+  });
+  const [row] = await db
+    .insert(schema.tasks)
+    .values({
+      projectId: null,
+      phaseId: null,
+      parentId,
+      number,
+      title: parsed.title,
+      description: parsed.description ?? null,
+      state: parsed.state ?? "new",
+      priority: parsed.priority ?? "none",
+      dueDate: parsed.dueDate ?? null,
+      estimateHours: parsed.estimateHours ?? null,
+      color: parsed.color ?? null,
+      sortOrder,
+      createdById: args.actorId,
+      updatedById: args.actorId,
+      ownerId: args.actorId,
+      assigneeId,
+    })
+    .returning();
+  if (!row) {
+    return { ok: false, status: 500, code: "insert_failed", message: "Could not create task" };
+  }
+  await afterTaskHierarchyChange(db, row.id, null, {
+    actorId: args.actorId,
+    source: args.source,
+    recordHistory: args.recordHistory,
+  });
+  await syncMentionLinks(db, {
+    srcType: "task",
+    srcId: row.id,
+    markdown: row.description,
+    actorUserId: args.actorId,
+  });
+  await scheduleKnowledgeIndex("task", row.id);
+  const created = await attachTaskActor(db, row);
+  const [data] = await attachAllowedNextStates(db, args.actorId, [created]);
+  return { ok: true, status: 201, data };
+}
+
 standaloneTasksRouter.post("/", async (req, res) => {
   try {
-    const parsed = createBody.parse(req.body);
     const actorId = await getCurrentUserId(db);
-    const parentId = parsed.parentId ?? null;
-    const parentOk = await assertParentCompatible(db, null, parentId);
-    if (!parentOk.ok) {
-      sendError(res, 400, "invalid_parent", parentOk.message);
-      return;
-    }
-    assertInitialState(parsed.state);
-    const number = await allocateTaskNumber(db);
-    const sortOrder = await nextSiblingSortOrder(db, null, parentId);
-    const assigneeId = await resolveAssigneeId(db, {
-      projectId: null,
-      requested: parsed.assigneeId,
-      creating: true,
-    });
-    const [row] = await db
-      .insert(schema.tasks)
-      .values({
-        projectId: null,
-        phaseId: null,
-        parentId,
-        number,
-        title: parsed.title,
-        description: parsed.description ?? null,
-        state: parsed.state ?? "new",
-        priority: parsed.priority ?? "none",
-        dueDate: parsed.dueDate ?? null,
-        estimateHours: parsed.estimateHours ?? null,
-        color: parsed.color ?? null,
-        sortOrder,
-        createdById: actorId,
-        updatedById: actorId,
-        ownerId: actorId,
-        assigneeId,
-      })
-      .returning();
-    if (!row) {
-      sendError(res, 500, "insert_failed", "Could not create task");
-      return;
-    }
-    await afterTaskHierarchyChange(db, row.id, null, {
-      actorId,
-      source: activitySourceFromRequest(req),
-      recordHistory: shouldRecordHistory(req),
-    });
-    await syncMentionLinks(db, {
-      srcType: "task",
-      srcId: row.id,
-      markdown: row.description,
-      actorUserId: actorId,
-    });
-    await scheduleKnowledgeIndex("task", row.id);
-    const created = await attachTaskActor(db, row);
-    const [data] = await attachAllowedNextStates(db, actorId, [created]);
-    res.status(201).json({ data });
+    sendMutation(
+      res,
+      await createStandaloneTask({
+        body: req.body,
+        actorId,
+        source: activitySourceFromRequest(req),
+        recordHistory: shouldRecordHistory(req),
+      }),
+    );
   } catch (err) {
     handleRouteError(res, err);
   }

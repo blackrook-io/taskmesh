@@ -55,7 +55,12 @@ function refOf(hit: CaptureHit): CaptureRef {
 
 function choicesOf(hits: CaptureHit[]): CaptureChoice[] {
   return hits
-    .map((hit) => ({ ref: formatEntityRef(hit.entityType, hit.number), title: hit.title }))
+    .map((hit) => ({
+      ref: formatEntityRef(hit.entityType, hit.number),
+      title: hit.title,
+      entityType: hit.entityType,
+      id: hit.id,
+    }))
     .sort((a, b) => a.ref.localeCompare(b.ref) || a.title.localeCompare(b.title));
 }
 
