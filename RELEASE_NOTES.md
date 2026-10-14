@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.83.0 — 2026-10-14
+
+### New Functionality
+- TaskMesh stores a daily or weekly attention digest for each person: overdue, at risk, stale, blocked, recent changes, tag suggestions, and possible duplicates. Work you own that is assigned to someone else is listed at the bottom with their name and status. An optional paragraph is marked as AI-written, and projects excluded from AI are named without their record titles being sent to the model.
+
 ## 0.82.1 — 2026-10-14
 
 ### New Functionality

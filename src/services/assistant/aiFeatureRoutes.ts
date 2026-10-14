@@ -46,6 +46,14 @@ export const AI_FEATURES: Record<string, AiFeatureNeeds> = {
     localOnly: false,
     size: "small",
   },
+  digest: {
+    id: "digest",
+    tools: false,
+    longContext: false,
+    embeddings: false,
+    localOnly: false,
+    size: "small",
+  },
 };
 
 export function aiFeatureNeeds(id: string): AiFeatureNeeds | null {

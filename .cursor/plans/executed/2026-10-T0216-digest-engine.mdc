@@ -1,0 +1,65 @@
+---
+description: T0216 — scheduled per-user attention digest of deterministic facts plus an optional labelled AI summary
+---
+
+# T0216 — AI digest engine
+
+**Task:** T0216 · id `231` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0197 AI: Attention digest (id `212`, Blocked). Grandparent T0177.
+**Depends on:** T0169 activity history, T0206 job queue, T0209 context assembly — all complete. No open blockers.
+**Required by:** T0217 in-app view, T0218 email delivery (both Blocked on this task).
+**Branch (after approval):** `T0216-digest-engine`
+**Version on finish-up:** MINOR (new `attention_digests` table and `users.digest_prefs`). Skip `FEATURES.md` — nothing user-visible until T0217.
+
+## Goal
+
+A scheduled job builds one stored digest per user per day or week. Facts (overdue, at risk, stale, blocked, changed since the last digest, pending tag suggestions, pending duplicates) are computed on the server. An optional model paragraph summarizes only the facts that are allowed to leave the instance, and the stored record marks that paragraph as AI-written. T0217 and T0218 render this record; they do not recompute it.
+
+## Current state
+
+- Mesh schedule math lives in `client/src/lib/meshSignals.ts`: overdue when the due date is before today; at risk when progress lags elapsed time by more than 25%. Stale uses `signalAt` and Administrator `mesh_appearance.staleDays` (default 30). There is no server copy.
+- pg-boss cron uses the host timezone (`hostTimeZone()`). Users have no timezone column. Capture accepts a browser zone per request and does not store it.
+- Pending rows already exist: `ai_tag_suggestions.status = pending` and `ai_duplicate_pairs.status = pending`. Mesh suggested links (T0168) are still Ready and have no table.
+- `assembleContext` builds a packet for one focus record. A digest is a list of many records, so that packet is the wrong shape. Project `aiAccess = excluded` must never be sent to a model (T0184).
+- Feature ids today are `assistant`, `capture`, `tagging`, `duplicates`. There is no `digest` route.
+- T0217 owns the preferences UI (frequency, sections, summary on/off) and snooze/dismiss. T0218 owns email, unsubscribe, and quiet hours.
+
+## Decisions (confirm or adjust)
+
+| # | Topic | Recommendation |
+|---|--------|----------------|
+| 1 | Whose records | Tasks and todos where the user is the assignee, or the assignee is empty and the user is the owner, fill the action sections. Projects, documents, and todo lists the user owns do too. Tasks and todos the user owns that are assigned to someone else are a status section at the bottom, not mixed into overdue, at risk, stale, or blocked. |
+| 2 | Sections | `overdue`, `at_risk`, `stale`, `blocked`, `changed`, `suggestions`, `duplicates`, then `assigned_out` last. Same rules as Mesh for the first four: civil “today” in the user’s zone; stale days from Mesh appearance; blocked means task/todo state `blocked`. Changed means activity (field changes and comments) since the previous digest, or since the start of this period on the first run. Suggestions are pending tag rows. Duplicates are pending duplicate pairs. `assigned_out` lists state, assignee name, and due date. Each section stores at most 25 items plus a total count. |
+| 3 | Item shape | Entity type, id, display ref, title, project id, a short reason, and `href`. No note or document body in the row. |
+| 4 | Preferences | `users.digest_prefs` jsonb, default daily, all sections on, summary on, timezone `UTC`, deliver at or after 07:00 local. This task does not add a settings screen. T0217 edits this object. |
+| 5 | Schedule | Hourly `digest-scan` cron. For each active user, if local time is at or after 07:00 and this period has no row, enqueue `digest-build` with singleton key `userId:periodKey`. Daily period key is `YYYY-MM-DD`; weekly is the ISO week, Monday start, in that zone. A missed 07:00 still runs on a later tick the same period. The next period does not start early. |
+| 6 | Stored record | `attention_digests`: user, period key, frequency, zone, period start/end, generated time, section items, counts, nullable summary, `summary_source` (`model` or null), and the names of projects omitted from the prompt. Unique on user + period key. An empty digest is still stored so the next “changed since” window moves forward. |
+| 7 | Summary | Register feature `digest` (small model, no tools, no embeddings). Skip the model when the preference is off, the feature is in `featuresOff`, or no key resolves. Otherwise send section labels, display refs, and titles only, wrapped as untrusted. Records in `excluded` projects stay in the stored digest and are listed by project name; their titles are not in the prompt. `read_only` projects may be summarized. One short paragraph. If the call fails, keep the facts and leave the summary null. |
+| 8 | Context assembly | Do not call `assembleContext` for the digest. Instructions and per-record packets are for a focus record. The summary input is the fact list from decision 7. |
+| 9 | Read API | `GET /api/v1/digests` (recent, own rows) and `GET /api/v1/digests/:id`. `POST /api/v1/digests/run` builds the current period now and replaces that period’s row so QA does not wait for 07:00. Scheduled runs do not replace an existing row. No snooze, dismiss, unread flag, or email. |
+| 10 | Mesh suggestions | T0168 has not shipped. This digest does not reserve a section for it. |
+
+## Work items
+
+1. Migration: `attention_digests` and `users.digest_prefs`. Document both under `docs/database/` and run `npm run docs:sync-schema`.
+2. Pure `src/lib/digestSignals.ts` for civil dates, period keys, overdue, at risk, and stale. Tests mirror the Mesh cases and the 07:00 catch-up rule.
+3. `src/services/digest/` loads the user’s records, activity since the window, pending tags, and pending duplicates, and writes the row.
+4. Register `digest-scan` and `digest-build` on the existing queue before the worker starts. Scan is hourly; build retries with backoff, concurrency 1.
+5. Feature id `digest` on `AI_FEATURES`, then the same route-and-audit path tagging uses. Prompt contains no excluded-project titles.
+6. The three HTTP routes above, session user only.
+7. Tests with fixtures: section membership, cap of 25, first-run window, excluded titles absent from the prompt payload, summary skipped when the preference or feature is off. No live model and no live Postgres required for the pure tests.
+
+## Out of scope
+
+- Digest page, home panel, snooze, dismiss, shell unread indicator, preferences screen (T0217).
+- Email, unsubscribe, quiet hours (T0218).
+- Mesh suggested links (T0168).
+- Recomputing facts in the client.
+
+## Acceptance
+
+- After 07:00 in the user’s zone, one digest row exists for that period. A second hourly tick does not add another. `POST /api/v1/digests/run` refreshes that same period.
+- Overdue, at risk, stale, and blocked items match the Mesh rules on the same dates and `signalAt` values. A task the user owns that is assigned to someone else appears only in `assigned_out`, at the bottom, with assignee and state.
+- A project set to `excluded` appears by name on the row, and its record titles are not in the text sent to the model.
+- With summary off, or with no resolved key, the row still has facts and a null summary.
+- T0217 can `GET` the same JSON T0218 will mail later.

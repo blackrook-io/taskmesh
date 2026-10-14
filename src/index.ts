@@ -11,6 +11,7 @@ import { attachApiVersionMeta } from "./middleware/apiVersionMeta.js";
 import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
 import { registerDocumentExtractJob, sweepDocumentExtractions } from "./services/documents/extractJob.js";
+import { registerDigestJobs } from "./services/digest/jobs.js";
 import { registerKnowledgeJobs, resumeKnowledgeRebuild } from "./services/knowledge/jobs.js";
 import { registerDuplicateJobs } from "./services/assistant/duplicates/jobs.js";
 import { registerTaggingJobs } from "./services/assistant/tagging/jobs.js";
@@ -29,6 +30,7 @@ registerDocumentExtractJob();
 registerKnowledgeJobs();
 registerTaggingJobs();
 registerDuplicateJobs();
+registerDigestJobs();
 
 const app = express();
 app.set("trust proxy", parseTrustProxy());
