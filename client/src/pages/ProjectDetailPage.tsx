@@ -27,6 +27,7 @@ import { DocumentsToc } from "../components/DocumentsToc";
 import { ImageBoardList } from "../components/imageBoard/ImageBoardList";
 import { OverviewPanels } from "../components/projectOverview/OverviewPanels";
 import {
+  IMPLEMENTED_MODULES,
   isProjectModuleKey,
   MODULE_BLURBS,
   MODULE_LABELS,
@@ -974,9 +975,11 @@ export function ProjectDetailPage() {
                     <div className="module-hub__actions">
                       {m.enabled ? (
                         <>
-                          <button type="button" className="btn small primary" onClick={() => setTab(key)}>
-                            Open
-                          </button>
+                          {IMPLEMENTED_MODULES.has(key) ? (
+                            <button type="button" className="btn small primary" onClick={() => setTab(key)}>
+                              Open
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="btn small ghost"

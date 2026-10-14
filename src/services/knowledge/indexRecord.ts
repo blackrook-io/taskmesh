@@ -253,6 +253,7 @@ async function loadRecord(entityType: EntityType, entityId: number): Promise<Loa
     if (!row) return null;
     return pack(row.projectId, row.number, row.title, null, await embedFor(row.projectId), [], comments);
   }
+  if (entityType === "plan") return null;
   const [row] = await db.select().from(schema.imageBoards).where(eq(schema.imageBoards.id, entityId));
   if (!row) return null;
   return pack(row.projectId, row.number, row.title, null, await embedFor(row.projectId), [], comments);

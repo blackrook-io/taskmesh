@@ -860,7 +860,7 @@ export const meshLayouts = pgTable(
     index("mesh_layouts_owner_id_idx").on(t.ownerId),
     check(
       "mesh_layouts_root_type_chk",
-      sql`${t.rootType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'tag')`,
+      sql`${t.rootType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'plan', 'tag')`,
     ),
     check("mesh_layouts_view_chk", sql`${t.view} in ('focus', 'plan')`),
   ],
@@ -1325,7 +1325,7 @@ export const aiLinkSuggestions = pgTable(
     ),
     typeCheck: check(
       "ai_link_suggestions_type_chk",
-      sql`${t.srcType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board') and ${t.dstType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board')`,
+      sql`${t.srcType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'plan') and ${t.dstType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'plan')`,
     ),
     notSelf: check(
       "ai_link_suggestions_not_self",
@@ -1604,7 +1604,7 @@ export const taskActivity = pgTable(
     entityIdx: index("task_activity_entity_idx").on(t.entityType, t.entityId, t.createdAt),
     entityTypeCheck: check(
       "task_activity_entity_type_chk",
-      sql`${t.entityType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board')`,
+      sql`${t.entityType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'plan')`,
     ),
     taskLinkCheck: check(
       "task_activity_task_link_chk",
@@ -1787,7 +1787,7 @@ export const knowledgeChunks = pgTable(
     projectIdx: index("knowledge_chunks_project_idx").on(t.projectId),
     entityTypeCheck: check(
       "knowledge_chunks_entity_type_chk",
-      sql`${t.entityType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board')`,
+      sql`${t.entityType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'plan')`,
     ),
     sourceCheck: check(
       "knowledge_chunks_source_chk",
@@ -1856,7 +1856,7 @@ export const taggings = pgTable(
  * AFTER DELETE triggers purge rows when either end is hard-deleted.
  * `origin` separates manual links from later mention sync (T0161).
  */
-const ENTITY_LINK_TYPES_SQL = `'idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board'`;
+const ENTITY_LINK_TYPES_SQL = `'idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'plan'`;
 
 export const entityLinks = pgTable(
   "entity_links",
@@ -2055,6 +2055,106 @@ export const projectModules = pgTable(
   },
   (t) => ({
     projectModuleUniq: unique("project_modules_project_key_uidx").on(t.projectId, t.moduleKey),
+  }),
+);
+
+/**
+ * Ordered, phased sequences of Tasks and ToDos (T0309).
+ * Display number → PL####. `project_id` null means a standalone plan.
+ */
+export const plans = pgTable(
+  "plans",
+  {
+    id: serial("id").primaryKey(),
+    /** App-wide unique display number → PL####. */
+    number: integer("number").notNull().unique(),
+    projectId: integer("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    title: text("title").notNull(),
+    description: text("description"),
+    /** draft | active | complete | archived */
+    status: text("status").notNull().default("draft"),
+    targetDate: date("target_date", { mode: "string" }),
+    /** Hours per week used when completion history is too short to project a finish. */
+    capacityHoursPerWeek: numeric("capacity_hours_per_week", {
+      precision: 5,
+      scale: 2,
+      mode: "number",
+    }),
+    /** Optimistic lock incremented on every successful reorder. */
+    revision: integer("revision").notNull().default(0),
+    ownerId: integer("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdById: integer("created_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    updatedById: integer("updated_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    statusCheck: check(
+      "plans_status_chk",
+      sql`${t.status} in ('draft', 'active', 'complete', 'archived')`,
+    ),
+  }),
+);
+
+/** Phases belong to one plan. Deleting a phase is refused while it still has items. */
+export const planPhases = pgTable("plan_phases", {
+  id: serial("id").primaryKey(),
+  planId: integer("plan_id")
+    .notNull()
+    .references(() => plans.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * One row is one Task or ToDo in one phase of one plan.
+ * An item may appear in many plans, once per plan.
+ */
+export const planItems = pgTable(
+  "plan_items",
+  {
+    id: serial("id").primaryKey(),
+    planId: integer("plan_id")
+      .notNull()
+      .references(() => plans.id, { onDelete: "cascade" }),
+    phaseId: integer("phase_id")
+      .notNull()
+      .references(() => planPhases.id, { onDelete: "restrict" }),
+    /** task | todo */
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    planEntityUniq: unique("plan_items_plan_entity_uidx").on(t.planId, t.entityType, t.entityId),
+    orderIdx: index("plan_items_order_idx").on(t.planId, t.phaseId, t.sortOrder),
+    entityIdx: index("plan_items_entity_idx").on(t.entityType, t.entityId),
+    entityTypeCheck: check(
+      "plan_items_entity_type_chk",
+      sql`${t.entityType} in ('task', 'todo')`,
+    ),
   }),
 );
 
@@ -2257,6 +2357,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   documents: many(projectDocuments),
   todoLists: many(todoLists),
   modules: many(projectModules),
+  plans: many(plans),
   boards: many(boards),
   wikiNodes: many(wikiNodes),
   canvases: many(canvases),
@@ -2390,6 +2491,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   createdEntityLinks: many(entityLinks, { relationName: "entity_link_created_by" }),
   ownedTodoLists: many(todoLists, { relationName: "todo_list_owner" }),
   ownedImageBoards: many(imageBoards, { relationName: "image_board_owner" }),
+  ownedPlans: many(plans, { relationName: "plan_owner" }),
+  createdPlans: many(plans, { relationName: "plan_created_by" }),
+  updatedPlans: many(plans, { relationName: "plan_updated_by" }),
   createdTaskDescriptionTemplates: many(taskDescriptionTemplates, {
     relationName: "task_description_templates_created_by",
   }),
@@ -2752,6 +2856,49 @@ export const projectModulesRelations = relations(projectModules, ({ one }) => ({
   project: one(projects, {
     fields: [projectModules.projectId],
     references: [projects.id],
+  }),
+}));
+
+export const plansRelations = relations(plans, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [plans.projectId],
+    references: [projects.id],
+  }),
+  owner: one(users, {
+    fields: [plans.ownerId],
+    references: [users.id],
+    relationName: "plan_owner",
+  }),
+  createdBy: one(users, {
+    fields: [plans.createdById],
+    references: [users.id],
+    relationName: "plan_created_by",
+  }),
+  updatedBy: one(users, {
+    fields: [plans.updatedById],
+    references: [users.id],
+    relationName: "plan_updated_by",
+  }),
+  phases: many(planPhases),
+  items: many(planItems),
+}));
+
+export const planPhasesRelations = relations(planPhases, ({ one, many }) => ({
+  plan: one(plans, {
+    fields: [planPhases.planId],
+    references: [plans.id],
+  }),
+  items: many(planItems),
+}));
+
+export const planItemsRelations = relations(planItems, ({ one }) => ({
+  plan: one(plans, {
+    fields: [planItems.planId],
+    references: [plans.id],
+  }),
+  phase: one(planPhases, {
+    fields: [planItems.phaseId],
+    references: [planPhases.id],
   }),
 }));
 

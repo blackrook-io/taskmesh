@@ -220,6 +220,8 @@ function sourceTable(entityType: EntityType): string {
       return "wiki_nodes";
     case "image_board":
       return "image_boards";
+    case "plan":
+      return "plans";
   }
 }
 

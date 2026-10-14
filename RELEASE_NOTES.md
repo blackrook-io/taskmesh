@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.86.0 — 2026-10-14
+
+### New Functionality
+- A project can turn on Plans from Settings. The module stays off until enabled, and it does not appear in the project nav until the plan board ships. Plans, their phases, and Task or ToDo membership are stored so later work can order them and total hours. Display numbers are PL####.
+
 ## 0.85.10 — 2026-10-14
 
 ### Enhancements

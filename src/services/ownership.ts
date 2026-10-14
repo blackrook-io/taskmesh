@@ -354,6 +354,18 @@ export async function assertCanAccessEntity(
       await assertCanAccessDualScoped(db, actorUserId, row, level);
       return;
     }
+    case "plan": {
+      const [row] = await db
+        .select({
+          projectId: schema.plans.projectId,
+          ownerId: schema.plans.ownerId,
+        })
+        .from(schema.plans)
+        .where(eq(schema.plans.id, entityId));
+      if (!row) throw new NotFoundError("Entity not found");
+      await assertCanAccessDualScoped(db, actorUserId, row, level);
+      return;
+    }
     default: {
       const _exhaustive: never = entityType;
       throw new NotFoundError(`Unsupported entity type: ${_exhaustive}`);

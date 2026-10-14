@@ -14,7 +14,7 @@ import { eq } from "drizzle-orm";
 const rootTypes = [...ENTITY_TYPES, "tag"] as const;
 
 const graphQuery = z.object({
-  root: z.string().regex(/^(idea|project|task|todo|document|todo_list|board|canvas|wiki_node|image_board|tag):\d+$/),
+  root: z.string().regex(/^(idea|project|task|todo|document|todo_list|board|canvas|wiki_node|image_board|plan|tag):\d+$/),
   depth: z.coerce.number().int().optional(),
   rel: z.string().max(400).optional(),
   hideDone: z.enum(["true", "false", "1", "0"]).optional(),

@@ -18,7 +18,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Main domain** (full physical documentation):
 
-`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `project_managers`, `project_members`, `project_viewers`, `project_manager_groups`, `project_member_groups`, `project_viewer_groups`, `tasks`, `todos`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `document_extractions`, `document_text_spans`, `knowledge_chunks`, `uploads`, `tags`, `taggings`, `entity_links`, `todo_lists`, `todo_list_items`, `project_modules`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
+`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `project_managers`, `project_members`, `project_viewers`, `project_manager_groups`, `project_member_groups`, `project_viewer_groups`, `tasks`, `todos`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `document_extractions`, `document_text_spans`, `knowledge_chunks`, `uploads`, `tags`, `taggings`, `entity_links`, `todo_lists`, `todo_list_items`, `project_modules`, `plans`, `plan_phases`, `plan_items`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
 
 **Non-main** (inventory + minimal on diagrams):
 
@@ -26,7 +26,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 ## Conceptual model
 
-At a high level, a **Project** is the hub. An **Idea** can become a project or a **ToDo**. **ToDos** (display **D####**) are first-class scheduled items lighter than Tasks. Projects own task groups, project phases, role lists (managers / members / viewers — access enforced in T0128), tasks, todos, documents, module toggles, boards, wiki nodes, and canvases. Tasks and ToDos may also exist outside a project. **To Do lists** hold ToDo and Task memberships (legacy Idea rows may remain). Tags attach via polymorphic `(entity_type, entity_id)` pairs. **`entity_links`** stores directed links between any two records (manual, and later mentions) without copying the structural relations already on other tables. **`knowledge_chunks`** stores full-text and optional embeddings for those records (titles, bodies, comments, and extracted PDF/EPUB text). **`task_activity`** is the shared timeline for those records: task rows still cascade with the task, and ToDo, Project, Document, and ToDo List rows use the same `(entity_type, entity_id)` key. List comments are stored on the list. A list's last update is still taken from its members. Users and API keys support authorship and future auth; they are not the focus of product modeling.
+At a high level, a **Project** is the hub. An **Idea** can become a project or a **ToDo**. **ToDos** (display **D####**) are first-class scheduled items lighter than Tasks. Projects own task groups, project phases, role lists (managers / members / viewers — access enforced in T0128), tasks, todos, documents, module toggles, plans, boards, wiki nodes, and canvases. A **Plan** (display **PL####**) is an ordered set of phases whose items are Tasks and ToDos; the same item may sit in several plans, once per plan. Standalone plans have no project. Tasks and ToDos may also exist outside a project. **To Do lists** hold ToDo and Task memberships (legacy Idea rows may remain). Tags attach via polymorphic `(entity_type, entity_id)` pairs. **`entity_links`** stores directed links between any two records (manual, and later mentions) without copying the structural relations already on other tables. **`knowledge_chunks`** stores full-text and optional embeddings for those records (titles, bodies, comments, and extracted PDF/EPUB text). **`task_activity`** is the shared timeline for those records: task rows still cascade with the task, and ToDo, Project, Document, and ToDo List rows use the same `(entity_type, entity_id)` key. List comments are stored on the list. A list's last update is still taken from its members. Users and API keys support authorship and future auth; they are not the focus of product modeling.
 
 ```mermaid
 erDiagram
@@ -46,6 +46,10 @@ erDiagram
   project_documents ||--o{ document_text_spans : "page or chapter"
   projects ||--o{ todo_lists : "may own"
   projects ||--o{ project_modules : has
+  projects ||--o{ plans : "optional"
+  plans ||--o{ plan_phases : has
+  plans ||--o{ plan_items : has
+  plan_phases ||--o{ plan_items : has
   projects ||--o{ boards : has
   projects ||--o{ wiki_nodes : has
   projects ||--o{ canvases : has

@@ -167,7 +167,7 @@ async function reindexBatch(): Promise<void> {
     );
     return;
   }
-  const index = KNOWLEDGE_ENTITY_ORDER.indexOf(cursor.entityType);
+  const index = (KNOWLEDGE_ENTITY_ORDER as readonly string[]).indexOf(cursor.entityType);
   const next = KNOWLEDGE_ENTITY_ORDER[index + 1];
   if (!next) {
     await writeKnowledgeCursor({ status: "idle", entityType: "idea", afterId: 0 });
@@ -238,7 +238,8 @@ async function nextIds(entityType: EntityType, afterId: number): Promise<number[
   if (entityType === "board") return takeIds(schema.boards, afterId);
   if (entityType === "canvas") return takeIds(schema.canvases, afterId);
   if (entityType === "wiki_node") return takeIds(schema.wikiNodes, afterId);
-  return takeIds(schema.imageBoards, afterId);
+  if (entityType === "image_board") return takeIds(schema.imageBoards, afterId);
+  return [];
 }
 
 async function takeIds(

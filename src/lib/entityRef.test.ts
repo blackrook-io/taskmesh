@@ -13,6 +13,7 @@ describe("entityRef", () => {
     assert.equal(formatEntityRef("todo", 3), "D0003");
     assert.equal(formatEntityRef("document", 12), "N0012");
     assert.equal(formatEntityRef("image_board", 12), "M0012");
+    assert.equal(formatEntityRef("plan", 1), "PL0001");
   });
 
   it("maps prefixes", () => {
@@ -31,5 +32,7 @@ describe("entityRef", () => {
     });
     assert.equal(parseEntityRefToken("42", "idea").number, 42);
     assert.equal(parseEntityRefToken("42", "idea").entityType, "idea");
+    assert.equal(parseEntityRefToken("PL0001").entityType, null);
+    assert.equal(parseEntityRefToken("PL0001").number, null);
   });
 });

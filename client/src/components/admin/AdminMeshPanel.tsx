@@ -24,6 +24,7 @@ const TYPE_FIELDS: { key: EntityType; label: string }[] = [
   { key: "canvas", label: "Canvas" },
   { key: "wiki_node", label: "Wiki" },
   { key: "image_board", label: "Image board" },
+  { key: "plan", label: "Plan" },
 ];
 
 const LINE_FIELDS: { key: keyof MeshAppearance["lines"]; label: string; css: string }[] = [

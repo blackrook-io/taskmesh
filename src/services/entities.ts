@@ -89,6 +89,13 @@ export async function entityExists(
         .where(eq(schema.imageBoards.id, entityId));
       return Boolean(row);
     }
+    case "plan": {
+      const [row] = await database
+        .select({ id: schema.plans.id })
+        .from(schema.plans)
+        .where(eq(schema.plans.id, entityId));
+      return Boolean(row);
+    }
     default: {
       const _exhaustive: never = entityType;
       return Boolean(_exhaustive);
