@@ -582,6 +582,13 @@
       "when": 1792015722561,
       "tag": "0082_plans_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1792017325848,
+      "tag": "0083_classy_starjammers",
+      "breakpoints": true
     }
   ]
 }

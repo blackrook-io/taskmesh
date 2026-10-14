@@ -1,0 +1,81 @@
+# T0317 — Start date on Tasks, ToDos, Plans, and Projects
+
+**Status:** Complete — finishing up
+**App version:** `0.87.0` (MINOR; new `start_date` columns and `plans.workday_hours`)
+**Branch (on approval):** `T0317-start-date`
+**DEV Task:** T0317 (`id` 332), project 4, state `ready`, priority medium
+**Parent:** T0307 Plans epic (`id` 322, `blocked` — other children still open; this child is not blocked)
+**Depends on:** T0309 schema (`id` 324, `complete`) — gate clear
+**Required by:** T0318 timeline (`id` 333, `blocked`) — out of scope
+**Schema:** yes — `start_date` on four tables and `plans.workday_hours` (finish-up MINOR)
+
+## Goal
+
+Store a date-only Start date so a later timeline can honor "not before" dates and anchor a schedule. This task adds the field, the shared rejection rule, and the existing edit surfaces. It does not draw the Gantt or project a finish date.
+
+## Semantics
+
+| Record | Meaning of Start date | Empty value |
+|--------|------------------------|-------------|
+| Task, ToDo | Schedule hint: do not place the bar before this date. It does not block Start or In Progress when prerequisites are clear | No constraint |
+| Plan | Schedule anchor | Treat as today when a later schedule reads it |
+| Project | Default anchor copied onto a new plan | New plans stay unanchored (today at schedule time) |
+
+Label the control **Start date** on every surface so it is never the Start action.
+
+## Decisions (confirm before implement)
+
+| # | Decision |
+|---|----------|
+| 1 | Nullable `start_date` (`YYYY-MM-DD`) on `tasks`, `todos`, `plans`, and `projects`. No default. **Confirmed:** "not before" is scheduling only. A future Start date does not block setting a Task or ToDo to In Progress, or the Start action, when there are no open blockers or prerequisites. Workflow stays in `taskWorkflow`. |
+| 2 | `plans.workday_hours numeric(4,2) NOT NULL DEFAULT 8`. API accepts quarter-hours from `0.25` through `24`. `0` is rejected so a later duration (hours ÷ workday) cannot divide by zero. |
+| 3 | **Confirmed:** the pair is one invariant, checked when either date is created or patched. Start date cannot be after the due date, and the due date cannot be before the Start date. Shared message, UI and API: **Start date cannot be after the due date.** Equal dates are allowed. A null on either side skips the check. Projects have no due date, so a project start date is not compared. A plan start date and `target_date` use the same both-ways check with **Start date cannot be after the target date.** |
+| 4 | `startDate` joins `EDIT_KEYS`. Complete, Canceled, and Deleted tasks stay read-only. ToDos stay editable when complete, same as Hours. |
+| 5 | Task and ToDo editors (list expand, board, kanban, overview, ToDo editor) get a date input beside Due date. Blank clears to null. Project detail edit form gets the same field. |
+| 6 | List column **Start date**, default visible, sort order `55` (just before Due date at `60`), on Task lists and ToDo lists. Sortable. Nulls sort last. ToDo-list rows that are Tasks show that task's start date. |
+| 7 | Filters match Due date on each list: Tasks `before` / `after`; ToDos `is` / `is_not` / `before` / `after`. |
+| 8 | Task CSV/XLSX export adds `startDate` (empty when null). Import: empty → null; `YYYY-MM-DD` inserts; a start after that row's due date, or a due date before that row's start date, discards the row with the same message. ToDos, Projects, and Plans have no spreadsheet import; this task does not add one. |
+| 9 | A Task or ToDo start-date change is recorded in activity with the label **Start date**. |
+| 10 | Plans have no REST or editor yet (T0311 / T0312). This task adds the columns and a small validator (`startDate` vs `targetDate`, `workdayHours` range) for those tasks to call. It does not add plan routes or a plan form. On approval, post a comment on T0311 naming the two fields and the validator. |
+| 11 | Project start date is not copied onto plans that already exist. The copy happens when a plan is created, which T0311 owns. |
+| 12 | Assistant and MCP task tools stay unchanged. T0316 covers plan tools, not this field. |
+
+## Out of scope
+
+- Timeline bars, `schedulePlan`, and finish projection (T0315, T0318).
+- Plan CRUD, board rows, and a plan settings form (T0311, T0312).
+- Mesh cards, calendar, command palette, quick capture.
+- Using Start date as a workflow gate (state transitions stay on prerequisites only).
+
+## Schema and docs
+
+- One Drizzle migration: four `start_date` columns; `plans.workday_hours`; `entity_fields` rows for `startDate` on `task` and `todo_list` (same insert shape as Hours in `0075`).
+- Update `docs/database/tasks.md`, `projects-and-ideas.md`, `content-and-modules.md` (ToDos and Plans), and the glossary line for date fields.
+- `npm run docs:sync-schema` after the docs edit.
+
+## API
+
+- Create and patch on project tasks, standalone tasks, todos, and projects. A due-date patch is refused when it falls before the stored Start date, and a start-date patch is refused when it falls after the stored due date.
+- Import uses the same pair rule.
+- State changes ignore Start date. A task with a future Start date and no open prerequisites can still move to In Progress.
+- Closed-task patch that includes `startDate` returns the existing read-only error.
+
+## UI
+
+- Date control labeled **Start date**, stacked with Due date on narrow screens.
+- Column personalize can hide Start date.
+- Existing saved list prefs pick up the new column the same way they picked up Hours.
+
+## QA
+
+No follow-up requests before finish-up. Checks covered an inverted pair refused with the shared sentence, a future Start date still moving to In Progress, the list column, and the project overview field.
+
+## QA (after implementation)
+
+- Save a Task start date, clear it, and sort the column.
+- A start date after the due date is refused in the form and by the API with the same sentence. Setting the due date before the Start date is refused the same way. The same calendar day is accepted.
+- A Task whose Start date is in the future, with no open prerequisites, can still move to In Progress.
+- A closed Task rejects a start-date patch.
+- Task import discards a row whose start date is after its due date.
+- Project edit saves and clears Start date.
+- Filter a Task list with Start date before / after.

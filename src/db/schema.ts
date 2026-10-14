@@ -54,6 +54,11 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   description: text("description"),
   status: text("status").notNull().default("idea"),
+  /**
+   * Default schedule anchor for a new plan (YYYY-MM-DD).
+   * Null means a new plan stays unanchored.
+   */
+  startDate: date("start_date", { mode: "string" }),
   /** Manual list order (left nav / project list). */
   sortOrder: integer("sort_order").notNull().default(0),
   /** Set when an idea was converted into this project. */
@@ -1462,6 +1467,11 @@ export const tasks = pgTable("tasks", {
   /** Date-only due date (YYYY-MM-DD). */
   dueDate: date("due_date", { mode: "string" }),
   /**
+   * Schedule hint (YYYY-MM-DD): do not place work before this date.
+   * Does not block In Progress. Null means no constraint.
+   */
+  startDate: date("start_date", { mode: "string" }),
+  /**
    * Effort estimate in hours. Null = not estimated. 0 = trivial.
    * Quarter-hour steps only (0, 0.25, …, 999.75 at the API).
    */
@@ -1510,6 +1520,10 @@ export const tasks = pgTable("tasks", {
   estimateHoursQuarter: check(
     "tasks_estimate_hours_quarter",
     sql`${t.estimateHours} >= 0 AND ${t.estimateHours} * 4 = trunc(${t.estimateHours} * 4)`,
+  ),
+  startNotAfterDue: check(
+    "tasks_start_not_after_due",
+    sql`${t.startDate} is null or ${t.dueDate} is null or ${t.startDate} <= ${t.dueDate}`,
   ),
 }));
 
@@ -1932,6 +1946,11 @@ export const todos = pgTable("todos", {
   /** Date-only due date (YYYY-MM-DD). */
   dueDate: date("due_date", { mode: "string" }),
   /**
+   * Schedule hint (YYYY-MM-DD): do not place work before this date.
+   * Does not block In Progress. Null means no constraint.
+   */
+  startDate: date("start_date", { mode: "string" }),
+  /**
    * Effort estimate in hours. Null = not estimated. 0 = trivial.
    * Quarter-hour steps only (0, 0.25, …, 999.75 at the API).
    */
@@ -1978,6 +1997,10 @@ export const todos = pgTable("todos", {
   estimateHoursQuarter: check(
     "todos_estimate_hours_quarter",
     sql`${t.estimateHours} >= 0 AND ${t.estimateHours} * 4 = trunc(${t.estimateHours} * 4)`,
+  ),
+  startNotAfterDue: check(
+    "todos_start_not_after_due",
+    sql`${t.startDate} is null or ${t.dueDate} is null or ${t.startDate} <= ${t.dueDate}`,
   ),
   parentIdx: index("todos_parent_id_idx").on(t.parentId),
 }));
@@ -2076,6 +2099,17 @@ export const plans = pgTable(
     /** draft | active | complete | archived */
     status: text("status").notNull().default("draft"),
     targetDate: date("target_date", { mode: "string" }),
+    /**
+     * Schedule anchor (YYYY-MM-DD). Null means a later schedule treats the anchor as today.
+     */
+    startDate: date("start_date", { mode: "string" }),
+    /**
+     * Hours in a working day. Later duration is estimate hours ÷ this value.
+     * Quarter-hours from 0.25 through 24.
+     */
+    workdayHours: numeric("workday_hours", { precision: 4, scale: 2, mode: "number" })
+      .notNull()
+      .default(8),
     /** Hours per week used when completion history is too short to project a finish. */
     capacityHoursPerWeek: numeric("capacity_hours_per_week", {
       precision: 5,
@@ -2104,6 +2138,14 @@ export const plans = pgTable(
     statusCheck: check(
       "plans_status_chk",
       sql`${t.status} in ('draft', 'active', 'complete', 'archived')`,
+    ),
+    startNotAfterTarget: check(
+      "plans_start_not_after_target",
+      sql`${t.startDate} is null or ${t.targetDate} is null or ${t.startDate} <= ${t.targetDate}`,
+    ),
+    workdayHoursQuarter: check(
+      "plans_workday_hours_quarter",
+      sql`${t.workdayHours} >= 0.25 AND ${t.workdayHours} <= 24 AND ${t.workdayHours} * 4 = trunc(${t.workdayHours} * 4)`,
     ),
   }),
 );

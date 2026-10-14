@@ -14,6 +14,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { dateOrderViolation } from "../../../src/lib/dateOrder.ts";
 import { apiJson } from "../api/client";
 import { ignoreDuplicatePair, linkDuplicatePair } from "../api/duplicates";
 import { DuplicateWarning } from "./shared/DuplicateWarning";
@@ -218,6 +219,35 @@ function SortableItem({
           </span>
         );
       }
+      case "startDate": {
+        const startLocked = item.entityType === "task" && isClosedTaskState(item.state ?? "");
+        return canInline ? (
+          <input
+            key="startDate"
+            type="date"
+            className="task-list-row__date"
+            value={item.startDate ?? ""}
+            disabled={startLocked}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const next = e.target.value || null;
+              const message = dateOrderViolation(next, item.dueDate);
+              if (message) {
+                e.target.setCustomValidity(message);
+                e.target.reportValidity();
+                return;
+              }
+              e.target.setCustomValidity("");
+              onPatchEntity({ startDate: next });
+            }}
+            aria-label="Start date"
+          />
+        ) : (
+          <span key="startDate" className="muted">
+            —
+          </span>
+        );
+      }
       case "dueDate":
         return canInline ? (
           <input
@@ -226,7 +256,17 @@ function SortableItem({
             className="task-list-row__date"
             value={item.dueDate ?? ""}
             onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onPatchEntity({ dueDate: e.target.value || null })}
+            onChange={(e) => {
+              const next = e.target.value || null;
+              const message = dateOrderViolation(item.startDate, next);
+              if (message) {
+                e.target.setCustomValidity(message);
+                e.target.reportValidity();
+                return;
+              }
+              e.target.setCustomValidity("");
+              onPatchEntity({ dueDate: next });
+            }}
             aria-label="Due date"
           />
         ) : (
@@ -414,6 +454,7 @@ export function TodoEditorFields({
   const [state, setState] = useState(todo.state);
   const [priority, setPriority] = useState(todo.priority);
   const [dueLocal, setDueLocal] = useState(todo.dueDate ?? "");
+  const [startLocal, setStartLocal] = useState(todo.startDate ?? "");
   const [actionByLocal, setActionByLocal] = useState(datetimeLocalValue(todo.actionBy));
   const [progress, setProgress] = useState(todo.progress ?? 0);
   const [color, setColor] = useState(todo.color);
@@ -427,6 +468,7 @@ export function TodoEditorFields({
     setState(todo.state);
     setPriority(todo.priority);
     setDueLocal(todo.dueDate ?? "");
+    setStartLocal(todo.startDate ?? "");
     setActionByLocal(datetimeLocalValue(todo.actionBy));
     setProgress(todo.progress ?? 0);
     setColor(todo.color);
@@ -500,6 +542,26 @@ export function TodoEditorFields({
             ))}
           </select>
         </div>
+        <div className="field">
+          <label htmlFor={`d-start-${todo.id}`}>Start date</label>
+          <input
+            id={`d-start-${todo.id}`}
+            type="date"
+            value={startLocal}
+            onChange={(e) => setStartLocal(e.target.value)}
+            onBlur={() => {
+              const next = startLocal || null;
+              if (next === (todo.startDate ?? null)) return;
+              const message = dateOrderViolation(next, dueLocal || null);
+              if (message) {
+                setSaveError(message);
+                setStartLocal(todo.startDate ?? "");
+                return;
+              }
+              void patch({ startDate: next });
+            }}
+          />
+        </div>
         <div className="field task-editor-date-color">
           <label htmlFor={`d-due-${todo.id}`}>Due date</label>
           <div className="task-editor-date-color__row">
@@ -510,7 +572,14 @@ export function TodoEditorFields({
               onChange={(e) => setDueLocal(e.target.value)}
               onBlur={() => {
                 const next = dueLocal || null;
-                if (next !== (todo.dueDate ?? null)) void patch({ dueDate: next });
+                if (next === (todo.dueDate ?? null)) return;
+                const message = dateOrderViolation(startLocal || null, next);
+                if (message) {
+                  setSaveError(message);
+                  setDueLocal(todo.dueDate ?? "");
+                  return;
+                }
+                void patch({ dueDate: next });
               }}
             />
             <div className="task-color-swatch" title={color ?? "default"}>

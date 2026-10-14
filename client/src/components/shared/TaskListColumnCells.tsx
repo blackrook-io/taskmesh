@@ -20,6 +20,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../../lib/taskFields";
+import { dateOrderViolation } from "../../../../src/lib/dateOrder.ts";
 import { formatListDate, type ResolvedListColumn } from "../../lib/listViewColumns";
 import type { Task } from "../../types";
 
@@ -86,6 +87,7 @@ export type TaskColumnCellContext = {
   onPatch?: (patch: {
     priority?: TaskPriority;
     dueDate?: string | null;
+    startDate?: string | null;
     estimateHours?: number | null;
   }) => void;
   onRequestState?: (next: TaskState) => void;
@@ -107,6 +109,21 @@ function TaskStateReadout({ state, title }: { state: TaskState; title?: string }
       {TASK_STATE_LABELS[state]}
     </span>
   );
+}
+
+function rejectInvertedDates(
+  input: HTMLInputElement,
+  start: string | null | undefined,
+  end: string | null | undefined,
+): boolean {
+  const message = dateOrderViolation(start, end);
+  if (!message) {
+    input.setCustomValidity("");
+    return false;
+  }
+  input.setCustomValidity(message);
+  input.reportValidity();
+  return true;
 }
 
 function taskDue(task: Task): string | null {
@@ -385,6 +402,28 @@ export function renderTaskColumnCell(
           {TASK_PRIORITY_LABELS[task.priority]}
         </span>
       );
+    case "startDate":
+      return onPatch ? (
+        <input
+          key="startDate"
+          type="date"
+          className="task-list-row__date"
+          value={task.startDate ?? ""}
+          disabled={isClosedTaskState(task.state)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const next = e.target.value || null;
+            if (rejectInvertedDates(e.target, next, taskDue(task))) return;
+            onPatch({ startDate: next });
+          }}
+          aria-label="Start date"
+        />
+      ) : (
+        <span key="startDate" className="task-list-row__date muted">
+          {formatListDate(task.startDate)}
+        </span>
+      );
     case "dueDate":
       return onPatch ? (
         <input
@@ -396,7 +435,11 @@ export function renderTaskColumnCell(
           data-ctx-field="dueDate"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
-          onChange={(e) => onPatch({ dueDate: e.target.value || null })}
+          onChange={(e) => {
+            const next = e.target.value || null;
+            if (rejectInvertedDates(e.target, task.startDate, next)) return;
+            onPatch({ dueDate: next });
+          }}
           aria-label="Due date"
         />
       ) : (

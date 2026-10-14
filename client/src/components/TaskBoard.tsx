@@ -15,6 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { compareOptionalYmd, dateOrderViolation } from "../../../src/lib/dateOrder.ts";
 import { compareEstimateHours } from "../../../src/lib/estimateHours.ts";
 import { apiJson } from "../api/client";
 import { DuplicateWarning } from "./shared/DuplicateWarning";
@@ -139,6 +140,7 @@ type TaskPatch = {
   title?: string;
   description?: string | null;
   dueDate?: string | null;
+  startDate?: string | null;
   estimateHours?: number | null;
   color?: string | null;
   phaseId?: number | null;
@@ -155,6 +157,7 @@ type TaskSnapshot = {
   title: string;
   description: string;
   dueDate: string | null;
+  startDate: string | null;
   estimateHours: number | null;
   color: string | null;
   phaseId: number | null;
@@ -173,6 +176,7 @@ function snapshotFromTask(task: Task): TaskSnapshot {
     title: task.title,
     description: task.description ?? "",
     dueDate: taskDue(task),
+    startDate: task.startDate ?? null,
     estimateHours: task.estimateHours ?? null,
     color: task.color,
     phaseId: task.phaseId,
@@ -205,6 +209,10 @@ function sortRoots(roots: Task[], col: SortCol | null, dir: 1 | -1): Task[] {
       cmp = a.updatedAt.localeCompare(b.updatedAt);
     } else if (col === "phase") {
       cmp = (a.phaseId ?? 0) - (b.phaseId ?? 0);
+    } else if (col === "startDate") {
+      const dates = compareOptionalYmd(a.startDate, b.startDate, dir);
+      if (dates !== 0) return dates;
+      cmp = 0;
     } else if (col === "estimateHours") {
       const hours = compareEstimateHours(a.estimateHours, b.estimateHours, dir);
       if (hours !== 0) return hours;
@@ -431,6 +439,7 @@ export function TaskEditorFields({
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [dueLocal, setDueLocal] = useState(initial.dueDate ?? "");
+  const [startLocal, setStartLocal] = useState(initial.startDate ?? "");
   const [hoursLocal, setHoursLocal] = useState(initial.estimateHours);
   const [color, setColor] = useState(initial.color);
   const [phaseId, setPhaseId] = useState(initial.phaseId);
@@ -456,6 +465,7 @@ export function TaskEditorFields({
     state: task.state,
     priority: task.priority,
     dueDate: taskDue(task),
+    startDate: task.startDate ?? null,
     estimateHours: task.estimateHours ?? null,
     color: task.color,
     phaseId: task.phaseId,
@@ -553,6 +563,7 @@ export function TaskEditorFields({
         state: freshTask.state,
         priority: task.priority,
         dueDate: taskDue(task),
+        startDate: task.startDate ?? null,
         estimateHours: task.estimateHours ?? null,
         color: task.color,
         phaseId: task.phaseId,
@@ -576,6 +587,7 @@ export function TaskEditorFields({
     title,
     description,
     dueDate: dueLocal || null,
+    startDate: startLocal || null,
     estimateHours: hoursLocal,
     color,
     phaseId,
@@ -589,6 +601,7 @@ export function TaskEditorFields({
     setTitle(sanitizePlainText(snap.title));
     setDescription(snap.description);
     setDueLocal(snap.dueDate ?? "");
+    setStartLocal(snap.startDate ?? "");
     setHoursLocal(snap.estimateHours);
     setColor(snap.color);
     setPhaseId(snap.phaseId);
@@ -602,6 +615,7 @@ export function TaskEditorFields({
     setTitle(sanitizePlainText(row.title));
     setDescription(row.description ?? "");
     setDueLocal(taskDue(row) ?? "");
+    setStartLocal(row.startDate ?? "");
     setHoursLocal(row.estimateHours ?? null);
     setColor(row.color);
     setPhaseId(row.phaseId);
@@ -641,6 +655,7 @@ export function TaskEditorFields({
           title: restored.title,
           description: restored.description.trim() ? restored.description : null,
           dueDate: restored.dueDate,
+          startDate: restored.startDate,
           estimateHours: restored.estimateHours,
           color: restored.color,
           phaseId: restored.phaseId,
@@ -928,6 +943,27 @@ export function TaskEditorFields({
             ))}
           </select>
         </div>
+        <div className="field">
+          <label htmlFor={`t-start-${task.id}`}>Start date</label>
+          <input
+            id={`t-start-${task.id}`}
+            type="date"
+            value={startLocal}
+            disabled={closed}
+            onChange={(e) => setStartLocal(e.target.value)}
+            onBlur={() => {
+              const next = startLocal || null;
+              if (next === (task.startDate ?? null)) return;
+              const message = dateOrderViolation(next, dueLocal || null);
+              if (message) {
+                setSaveError(message);
+                setStartLocal(task.startDate ?? "");
+                return;
+              }
+              void commit({ ...currentSnap(), startDate: task.startDate ?? null }, { startDate: next });
+            }}
+          />
+        </div>
         <div className="field task-editor-date-color">
           <label htmlFor={`t-due-${task.id}`}>Due date</label>
           <div className="task-editor-date-color__row">
@@ -939,9 +975,14 @@ export function TaskEditorFields({
               onChange={(e) => setDueLocal(e.target.value)}
               onBlur={() => {
                 const next = dueLocal || null;
-                if (next !== taskDue(task)) {
-                  void commit({ ...currentSnap(), dueDate: taskDue(task) }, { dueDate: next });
+                if (next === taskDue(task)) return;
+                const message = dateOrderViolation(startLocal || null, next);
+                if (message) {
+                  setSaveError(message);
+                  setDueLocal(taskDue(task) ?? "");
+                  return;
                 }
+                void commit({ ...currentSnap(), dueDate: taskDue(task) }, { dueDate: next });
               }}
             />
             <div className="task-color-swatch" title={color ?? "default"}>

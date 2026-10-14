@@ -1,3 +1,4 @@
+import { compareOptionalYmd } from "../../../src/lib/dateOrder.ts";
 import type { TodoListItem } from "../types";
 import { TASK_PRIORITIES, TASK_STATES } from "./taskFields";
 
@@ -41,6 +42,11 @@ export function compareTodoListItems(a: TodoListItem, b: TodoListItem, col: stri
 export function sortTodoListItems(items: TodoListItem[], col: string | null, dir: 1 | -1): TodoListItem[] {
   if (col == null) return items;
   return [...items].sort((a, b) => {
+    if (col === "startDate") {
+      const primary = compareOptionalYmd(a.startDate, b.startDate, dir);
+      if (primary !== 0) return primary;
+      return a.sortOrder - b.sortOrder || a.id - b.id;
+    }
     const primary = compareTodoListItems(a, b, col);
     if (primary !== 0) return primary * dir;
     return a.sortOrder - b.sortOrder || a.id - b.id;

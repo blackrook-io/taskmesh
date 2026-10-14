@@ -57,6 +57,7 @@ import {
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
 import { hiddenDescendantCount } from "../lib/hiddenDescendantCount";
+import { compareOptionalYmd } from "../../../src/lib/dateOrder.ts";
 import { compareEstimateHours } from "../../../src/lib/estimateHours.ts";
 import type { Project, Task } from "../types";
 
@@ -99,6 +100,10 @@ function sortTasks(list: Task[], col: SortCol | null, dir: 1 | -1, projectName: 
       const da = taskDue(a) ?? "";
       const db = taskDue(b) ?? "";
       cmp = da.localeCompare(db);
+    } else if (col === "startDate") {
+      const dates = compareOptionalYmd(a.startDate, b.startDate, dir);
+      if (dates !== 0) return dates;
+      cmp = 0;
     } else if (col === "estimateHours") {
       const hours = compareEstimateHours(a.estimateHours, b.estimateHours, dir);
       if (hours !== 0) return hours;

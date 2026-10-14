@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { startDateSchema } from "../../lib/taskFields.js";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { activitySourceFromRequest } from "../../lib/activityRequest.js";
@@ -62,12 +63,14 @@ const projectBody = z.object({
   name: plainTitle(500),
   description: optionalMarkdown(500_000),
   status: projectStatus.optional(),
+  startDate: startDateSchema,
 });
 
 const projectPatch = z.object({
   name: optionalPlainTitle(500),
   description: optionalMarkdown(500_000),
   status: projectStatus.optional(),
+  startDate: startDateSchema,
   aiAccess: aiAccessValue.optional(),
   aiLocalOnly: z.boolean().optional(),
   aiInstructions: optionalMarkdown(8_000),
@@ -131,6 +134,7 @@ projectsRouter.post("/", async (req, res) => {
         name: parsed.name,
         description: parsed.description ?? null,
         status: parsed.status ?? "idea",
+        startDate: parsed.startDate ?? null,
         sortOrder,
         ownerId,
         aiAccess,
@@ -243,6 +247,7 @@ projectsRouter.patch("/:id", async (req, res) => {
         "aiAccess",
         "aiLocalOnly",
         "aiInstructions",
+        "startDate",
       ])
     ) {
       sendError(res, 400, "empty_patch", "Provide name, description, status, and/or AI settings");
@@ -288,6 +293,7 @@ projectsRouter.patch("/:id", async (req, res) => {
         ...(parsed.name !== undefined ? { name: parsed.name } : {}),
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(parsed.status !== undefined ? { status: parsed.status } : {}),
+        ...(parsed.startDate !== undefined ? { startDate: parsed.startDate } : {}),
         ...(parsed.aiAccess !== undefined ? { aiAccess: parsed.aiAccess } : {}),
         ...(parsed.aiLocalOnly !== undefined ? { aiLocalOnly: parsed.aiLocalOnly } : {}),
         ...(parsed.aiInstructions !== undefined

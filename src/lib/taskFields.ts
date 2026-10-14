@@ -67,6 +67,13 @@ export const dueDateSchema = z
   .nullable()
   .optional();
 
+/** YYYY-MM-DD schedule hint. Does not gate workflow. */
+export const startDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD")
+  .nullable()
+  .optional();
+
 /** Display form: T + zero-padded number (at least 4 digits). */
 export function formatTaskNumber(n: number): string {
   return `T${String(n).padStart(4, "0")}`;

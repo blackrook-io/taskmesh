@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { dateOrderViolation } from "../../lib/dateOrder.js";
 import type { MutationResult } from "../../lib/mutationResult.js";
 import { optionalMarkdown, plainTitle } from "../../lib/markdownFields.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
@@ -129,6 +130,10 @@ export async function applyTodoUpdate(
       return fail(404, "not_found", "ToDo not found");
     }
     await assertCanAccessDualScoped(db, actorId, existing, "write");
+    if (parsed.dueDate !== undefined) {
+      const dateOrder = dateOrderViolation(existing.startDate, parsed.dueDate);
+      if (dateOrder) return fail(400, "invalid_dates", dateOrder);
+    }
     const rollup = await loadRollup(db, todoId);
     const touchesProgress = parsed.state !== undefined || parsed.progress !== undefined;
     if (

@@ -12,6 +12,8 @@ describe("list filter combinations", () => {
   it("allows the pairs each list view dropdown offers", () => {
     assert.equal(isAllowedFilterCombination(TASK_LIST_FILTER_COMBINATIONS, "tags", "contains"), true);
     assert.equal(isAllowedFilterCombination(TASK_LIST_FILTER_COMBINATIONS, "dueDate", "before"), true);
+    assert.equal(isAllowedFilterCombination(TASK_LIST_FILTER_COMBINATIONS, "startDate", "after"), true);
+    assert.equal(isAllowedFilterCombination(TODO_LIST_FILTER_COMBINATIONS, "startDate", "is"), true);
     assert.equal(isAllowedFilterCombination(IDEA_LIST_FILTER_COMBINATIONS, "assignee", "is_empty"), true);
     assert.equal(isAllowedFilterCombination(TODO_LIST_FILTER_COMBINATIONS, "checked", "is"), true);
   });

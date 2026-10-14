@@ -177,7 +177,7 @@ export function FilterClauseValueInput({
       />
     );
   }
-  if (clause.field === "dueDate") {
+  if (clause.field === "dueDate" || clause.field === "startDate") {
     return (
       <input
         type="date"

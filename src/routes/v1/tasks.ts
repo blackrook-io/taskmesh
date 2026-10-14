@@ -14,10 +14,12 @@ import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import { parseRouteId } from "../../lib/routeParams.js";
+import { dateOrderViolation } from "../../lib/dateOrder.js";
 import {
   dueDateSchema,
   estimateHoursSchema,
   selectableTaskStateSchema,
+  startDateSchema,
   taskPrioritySchema,
 } from "../../lib/taskFields.js";
 import { derivedStatePatchRejected } from "../../lib/taskRollup.js";
@@ -68,6 +70,7 @@ const taskBody = z.object({
   title: plainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  startDate: startDateSchema,
   estimateHours: estimateHoursSchema,
   /** @deprecated Accept datetime for older clients; stored as dueDate date part. */
   dueAt: z.string().datetime().optional().nullable(),
@@ -85,6 +88,7 @@ const taskPatch = z.object({
   title: optionalPlainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  startDate: startDateSchema,
   estimateHours: estimateHoursSchema,
   dueAt: z.string().datetime().optional().nullable(),
   color: z.string().max(64).optional().nullable(),
@@ -179,6 +183,11 @@ export async function createProjectTask(args: {
   const nextSort = parsed.sortOrder ?? (await nextSiblingSortOrder(db, args.projectId, parentId));
   const number = await allocateTaskNumber(db);
   const dueDate = resolveDueDate(parsed) ?? null;
+  const startDate = parsed.startDate ?? null;
+  const dateOrder = dateOrderViolation(startDate, dueDate);
+  if (dateOrder) {
+    return { ok: false, status: 400, code: "invalid_dates", message: dateOrder };
+  }
   const initialState = parsed.state ?? "new";
   const assigneeId = await resolveAssigneeId(db, {
     projectId: args.projectId,
@@ -198,6 +207,7 @@ export async function createProjectTask(args: {
       state: initialState,
       priority: parsed.priority ?? "none",
       dueDate,
+      startDate,
       estimateHours: parsed.estimateHours ?? null,
       color: parsed.color ?? null,
       sortOrder: nextSort,
@@ -379,6 +389,7 @@ export async function patchProjectTask(args: {
       "title",
       "description",
       "dueDate",
+      "startDate",
       "estimateHours",
       "dueAt",
       "color",
@@ -402,6 +413,13 @@ export async function patchProjectTask(args: {
       message:
         "Status is derived from child tasks. Turn on Manual status to set it yourself.",
     };
+  }
+
+  const nextStartDate = parsed.startDate !== undefined ? parsed.startDate : existing.startDate;
+  const nextDueDate = dueDate !== undefined ? dueDate : existing.dueDate;
+  const dateOrder = dateOrderViolation(nextStartDate, nextDueDate);
+  if (dateOrder) {
+    return { ok: false, status: 400, code: "invalid_dates", message: dateOrder };
   }
 
   const canReopen = await actorCanReopen(db, args.actorId, existing.projectId);
@@ -457,6 +475,7 @@ export async function patchProjectTask(args: {
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(dueDate !== undefined ? { dueDate } : {}),
+        ...(parsed.startDate !== undefined ? { startDate: parsed.startDate } : {}),
         ...(parsed.estimateHours !== undefined ? { estimateHours: parsed.estimateHours } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
         ...(nextPhaseId !== existing.phaseId || parsed.phaseId !== undefined

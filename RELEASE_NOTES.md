@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.0 — 2026-10-14
+
+### Enhancements
+- Tasks, ToDos, and Projects can store a Start date. On a Task or ToDo it is a schedule hint and does not block In Progress when prerequisites are clear. A Project start date is the default anchor for a new plan. The form and the API both refuse a start date after the due date, and a due date before the start date, with the same message. The same calendar day is allowed. Task and ToDo lists can show, sort, and filter the column, and task import and export include it.
+- Plans store a start date and a workday length (default 8 hours, quarter-hours from 0.25 through 24) for the later timeline. Plan editing waits on the plans API.
+
 ## 0.86.0 — 2026-10-14
 
 ### New Functionality

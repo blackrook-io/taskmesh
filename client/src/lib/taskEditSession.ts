@@ -6,6 +6,7 @@ export type TaskEditSessionBaseline = {
   state: string;
   priority: string;
   dueDate: string | null;
+  startDate: string | null;
   estimateHours: number | null;
   color: string | null;
   phaseId: number | null;

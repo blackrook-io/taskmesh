@@ -29,6 +29,7 @@ const FIELD_LABELS: Record<string, string> = {
   state: "State",
   priority: "Priority",
   dueDate: "Due date",
+  startDate: "Start date",
   estimateHours: "Hours",
   color: "Color",
   phaseId: "Phase",

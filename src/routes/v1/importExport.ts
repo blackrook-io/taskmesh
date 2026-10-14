@@ -23,6 +23,7 @@ import {
 import { userHasAdministrator } from "../../services/roles.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { getCurrentUserId } from "../../services/users.js";
+import { dateOrderViolation } from "../../lib/dateOrder.js";
 import { parseEstimateHours } from "../../lib/estimateHours.js";
 import { assertImportedInitialState, TaskWorkflowError } from "../../services/taskWorkflow.js";
 import {
@@ -67,6 +68,7 @@ function taskExportRow(t: typeof schema.tasks.$inferSelect): Record<string, unkn
     state: t.state,
     priority: t.priority,
     dueDate: t.dueDate ?? "",
+    startDate: t.startDate ?? "",
     estimateHours: t.estimateHours ?? "",
     dueAt: t.dueAt ? t.dueAt.toISOString() : "",
     color: t.color ?? "",
@@ -511,6 +513,29 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
       dueDate = dueAt.toISOString().slice(0, 10);
     }
 
+    let startDate: string | null = null;
+    if (raw.startDate != null && String(raw.startDate).trim() !== "") {
+      const d = String(raw.startDate).trim().slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        discarded.push({
+          row: rowNum,
+          code: "invalid_data",
+          reason: "startDate must be YYYY-MM-DD",
+        });
+        continue;
+      }
+      startDate = d;
+    }
+    const dateOrder = dateOrderViolation(startDate, dueDate);
+    if (dateOrder) {
+      discarded.push({
+        row: rowNum,
+        code: "invalid_data",
+        reason: dateOrder,
+      });
+      continue;
+    }
+
     let color: string | null = null;
     if (raw.color != null && raw.color !== "") {
       color = String(raw.color);
@@ -589,6 +614,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
           title,
           description,
           dueDate,
+          startDate,
           estimateHours,
           dueAt: dueAt instanceof Date ? dueAt : null,
           color,

@@ -133,6 +133,7 @@ Primary product hub. Status defaults to `"idea"`. Display number → **P####**.
 | `name` | text | no | — | |
 | `description` | text | yes | — | |
 | `status` | text | no | `'idea'` | Lifecycle / status string used by the app |
+| `start_date` | date | yes | — | Default schedule anchor copied onto a new plan (T0311). Null means the new plan stays unanchored |
 | `sort_order` | integer | no | `0` | Manual list order (left nav / project list) |
 | `source_idea_id` | integer | yes | — | FK → `ideas.id` |
 | `owner_id` | integer | no | — | FK → `users.id` — record owner (T0112); nested content inherits for access |

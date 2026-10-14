@@ -5,11 +5,13 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { dateOrderViolation } from "../../lib/dateOrder.js";
 import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import {
   dueDateSchema,
   estimateHoursSchema,
+  startDateSchema,
   isDeletedTaskState,
   selectableTaskStateSchema,
   taskPrioritySchema,
@@ -57,6 +59,7 @@ const createBody = z.object({
   title: plainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  startDate: startDateSchema,
   estimateHours: estimateHoursSchema,
   actionBy: actionBySchema,
   color: z.string().max(64).optional().nullable(),
@@ -73,6 +76,7 @@ const patchBody = z.object({
   title: optionalPlainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  startDate: startDateSchema,
   estimateHours: estimateHoursSchema,
   actionBy: actionBySchema,
   color: z.string().max(64).optional().nullable(),
@@ -216,13 +220,21 @@ todosRouter.post("/", async (req, res) => {
         ...(parsed.progress !== undefined ? { progress: parsed.progress } : {}),
       },
     );
+    const dueDate = parsed.dueDate ?? null;
+    const startDate = parsed.startDate ?? null;
+    const dateOrder = dateOrderViolation(startDate, dueDate);
+    if (dateOrder) {
+      sendError(res, 400, "invalid_dates", dateOrder);
+      return;
+    }
     const [row] = await db
       .insert(schema.todos)
       .values({
         number,
         title: parsed.title,
         description: parsed.description ?? null,
-        dueDate: parsed.dueDate ?? null,
+        dueDate,
+        startDate,
         estimateHours: parsed.estimateHours ?? null,
         actionBy: parseActionBy(parsed.actionBy) ?? null,
         color: parsed.color ?? null,
@@ -287,6 +299,7 @@ todosRouter.patch("/:id", async (req, res) => {
         "title",
         "description",
         "dueDate",
+        "startDate",
         "estimateHours",
         "actionBy",
         "color",
@@ -312,6 +325,13 @@ todosRouter.patch("/:id", async (req, res) => {
     }
     const actorId = await getCurrentUserId(db);
     await assertCanAccessDualScoped(db, actorId, existing, "write");
+    const nextStartDate = parsed.startDate !== undefined ? parsed.startDate : existing.startDate;
+    const nextDueDate = parsed.dueDate !== undefined ? parsed.dueDate : existing.dueDate;
+    const dateOrder = dateOrderViolation(nextStartDate, nextDueDate);
+    if (dateOrder) {
+      sendError(res, 400, "invalid_dates", dateOrder);
+      return;
+    }
     if (parsed.projectId !== undefined && parsed.projectId != null) {
       await assertCanAccessProject(db, actorId, parsed.projectId, "write");
     }
@@ -383,6 +403,7 @@ todosRouter.patch("/:id", async (req, res) => {
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
+        ...(parsed.startDate !== undefined ? { startDate: parsed.startDate } : {}),
         ...(parsed.estimateHours !== undefined ? { estimateHours: parsed.estimateHours } : {}),
         ...(parsed.actionBy !== undefined
           ? { actionBy: parseActionBy(parsed.actionBy) ?? null }
@@ -405,7 +426,7 @@ todosRouter.patch("/:id", async (req, res) => {
     if (progressUpdate?.membershipChecked != null) {
       await syncTodoMembershipChecked(db, id, progressUpdate.membershipChecked);
     }
-    if (row && (progressUpdate || parsed.estimateHours !== undefined)) {
+    if (row && (progressUpdate || parsed.estimateHours !== undefined || parsed.startDate !== undefined)) {
       await recordTodoFieldChanges(
         db,
         id,
@@ -413,11 +434,13 @@ todosRouter.patch("/:id", async (req, res) => {
           state: existing.state,
           progress: existing.progress,
           estimateHours: existing.estimateHours,
+          startDate: existing.startDate,
         },
         {
           state: progressUpdate?.state ?? row.state,
           progress: progressUpdate?.progress ?? row.progress,
           estimateHours: row.estimateHours,
+          startDate: row.startDate,
         },
         actorId,
         activitySourceFromRequest(req),

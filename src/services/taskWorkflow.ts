@@ -34,10 +34,12 @@ const NEXT_STATES: Record<string, readonly string[]> = {
   deleted: [],
 };
 
+/** Field edits. `startDate` is a schedule hint and does not gate state changes. */
 const EDIT_KEYS = [
   "title",
   "description",
   "dueDate",
+  "startDate",
   "estimateHours",
   "dueAt",
   "color",

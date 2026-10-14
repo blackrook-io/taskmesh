@@ -12,6 +12,7 @@ export const TASK_LIST_FILTER_COMBINATIONS = {
   tags: ["contains", "does_not_contain", "starts_with"],
   project: ["is", "is_not", "contains", "does_not_contain", "starts_with"],
   dueDate: ["before", "after"],
+  startDate: ["before", "after"],
   estimateHours: ["is", "gt", "lt", "is_empty", "is_not_empty"],
 } as const;
 
@@ -27,6 +28,7 @@ export const TODO_LIST_FILTER_COMBINATIONS = {
   state: ["is", "is_not"],
   priority: ["is", "is_not"],
   dueDate: ["is", "is_not", "before", "after"],
+  startDate: ["is", "is_not", "before", "after"],
   estimateHours: ["is", "gt", "lt", "is_empty", "is_not_empty"],
   tags: ["contains", "does_not_contain", "starts_with"],
   title: ["contains", "does_not_contain", "starts_with", "is", "is_not"],

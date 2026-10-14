@@ -177,6 +177,17 @@ describe("task workflow call sites", () => {
     assert.match(read("src/routes/v1/importExport.ts"), /assertImportedInitialState\(/);
   });
 
+  it("rejects a start-date change on a closed task", () => {
+    const refused = capture(() =>
+      enforceTaskPatch({
+        fromState: "complete",
+        canReopen: true,
+        patch: { startDate: "2026-10-01" },
+      }),
+    );
+    assert.equal(refused?.code, "task_closed");
+  });
+
   it("rejects an hours change on a closed task", () => {
     const refused = capture(() =>
       enforceTaskPatch({
