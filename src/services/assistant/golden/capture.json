@@ -1,0 +1,112 @@
+{
+  "now": "2026-10-14T15:00:00.000Z",
+  "timeZone": "America/New_York",
+  "cases": [
+    {
+      "id": "01-todo-friday-urgent-aws",
+      "text": "ToDo: book the exam slot by Friday, urgent, AWS project",
+      "stubReply": "{\"recordType\":\"todo\",\"title\":\"book the exam slot\",\"priority\":\"urgent\",\"datePhrase\":\"by Friday\",\"project\":\"AWS\"}",
+      "expect": {
+        "recordType": "todo",
+        "title": "book the exam slot",
+        "priority": "urgent",
+        "datePhrase": "by Friday",
+        "project": "AWS",
+        "tags": []
+      }
+    },
+    {
+      "id": "03-idea-plain",
+      "text": "Idea: sketch a logo",
+      "stubReply": "{\"recordType\":\"idea\",\"title\":\"sketch a logo\"}",
+      "expect": {
+        "recordType": "idea",
+        "title": "sketch a logo",
+        "priority": null,
+        "datePhrase": null,
+        "project": null,
+        "tags": []
+      }
+    },
+    {
+      "id": "05-type-unsure",
+      "text": "buy milk",
+      "stubReply": "{\"recordType\":\"todo\",\"typeUnsure\":true,\"title\":\"buy milk\"}",
+      "expect": {
+        "recordType": "todo",
+        "typeUnsure": true,
+        "title": "buy milk",
+        "priority": null,
+        "datePhrase": null,
+        "project": null,
+        "tags": []
+      }
+    },
+    {
+      "id": "06-soon",
+      "text": "ToDo: file the form soon",
+      "stubReply": "{\"recordType\":\"todo\",\"title\":\"file the form\",\"datePhrase\":\"soon\"}",
+      "expect": {
+        "recordType": "todo",
+        "title": "file the form",
+        "priority": null,
+        "datePhrase": "soon",
+        "project": null,
+        "tags": []
+      }
+    },
+    {
+      "id": "21-aws-migration-exact",
+      "text": "Task: cut over AWS migration",
+      "stubReply": "{\"recordType\":\"task\",\"title\":\"cut over\",\"project\":\"AWS migration\"}",
+      "expect": {
+        "recordType": "task",
+        "title": "cut over",
+        "priority": null,
+        "datePhrase": null,
+        "project": "AWS migration",
+        "tags": []
+      }
+    },
+    {
+      "id": "33-priority-low",
+      "text": "ToDo: water the plant, low",
+      "stubReply": "{\"recordType\":\"todo\",\"title\":\"water the plant\",\"priority\":\"low\"}",
+      "expect": {
+        "recordType": "todo",
+        "title": "water the plant",
+        "priority": "low",
+        "datePhrase": null,
+        "project": null,
+        "tags": []
+      }
+    },
+    {
+      "id": "35-priority-unsure",
+      "text": "ToDo: file this, critical",
+      "stubReply": "{\"recordType\":\"todo\",\"title\":\"file this\",\"priority\":\"critical\"}",
+      "expect": {
+        "recordType": "todo",
+        "title": "file this",
+        "priority": null,
+        "priorityUnsure": true,
+        "datePhrase": null,
+        "project": null,
+        "tags": []
+      }
+    },
+    {
+      "id": "40-tags",
+      "text": "ToDo: pack the kit #exam #aws",
+      "stubReply": "{\"recordType\":\"todo\",\"title\":\"pack the kit\",\"tags\":[\"exam\",\"aws\"]}",
+      "expect": {
+        "recordType": "todo",
+        "title": "pack the kit",
+        "priority": null,
+        "datePhrase": null,
+        "project": null,
+        "tags": ["exam", "aws"]
+      }
+    }
+  ]
+}

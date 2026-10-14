@@ -4,6 +4,7 @@ import { db, pool } from "../db/client.js";
 import * as schema from "../db/schema.js";
 import { resolveAssistantSession } from "../services/assistant/index.js";
 import { assertLocalProviderBaseUrl, assertPublicProviderBaseUrl } from "../services/assistant/providerBaseUrl.js";
+import { runFeatureGoldenCases } from "../services/assistant/golden/features.js";
 import { runGoldenCases } from "../services/assistant/golden/run.js";
 
 async function main(): Promise<void> {
@@ -17,15 +18,25 @@ async function main(): Promise<void> {
     console.log("ai:golden skipped — no chat provider is configured");
     return;
   }
-  const results = await runGoldenCases({
-    plugin: session.plugin,
-    apiKey: session.apiKey,
-    config: session.config,
-    assertBaseUrl: session.plugin.capabilities.local
-      ? assertLocalProviderBaseUrl
-      : assertPublicProviderBaseUrl,
-    mode: "live",
-  });
+  const assertBaseUrl = session.plugin.capabilities.local
+    ? assertLocalProviderBaseUrl
+    : assertPublicProviderBaseUrl;
+  const results = [
+    ...(await runGoldenCases({
+      plugin: session.plugin,
+      apiKey: session.apiKey,
+      config: session.config,
+      assertBaseUrl,
+      mode: "live",
+    })),
+    ...(await runFeatureGoldenCases({
+      plugin: session.plugin,
+      apiKey: session.apiKey,
+      config: session.config,
+      assertBaseUrl,
+      mode: "live",
+    })),
+  ];
   for (const result of results) {
     console.log(`${result.ok ? "ok" : "fail"} ${result.id}: ${result.detail}`);
   }

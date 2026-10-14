@@ -1,0 +1,58 @@
+[
+  {
+    "id": "tag-exam",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "Book the driving exam and pack the forms.",
+    "stubReply": "[{\"name\":\"exam\",\"confidence\":0.91},{\"name\":\"aws\",\"confidence\":0.2}]",
+    "show": ["exam"]
+  },
+  {
+    "id": "tag-aws",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "Cut over the VPC networking for the migration.",
+    "stubReply": "[{\"name\":\"aws\",\"confidence\":0.88}]",
+    "show": ["aws"]
+  },
+  {
+    "id": "tag-design",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "Sketch a logo and try two color palettes.",
+    "stubReply": "[{\"name\":\"design\",\"confidence\":0.8}]",
+    "show": ["design"]
+  },
+  {
+    "id": "tag-none",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "Buy milk and bread on the way home.",
+    "stubReply": "[{\"name\":\"exam\",\"confidence\":0.1},{\"name\":\"aws\",\"confidence\":0.05},{\"name\":\"design\",\"confidence\":0.05}]",
+    "show": []
+  },
+  {
+    "id": "tag-two",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "Book the exam slot and attach the AWS study notes.",
+    "stubReply": "[{\"name\":\"exam\",\"confidence\":0.86},{\"name\":\"aws\",\"confidence\":0.77}]",
+    "show": ["exam", "aws"]
+  },
+  {
+    "id": "tag-below-threshold",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "The clinic sent a reminder about the appointment.",
+    "stubReply": "[{\"name\":\"exam\",\"confidence\":0.44}]",
+    "show": []
+  },
+  {
+    "id": "tag-unknown-dropped",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "Book the driving exam.",
+    "stubReply": "[{\"name\":\"kubernetes\",\"confidence\":0.99},{\"name\":\"exam\",\"confidence\":0.8}]",
+    "show": ["exam"]
+  },
+  {
+    "id": "tag-at-threshold",
+    "candidates": ["exam", "aws", "design"],
+    "excerpt": "Sketch a small logo.",
+    "stubReply": "[{\"name\":\"design\",\"confidence\":0.45},{\"name\":\"aws\",\"confidence\":0.44}]",
+    "show": ["design"]
+  }
+]
