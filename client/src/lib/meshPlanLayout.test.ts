@@ -84,6 +84,19 @@ describe("mesh plan layout", () => {
     assert.equal(layout.nodes.find((item) => item.key === "task:2")?.planMark, "next");
   });
 
+  it("does not treat pending or deleted prerequisites as open blockers", () => {
+    for (const state of ["pending", "deleted"]) {
+      const nodes = [
+        node("task:1", "Settled", { state }),
+        node("task:2", "Practice"),
+      ];
+      const edges: MeshGraphEdge[] = [{ source: "task:2", target: "task:1", relation: "depends_on" }];
+      assert.equal(meshBlockedKeys(nodes, edges).has("task:2"), false, state);
+      const layout = layoutMeshPlan({ nodes, edges, focusKey: "task:2", meshProjectId: 4 });
+      assert.equal(layout.edges[0]?.blocking, false, state);
+    }
+  });
+
   it("keeps a reference cycle from throwing and ignores it for rank", () => {
     const nodes = [
       node("task:1", "A", { phaseId: 1, phaseName: "Foundation", phaseSort: 0, state: "in_progress" }),

@@ -19,6 +19,7 @@ import {
   type MeshPlanMark,
   type MeshSuggestion,
 } from "./meshLayout.ts";
+import { isDependencySatisfied } from "./dependencySatisfied.ts";
 
 const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of", "duplicate_of"]);
 
@@ -146,7 +147,7 @@ function ranksOf(keys: readonly string[], flows: readonly Flow[]): Map<string, n
 }
 
 function openState(state: string | null | undefined): boolean {
-  return state !== "complete" && state !== "canceled";
+  return !isDependencySatisfied(state ?? "");
 }
 
 /** Tasks and to-dos with a prerequisite that is still open in the fetched graph. */

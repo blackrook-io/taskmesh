@@ -90,5 +90,9 @@ describe("mesh signals", () => {
     assert.equal(counts.get("project:1"), 1);
     assert.equal(dependsBlocking("ready"), true);
     assert.equal(dependsBlocking("complete"), false);
+    assert.equal(dependsBlocking("canceled"), false);
+    assert.equal(dependsBlocking("pending"), false);
+    assert.equal(dependsBlocking("deleted"), false);
+    assert.equal(dependsBlocking(null), true);
   });
 });

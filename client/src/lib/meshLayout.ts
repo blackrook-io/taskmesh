@@ -1,5 +1,7 @@
 /** Deterministic cascade positions for the Mesh tab. No force simulation. */
 
+import { isDependencySatisfied } from "./dependencySatisfied.ts";
+
 /** Matches the cascade in docs/design/mesh-view.html (centers, then a bus). */
 export const MESH_COLUMN_PITCH = 240;
 export const MESH_ROW_PITCH = 58;
@@ -1168,7 +1170,7 @@ export function layoutMesh(input: {
       target,
       ...edgeHandles(source, target),
       kind: "depends",
-      blocking: prerequisite?.state !== "complete",
+      blocking: !isDependencySatisfied(prerequisite?.state ?? ""),
       sourceOffset: 0,
       targetOffset: 0,
       laneX: 0,

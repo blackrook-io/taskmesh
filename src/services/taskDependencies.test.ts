@@ -20,12 +20,16 @@ describe("taskDependencies helpers", () => {
     assert.equal(isOpenTaskState("deleted"), false);
   });
 
-  it("does not treat pending as a dependency blocker", () => {
+  it("does not treat satisfied states as dependency blockers", () => {
     assert.equal(isDependencyBlockingState("pending"), false);
     assert.equal(isDependencyBlockingState("complete"), false);
+    assert.equal(isDependencyBlockingState("canceled"), false);
+    assert.equal(isDependencyBlockingState("deleted"), false);
     assert.equal(isDependencyBlockingState("in_progress"), true);
     assert.equal(isDependencyBlockingState("ready"), true);
     assert.equal(isDependencyBlockingState("blocked"), true);
+    assert.equal(isDependencyBlockingState("on_hold"), true);
+    assert.equal(isDependencyBlockingState("new"), true);
   });
 
   it("formats complete/delete blocker messages", () => {
