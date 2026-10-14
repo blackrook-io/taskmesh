@@ -167,7 +167,7 @@ describe("mesh hover card", () => {
     assert.equal(card.hint, "Click to cascade its contents underneath.");
   });
 
-  it("lists open blockers and counts references, unblocks, and waits on", () => {
+  it("names waits-on and unblocks, and counts only references on Links", () => {
     const nodes = [
       node({ key: "task:1", title: "Blocked", referenceId: "T0001" }),
       node({ key: "task:9", title: "Setup", referenceId: "T0009", state: "in_progress" }),
@@ -190,14 +190,32 @@ describe("mesh hover card", () => {
       staleDays: 30,
       isFocus: false,
     });
-    assert.equal(card.rows.find((row) => row.label === "Blocked by")?.value, "T0009 Setup");
-    assert.equal(card.rows.find((row) => row.label === "Links")?.value, "2 references · 1 unblocks · 2 waits on");
+    assert.equal(
+      card.rows.some((row) => row.label === "Blocked by"),
+      false,
+    );
+    assert.equal(card.rows.find((row) => row.label === "Links")?.value, "2 references");
+    const waits = card.dependencies.find((list) => list.label === "Waits on");
+    assert.deepEqual(
+      waits?.entries.map((entry) => [entry.referenceId, entry.title, entry.blocking, entry.stateLabel]),
+      [
+        ["T0009", "Setup", true, "In Progress"],
+        ["T0008", "Done dep", false, "Complete"],
+      ],
+    );
+    const unblocks = card.dependencies.find((list) => list.label === "Unblocks");
+    assert.deepEqual(
+      unblocks?.entries.map((entry) => [entry.referenceId, entry.title]),
+      [["T0004", "Later"]],
+    );
     assert.equal(card.hint, "Click to focus and see its links.");
     assert.match(card.description, /T0001 Task/);
-    assert.match(card.description, /Blocked by/);
+    assert.match(card.description, /Waits on/);
+    assert.match(card.description, /T0009 Setup · In Progress/);
+    assert.match(card.description, /T0008 Done dep · Complete/);
   });
 
-  it("omits canceled, pending, and deleted prerequisites from Blocked by", () => {
+  it("lists canceled prerequisites as satisfied, after blockers", () => {
     const nodes = [
       node({ key: "task:1", title: "Blocked", referenceId: "T0001" }),
       node({ key: "task:9", title: "Setup", referenceId: "T0009", state: "in_progress" }),
@@ -221,7 +239,54 @@ describe("mesh hover card", () => {
       staleDays: 30,
       isFocus: false,
     });
-    assert.equal(card.rows.find((row) => row.label === "Blocked by")?.value, "T0009 Setup");
+    const waits = card.dependencies.find((list) => list.label === "Waits on");
+    assert.deepEqual(
+      waits?.entries.map((entry) => [entry.referenceId, entry.blocking, entry.stateLabel]),
+      [
+        ["T0009", true, "In Progress"],
+        ["T0008", false, "Complete"],
+        ["T0007", false, "Canceled"],
+        ["T0006", false, "Pending"],
+        ["T0005", false, "Deleted"],
+      ],
+    );
+    assert.equal(waits?.more, 0);
+    assert.equal(card.rows.some((row) => row.label === "Blocked by"), false);
+  });
+
+  it("caps each dependency list at five and reports the rest", () => {
+    const nodes = [
+      node({ key: "task:1", title: "Hub", referenceId: "T0001" }),
+      node({ key: "task:2", title: "Open", referenceId: "T0002", state: "ready" }),
+      node({ key: "task:3", title: "One", referenceId: "T0003", state: "complete" }),
+      node({ key: "task:4", title: "Two", referenceId: "T0004", state: "complete" }),
+      node({ key: "task:5", title: "Three", referenceId: "T0005", state: "complete" }),
+      node({ key: "task:6", title: "Four", referenceId: "T0006", state: "canceled" }),
+      node({ key: "task:7", title: "Five", referenceId: "T0007", state: "complete" }),
+    ];
+    const edges = nodes.slice(1).map((item) => ({
+      source: "task:1",
+      target: item.key,
+      relation: "depends_on",
+    }));
+    const card = buildMeshCard({
+      node: nodes[0]!,
+      nodes,
+      edges,
+      today,
+      staleDays: 30,
+      isFocus: false,
+    });
+    const waits = card.dependencies.find((list) => list.label === "Waits on");
+    assert.equal(waits?.entries[0]?.referenceId, "T0002");
+    assert.equal(waits?.entries[0]?.blocking, true);
+    assert.deepEqual(
+      waits?.entries.map((entry) => entry.referenceId),
+      ["T0002", "T0003", "T0004", "T0005", "T0006"],
+    );
+    assert.equal(waits?.more, 1);
+    assert.match(card.description, /\+1 more/);
+    assert.equal(card.description.includes("T0007"), false);
   });
 
   it("adds a suggested count when a proposal touches the record", () => {

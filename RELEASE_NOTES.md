@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.85.10 — 2026-10-14
+
+### Enhancements
+- Mesh hover cards name each loaded dependency. Waits on and Unblocks show the display number, title, and state, with still-blocking prerequisites first and at most five entries before “+N more”. Clicking an entry focuses that record. A canceled prerequisite stays on the list as satisfied.
+
 ## 0.85.9 — 2026-10-14
 
 ### Enhancements

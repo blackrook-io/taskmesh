@@ -1,0 +1,34 @@
+# T0306 Mesh hover card lists dependencies by name and state
+
+**Task:** T0306 (id `321`) — Mesh: hover card lists dependencies by name and state
+**Parent:** T0301 (id `316`) — Mesh: dependency and completion clarity (group). Child 5 of 5. Parent is In Progress.
+**Depends on:** T0302 (satisfied rule, complete) and T0303 (unblocks direction, complete).
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch (after approval):** `T0306-mesh-hover-deps`
+
+One session. The card already counts “N unblocks” and “N waits on” (T0303) and lists only open blockers under **Blocked by**. This task names every loaded dependency and its state.
+
+## Decisions
+
+1. **Waits on and Unblocks replace Blocked by and the dependency counts.** **Waits on** lists prerequisites of this record (graph edge `source` is this record). **Unblocks** lists records this one unblocks (graph edge `target` is this record). Each entry is display number, title, and a state pill. **Blocked by** goes away so open blockers are not listed twice. The Links row keeps reference and suggested counts only.
+2. **Blocking first, then satisfied.** A record is blocking when `isDependencySatisfied` is false. Satisfied states (`complete`, `canceled`, `pending`, `deleted`) follow. A canceled prerequisite still appears, with a Canceled pill and no danger tone. Within each group, keep loaded-edge order. Only records already in the neighbourhood are listed.
+3. **Five entries, then “+N more”.** The overflow label is not a control. It does not focus a record and does not expand the card.
+4. **Click focuses.** An entry button calls the existing `openNode` path (push the focus stack, dismiss the card), the same as clicking that node on the canvas.
+5. **Both Mesh views.** The hover card is shared, so Focus and Plan both get the lists. No layout, arrow, or filter changes.
+6. **No schema.** Finish-up bump is PATCH. No `FEATURES.md` change: this names dependencies the card already counts.
+
+## Scope
+
+1. `client/src/lib/meshCard.ts` — build `waitsOn` and `unblocks` entry lists (key, reference, title, state, state label, blocking) on the card model, cap at 5 plus an overflow count. Drop the Blocked by row and the unblocks / waits-on pieces of Links. Include the visible entries in the card description as `T0104 Title · Complete`.
+2. `client/src/components/MeshPanel.tsx` — render each list under its heading. State pills reuse the card’s state colors. Unblocking-wait entries (still blocking) use the danger tone. Wire entry clicks to `openNode`.
+3. `client/src/index.css` — compact entry row so number, title, and pill fit the card.
+4. `client/src/lib/meshCard.test.ts` — T0099-style waits-on of a complete prerequisite; blocking entries sort ahead of a canceled one; a sixth entry becomes “+1 more”; unblocks lists the dependent; Links no longer counts dependencies; Blocked by is absent.
+5. `npm run lint` clean.
+
+## Acceptance
+
+- On the record that waits on T0104, the card shows **Waits on** with `T0104`, the title, and a Complete pill (description reads `T0104 … · Complete`).
+- An open prerequisite is listed before a canceled or complete one, and the canceled one is not treated as blocking.
+- A record that unblocks others shows those records under **Unblocks**, blocking ones first, five at most, then “+N more”.
+- Clicking an entry focuses that record.
+- Links still counts references and suggestions. It does not say “N dependencies”.
