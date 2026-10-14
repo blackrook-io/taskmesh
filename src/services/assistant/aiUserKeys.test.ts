@@ -363,7 +363,10 @@ describe("user provider keys", { concurrency: false }, () => {
     await db.delete(schema.userAiCredentials).where(eq(schema.userAiCredentials.userId, userId));
     await storeInstanceKey(null);
     const missing = await listAiCapabilities(db, { userId, env: EMPTY_ENV });
-    assert.deepEqual(missing, [{ id: "assistant", available: false, reason: "no_key" }]);
+    assert.deepEqual(missing, [
+      { id: "assistant", available: false, reason: "no_key" },
+      { id: "capture", available: false, reason: "no_key" },
+    ]);
     assert.equal(JSON.stringify(missing).includes("budget_reached"), false);
 
     await setProviders({

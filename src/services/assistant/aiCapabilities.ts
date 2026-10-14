@@ -7,6 +7,7 @@ import { getSystemProperties } from "../systemProperties.js";
 import { loadedAiProviders } from "./providerLoader.js";
 import { pluginBudgetReason, sumDayUsage, usageWarning, utcDayStart, type AiKeySource } from "./aiBudgets.js";
 import { resolveFeatureRoute } from "./aiRouting.js";
+import { AI_FEATURES } from "./aiFeatureRoutes.js";
 import { loadUserAiPolicy, type UserAiPolicy } from "./aiUserPolicy.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -23,7 +24,7 @@ export const AI_CAPABILITY_REASONS = [
 export type AiCapabilityReason = (typeof AI_CAPABILITY_REASONS)[number];
 
 export type AiCapability = {
-  id: "assistant";
+  id: string;
   available: boolean;
   reason: AiCapabilityReason | null;
 };
@@ -46,6 +47,10 @@ function applyUserOff(rows: AiCapability[], policy: UserAiPolicy): AiCapability[
   });
 }
 
+function featureRows(available: boolean, reason: AiCapabilityReason | null): AiCapability[] {
+  return Object.values(AI_FEATURES).map((feature) => ({ id: feature.id, available, reason }));
+}
+
 export async function listAiCapabilities(
   db: Db,
   args: {
@@ -65,7 +70,7 @@ export async function listAiCapabilities(
       throw new AiCredentialsError(404, "not_found", "No such project.");
     }
     if (access === "excluded") {
-      return finish([{ id: "assistant", available: false, reason: "project_excluded" }]);
+      return finish(featureRows(false, "project_excluded"));
     }
     localOnly = (await resolveEffectiveLocalOnly(db, args.projectId)) === true;
   }
@@ -73,17 +78,17 @@ export async function listAiCapabilities(
   const props = await getSystemProperties(db);
   const route = await resolveFeatureRoute(db, { userId: args.userId, env: args.env, localOnly });
   if (localOnly && route.attempts.length === 0) {
-    return finish([{ id: "assistant", available: false, reason: "no_local_model" }]);
+    return finish(featureRows(false, "no_local_model"));
   }
   if (!session) {
-    return finish([{ id: "assistant", available: false, reason: await unavailableReason(db) }]);
+    return finish(featureRows(false, await unavailableReason(db)));
   }
   const keySource = route.attempts[0]?.keySource ?? null;
   const totals = await sumDayUsage(db, { userId: args.userId });
   if (pluginBudgetReason(props.aiBudgets, totals, keySource)) {
-    return finish([{ id: "assistant", available: false, reason: "budget_reached" }]);
+    return finish(featureRows(false, "budget_reached"));
   }
-  return finish([{ id: "assistant", available: true, reason: null }]);
+  return finish(featureRows(true, null));
 }
 
 export type UserAiUsage = {

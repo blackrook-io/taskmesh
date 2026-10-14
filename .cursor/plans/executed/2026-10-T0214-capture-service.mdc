@@ -1,0 +1,56 @@
+---
+description: T0214 — sentence to a Tier 2 capture proposal, with dates and record links resolved on the server
+---
+
+# T0214 — AI capture service
+
+**Task:** T0214 · id `229` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0196 Natural-language capture (id `211`, Blocked until this and T0215 finish). Grandparent T0177.
+**Depends on:** T0183, T0185, T0209, T0210 — all complete. No open blockers.
+**Required by:** T0215 quick-capture UI (Blocked). This task does not build that UI.
+**Branch (after approval):** `T0214-capture-service`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`).
+
+## Goal
+
+`POST /api/v1/ai/capture` takes one free-text sentence plus optional context and returns a structured proposal: record type, title, description, due date, priority, project, list, tags, parent, and links. Relative dates use the caller’s time zone. Names and display numbers resolve through the knowledge index. Anything ambiguous comes back as a question. The result is a Tier 2 change plan. Nothing is written until a later confirm (T0215).
+
+Parent example: `ToDo: book the exam slot by Friday, urgent, AWS project` → a todo proposal with title, due date, priority, and project filled in.
+
+## Current state
+
+- Proposals already exist on the assistant path (`AssistantProposal` in `tools.ts`). `classifyChangePlan` (T0185) sets the tier from the operations. `propose_create` is Tier 2. The model never supplies a tier.
+- Context packets (T0209) take a feature label such as `capture`. Search is `searchKnowledge`, scoped by ownership and excluded projects.
+- Prompts load from `src/services/assistant/prompts/<id>/vN.md` (T0212). There is no `capture` prompt yet.
+- Users have no time-zone column. Due dates elsewhere are `YYYY-MM-DD`.
+- The golden runner (T0211) checks chat replies for a stub substring. It does not score structured capture. T0300 (Draft) already owns live-provider golden corpora for capture, tagging, duplicates, and suggestions.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | One sentence | The body is `{ text, projectId?, todoListId?, timeZone? }`. One call, one proposal. Newline splitting and the confirm card stay on T0215. |
+| 2 | Record types | `task`, `todo`, `idea`. A leading `Task:`, `ToDo:`, or `Idea:` wins. Otherwise the model may suggest one of those three. Unsure → a question, not a default. Projects, documents, lists, boards, and wiki stay out. |
+| 3 | Model vs server | The model only extracts phrases (type hint, title, description, priority word, date phrase, project, list, tags, parent, links) plus which fields it is unsure about. It does not emit ids, dates, or a tier. The server resolves those. |
+| 4 | Dates | `timeZone` is an IANA name from the client. Missing or invalid → UTC. “Friday”, “tomorrow”, and “by Oct 20” resolve against that zone’s calendar date. A phrase with two plausible dates, or no date at all when the sentence has a vague time (“soon”), becomes a question. A phrase the server can resolve to one date stays that date even if the model flagged it as unsure. Stored due date is `YYYY-MM-DD` or null. |
+| 5 | Existing records | Display numbers (`T0214`, `P0004`) resolve by number. Names go through `searchKnowledge` as the signed-in user. One visible match is kept. Zero or two-plus matches become a question listing the candidates (ref + title only). Excluded projects never appear. |
+| 6 | Context | Optional `projectId` / `todoListId` are the page context, checked for ownership first. The packet uses feature `capture`, the sentence as the query, and a small budget. A missing context id is 404. An excluded or read-only project is a policy denial, not a proposal. |
+| 7 | Output | `{ proposal, questions, plan }`. `proposal` holds resolved fields and unresolved slots. `questions` is `{ field, prompt, choices? }[]`. `plan` is `classifyChangePlan` over the create plus any tag and link operations. Tier is 2 when the proposal is complete. `confirmable` is true only when `questions` is empty and policy allows the create. This route does not call the apply path. |
+| 8 | Prompt and audit | `prompts/capture/v1.md` via `loadPrompt`. The capture audit row stores prompt id, version, and ref, feature `capture`, and no sentence or record text. |
+| 9 | No key | Same provider resolution as chat. No configured provider → 403 with the existing unavailable code. Tests inject a stub and do not call a network. |
+| 10 | Golden set | Fifty sentences in `src/services/assistant/capture/golden.json`, each with a fixed clock, time zone, fixture extraction, fixture search hits, and the expected proposal or questions. CI runs the resolver only. Live-model scoring of these sentences stays on T0300. |
+
+## Work items
+
+1. Capture prompt `v1.md` and a Zod schema for the model’s extraction JSON. Invalid JSON is an error, not a guessed proposal.
+2. `resolveCapture`: dates, display numbers, knowledge-index names, priority words (`urgent` → high, and the existing priority set), and question generation.
+3. `proposeCapture`: policy check, context packet, one model call, resolve, `classifyChangePlan`. Wire `POST /api/v1/ai/capture`.
+4. Golden file of 50 sentences and a unit test that every case matches. No migration, no client UI.
+
+## Out of scope
+
+- Command palette, shortcut, editable card, and multi-line review (T0215).
+- Applying or saving the proposal.
+- A user time-zone setting.
+- Live provider runs of the 50 sentences (T0300).
+- Auto-tagging (T0199) and duplicate detection (T0200).

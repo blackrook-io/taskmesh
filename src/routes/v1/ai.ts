@@ -4,6 +4,7 @@ import { db } from "../../db/client.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ENTITY_TYPES } from "../../lib/entityType.js";
 import { assembleContext, ContextAssemblyError } from "../../services/assistant/contextAssembly.js";
+import { CaptureError, proposeCapture } from "../../services/assistant/capture/service.js";
 import { redactSecret } from "../../services/assistant/aiKeyMode.js";
 import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
 import { listAiCapabilities, readUserAiUsage } from "../../services/assistant/aiCapabilities.js";
@@ -243,6 +244,37 @@ const contextBody = z
     budgetTokens: z.number().int().min(256).max(32_000).optional(),
   })
   .strict();
+
+const captureBody = z
+  .object({
+    text: z.string().trim().min(1).max(2_000),
+    projectId: z.number().int().positive().optional(),
+    todoListId: z.number().int().positive().optional(),
+    timeZone: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict();
+
+aiRouter.post("/capture", async (req, res) => {
+  try {
+    const body = captureBody.parse(req.body ?? {});
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = "AI capture";
+    const data = await proposeCapture(db, {
+      actorUserId: userId,
+      text: body.text,
+      projectId: body.projectId,
+      todoListId: body.todoListId,
+      timeZone: body.timeZone,
+    });
+    res.json({ data });
+  } catch (err) {
+    if (err instanceof CaptureError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
 
 aiRouter.post("/context", async (req, res) => {
   try {
