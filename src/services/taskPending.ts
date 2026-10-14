@@ -4,6 +4,7 @@ import * as schema from "../db/schema.js";
 import { isFinishedChildState } from "../lib/taskFields.js";
 import { coerceReadyToBlocked } from "./taskBlocked.js";
 import { openDependsOnBlockers } from "./taskDependencies.js";
+import { recomputeTaskRollups } from "./taskRollup.js";
 import { recordTaskChanges, type RecordTaskChangesOpts } from "./tasks.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -58,6 +59,10 @@ async function promotePendingParentChain(
     const [parent] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, parentId));
     if (!parent) break;
     const nextParentId = parent.parentId;
+    if (!parent.stateManual) {
+      parentId = nextParentId;
+      continue;
+    }
     const children = await db
       .select({ state: schema.tasks.state })
       .from(schema.tasks)
@@ -111,4 +116,7 @@ export async function afterTaskHierarchyChange(
   if (previousParentId != null && previousParentId !== currentParent) {
     await promotePendingParentChain(db, previousParentId, opts);
   }
+  const starts = [persistedId];
+  if (previousParentId != null) starts.push(previousParentId);
+  await recomputeTaskRollups(db, starts, opts);
 }

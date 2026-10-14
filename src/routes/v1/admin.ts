@@ -84,6 +84,7 @@ import {
   listAdminTemplates,
   patchAdminTemplate,
 } from "../../services/taskDescriptionTemplates.js";
+import { recomputeTaskRollups } from "../../services/taskRollup.js";
 import { recordTaskChanges } from "../../services/tasks.js";
 import {
   OwnershipTransferValidationError,
@@ -1037,12 +1038,15 @@ adminRouter.post("/deleted-tasks/:id/restore", async (req, res) => {
       sendError(res, 404, "not_found", "Task not found");
       return;
     }
-    await recordTaskChanges(db, id, existing, row, {
+    const activityOpts = {
       actorId,
       source: activitySourceFromRequest(req),
       recordHistory: shouldRecordHistory(req),
-    });
-    res.json({ data: await attachTaskActor(db, row) });
+    };
+    await recordTaskChanges(db, id, existing, row, activityOpts);
+    await recomputeTaskRollups(db, [id], activityOpts);
+    const [fresh] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
+    res.json({ data: await attachTaskActor(db, fresh ?? row) });
   } catch (err) {
     handleRouteError(res, err);
   }

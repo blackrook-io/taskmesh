@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- header component + cell renderer helpers */
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { TaskRollupMeter } from "../TaskRollupMeter";
 import { RowTagChips } from "./RowTagChips";
 import { stateWaitingDescribedBy } from "./stateWaitingDescribedBy";
 import { StateWaitingHint } from "./StateWaitingHint";
@@ -12,6 +13,7 @@ import {
   allowedTaskStates,
   formatTaskNumber,
   isClosedTaskState,
+  isDerivedTaskStatus,
   taskPriorityClass,
   taskStateClass,
   type TaskPriority,
@@ -88,13 +90,14 @@ export type TaskColumnCellContext = {
   childIndentPx?: number;
 };
 
-function TaskStateReadout({ state }: { state: TaskState }) {
+function TaskStateReadout({ state, title }: { state: TaskState; title?: string }) {
   const describedBy = useContext(stateWaitingDescribedBy);
   return (
     <span
       className={taskStateClass("task-list-row__state", state)}
       data-ctx-field="state"
       aria-describedby={describedBy}
+      title={title}
     >
       {TASK_STATE_LABELS[state]}
     </span>
@@ -303,6 +306,9 @@ export function renderTaskColumnCell(
             </span>
           ) : null}
           <span className="task-list-row__title-text">{task.title}</span>
+          {task.rollupTotal != null && task.rollupDone != null ? (
+            <TaskRollupMeter done={task.rollupDone} total={task.rollupTotal} />
+          ) : null}
           {duplicate ? (
             <span className="task-list-row__duplicate" title="Also shown in another group">
               Duplicate
@@ -312,11 +318,12 @@ export function renderTaskColumnCell(
         </span>
       );
     case "state": {
+      const derived = isDerivedTaskStatus(task);
       const nextStates = allowedTaskStates(task.allowedNextStates).filter(
         (state) => state !== task.state,
       );
       const stateOptions = [task.state, ...nextStates];
-      const control = onRequestState ? (
+      const control = onRequestState && !derived ? (
         <ListRowSelect
           value={task.state}
           disabled={nextStates.length === 0}
@@ -331,7 +338,10 @@ export function renderTaskColumnCell(
           onChange={(next) => onRequestState(next as TaskState)}
         />
       ) : (
-        <TaskStateReadout state={task.state} />
+        <TaskStateReadout
+          state={task.state}
+          title={derived ? "Derived from child tasks" : undefined}
+        />
       );
       return (
         <StateWaitingHint key="state" taskId={task.id} state={task.state}>

@@ -17,6 +17,7 @@ import {
   taskPrioritySchema,
   taskStateSchema,
 } from "../../lib/taskFields.js";
+import { derivedStatePatchRejected } from "../../lib/taskRollup.js";
 import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import {
@@ -82,6 +83,7 @@ const patchBody = z.object({
   dueDate: dueDateSchema,
   color: z.string().max(64).optional().nullable(),
   state: selectableTaskStateSchema.optional(),
+  stateManual: z.boolean().optional(),
   priority: taskPrioritySchema.optional(),
   parentId: z.number().int().positive().nullable().optional(),
   projectId: z.number().int().positive().nullable().optional(),
@@ -266,6 +268,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
         "dueDate",
         "color",
         "state",
+        "stateManual",
         "priority",
         "parentId",
         "projectId",
@@ -274,6 +277,16 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       ])
     ) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
+      return;
+    }
+
+    if (derivedStatePatchRejected(existing, parsed)) {
+      sendError(
+        res,
+        400,
+        "state_derived",
+        "Status is derived from child tasks. Turn on Manual status to set it yourself.",
+      );
       return;
     }
 
@@ -356,6 +369,7 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
           ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
           ...(parsed.color !== undefined ? { color: parsed.color } : {}),
           ...(persistedState !== undefined ? { state: persistedState } : {}),
+          ...(parsed.stateManual !== undefined ? { stateManual: parsed.stateManual } : {}),
           ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
           ...(parsed.projectId !== undefined || nextProjectId !== existing.projectId
             ? { projectId: nextProjectId }
@@ -419,7 +433,8 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       res.json({ data: row });
       return;
     }
-    const updatedTask = await attachTaskActor(db, row);
+    const [fresh] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
+    const updatedTask = await attachTaskActor(db, fresh ?? row);
     const [data] = await attachAllowedNextStates(db, actorId, [updatedTask]);
     res.json({ data });
   } catch (err) {

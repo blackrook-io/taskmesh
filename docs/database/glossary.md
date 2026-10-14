@@ -81,9 +81,11 @@ Stored on `tasks.state` (text). API values and typical UI labels:
 
 Default for new rows: `new`. Soft-delete sets `deleted` instead of removing the row (preserves Task numbers and references).
 
-**Pending:** Completing a task that still has unfinished direct children is stored as `pending` instead of `complete`. When every direct child is `complete`, `canceled`, or `deleted`, a Pending parent is set to `complete` (ancestors too). Pending does not block Depends-on.
+**Pending:** Completing a task that still has unfinished direct children is stored as `pending` instead of `complete`, when that task’s status is hand-set (`state_manual`). When every direct child is `complete`, `canceled`, or `deleted`, a hand-set Pending parent is set to `complete` (ancestors too). A parent whose status is derived does not stay Pending; Pending children roll the parent up to In Progress. Pending does not block Depends-on.
 
-**Blocked:** A user request to move Draft (`new`) or In Progress (`in_progress`) to Ready is stored as `blocked` when any Depends-on task is still blocking (`new`, `blocked`, `ready`, `in_progress`, or `on_hold`). Users may move Blocked only to Draft or Canceled. The system sets Blocked to Ready when every Depends-on is `complete`, `canceled`, `deleted`, or `pending`, including after a dependency link is removed. Adding a dependency does not pull a later state back to Blocked. Blocked stays in working lists. It is not a choice on create or in state menus.
+**Blocked:** A user request to move Draft (`new`) or In Progress (`in_progress`) to Ready is stored as `blocked` when any Depends-on task is still blocking (`new`, `blocked`, `ready`, `in_progress`, or `on_hold`). Users may move Blocked only to Draft or Canceled. The system sets Blocked to Ready when every Depends-on is `complete`, `canceled`, `deleted`, or `pending`, including after a dependency link is removed, unless the task’s status is derived from child leaves. Adding a dependency does not pull a later state back to Blocked. A derived parent is also Blocked when any counted leaf is Blocked. Blocked stays in working lists. It is not a choice on create or in state menus.
+
+**Derived parent status:** When `state_manual` is false and the task has counted descendant leaves, `state` is written from those leaves and the list shows `rollup_done` / `rollup_total`. See [tasks](tasks.md).
 
 ## Task priority
 

@@ -221,6 +221,12 @@ export async function attachAllowedNextStates<T extends { state: string; project
   return rows.map((row) => {
     const canReopen =
       row.projectId == null ? isAdmin : (canReopenByProject.get(row.projectId) ?? false);
-    return { ...row, allowedNextStates: allowedNextStates(row.state, canReopen) };
+    const manual = "stateManual" in row ? row.stateManual : undefined;
+    const total = "rollupTotal" in row ? row.rollupTotal : undefined;
+    const derived = manual !== true && total != null;
+    return {
+      ...row,
+      allowedNextStates: derived ? [] : allowedNextStates(row.state, canReopen),
+    };
   });
 }

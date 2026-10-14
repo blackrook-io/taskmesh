@@ -122,6 +122,12 @@ export type Task = {
   updatedBy?: UserRef | null;
   owner?: UserRef | null;
   assignee?: UserRef | null;
+  /** When true, status is hand-set even if this task has child leaves. */
+  stateManual?: boolean;
+  /** Complete counted leaves. Null when status is not derived. */
+  rollupDone?: number | null;
+  /** Counted leaves under this task. Null when status is not derived. */
+  rollupTotal?: number | null;
   /** States this user may move the task to. Pending is never included. */
   allowedNextStates?: Array<Task["state"]>;
   createdAt: string;

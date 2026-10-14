@@ -19,6 +19,7 @@ import {
   selectableTaskStateSchema,
   taskPrioritySchema,
 } from "../../lib/taskFields.js";
+import { derivedStatePatchRejected } from "../../lib/taskRollup.js";
 import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { assertCanAccessProject } from "../../services/ownership.js";
@@ -69,6 +70,7 @@ const taskBody = z.object({
   phaseId: z.number().int().positive().optional().nullable(),
   parentId: z.number().int().positive().optional().nullable(),
   state: selectableTaskStateSchema.optional(),
+  stateManual: z.boolean().optional(),
   priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
   assigneeId: z.number().int().positive().nullable().optional(),
@@ -83,6 +85,7 @@ const taskPatch = z.object({
   phaseId: z.number().int().positive().optional().nullable(),
   parentId: z.number().int().positive().nullable().optional(),
   state: selectableTaskStateSchema.optional(),
+  stateManual: z.boolean().optional(),
   priority: taskPrioritySchema.optional(),
   sortOrder: z.number().int().optional(),
   assigneeId: z.number().int().positive().nullable().optional(),
@@ -369,12 +372,23 @@ export async function patchProjectTask(args: {
       "phaseId",
       "parentId",
       "state",
+      "stateManual",
       "priority",
       "sortOrder",
       "assigneeId",
     ]) || dueDate !== undefined;
   if (!hasFieldChange) {
     return { ok: false, status: 400, code: "empty_patch", message: "No updatable fields provided" };
+  }
+
+  if (derivedStatePatchRejected(existing, parsed)) {
+    return {
+      ok: false,
+      status: 400,
+      code: "state_derived",
+      message:
+        "Status is derived from child tasks. Turn on Manual status to set it yourself.",
+    };
   }
 
   const canReopen = await actorCanReopen(db, args.actorId, existing.projectId);
@@ -436,6 +450,7 @@ export async function patchProjectTask(args: {
           : {}),
         ...(parsed.parentId !== undefined ? { parentId: parsed.parentId } : {}),
         ...(persistedState !== undefined ? { state: persistedState } : {}),
+        ...(parsed.stateManual !== undefined ? { stateManual: parsed.stateManual } : {}),
         ...(parsed.priority !== undefined ? { priority: parsed.priority } : {}),
         ...(parsed.sortOrder !== undefined ? { sortOrder: parsed.sortOrder } : {}),
         ...(parsed.assigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
@@ -489,7 +504,8 @@ export async function patchProjectTask(args: {
   if (!row) {
     return { ok: true, status: 200, data: row };
   }
-  const updated = await attachTaskActor(db, row);
+  const [fresh] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, args.taskId));
+  const updated = await attachTaskActor(db, fresh ?? row);
   const [data] = await attachAllowedNextStates(db, args.actorId, [updated]);
   return { ok: true, status: 200, data };
 }

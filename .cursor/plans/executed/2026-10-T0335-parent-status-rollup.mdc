@@ -1,0 +1,52 @@
+# T0335 — List view: derived parent status and progress indicator
+
+**Status:** Complete — finishing up  
+**Branch:** `T0335-parent-status-rollup`  
+**App version:** `0.78.0` (MINOR; new `tasks` columns)  
+**DEV Task:** T0335 (`id` 351), project 4, state `ready`, priority high  
+**Depends on:** none  
+**Required by:** T0338 List view: global “Hide completed” toggle (`id` 354, `ready`) — out of scope  
+**Schema:** yes — new `tasks` columns (finish-up MINOR)
+
+## Decisions (locked)
+
+| # | Decision |
+|---|----------|
+| A | Count **non-deleted, non-canceled leaf tasks** under the parent (tasks with no children of their own). Intermediate groups are not items in the fraction; they get the same derived status from their own leaves. |
+| B | **Done** means `complete` only. `[done/total]` is complete leaves / counted leaves. Bar width is that ratio. |
+| C | Rollup precedence on the counted leaves: (1) all Complete → Complete; (2) any Blocked → Blocked; (3) any In Progress, Pending, or Complete → In Progress; (4) any On Hold → On Hold; (5) any Draft → Draft; (6) otherwise Ready. |
+| D | A task with **no counted leaves** is not derived: no fraction, no bar, status stays editable. Adding the first counted child starts derivation unless manual override is on. |
+| E | Depends-on Blocked is unchanged for tasks the user moves to Ready. It does not override a child rollup of In Progress or Complete. A **child** whose state is Blocked still rolls the parent up to Blocked (rule C2). |
+| F | New `tasks.state_manual` (boolean, default false). When false and the task has counted leaves, status is read-only in the list and on the task page. A list context-menu action, **Manual status**, toggles the flag. Turning it off recomputes immediately. The fraction and bar still show while override is on. |
+| G | Persist `rollup_done` and `rollup_total` (nullable ints; null when not derived). Recompute the ancestor chain when a child’s state, parent, or deletion changes, and write the derived `state` back so filters and other surfaces stay honest. Record a normal state-history row only when the stored state actually changes. Migration backfills existing parents. |
+
+## Context
+
+Parent rows keep a hand-set `tasks.state` that drifts from their children (T0194 can sit in Draft while most children are Complete). List rows are shared by `TasksListPage` and `TaskBoard` through `TaskListColumnCells`. To-do lists already show a derived completion fraction (`TodoProgressControl`); tasks do not. `blocked` today is only the Depends-on coercion in `taskBlocked.ts`, not a child rollup.
+
+## Goals / acceptance
+
+1. A derived parent row shows `[done/total]` and a progress bar to the right of that count, in the title cell.
+2. Status follows the rollup in decision C, recursively over descendant leaves.
+3. Derived status is read-only. **Manual status** restores hand editing for that parent.
+4. Counts are computed on the server and refresh when any descendant’s status (or place in the tree) changes.
+
+## Out of scope
+
+- T0338 global “Hide completed” toggle
+- Changing Depends-on blocking rules
+- Board card layout, Mesh cards, or a second progress column (they pick up the persisted state only)
+- Per-child weights or a typed percent
+
+## Approach
+
+1. **Schema** — `state_manual boolean not null default false`, `rollup_done integer`, `rollup_total integer` on `tasks`. Update `docs/database/tasks.md` (and glossary if the state meaning changes) and run `npm run docs:sync-schema`.
+2. **Rollup service** — pure function for decisions A–E plus a DB walker: load the subtree, compute leaf counts and state, write the row and each ancestor. Call it from task create/update/delete and parent moves (project and standalone task routes).
+3. **API** — include `stateManual`, `rollupDone`, `rollupTotal` on task payloads. Reject a `state` patch when the task is derived and `stateManual` is false. Accept `stateManual` toggles.
+4. **List UI** — title cell: `3/4` plus a read-only bar (todo track styling, no extra percent). State cell is a readout when derived. Context menu toggles Manual status.
+5. **Task page** — same read-only state control when derived, with the override toggle.
+6. **Tests** — unit tests for the precedence table (including mixed Complete+Blocked, Complete+Ready, Draft+Ready, canceled excluded, empty parent) and an ancestor recompute case.
+
+## QA notes
+
+Check a real epic such as one whose children are mostly Complete, a parent with a Blocked child, a parent with only Draft/Ready children, Manual status on then off, and that a leaf state change updates every ancestor without a reload.

@@ -9,6 +9,7 @@ import { maybeNotifyBlockedReady } from "../lib/blockedStateNotice";
 import {
   TaskListContextMenu,
   ctxFieldFromEventTarget,
+  manualStatusMenuItem,
   type TaskListContextMenuItem,
   type TaskListContextMenuState,
 } from "../components/TaskListContextMenu";
@@ -615,6 +616,9 @@ export function TasksListPage() {
           const ctxTask = ctxMenu ? (all.find((t) => t.id === ctxMenu.taskId) ?? null) : null;
           if (!ctxMenu || !ctxTask) return [] as TaskListContextMenuItem[];
           const stateChoices = allowedTaskStates(ctxTask.allowedNextStates);
+          const manualItem = manualStatusMenuItem(ctxTask, (stateManual) => {
+            void patchTask.mutateAsync({ id: ctxTask.id, patch: { stateManual } });
+          });
           return [
             ...(stateChoices.length > 0
               ? [
@@ -630,6 +634,7 @@ export function TasksListPage() {
                   { type: "separator" as const },
                 ]
               : []),
+            ...(manualItem ? [manualItem, { type: "separator" as const }] : []),
             {
               type: "action" as const,
               label: "Move to…",
