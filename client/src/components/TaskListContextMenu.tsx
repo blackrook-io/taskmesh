@@ -228,3 +228,17 @@ export function buildCreateGroupMenuItems(opts: {
 }
 
 export type TaskListContextMenuItem = MenuItem;
+
+/** Shown for a parent that has a child-task rollup. Toggles hand-set status. */
+export function manualStatusMenuItem(
+  task: { stateManual?: boolean; rollupTotal?: number | null },
+  onToggle: (stateManual: boolean) => void,
+): TaskListContextMenuItem | null {
+  if (task.rollupTotal == null) return null;
+  const manual = task.stateManual === true;
+  return {
+    type: "action",
+    label: manual ? "Use derived status" : "Manual status",
+    onSelect: () => onToggle(!manual),
+  };
+}

@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.78.0 — 2026-10-14
+
+### Enhancements
+- Parent tasks show how many descendant leaves are complete, with a progress bar beside the title. Their status follows those children and stays read-only until Manual status is turned on.
+
 ## 0.77.0 — 2026-10-14
 
 ### New Functionality

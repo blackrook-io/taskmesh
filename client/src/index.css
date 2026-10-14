@@ -2110,6 +2110,39 @@ textarea.raw-md {
   white-space: nowrap;
 }
 
+.task-rollup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.task-rollup__count {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  color: var(--text-muted, #b7c4b4);
+}
+
+.task-rollup .todo-progress__track {
+  width: 3.25rem;
+}
+
+.task-editor-rollup {
+  margin-top: 0.35rem;
+}
+
+.task-editor-derived {
+  margin: 0.25rem 0 0;
+}
+
+.task-editor-manual-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+}
+
 .row-tag-chips {
   display: inline-flex;
   align-items: center;

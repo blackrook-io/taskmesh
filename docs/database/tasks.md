@@ -75,7 +75,10 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 | `number` | integer | no | — | App-wide unique display number (T####) |
 | `title` | text | no | — | |
 | `description` | text | yes | — | Markdown body |
-| `state` | text | no | `'new'` | See [task states](glossary.md#task-states) |
+| `state` | text | no | `'new'` | See [task states](glossary.md#task-states). When `state_manual` is false and `rollup_total` is set, this value is derived from descendant leaves and is read-only |
+| `state_manual` | boolean | no | `false` | When true, `state` stays hand-set. When false, a parent with counted leaves takes a derived status |
+| `rollup_done` | integer | yes | — | Count of `complete` leaves. Null when this task has no counted leaves |
+| `rollup_total` | integer | yes | — | Counted leaves: non-deleted, non-canceled tasks with no children of their own, anywhere under this task |
 | `priority` | text | no | `'none'` | `none` \| `low` \| `medium` \| `high` \| `urgent` |
 | `due_date` | date | yes | — | Date-only (`YYYY-MM-DD` string mode in Drizzle) |
 | `due_at` | timestamptz | yes | — | **Deprecated**; prefer `due_date` |
@@ -100,6 +103,9 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 - **FK:** `owner_id` → `users.id` · **ON DELETE RESTRICT**
 - **FK:** `assignee_id` → `users.id` · **ON DELETE SET NULL**
 - **INDEX:** `assignee_id`
+- **CHECK:** `tasks_rollup_pair` — `rollup_done` and `rollup_total` are both null, or both set with `0 <= rollup_done <= rollup_total` and `rollup_total > 0`
+
+Parent status (T0335) is computed from descendant **leaf** tasks. Canceled and deleted tasks are not counted. Intermediate groups are not items in the fraction; they receive the same kind of rollup from their own leaves. Precedence: all Complete → Complete; any Blocked → Blocked; any In Progress, Pending, or Complete → In Progress; any On Hold → On Hold; any Draft → Draft; otherwise Ready. A task with no counted leaves keeps its stored status. Turning on `state_manual` stops the derived write but still refreshes the counts.
 
 ---
 

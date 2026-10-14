@@ -101,6 +101,14 @@ export const TASK_FILTER_STATES: TaskState[] = [
   "on_hold",
 ];
 
+/** Parent status computed from descendant leaves (T0335). */
+export function isDerivedTaskStatus(task: {
+  stateManual?: boolean;
+  rollupTotal?: number | null;
+}): boolean {
+  return task.stateManual !== true && task.rollupTotal != null;
+}
+
 export function isClosedTaskState(state: string): boolean {
   return state === "complete" || state === "canceled" || state === "deleted";
 }

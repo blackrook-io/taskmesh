@@ -1208,13 +1208,27 @@ export const tasks = pgTable("tasks", {
   assigneeId: integer("assignee_id").references(() => users.id, {
     onDelete: "set null",
   }),
+  /**
+   * When true, `state` is hand-set. When false and `rollup_total` is set,
+   * status is derived from descendant leaf tasks (T0335).
+   */
+  stateManual: boolean("state_manual").notNull().default(false),
+  /** Complete counted leaves. Null when this task has no counted leaves. */
+  rollupDone: integer("rollup_done"),
+  /** Counted leaves (non-deleted, non-canceled). Null when not derived. */
+  rollupTotal: integer("rollup_total"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => ({
+  rollupPair: check(
+    "tasks_rollup_pair",
+    sql`(${t.rollupDone} is null and ${t.rollupTotal} is null) or (${t.rollupDone} >= 0 and ${t.rollupTotal} > 0 and ${t.rollupDone} <= ${t.rollupTotal})`,
+  ),
+}));
 
 /** Manual members for Task Groups with no active filter (List View drag-into). */
 export const taskGroupMembers = pgTable(

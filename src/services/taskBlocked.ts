@@ -6,6 +6,7 @@ import {
   listRequiredBy,
   openDependsOnBlockers,
 } from "./taskDependencies.js";
+import { recomputeTaskRollups } from "./taskRollup.js";
 import { recordTaskChanges, type RecordTaskChangesOpts } from "./tasks.js";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -34,6 +35,7 @@ export async function promoteBlockedTaskIfClear(
 ): Promise<void> {
   const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId));
   if (!task || task.state !== "blocked") return;
+  if (!task.stateManual && task.rollupTotal != null) return;
   const blockers = await openDependsOnBlockers(db, taskId);
   if (blockers.length > 0) return;
   const [updated] = await db
@@ -47,6 +49,7 @@ export async function promoteBlockedTaskIfClear(
     .returning();
   if (updated) {
     await recordTaskChanges(db, task.id, task, updated, { ...opts, recordHistory: true });
+    await recomputeTaskRollups(db, [task.id], opts);
   }
 }
 

@@ -31,6 +31,7 @@ import {
   allowedTaskStates,
   formatTaskNumber,
   isClosedTaskState,
+  isDerivedTaskStatus,
   nextAllowedTaskState,
   stateChangeNeedsComment,
   stateReasonPrompt,
@@ -42,12 +43,14 @@ import {
 import type { Project, ProjectPhase, Task, TaskGroup } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { StateReasonDialog } from "./StateReasonDialog";
+import { TaskRollupMeter } from "./TaskRollupMeter";
 import { ColorPopover } from "./shared/ColorPopover";
 import { GroupEditModal } from "./GroupEditModal";
 import {
   TaskListContextMenu,
   buildCreateGroupMenuItems,
   ctxFieldFromEventTarget,
+  manualStatusMenuItem,
   type TaskListContextMenuItem,
   type TaskListContextMenuState,
 } from "./TaskListContextMenu";
@@ -137,6 +140,7 @@ type TaskPatch = {
   parentId?: number | null;
   projectId?: number | null;
   state?: TaskState;
+  stateManual?: boolean;
   stateComment?: string;
   priority?: TaskPriority;
   assigneeId?: number | null;
@@ -812,6 +816,35 @@ export function TaskEditorFields({
               </option>
             ))}
           </select>
+          {task.rollupTotal != null && task.rollupDone != null ? (
+            <div className="task-editor-rollup">
+              <TaskRollupMeter done={task.rollupDone} total={task.rollupTotal} />
+            </div>
+          ) : null}
+          {isDerivedTaskStatus(task) ? (
+            <p className="muted task-editor-derived">Derived from child tasks</p>
+          ) : null}
+          {task.rollupTotal != null ? (
+            <label className="task-editor-manual-status">
+              <input
+                type="checkbox"
+                checked={task.stateManual === true}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  void (async () => {
+                    try {
+                      const row = await onSavePatch({ stateManual: next });
+                      if (row) applyServerTask(row);
+                      setSaveError(null);
+                    } catch (err) {
+                      setSaveError(err instanceof Error ? err.message : "Could not update status");
+                    }
+                  })();
+                }}
+              />
+              Manual status
+            </label>
+          ) : null}
         </div>
         <div className="field">
           <label htmlFor={`t-pri-${task.id}`}>Priority</label>
@@ -1797,6 +1830,9 @@ export function TaskBoard({
     if (!ctxMenu || !ctxTask) return [];
     const due = taskDue(ctxTask);
     const stateChoices = allowedTaskStates(ctxTask.allowedNextStates);
+    const manualItem = manualStatusMenuItem(ctxTask, (stateManual) => {
+      void onPatchTask(ctxTask.id, { stateManual });
+    });
     const items: TaskListContextMenuItem[] = [
       ...(stateChoices.length > 0
         ? [
@@ -1812,6 +1848,7 @@ export function TaskBoard({
             { type: "separator" as const },
           ]
         : []),
+      ...(manualItem ? [manualItem, { type: "separator" as const }] : []),
       {
         type: "action",
         label: "Move to…",
