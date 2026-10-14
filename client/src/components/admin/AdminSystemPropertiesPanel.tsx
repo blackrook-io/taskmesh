@@ -3,9 +3,6 @@ import { useState } from "react";
 import { apiJson } from "../../api/client";
 import { ThemeSwitcher } from "../shell/ThemeSwitcher";
 import { isThemeId, type ThemeId } from "../../lib/theme";
-import { AdminAiProvidersSection } from "./AdminAiProvidersSection";
-import { AdminAiQualitySection } from "./AdminAiQualitySection";
-import { AdminAiUsageSection } from "./AdminAiUsageSection";
 
 type MfaEnforcement = "none" | "administrators";
 
@@ -24,16 +21,6 @@ type SystemProperties = {
   mfaGraceDays?: number;
   mfaTrustedDeviceDays?: number;
   mfaTrustedDeviceMax?: number;
-  aiWebFetch?: boolean;
-  aiProjectAccessDefault?: "full" | "read_only" | "excluded";
-  aiProjectLocalOnly?: boolean;
-  aiBudgets?: {
-    tokensPerUserPerDay: number | null;
-    instanceSpendUsdPerDay: number | null;
-    toolCallsPerRun: number | null;
-    writesPerRun: number | null;
-  };
-  aiInstanceUsdPerMillionTokens?: number;
   updatedAt: string | null;
 };
 
@@ -61,16 +48,6 @@ function hasSearchRateLimit(
   return typeof data?.searchRateLimitPerMinute === "number";
 }
 
-function optionalPositive(raw: string, label: string): number | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const n = Number(trimmed);
-  if (!Number.isInteger(n) || n < 1) {
-    throw new Error(`${label} must be a positive integer, or blank for no cap`);
-  }
-  return n;
-}
-
 function configurableRateLimitError(label: string, value: number): string | null {
   if (
     !Number.isInteger(value) ||
@@ -95,16 +72,6 @@ export function AdminSystemPropertiesPanel() {
   const [mfaGraceDays, setMfaGraceDays] = useState("7");
   const [mfaTrustedDeviceDays, setMfaTrustedDeviceDays] = useState("15");
   const [mfaTrustedDeviceMax, setMfaTrustedDeviceMax] = useState("5");
-  const [tokenLimit, setTokenLimit] = useState("");
-  const [spendLimit, setSpendLimit] = useState("");
-  const [toolLimit, setToolLimit] = useState("");
-  const [writeLimit, setWriteLimit] = useState("");
-  const [usdPerMillion, setUsdPerMillion] = useState("1");
-  const [aiWebFetch, setAiWebFetch] = useState(false);
-  const [aiProjectAccessDefault, setAiProjectAccessDefault] = useState<
-    "full" | "read_only" | "excluded"
-  >("full");
-  const [aiProjectLocalOnly, setAiProjectLocalOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -154,25 +121,6 @@ export function AdminSystemPropertiesPanel() {
       if (typeof propsQuery.data.mfaTrustedDeviceMax === "number") {
         setMfaTrustedDeviceMax(String(propsQuery.data.mfaTrustedDeviceMax));
       }
-      const budgets = propsQuery.data.aiBudgets;
-      setTokenLimit(budgets?.tokensPerUserPerDay == null ? "" : String(budgets.tokensPerUserPerDay));
-      setSpendLimit(
-        budgets?.instanceSpendUsdPerDay == null ? "" : String(budgets.instanceSpendUsdPerDay),
-      );
-      setToolLimit(budgets?.toolCallsPerRun == null ? "" : String(budgets.toolCallsPerRun));
-      setWriteLimit(budgets?.writesPerRun == null ? "" : String(budgets.writesPerRun));
-      if (typeof propsQuery.data.aiInstanceUsdPerMillionTokens === "number") {
-        setUsdPerMillion(String(propsQuery.data.aiInstanceUsdPerMillionTokens));
-      }
-      setAiWebFetch(propsQuery.data.aiWebFetch === true);
-      if (
-        propsQuery.data.aiProjectAccessDefault === "full" ||
-        propsQuery.data.aiProjectAccessDefault === "read_only" ||
-        propsQuery.data.aiProjectAccessDefault === "excluded"
-      ) {
-        setAiProjectAccessDefault(propsQuery.data.aiProjectAccessDefault);
-      }
-      setAiProjectLocalOnly(propsQuery.data.aiProjectLocalOnly === true);
     }
   }
 
@@ -235,14 +183,6 @@ export function AdminSystemPropertiesPanel() {
       if (!Number.isInteger(trustMax) || trustMax < 1 || trustMax > 50) {
         throw new Error("Trusted device max must be an integer from 1 to 50");
       }
-      const tokensPerUserPerDay = optionalPositive(tokenLimit, "Tokens per user per day");
-      const instanceSpendUsdPerDay = optionalPositive(spendLimit, "Instance-key spend per day");
-      const toolCallsPerRun = optionalPositive(toolLimit, "Tool calls per run");
-      const writesPerRun = optionalPositive(writeLimit, "Writes per run");
-      const usdRate = Number(usdPerMillion);
-      if (!Number.isFinite(usdRate) || usdRate < 0) {
-        throw new Error("USD per million tokens must be zero or greater");
-      }
       const body: {
         apiRateLimitPerMinute: number;
         globalApiRateLimitPerMinute?: number;
@@ -255,16 +195,6 @@ export function AdminSystemPropertiesPanel() {
         mfaGraceDays: number;
         mfaTrustedDeviceDays: number;
         mfaTrustedDeviceMax: number;
-        aiWebFetch: boolean;
-        aiProjectAccessDefault: "full" | "read_only" | "excluded";
-        aiProjectLocalOnly: boolean;
-        aiBudgets: {
-          tokensPerUserPerDay: number | null;
-          instanceSpendUsdPerDay: number | null;
-          toolCallsPerRun: number | null;
-          writesPerRun: number | null;
-        };
-        aiInstanceUsdPerMillionTokens: number;
       } = {
         apiRateLimitPerMinute,
         loginFailureThreshold,
@@ -273,16 +203,6 @@ export function AdminSystemPropertiesPanel() {
         mfaGraceDays: graceDays,
         mfaTrustedDeviceDays: trustDays,
         mfaTrustedDeviceMax: trustMax,
-        aiWebFetch,
-        aiProjectAccessDefault,
-        aiProjectLocalOnly,
-        aiBudgets: {
-          tokensPerUserPerDay,
-          instanceSpendUsdPerDay,
-          toolCallsPerRun,
-          writesPerRun,
-        },
-        aiInstanceUsdPerMillionTokens: usdRate,
       };
       if (supportsGlobalRate) {
         body.globalApiRateLimitPerMinute = globalApiRateLimitPerMinute;
@@ -309,8 +229,6 @@ export function AdminSystemPropertiesPanel() {
       setError(null);
       setSaved(true);
       await qc.invalidateQueries({ queryKey: ["admin", "system-properties"] });
-      await qc.invalidateQueries({ queryKey: ["admin", "ai-providers"] });
-      await qc.invalidateQueries({ queryKey: ["admin", "ai-usage"] });
       window.setTimeout(() => setSaved(false), 2000);
     },
     onError: (err: Error) => setError(err.message),
@@ -498,103 +416,6 @@ export function AdminSystemPropertiesPanel() {
       {error ? <p className="error-text">{error}</p> : null}
       {saved ? <p className="ok-text">Saved.</p> : null}
 
-      <h2>AI usage budgets</h2>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Leave a limit blank for no cap. Counts use the UTC day. Instance-key spend is an estimate:
-        tokens times the rate below. A user&apos;s own key is not counted in that spend.
-      </p>
-      <label className="field">
-        <span>Tokens per user per day</span>
-        <input
-          type="number"
-          min={1}
-          value={tokenLimit}
-          onChange={(e) => setTokenLimit(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>Instance-key spend per day (USD)</span>
-        <input
-          type="number"
-          min={1}
-          value={spendLimit}
-          onChange={(e) => setSpendLimit(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>Tool calls per run</span>
-        <input
-          type="number"
-          min={1}
-          value={toolLimit}
-          onChange={(e) => setToolLimit(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>Writes per run</span>
-        <input
-          type="number"
-          min={1}
-          value={writeLimit}
-          onChange={(e) => setWriteLimit(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>USD per million tokens (instance key)</span>
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          value={usdPerMillion}
-          onChange={(e) => setUsdPerMillion(e.target.value)}
-        />
-      </label>
-
-      <h2>Assistant web access</h2>
-      <label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <input
-          type="checkbox"
-          checked={aiWebFetch}
-          onChange={(e) => setAiWebFetch(e.target.checked)}
-        />
-        <span>Allow assistant chat to fetch public web pages</span>
-      </label>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Off by default. Background AI features cannot fetch the web. Private and local addresses
-        stay blocked. Save with the button below.
-      </p>
-
-      <h2>Project AI access</h2>
-      <label className="field">
-        <span>Instance default</span>
-        <select
-          value={aiProjectAccessDefault}
-          onChange={(e) =>
-            setAiProjectAccessDefault(e.target.value as "full" | "read_only" | "excluded")
-          }
-        >
-          <option value="full">Full</option>
-          <option value="read_only">Read-only</option>
-          <option value="excluded">Excluded</option>
-        </select>
-      </label>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        New projects start here. A project owner or manager can only narrow this. Excluded
-        projects are never sent to a model. Read-only projects can be read but not changed by AI.
-      </p>
-      <label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <input
-          type="checkbox"
-          checked={aiProjectLocalOnly}
-          onChange={(e) => setAiProjectLocalOnly(e.target.checked)}
-        />
-        <span>Require local models for every project</span>
-      </label>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Projects can only narrow this. When it is on, a cloud model is never called for project
-        work, even if the local model errors or is rate-limited.
-      </p>
-
       <button
         type="button"
         className="btn primary small"
@@ -603,9 +424,6 @@ export function AdminSystemPropertiesPanel() {
       >
         Save
       </button>
-      <AdminAiProvidersSection />
-      <AdminAiUsageSection />
-      <AdminAiQualitySection />
     </div>
   );
 }

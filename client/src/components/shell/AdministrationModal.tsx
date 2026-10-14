@@ -10,6 +10,7 @@ import { AdminKeysPanel } from "../admin/AdminKeysPanel";
 import { AdminOauthPanel } from "../admin/AdminOauthPanel";
 import { AdminLoggingPanel } from "../admin/AdminLoggingPanel";
 import { AdminMeshPanel } from "../admin/AdminMeshPanel";
+import { AdminAiPanel } from "../admin/AdminAiPanel";
 import { AdminSystemPropertiesPanel } from "../admin/AdminSystemPropertiesPanel";
 import { AdminOwnershipPanel } from "../admin/AdminOwnershipPanel";
 import { AdminTemplatesPanel } from "../admin/AdminTemplatesPanel";
@@ -37,6 +38,7 @@ const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
   logging: shellIcons.logging,
   backups: shellIcons.documents,
   "system-properties": shellIcons.admin,
+  ai: shellIcons.assistant,
   mesh: shellIcons.mesh,
   templates: shellIcons.templates,
   ownership: shellIcons.profile,
@@ -134,6 +136,7 @@ export function AdministrationModal() {
             {section === "logging" ? <AdminLoggingPanel /> : null}
             {section === "backups" ? <BackupsPage embedded /> : null}
             {section === "system-properties" ? <AdminSystemPropertiesPanel /> : null}
+            {section === "ai" ? <AdminAiPanel /> : null}
             {section === "mesh" ? <AdminMeshPanel /> : null}
             {section === "templates" ? <AdminTemplatesPanel /> : null}
             {section === "ownership" ? <AdminOwnershipPanel /> : null}

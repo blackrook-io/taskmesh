@@ -71,6 +71,17 @@ const storedSchema = z.object({
   maxProjects: z.number().int().positive(),
 });
 
+const MATRIX_KEY =
+  /^(read|web_fetch|link|tag|comment|propose_create|propose_update|apply|propose_delete|bulk)(:(idea|project|task|document|todo|todo_list))?$/;
+
+/** Patch body for the Administrator matrix. Unknown actions and record types are rejected. */
+export const aiPermissionTiersPatchSchema = z.object({
+  matrix: z.record(z.string().regex(MATRIX_KEY), tierSchema),
+  tier1Enabled: z.boolean(),
+  maxRecords: z.number().int().positive().max(10_000),
+  maxProjects: z.number().int().positive().max(10_000),
+});
+
 export function defaultStoredAiPermissionTiers(): StoredAiPermissionTiers {
   return {
     matrix: { ...DEFAULT_ACTION_TIERS },

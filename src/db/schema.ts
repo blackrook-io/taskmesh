@@ -981,7 +981,7 @@ export const aiAuditLog = pgTable(
     provider: text("provider"),
     model: text("model"),
     tool: text("tool"),
-    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode | route | undo | usage */
+    /** read | propose_create | propose_update | link | tag | comment | apply | propose_delete | web_fetch | bulk | respond | key_mode | route | undo | usage | settings */
     action: text("action").notNull(),
     entityType: text("entity_type"),
     entityId: integer("entity_id"),
@@ -1014,7 +1014,7 @@ export const aiAuditLog = pgTable(
     ),
     actionCheck: check(
       "ai_audit_log_action_chk",
-      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route', 'undo', 'usage')`,
+      sql`${t.action} in ('read', 'propose_create', 'propose_update', 'link', 'tag', 'comment', 'apply', 'propose_delete', 'web_fetch', 'bulk', 'respond', 'key_mode', 'route', 'undo', 'usage', 'settings')`,
     ),
     keySourceCheck: check(
       "ai_audit_log_key_source_chk",

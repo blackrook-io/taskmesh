@@ -62,6 +62,8 @@ import {
 import { getDatabaseStatsSummary } from "../../services/dbStats.js";
 import { getAiQualitySummary } from "../../services/assistant/aiFeedback.js";
 import { listAdminAiUsage } from "../../services/assistant/aiBudgets.js";
+import { aiAuditRowsToCsv, listAiAudit, parseAiAuditListQuery } from "../../services/assistant/aiAuditQuery.js";
+import { describeAiSettingsChange, writeSettingsAudit } from "../../services/assistant/aiSettingsAudit.js";
 import { meshAppearanceEqual } from "../../lib/meshAppearance.js";
 import { isUsageRange } from "../../lib/usageRange.js";
 import { registerAiProviderAdminRoutes } from "./adminAiProviders.js";
@@ -765,6 +767,35 @@ adminRouter.patch("/system-properties", async (req, res) => {
         `ai_instance_usd_per_million_tokens ${before.aiInstanceUsdPerMillionTokens}→${after.aiInstanceUsdPerMillionTokens}`,
       );
     }
+    if (parsed.aiWebFetch !== undefined && before.aiWebFetch !== after.aiWebFetch) {
+      parts.push(`ai_web_fetch ${before.aiWebFetch}→${after.aiWebFetch}`);
+    }
+    if (
+      parsed.aiProjectAccessDefault !== undefined &&
+      before.aiProjectAccessDefault !== after.aiProjectAccessDefault
+    ) {
+      parts.push(
+        `ai_project_access_default ${before.aiProjectAccessDefault}→${after.aiProjectAccessDefault}`,
+      );
+    }
+    if (
+      parsed.aiProjectLocalOnly !== undefined &&
+      before.aiProjectLocalOnly !== after.aiProjectLocalOnly
+    ) {
+      parts.push(`ai_project_local_only ${before.aiProjectLocalOnly}→${after.aiProjectLocalOnly}`);
+    }
+    const settingsReason = describeAiSettingsChange(before, after, parsed);
+    if (
+      parsed.aiPermissionTiers !== undefined &&
+      settingsReason != null &&
+      (settingsReason.includes("tier1Enabled") ||
+        settingsReason.includes("maxRecords") ||
+        settingsReason.includes("maxProjects") ||
+        settingsReason.includes("matrix "))
+    ) {
+      parts.push("ai_permission_tiers updated");
+    }
+    if (settingsReason) await writeSettingsAudit(actor.id, settingsReason);
     res.locals.logUserId = actor.id;
     res.locals.logMessage =
       parts.length > 0
@@ -777,6 +808,35 @@ adminRouter.patch("/system-properties", async (req, res) => {
 });
 
 // ── API usage + logs ───────────────────────────────────────────────────────
+
+adminRouter.get("/ai/audit", async (req, res) => {
+  try {
+    const parsed = parseAiAuditListQuery(req.query);
+    if (!parsed.ok) {
+      sendError(res, 400, "invalid_audit_query", parsed.message);
+      return;
+    }
+    res.json({ data: await listAiAudit(db, parsed.query) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+adminRouter.get("/ai/audit/export", async (req, res) => {
+  try {
+    const parsed = parseAiAuditListQuery(req.query, { export: true });
+    if (!parsed.ok) {
+      sendError(res, 400, "invalid_audit_query", parsed.message);
+      return;
+    }
+    const csv = aiAuditRowsToCsv(await listAiAudit(db, parsed.query));
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"ai-audit.csv\"");
+    res.send(csv);
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
 
 adminRouter.get("/ai/usage", async (_req, res) => {
   try {

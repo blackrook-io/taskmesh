@@ -16,6 +16,7 @@ import {
   patchAiProvider,
 } from "../../services/assistant/aiProviderAdmin.js";
 import { saveAiFeatureRoutes } from "../../services/assistant/aiRouting.js";
+import { providerSettingsReason, writeSettingsAudit } from "../../services/assistant/aiSettingsAudit.js";
 import { getSystemProperties } from "../../services/systemProperties.js";
 
 const pluginIdSchema = z.string().regex(/^[a-z0-9-]+$/);
@@ -61,7 +62,9 @@ export function registerAiProviderAdminRoutes(adminRouter: Router): void {
   adminRouter.patch("/ai-providers", async (req, res) => {
     try {
       const parsed = aiProviderPatchSchema.parse(req.body ?? {});
+      const userId = actorId(req);
       const row = await patchAiProvider(db, parsed);
+      await writeSettingsAudit(userId, providerSettingsReason(row.id, "saved", row.enabled));
       res.locals.logMessage = `AI provider ${row.id} ${row.enabled ? "enabled" : "disabled"}`;
       res.json({ data: row });
     } catch (err) {
@@ -80,11 +83,13 @@ export function registerAiProviderAdminRoutes(adminRouter: Router): void {
       res.locals.logMessage = `AI instance key replace ${pluginId.data}`;
       const body = replaceKeySchema.parse(req.body ?? {});
       secret = body.apiKey;
+      const userId = actorId(req);
       const row = await replaceInstanceKey(db, {
         pluginId: pluginId.data,
         apiKey: body.apiKey,
-        actorUserId: actorId(req),
+        actorUserId: userId,
       });
+      await writeSettingsAudit(userId, providerSettingsReason(pluginId.data, "key_replaced"));
       res.json({ data: row });
     } catch (err) {
       handleRouteError(res, withoutSecret(err, secret));
@@ -95,7 +100,9 @@ export function registerAiProviderAdminRoutes(adminRouter: Router): void {
     try {
       const pluginId = pluginIdSchema.parse(req.params.id);
       res.locals.logMessage = `AI instance key remove ${pluginId}`;
+      const userId = actorId(req);
       const row = await removeInstanceKey(db, pluginId);
+      await writeSettingsAudit(userId, providerSettingsReason(pluginId, "key_removed"));
       res.json({ data: row });
     } catch (err) {
       handleRouteError(res, err);
@@ -106,11 +113,13 @@ export function registerAiProviderAdminRoutes(adminRouter: Router): void {
     try {
       const pluginId = pluginIdSchema.parse(req.params.id);
       res.locals.logMessage = `AI instance key verify ${pluginId}`;
+      const userId = actorId(req);
       const row = await verifyInstanceKey(db, {
         pluginId,
-        actorUserId: actorId(req),
+        actorUserId: userId,
         assertBaseUrl: assertPublicProviderBaseUrl,
       });
+      await writeSettingsAudit(userId, providerSettingsReason(pluginId, "key_verified"));
       res.json({ data: row });
     } catch (err) {
       handleRouteError(res, err);
