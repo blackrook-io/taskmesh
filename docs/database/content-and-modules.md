@@ -334,7 +334,7 @@ Directed links between any two records (T0160). Ends are polymorphic `(type, id)
 
 ## `todos`
 
-First-class **ToDo** records (UI label “ToDo”). Display number → **D####**. Lighter than Task: due date, priority, Task-parity state, `action_by` datetime, and a stored `progress` percent (0–100). Optional `project_id` and `source_idea_id` (when converted from an Idea). Soft-delete via `state = 'deleted'`.
+First-class **ToDo** records (UI label “ToDo”). Display number → **D####**. Lighter than Task: due date, optional quarter-hour `estimate_hours`, priority, Task-parity state, `action_by` datetime, and a stored `progress` percent (0–100). Optional `project_id` and `source_idea_id` (when converted from an Idea). Soft-delete via `state = 'deleted'`.
 
 Hierarchy is `parent_id` on the ToDo (same idea as tasks). A parent with any non-deleted sub-item stores a **derived** progress: **x of y** direct children complete, where canceled and deleted children are left out of both counts, and the percent is `round(100 * x / y)`. Marking that parent complete while a child is still open stores **Pending** and keeps the rollup percent. When every direct child is finished, a Pending parent becomes **Complete** at 100%. Completing children does not auto-complete a parent left in Draft, Ready, or In Progress. A list indents a child only when the parent is also on that list.
 
@@ -350,6 +350,7 @@ Hierarchy is `parent_id` on the ToDo (same idea as tasks). A parent with any non
 | `state` | text | no | `'new'` | Same values as `tasks.state` |
 | `priority` | text | no | `'none'` | Same values as `tasks.priority` |
 | `due_date` | date | yes | — | Date-only due |
+| `estimate_hours` | numeric(6,2) | yes | — | Effort estimate in hours. Null = not estimated. 0 = trivial. Quarter-hour steps only. Drizzle `mode: "number"` maps the driver string to a JSON number |
 | `action_by` | timestamptz | yes | — | When to act |
 | `color` | text | yes | — | |
 | `sort_order` | integer | no | `0` | |
@@ -363,7 +364,7 @@ Hierarchy is `parent_id` on the ToDo (same idea as tasks). A parent with any non
 | `created_at` | timestamptz | no | `now()` | |
 | `updated_at` | timestamptz | no | `now()` | |
 
-**Constraints:** PK `id`; UNIQUE `number`; CHECK `todos_progress_range` (`progress` between 0 and 100); FKs as above (`assignee_id` · **ON DELETE SET NULL**); `parent_id` → `todos.id` · **ON DELETE SET NULL**; index `todos_parent_id_idx`.
+**Constraints:** PK `id`; UNIQUE `number`; CHECK `todos_progress_range` (`progress` between 0 and 100); CHECK `todos_estimate_hours_quarter` (`estimate_hours >= 0` and a whole number of quarter hours; null passes; the API also caps the value at 999.75); FKs as above (`assignee_id` · **ON DELETE SET NULL**); `parent_id` → `todos.id` · **ON DELETE SET NULL**; index `todos_parent_id_idx`.
 
 ---
 

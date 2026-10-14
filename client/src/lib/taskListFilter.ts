@@ -1,5 +1,6 @@
 /** Client-side compound filters for task list views. */
 
+import { estimateHoursMatches } from "../../../src/lib/estimateHours.ts";
 import {
   TASK_LIST_FILTER_COMBINATIONS,
   isAllowedFilterCombination,
@@ -24,6 +25,7 @@ export const FILTER_FIELDS = [
   "tags",
   "project",
   "dueDate",
+  "estimateHours",
 ] as const;
 export type FilterField = (typeof FILTER_FIELDS)[number];
 
@@ -35,6 +37,10 @@ export const FILTER_OPERATORS = [
   "starts_with",
   "before",
   "after",
+  "gt",
+  "lt",
+  "is_empty",
+  "is_not_empty",
 ] as const;
 export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 
@@ -62,6 +68,7 @@ export const FILTER_FIELD_LABELS: Record<FilterField, string> = {
   tags: "Tags",
   project: "Project",
   dueDate: "Due date",
+  estimateHours: "Hours",
 };
 
 export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
@@ -72,6 +79,10 @@ export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
   starts_with: "starts with",
   before: "before",
   after: "after",
+  gt: "greater than",
+  lt: "less than",
+  is_empty: "is empty",
+  is_not_empty: "is not empty",
 };
 
 export const FILTER_JOIN_LABELS: Record<FilterJoin, string> = {
@@ -152,10 +163,20 @@ function foldCase(s: string): string {
   return s.toLocaleLowerCase();
 }
 
-type TextOperator = Exclude<FilterOperator, "before" | "after">;
+type TextOperator = Exclude<
+  FilterOperator,
+  "before" | "after" | "gt" | "lt" | "is_empty" | "is_not_empty"
+>;
 
 function isTextOperator(op: FilterOperator): op is TextOperator {
-  return op !== "before" && op !== "after";
+  return (
+    op !== "before" &&
+    op !== "after" &&
+    op !== "gt" &&
+    op !== "lt" &&
+    op !== "is_empty" &&
+    op !== "is_not_empty"
+  );
 }
 
 function matchText(haystack: string, needle: string, operator: TextOperator): boolean {
@@ -245,6 +266,8 @@ function fieldHaystacks(task: Task, field: FilterField, ctx?: FilterMatchContext
       const due = taskDueDateYmd(task);
       return due ? [due] : [];
     }
+    case "estimateHours":
+      return task.estimateHours == null ? [] : [String(task.estimateHours)];
   }
 }
 
@@ -318,6 +341,9 @@ export function clauseMatchesTask(
   const value = clause.value.trim();
   if (clause.field === "dueDate") {
     return matchDueDate(task, clause);
+  }
+  if (clause.field === "estimateHours") {
+    return estimateHoursMatches(task.estimateHours, clause.operator, clause.value);
   }
   if (clause.field === "phase") {
     return matchPhase(task, clause, ctx);
@@ -514,8 +540,14 @@ export function formatFilterBreadcrumb(filter: TaskListFilter, ctx?: FilterMatch
     if (i > 0) {
       parts.push(FILTER_JOIN_LABELS[filter.joins[i - 1] ?? "and"]);
     }
+    const valueLabel =
+      clause.operator === "is_empty" || clause.operator === "is_not_empty"
+        ? ""
+        : clauseValueLabel(clause, ctx);
     parts.push(
-      `${FILTER_FIELD_LABELS[clause.field]} ${FILTER_OPERATOR_LABELS[clause.operator]} ${clauseValueLabel(clause, ctx)}`,
+      [FILTER_FIELD_LABELS[clause.field], FILTER_OPERATOR_LABELS[clause.operator], valueLabel]
+        .filter((part) => part.length > 0)
+        .join(" "),
     );
   });
   return parts.join(" ");

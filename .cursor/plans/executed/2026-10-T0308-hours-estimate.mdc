@@ -1,0 +1,59 @@
+# T0308 — Hours estimate on Tasks and ToDos
+
+**Status:** Complete — finishing up  
+**App version:** `0.79.0` (MINOR; new `estimate_hours` columns)  
+**Branch (on approval):** `T0308-hours-estimate`  
+**DEV Task:** T0308 (`id` 323), project 4, state `ready`, priority medium  
+**Parent:** T0307 Plans epic (`id` 322, still Draft)  
+**Depends on:** none  
+**Required by:** T0310 plans service (`id` 325, `ready`) — out of scope  
+**Schema:** yes — `estimate_hours` on `tasks` and `todos` (finish-up MINOR)
+
+## Goal
+
+Store a quarter-hour effort estimate on Tasks and ToDos so later plan rollups (T0310) can total hours. Null means not estimated. Zero means a trivial item.
+
+## Decisions (confirm before implement)
+
+| # | Decision |
+|---|----------|
+| 1 | Column `estimate_hours numeric(6,2)` nullable on `tasks` and `todos`. Check: `estimate_hours >= 0 AND estimate_hours * 4 = trunc(estimate_hours * 4)`. No default. |
+| 2 | Shared Zod `estimateHoursSchema`: number, `.min(0).max(999.75).multipleOf(0.25)`, nullable and optional. JSON number in and out. Drizzle returns `numeric` as a string; map to `number \| null` on every Task and ToDo response. |
+| 3 | `estimateHours` joins `EDIT_KEYS` in `taskWorkflow.ts`. Complete, Canceled, and Deleted tasks stay read-only. ToDos have no closed-state lock today; hours stay editable on a completed ToDo. |
+| 4 | UI label **Hours**. Show a decimal (`1.25`, `0`). Blank clears to null. Number input `step="0.25"` `min="0"` `max="999.75"`. Reject `1.3` in the form before save, and the API rejects it too. |
+| 5 | Field lives in `TaskEditorFields` (task list expand, board, kanban, overview) and the ToDo editor in `TodoListView`. List rows also edit inline, same as due date. |
+| 6 | List column **Hours**, default visible, sort order just after Due date, on the Task list (`entity_type` `task`) and the ToDo list (`entity_type` `todo_list`). Sortable. Nulls sort last. ToDo-list rows that are Tasks show that task’s hours. |
+| 7 | Filter operators for Hours: `is`, `gt`, `lt`, `is_empty`, `is_not_empty`, on both Task and ToDo list filters (client + the shared combination table the API reads). |
+| 8 | Task CSV/XLSX export adds `estimateHours` (empty cell when null). Import: empty → null; `1.25` and `0` insert; `1.3` and negatives discard that row with a reason. ToDos have no import/export today; this task does not add one. |
+| 9 | A change to hours is recorded in activity with the label **Hours**. |
+| 10 | Assistant and MCP tool schemas stay on T0316. This task only puts the field on REST create/patch/read. |
+
+## Out of scope
+
+- Plan phases, rollups, ordering, timeline (T0309–T0318).
+- Start date (T0317).
+- Hour display as `1h 15m`.
+- Mesh cards, calendar, command palette.
+- A new ToDo spreadsheet import/export.
+
+## Schema and docs
+
+- Drizzle migration adding both columns and checks.
+- `docs/database/tasks.md` and `docs/database/content-and-modules.md` (ToDos). Glossary only if the column needs a term.
+- `npm run docs:sync-schema` after the docs edit.
+
+## API
+
+- Create and patch on project tasks, standalone tasks, and todos.
+- Import path uses the same quarter-hour rule as Zod.
+- Closed-task patch that includes `estimateHours` returns the existing read-only error.
+
+## UI
+
+- Forms and inline list cells as in decisions 4–6.
+- Column personalize can hide Hours.
+- Mobile: the column participates in the existing list grid; the editor field stacks with Due date.
+
+## QA
+
+No follow-up requests before finish-up. Checks covered a saved `1.25`, a rejected `1.3`, a closed task staying read-only, task import discarding `1.3`, and the Hours column and filter on Task lists and ToDo lists.

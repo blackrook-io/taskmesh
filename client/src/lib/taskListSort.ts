@@ -6,6 +6,7 @@ export const TASK_LIST_SORT_COLS = [
   "state",
   "priority",
   "dueDate",
+  "estimateHours",
   "project",
   "phase",
   "createdAt",

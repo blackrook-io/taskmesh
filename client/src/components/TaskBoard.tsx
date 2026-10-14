@@ -15,6 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { compareEstimateHours } from "../../../src/lib/estimateHours.ts";
 import { apiJson } from "../api/client";
 import { useUndoStack } from "../hooks/useUndoStack";
 import {
@@ -45,6 +46,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { StateReasonDialog } from "./StateReasonDialog";
 import { TaskRollupMeter } from "./TaskRollupMeter";
 import { ColorPopover } from "./shared/ColorPopover";
+import { HoursInput } from "./shared/HoursInput";
 import { GroupEditModal } from "./GroupEditModal";
 import {
   TaskListContextMenu,
@@ -135,6 +137,7 @@ type TaskPatch = {
   title?: string;
   description?: string | null;
   dueDate?: string | null;
+  estimateHours?: number | null;
   color?: string | null;
   phaseId?: number | null;
   parentId?: number | null;
@@ -150,6 +153,7 @@ type TaskSnapshot = {
   title: string;
   description: string;
   dueDate: string | null;
+  estimateHours: number | null;
   color: string | null;
   phaseId: number | null;
   projectId: number | null;
@@ -167,6 +171,7 @@ function snapshotFromTask(task: Task): TaskSnapshot {
     title: task.title,
     description: task.description ?? "",
     dueDate: taskDue(task),
+    estimateHours: task.estimateHours ?? null,
     color: task.color,
     phaseId: task.phaseId,
     projectId: task.projectId,
@@ -198,6 +203,10 @@ function sortRoots(roots: Task[], col: SortCol | null, dir: 1 | -1): Task[] {
       cmp = a.updatedAt.localeCompare(b.updatedAt);
     } else if (col === "phase") {
       cmp = (a.phaseId ?? 0) - (b.phaseId ?? 0);
+    } else if (col === "estimateHours") {
+      const hours = compareEstimateHours(a.estimateHours, b.estimateHours, dir);
+      if (hours !== 0) return hours;
+      cmp = 0;
     } else {
       const da = taskDue(a) ?? "";
       const db = taskDue(b) ?? "";
@@ -420,6 +429,7 @@ export function TaskEditorFields({
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [dueLocal, setDueLocal] = useState(initial.dueDate ?? "");
+  const [hoursLocal, setHoursLocal] = useState(initial.estimateHours);
   const [color, setColor] = useState(initial.color);
   const [phaseId, setPhaseId] = useState(initial.phaseId);
   const [projectId, setProjectId] = useState(initial.projectId);
@@ -443,6 +453,7 @@ export function TaskEditorFields({
     state: task.state,
     priority: task.priority,
     dueDate: taskDue(task),
+    estimateHours: task.estimateHours ?? null,
     color: task.color,
     phaseId: task.phaseId,
     parentId: task.parentId,
@@ -519,6 +530,7 @@ export function TaskEditorFields({
     title,
     description,
     dueDate: dueLocal || null,
+    estimateHours: hoursLocal,
     color,
     phaseId,
     projectId,
@@ -531,6 +543,7 @@ export function TaskEditorFields({
     setTitle(sanitizePlainText(snap.title));
     setDescription(snap.description);
     setDueLocal(snap.dueDate ?? "");
+    setHoursLocal(snap.estimateHours);
     setColor(snap.color);
     setPhaseId(snap.phaseId);
     setProjectId(snap.projectId);
@@ -543,6 +556,7 @@ export function TaskEditorFields({
     setTitle(sanitizePlainText(row.title));
     setDescription(row.description ?? "");
     setDueLocal(taskDue(row) ?? "");
+    setHoursLocal(row.estimateHours ?? null);
     setColor(row.color);
     setPhaseId(row.phaseId);
     setProjectId(row.projectId);
@@ -581,6 +595,7 @@ export function TaskEditorFields({
           title: restored.title,
           description: restored.description.trim() ? restored.description : null,
           dueDate: restored.dueDate,
+          estimateHours: restored.estimateHours,
           color: restored.color,
           phaseId: restored.phaseId,
           projectId: restored.projectId,
@@ -898,6 +913,20 @@ export function TaskEditorFields({
               <span className="task-color-swatch__hex muted">{color ?? "default"}</span>
             </div>
           </div>
+        </div>
+        <div className="field">
+          <label htmlFor={`t-hours-${task.id}`}>Hours</label>
+          <HoursInput
+            id={`t-hours-${task.id}`}
+            value={hoursLocal}
+            disabled={closed}
+            ariaLabel="Hours"
+            onCommit={(next) => {
+              const prev = { ...currentSnap(), estimateHours: hoursLocal };
+              setHoursLocal(next);
+              void commit(prev, { estimateHours: next });
+            }}
+          />
         </div>
         <AssigneeSelectField
           id={`t-assignee-${task.id}`}

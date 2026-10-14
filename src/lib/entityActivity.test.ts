@@ -31,6 +31,13 @@ describe("tracked field changes", () => {
         { field: "progress", oldValue: "60", newValue: "70" },
       ],
     );
+    assert.deepEqual(
+      trackedTodoChanges(
+        { state: "ready", progress: 10, estimateHours: null },
+        { state: "ready", progress: 10, estimateHours: 1.25 },
+      ),
+      [{ field: "estimateHours", oldValue: "none", newValue: "1.25" }],
+    );
   });
 
   it("records a project status label change", () => {

@@ -110,6 +110,8 @@ export type Task = {
     | "deleted";
   priority: "none" | "low" | "medium" | "high" | "urgent";
   dueDate: string | null;
+  /** Quarter-hour effort estimate. Null when not estimated. */
+  estimateHours?: number | null;
   /** @deprecated Prefer dueDate */
   dueAt?: string | null;
   color: string | null;
@@ -208,6 +210,8 @@ export type Todo = {
   state: string;
   priority: string;
   dueDate: string | null;
+  /** Quarter-hour effort estimate. Null when not estimated. */
+  estimateHours?: number | null;
   actionBy: string | null;
   /** Stored percent complete, 0–100. Derived from sub-items when `progressDerived` is true. */
   progress: number;
@@ -264,6 +268,7 @@ export type TodoListItem = {
   href: string | null;
   state?: string;
   dueDate?: string | null;
+  estimateHours?: number | null;
   priority?: string;
   actionBy?: string | null;
   /** Present on ToDo rows. */

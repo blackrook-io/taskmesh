@@ -23,6 +23,7 @@ import {
 import { userHasAdministrator } from "../../services/roles.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
 import { getCurrentUserId } from "../../services/users.js";
+import { parseEstimateHours } from "../../lib/estimateHours.js";
 import { assertImportedInitialState, TaskWorkflowError } from "../../services/taskWorkflow.js";
 import {
   objectsToCsv,
@@ -66,6 +67,7 @@ function taskExportRow(t: typeof schema.tasks.$inferSelect): Record<string, unkn
     state: t.state,
     priority: t.priority,
     dueDate: t.dueDate ?? "",
+    estimateHours: t.estimateHours ?? "",
     dueAt: t.dueAt ? t.dueAt.toISOString() : "",
     color: t.color ?? "",
     sortOrder: t.sortOrder,
@@ -483,6 +485,16 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
       continue;
     }
 
+    const estimateHours = parseEstimateHours(raw.estimateHours);
+    if (estimateHours === "invalid") {
+      discarded.push({
+        row: rowNum,
+        code: "invalid_data",
+        reason: "estimateHours must be a quarter-hour from 0 to 999.75",
+      });
+      continue;
+    }
+
     let dueDate: string | null = null;
     if (raw.dueDate != null && String(raw.dueDate).trim() !== "") {
       const d = String(raw.dueDate).trim().slice(0, 10);
@@ -577,6 +589,7 @@ async function importTasks(rows: Record<string, unknown>[]): Promise<ImportResul
           title,
           description,
           dueDate,
+          estimateHours,
           dueAt: dueAt instanceof Date ? dueAt : null,
           color,
           sortOrder,

@@ -526,6 +526,13 @@
       "when": 1791941250443,
       "tag": "0074_open_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1791943940046,
+      "tag": "0075_cynical_doctor_octopus",
+      "breakpoints": true
     }
   ]
 }

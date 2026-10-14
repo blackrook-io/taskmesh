@@ -24,7 +24,7 @@ type Db = NodePgDatabase<typeof schema>;
 export type ActivityRef = { type: EntityType; id: number };
 
 type ChangeRow = {
-  field: ActivityUpdateField | "state" | "progress" | "status" | "body";
+  field: ActivityUpdateField | "state" | "progress" | "estimateHours" | "status" | "body";
   oldValue: string | null;
   newValue: string | null;
 };
@@ -75,8 +75,8 @@ export async function recordTrackedChanges(
 export async function recordTodoFieldChanges(
   db: Db,
   todoId: number,
-  before: { state: string; progress: number },
-  after: { state: string; progress: number },
+  before: { state: string; progress: number; estimateHours?: number | null },
+  after: { state: string; progress: number; estimateHours?: number | null },
   actorId: number | null,
   source: ActivitySource = "api",
 ): Promise<void> {

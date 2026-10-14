@@ -2,6 +2,7 @@
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TaskRollupMeter } from "../TaskRollupMeter";
+import { HoursInput } from "./HoursInput";
 import { RowTagChips } from "./RowTagChips";
 import { stateWaitingDescribedBy } from "./stateWaitingDescribedBy";
 import { StateWaitingHint } from "./StateWaitingHint";
@@ -82,7 +83,11 @@ export type TaskColumnCellContext = {
   hiddenCount?: number;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
-  onPatch?: (patch: { priority?: TaskPriority; dueDate?: string | null }) => void;
+  onPatch?: (patch: {
+    priority?: TaskPriority;
+    dueDate?: string | null;
+    estimateHours?: number | null;
+  }) => void;
   onRequestState?: (next: TaskState) => void;
   projectName?: (id: number | null) => string;
   phaseName?: (id: number | null) => string;
@@ -397,6 +402,21 @@ export function renderTaskColumnCell(
       ) : (
         <span key="dueDate" className="task-list-row__date muted">
           {formatListDate(taskDue(task))}
+        </span>
+      );
+    case "estimateHours":
+      return onPatch ? (
+        <HoursInput
+          key="estimateHours"
+          className="task-list-row__date"
+          value={task.estimateHours}
+          disabled={isClosedTaskState(task.state)}
+          ariaLabel="Hours"
+          onCommit={(next) => onPatch({ estimateHours: next })}
+        />
+      ) : (
+        <span key="estimateHours" className="task-list-row__date muted">
+          {task.estimateHours == null ? "—" : task.estimateHours}
         </span>
       );
     case "project":

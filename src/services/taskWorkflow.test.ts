@@ -177,6 +177,17 @@ describe("task workflow call sites", () => {
     assert.match(read("src/routes/v1/importExport.ts"), /assertImportedInitialState\(/);
   });
 
+  it("rejects an hours change on a closed task", () => {
+    const refused = capture(() =>
+      enforceTaskPatch({
+        fromState: "complete",
+        canReopen: true,
+        patch: { estimateHours: 1.25 },
+      }),
+    );
+    assert.equal(refused?.code, "task_closed");
+  });
+
   it("task taggings use the tag rules", () => {
     const src = read("src/routes/v1/taggings.ts");
     assert.match(src, /assertTaskTagAdd\(/);
