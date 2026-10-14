@@ -38,6 +38,7 @@ describe("instance keys and key mode", { concurrency: false }, () => {
             secretEnc: originalCred.secretEnc,
             hint: originalCred.hint,
             verifiedAt: originalCred.verifiedAt,
+            lastError: originalCred.lastError,
             updatedById: originalCred.updatedById,
             updatedAt: originalCred.updatedAt,
           },
@@ -141,6 +142,7 @@ describe("instance keys and key mode", { concurrency: false }, () => {
         }) as Response,
     });
     assert.ok(verified.keyVerifiedAt);
+    assert.equal(verified.keyLastError, null);
     assert.equal(JSON.stringify(verified).includes(SECRET), false);
 
     await assert.rejects(
@@ -165,10 +167,15 @@ describe("instance keys and key mode", { concurrency: false }, () => {
       },
     );
     const [row] = await db
-      .select({ verifiedAt: schema.aiInstanceCredentials.verifiedAt })
+      .select({
+        verifiedAt: schema.aiInstanceCredentials.verifiedAt,
+        lastError: schema.aiInstanceCredentials.lastError,
+      })
       .from(schema.aiInstanceCredentials)
       .where(eq(schema.aiInstanceCredentials.pluginId, "openai"))
       .limit(1);
     assert.equal(row?.verifiedAt, null);
+    assert.match(row?.lastError ?? "", /\[redacted\]/);
+    assert.equal((row?.lastError ?? "").includes(SECRET), false);
   });
 });

@@ -1,0 +1,2 @@
+ALTER TABLE "ai_instance_credentials" ADD COLUMN "last_error" text;--> statement-breakpoint
+ALTER TABLE "ai_instance_credentials" ADD CONSTRAINT "ai_instance_credentials_error_chk" CHECK ("ai_instance_credentials"."last_error" is null or char_length("ai_instance_credentials"."last_error") between 1 and 500);

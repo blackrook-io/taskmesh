@@ -11,6 +11,7 @@ import { getSystemProperties } from "../systemProperties.js";
 import { providerEntryConfigured } from "./aiProviderConfig.js";
 import type { AiKeyMode } from "./aiKeyMode.js";
 import { loadResolvedKeys } from "./aiUserKeys.js";
+import { noteStoredKeyUse } from "./aiCredentialHealth.js";
 import { assertLocalProviderBaseUrl, assertPublicProviderBaseUrl } from "./providerBaseUrl.js";
 import { loadedAiProviders } from "./providerLoader.js";
 import { runAssistantWithTools } from "./runWithTools.js";
@@ -250,6 +251,16 @@ export async function runConfiguredAssistant(args: {
             model: attempt.model,
             userId: args.actorUserId,
           } satisfies AiUsageMeter,
+          noteCredential: async (outcome, message) => {
+            await noteStoredKeyUse(args.db, {
+              userId: args.actorUserId,
+              pluginId: attempt.plugin.id,
+              storedKey: attempt.storedKey,
+              apiKey: attempt.apiKey,
+              outcome,
+              message,
+            });
+          },
         });
       },
     });

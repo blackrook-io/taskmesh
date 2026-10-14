@@ -26,8 +26,10 @@ export type ResolvedProviderKey = {
   apiKey: string | null;
   /** Set only when the call spends this user's stored key. */
   defaultModel: string | null;
-  /** Whose secret pays for the call. Null when no key is available. */
+  /** Whose secret pays for the call. Null when no key is available. Env fallbacks count as instance. */
   keySource: "user" | "instance" | "local" | null;
+  /** Stored row that supplied the secret. Null for env fallbacks and local models. */
+  storedKey: "user" | "instance" | null;
 };
 
 type UserKeySecret = {
@@ -141,7 +143,7 @@ export async function resolveProviderKey(
   db: Db,
   args: { userId: number; pluginId: string; local?: boolean; env?: NodeJS.ProcessEnv },
 ): Promise<ResolvedProviderKey> {
-  if (args.local) return { apiKey: null, defaultModel: null, keySource: "local" };
+  if (args.local) return { apiKey: null, defaultModel: null, keySource: "local", storedKey: null };
   const mode = await readAiKeyMode(db);
   const userKeys = mode === "instance_only" ? new Map<string, UserKeySecret>() : await loadDecryptedUserKeys(db, args.userId);
   const instanceKeys = mode === "user_only" ? new Map<string, string>() : await loadDecryptedInstanceKeys(db);
@@ -163,14 +165,16 @@ export function pickProviderKey(args: {
 }): ResolvedProviderKey {
   if (args.mode !== "instance_only" && args.user) {
     if (args.mode === "user_only" || args.mode === "user_preferred_instance_fallback") {
-      return { apiKey: args.user.apiKey, defaultModel: args.user.defaultModel, keySource: "user" };
+      return { apiKey: args.user.apiKey, defaultModel: args.user.defaultModel, keySource: "user", storedKey: "user" };
     }
   }
-  if (args.mode === "user_only") return { apiKey: null, defaultModel: null, keySource: null };
-  if (args.instanceKey) return { apiKey: args.instanceKey, defaultModel: null, keySource: "instance" };
+  if (args.mode === "user_only") return { apiKey: null, defaultModel: null, keySource: null, storedKey: null };
+  if (args.instanceKey) {
+    return { apiKey: args.instanceKey, defaultModel: null, keySource: "instance", storedKey: "instance" };
+  }
   const envKey = resolvePluginApiKey(args.pluginId, args.env);
-  if (envKey) return { apiKey: envKey, defaultModel: null, keySource: "instance" };
-  return { apiKey: null, defaultModel: null, keySource: null };
+  if (envKey) return { apiKey: envKey, defaultModel: null, keySource: "instance", storedKey: null };
+  return { apiKey: null, defaultModel: null, keySource: null, storedKey: null };
 }
 
 export async function loadResolvedKeys(

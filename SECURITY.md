@@ -129,7 +129,7 @@ Run after adding a route or query:
 
 ## Secrets and host hardening (T0087)
 
-- **`.env`:** mode `600`, owned by the service user; never commit. Contains `DATABASE_URL`, optional `AI_CREDENTIALS_KEY` (encrypts instance provider keys; minimum 32 characters when set), and optional provider keys: `OPENAI_API_KEY` (deprecated OpenAI fallback when no instance key is stored), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and `AZURE_OPENAI_API_KEY` (the same fallback for those plugins). Instance keys are stored only as ciphertext.
+- **`.env`:** mode `600`, owned by the service user; never commit. Contains `DATABASE_URL`, optional `AI_CREDENTIALS_KEY` (encrypts instance and per-user provider keys; minimum 32 characters when set), and optional provider keys: `OPENAI_API_KEY` (deprecated OpenAI fallback when no instance key is stored), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and `AZURE_OPENAI_API_KEY` (the same fallback for those plugins). Stored provider keys are ciphertext only. The encryption key is not part of a backup; rotation and restore steps are in [docs/AI_CREDENTIALS.md](docs/AI_CREDENTIALS.md).
 - **Postgres:** dedicated `taskmesh` role with least privilege on the `taskmesh` database only (not superuser).
 - **OS:** run systemd unit as a non-root user; only nginx (:443/:80) exposed on the LAN/internet, not Express `:3000`. Compose app process drops to uid **10001** after entrypoint volume `chown`.
 - **TLS:** prefer HTTPS via nginx; see [`deploy/ssl/README.md`](deploy/ssl/README.md). For public hosts, use certbot/Let's Encrypt (manual setup documented there). Compose desktop uses `docker/nginx/generate-certs.sh` self-signed certs by default.

@@ -21,6 +21,7 @@ type BackupItem = {
 type BackupsPayload = {
   health: "ok" | "warn" | "missing";
   freshHours: number;
+  aiCredentialsKeyConfigured: boolean;
   items: BackupItem[];
 };
 
@@ -215,8 +216,16 @@ export function BackupsPage({ embedded = false }: { embedded?: boolean }) {
         {listQuery.data?.freshHours ?? 36} hours old. Download pulls the full backup folder (SQL +
         uploads + manifest). Restore replaces the current database (and uploads when present) after
         confirmation; a safety backup is taken first. Delete removes a backup folder from disk
-        (useful for discarding unwanted safety snapshots).
+        (useful for discarding unwanted safety snapshots). Provider keys in a backup stay encrypted.
+        Restoring them requires the <code>AI_CREDENTIALS_KEY</code> that was set when they were stored.
+        That key is not part of the archive.
       </p>
+      {listQuery.data && !listQuery.data.aiCredentialsKeyConfigured ? (
+        <p className="error-text" role="alert">
+          <code>AI_CREDENTIALS_KEY</code> is not set. A restored backup cannot decrypt stored provider
+          keys until that key is configured.
+        </p>
+      ) : null}
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
         <div className="btn-row" style={{ justifyContent: "space-between", alignItems: "center" }}>

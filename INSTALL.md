@@ -114,7 +114,7 @@ Edit `.env.docker`:
 - Defaults already set **`COOKIE_SECURE=true`** and **`TRUST_PROXY=1`** for the TLS proxy path.
 - Optionally override **`TASKMESH_HTTP_PORT`** / **`TASKMESH_HTTPS_PORT`** if 80/443 are busy.
 - Optionally set **`OPENAI_API_KEY`** for the Assistant panel. The variable is deprecated. A stored instance key is preferred; this remains the fallback when no instance key is stored.
-- Optionally set **`AI_CREDENTIALS_KEY`** (at least 32 characters) before an Administrator stores an instance key under Administration → System properties. Startup refuses a shorter value. It is separate from `OAUTH_CREDENTIALS_KEY`.
+- Optionally set **`AI_CREDENTIALS_KEY`** (at least 32 characters) before an Administrator stores an instance key under Administration → System properties. Startup refuses a shorter value. It is separate from `OAUTH_CREDENTIALS_KEY`. Rotation, backup restore, and rejected provider keys are in [docs/AI_CREDENTIALS.md](docs/AI_CREDENTIALS.md).
 - Optionally set **`ANTHROPIC_API_KEY`** after an Administrator enables the Anthropic plugin. It is not stored and does not enable the plugin on its own.
 - Optionally set **`GEMINI_API_KEY`** after an Administrator enables the Google Gemini plugin. It is not stored and does not enable the plugin on its own.
 - Optionally set **`AZURE_OPENAI_API_KEY`** after an Administrator enables the Azure OpenAI plugin. It is not stored and does not enable the plugin on its own.
@@ -889,7 +889,7 @@ Always run migrations after pulling schema changes; review `drizzle/` if you mai
 | nginx 502 Bad Gateway | TaskMesh not running (`systemctl status taskmesh`); wrong `HOST`/`PORT`; `ss -tlnp \| grep 3000` should show `127.0.0.1:3000` |
 | Blank Excalidraw / missing fonts | Re-run `cd client && npm install`; confirm `client/public/excalidraw-assets/fonts` exists; `index.html` sets `EXCALIDRAW_ASSET_PATH` |
 | SPA 404 on refresh in production | Ensure `NODE_ENV=production` and `client/dist/index.html` exists (`npm run build:all`) |
-| Assistant “not configured” / 503 | Enable a chat provider (Administration → System properties) and store an instance key, or set the deprecated `OPENAI_API_KEY` fallback in `.env`; set `AI_CREDENTIALS_KEY` before storing a key; restart TaskMesh; confirm the host can reach the plugin base URL |
+| Assistant “not configured” / 503 | Enable a chat provider (Administration → System properties) and store an instance key, or set the deprecated `OPENAI_API_KEY` fallback in `.env`; set `AI_CREDENTIALS_KEY` before storing a key; restart TaskMesh; confirm the host can reach the plugin base URL. Key rotation and restore: [docs/AI_CREDENTIALS.md](docs/AI_CREDENTIALS.md) |
 | Client `postinstall` skipped | Run `node client/scripts/copy-excalidraw-assets.mjs` manually from `client/` |
 
 ---

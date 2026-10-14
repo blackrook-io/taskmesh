@@ -43,6 +43,7 @@ export type ResolvedAttempt = RouteAttempt & {
   config: unknown;
   apiKey: string | null;
   keySource: "user" | "instance" | "local" | null;
+  storedKey: "user" | "instance" | null;
 };
 
 export type ResolvedRoute = {
@@ -129,6 +130,7 @@ export async function resolveFeatureRoute(
       config: parsed.data,
       apiKey,
       keySource: plugin.capabilities.local ? "local" : resolved.keySource,
+      storedKey: plugin.capabilities.local ? null : resolved.storedKey,
       model: attempt.model,
     });
   }

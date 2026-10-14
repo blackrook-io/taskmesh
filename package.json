@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.76.0",
+  "version": "0.77.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
     "db:studio": "drizzle-kit studio",
     "backup": "tsx src/scripts/runBackup.ts",
     "docs:sync-schema": "tsx src/scripts/syncSchemaDocsToProject.ts",
+    "ai:rotate-credentials-key": "tsx src/scripts/rotateAiCredentialsKey.ts",
     "ai:golden": "tsx src/scripts/aiGolden.ts",
     "ai:redteam": "tsx src/scripts/aiRedteam.ts",
     "security:scan": "python3 security/scan/run.py",

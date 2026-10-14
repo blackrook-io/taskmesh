@@ -62,6 +62,8 @@ export async function runAssistantWithTools(args: {
   auditSink?: AiAuditSink;
   /** When set, each plugin round is metered and limits are checked first. */
   meter?: AiUsageMeter;
+  /** First successful round, or an auth rejection. Callers persist this onto the stored key. */
+  noteCredential?: (outcome: "ok" | "auth", message: string) => Promise<void>;
 }): Promise<void> {
   const model = args.model?.trim() || readDefaultModel(args.config);
   const tools = assistantToolDefinitions({ webFetchEnabled: args.webFetchEnabled === true });
@@ -72,6 +74,7 @@ export async function runAssistantWithTools(args: {
   }));
   let sawPrivate = args.messages.some((message) => containsPrivateUntrusted(message.content));
   let committed = false;
+  let notedOk = false;
   let toolCalls = 0;
   let writes = 0;
 
@@ -96,6 +99,10 @@ export async function runAssistantWithTools(args: {
       } catch (err) {
         if (!committed && args.rethrowFirstProviderError && err instanceof AiProviderError) throw err;
         throw err;
+      }
+      if (!notedOk) {
+        notedOk = true;
+        await noteCredentialOutcome(args.noteCredential, "ok", "");
       }
       if (!committed) {
         committed = true;
@@ -223,6 +230,9 @@ export async function runAssistantWithTools(args: {
     }
     args.handlers.onError("Too many tool rounds; try a simpler request.");
   } catch (err) {
+    if (err instanceof AiProviderError && err.code === "auth") {
+      await noteCredentialOutcome(args.noteCredential, "auth", err.message);
+    }
     if (!committed && args.rethrowFirstProviderError && err instanceof AiProviderError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
       try {
@@ -239,6 +249,19 @@ export async function runAssistantWithTools(args: {
           ? err.message
           : "Assistant failed";
     args.handlers.onError(message);
+  }
+}
+
+async function noteCredentialOutcome(
+  note: ((outcome: "ok" | "auth", message: string) => Promise<void>) | undefined,
+  outcome: "ok" | "auth",
+  message: string,
+): Promise<void> {
+  if (!note) return;
+  try {
+    await note(outcome, message);
+  } catch (err) {
+    console.warn("Could not record the provider key result.", err);
   }
 }
 
