@@ -1,0 +1,38 @@
+# T0248 — Persist record mentions inside canvas text
+
+**Task:** T0248 (id `263`) — Mesh: persist record mentions inside canvas text
+**Parent:** T0159 (id `172`) — Mesh: relationship graph, backlinks and focus view (epic)
+**Depends on:** T0161 complete (mention sync for Markdown fields)
+**Required by:** none
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0248-canvas-mentions`
+
+A canvas stores an Excalidraw scene in `canvases.document`. Saving that scene should turn the same mention tokens T0161 accepts into `entity_links` rows (`origin='mention'`, `relation='references'`) from the canvas. No new SQL file.
+
+## Decisions
+
+1. **Text that counts.** Walk `document.elements`. Keep elements whose `type` is `text` and whose `isDeleted` is not true. Read `text` when it is a string; otherwise `originalText`. Join those strings with newlines and pass them through the existing `extractMentionTokens` / `syncMentionLinks` path. Deleted tombstones do not keep a link. Shapes, frames, arrows, files, and `appState` are not scanned.
+2. **Same token rules.** `#T31`, `#T0031`, and `[T0031]` (any prefix, any letter case). Code fences and inline code inside a text box are ignored, because the Markdown parser still runs. A bare `T0031` is not a mention. Self-mentions and records the saver cannot read are skipped. Manual links stay.
+3. **When it runs.** Canvas create and canvas patch, only when a `document` is written. Title-only and reorder patches do not rescan. Wiki canvas create stores an empty scene, so the first document save is the hook. The actor is the current user (`getCurrentUserId`), same as document saves.
+4. **Already-saved canvases.** Extend `src/scripts/backfillMentionLinks.ts` to scan canvases. The reader is the project owner, matching documents. `--dry-run` still writes nothing.
+5. **Not in this task.** Canvas titles, Excalidraw frame `name` labels, image-board scenes, and comment bodies.
+
+## Scope
+
+1. A small extractor (plus unit tests) that turns a scene into the string `syncMentionLinks` already understands: text elements only, deleted elements dropped.
+2. Call `syncMentionLinks` with `srcType: "canvas"` from canvas create and from patch when `document` is present.
+3. Add canvases to the existing backfill script.
+4. `npm run lint` clean.
+
+## Out
+
+- Schema change. Finish-up is a PATCH bump.
+- `FEATURES.md`: revise the existing mention bullet so a canvas text mention is included.
+- `RELEASE_NOTES.md`: one Enhancements bullet.
+
+## Acceptance
+
+- A text element containing `#T0042` or `[T0042]` creates a mention link from that canvas. Removing the token, or deleting the text element, removes that mention link on the next document save. A manual link on the same pair remains.
+- A token inside a non-text element, or on an `isDeleted` text element, does not create a link.
+- A self-mention and a mention of a record the author cannot read create no link.
+- Backfill `--dry-run` includes canvases, prints counts, and writes nothing.
