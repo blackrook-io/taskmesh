@@ -112,6 +112,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Write AI instructions for the instance, a project, or yourself. Context for a record includes those instructions, the record, its parent and links, recent activity, and search hits, each cited by its display number
 - Send one sentence to Capture and get a task, todo, or idea proposal back, with the date, priority, and matching records filled in. Unclear fields are questions, and nothing is saved until you confirm
 - Suggest tags when a record's text changes, using tags already on similar records. High-confidence tags apply with Undo when you opt in; otherwise Accept or Dismiss them. New tag names stay off unless you allow them
+- While you create a task or todo, warn when the title looks like a task or todo you can already see. Open it, link it as a duplicate, or ignore the pair. Ignored pairs stay quiet, and nothing is merged or deleted
 - The assistant picks a model that can use tools and falls back to the next provider when the first is rate-limited, over quota, unreachable, or rejects the key
 - Enable Anthropic for assistant chat. An environment key remains the fallback when no instance key is stored
 - Enable Google Gemini for assistant chat and embeddings. An environment key remains the fallback when no instance key is stored

@@ -1,5 +1,5 @@
 /** Directed link labels stored on `entity_links.relation`. */
-export const LINK_RELATIONS = ["relates_to", "references", "supports", "part_of"] as const;
+export const LINK_RELATIONS = ["relates_to", "references", "supports", "part_of", "duplicate_of"] as const;
 export type LinkRelation = (typeof LINK_RELATIONS)[number];
 
 /** `manual` is user-authored. `mention` is reserved for markdown sync (T0161). */

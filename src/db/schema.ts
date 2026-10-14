@@ -1204,6 +1204,58 @@ export const aiTagSuggestions = pgTable(
   }),
 );
 
+/**
+ * Likely duplicate task/todo pairs for one user (T0200).
+ * Ends are stored in canonical order so a task↔todo pair is one row.
+ * `pending` is a warning. `linked` and `ignored` are user choices.
+ * `rejected` is a model “no” and is not raised again for this pair.
+ */
+export const aiDuplicatePairs = pgTable(
+  "ai_duplicate_pairs",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    aType: text("a_type").notNull(),
+    aId: integer("a_id").notNull(),
+    bType: text("b_type").notNull(),
+    bId: integer("b_id").notNull(),
+    score: real("score").notNull(),
+    /** exact_title | near_title | index | model */
+    reason: text("reason").notNull(),
+    /** pending | linked | ignored | rejected */
+    status: text("status").notNull().default("pending"),
+    contentHash: text("content_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pairUidx: uniqueIndex("ai_duplicate_pairs_pair_uidx").on(t.userId, t.aType, t.aId, t.bType, t.bId),
+    aIdx: index("ai_duplicate_pairs_a_idx").on(t.userId, t.aType, t.aId),
+    bIdx: index("ai_duplicate_pairs_b_idx").on(t.userId, t.bType, t.bId),
+    statusCheck: check(
+      "ai_duplicate_pairs_status_chk",
+      sql`${t.status} in ('pending', 'linked', 'ignored', 'rejected')`,
+    ),
+    scoreCheck: check(
+      "ai_duplicate_pairs_score_chk",
+      sql`${t.score} >= 0 and ${t.score} <= 1`,
+    ),
+    reasonCheck: check(
+      "ai_duplicate_pairs_reason_chk",
+      sql`${t.reason} in ('exact_title', 'near_title', 'index', 'model')`,
+    ),
+    typeCheck: check(
+      "ai_duplicate_pairs_type_chk",
+      sql`${t.aType} in ('task', 'todo') and ${t.bType} in ('task', 'todo')`,
+    ),
+    orderCheck: check(
+      "ai_duplicate_pairs_order_chk",
+      sql`${t.aType} < ${t.bType} or (${t.aType} = ${t.bType} and ${t.aId} < ${t.bId})`,
+    ),
+  }),
+);
+
 /** Periodic Postgres gauges for Administration → Database charts. */
 export const dbStatsSnapshots = pgTable(
   "db_stats_snapshots",
@@ -1653,7 +1705,7 @@ export const entityLinks = pgTable(
     srcId: integer("src_id").notNull(),
     dstType: text("dst_type").notNull(),
     dstId: integer("dst_id").notNull(),
-    /** relates_to | references | supports | part_of */
+    /** relates_to | references | supports | part_of | duplicate_of */
     relation: text("relation").notNull().default("relates_to"),
     /** manual | mention */
     origin: text("origin").notNull().default("manual"),
@@ -1685,7 +1737,7 @@ export const entityLinks = pgTable(
     ),
     relationCheck: check(
       "entity_links_relation_chk",
-      sql`${t.relation} in ('relates_to', 'references', 'supports', 'part_of')`,
+      sql`${t.relation} in ('relates_to', 'references', 'supports', 'part_of', 'duplicate_of')`,
     ),
     originCheck: check(
       "entity_links_origin_chk",

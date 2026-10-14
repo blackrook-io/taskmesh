@@ -317,7 +317,7 @@ Directed links between any two records (T0160). Ends are polymorphic `(type, id)
 | `src_id` | integer | no | — | Source row id (no DB FK) |
 | `dst_type` | text | no | — | Destination `EntityType` |
 | `dst_id` | integer | no | — | Destination row id (no DB FK) |
-| `relation` | text | no | `'relates_to'` | `relates_to` · `references` · `supports` · `part_of` |
+| `relation` | text | no | `'relates_to'` | `relates_to` · `references` · `supports` · `part_of` · `duplicate_of` |
 | `origin` | text | no | `'manual'` | `manual` · `mention` |
 | `created_by_id` | integer | no | — | FK → `users.id` |
 | `created_at` | timestamptz | no | `now()` | |

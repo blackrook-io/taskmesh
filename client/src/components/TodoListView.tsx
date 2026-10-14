@@ -15,6 +15,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiJson } from "../api/client";
+import { ignoreDuplicatePair, linkDuplicatePair } from "../api/duplicates";
+import { DuplicateWarning } from "./shared/DuplicateWarning";
 import { formatEntityRef } from "../lib/entityRef";
 import { buildTodoListGridTemplate, type ResolvedListColumn } from "../lib/listViewColumns";
 import { sanitizePlainText } from "../lib/plainText";
@@ -459,6 +461,7 @@ export function TodoEditorFields({
             if (next && next !== todo.title) void patch({ title: next });
           }}
         />
+        <DuplicateWarning entityType="todo" title={title} entityId={todo.id} projectId={todo.projectId} />
       </div>
       <div className="task-editor-grid">
         <div className="field">
@@ -636,9 +639,11 @@ type Props = {
   listId: number;
   /** When set, convert-to-task / create uses this project */
   defaultProjectId?: number | null;
+  /** Open this task or todo once the list has loaded it. */
+  openEntityId?: number | null;
 };
 
-export function TodoListView({ listId, defaultProjectId }: Props) {
+export function TodoListView({ listId, defaultProjectId, openEntityId }: Props) {
   const qc = useQueryClient();
   const [openItem, setOpenItem] = useState<TodoListItem | null>(null);
   const [taskHeaderActions, setTaskHeaderActions] = useState<ReactNode>(null);
@@ -882,6 +887,17 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
       ? detailQuery.data
       : undefined;
   const items = useMemo(() => list?.items ?? [], [list?.items]);
+  const [adoptedOpenId, setAdoptedOpenId] = useState<number | null>(null);
+  if (openEntityId != null && adoptedOpenId !== openEntityId) {
+    const match = items.find(
+      (item) =>
+        item.entityId === openEntityId && (item.entityType === "todo" || item.entityType === "task"),
+    );
+    if (match) {
+      setAdoptedOpenId(openEntityId);
+      setOpenItem(match);
+    }
+  }
   const visibleItems = useMemo(
     () => evaluateTodoListFilter(items, listFilter, filterCtx),
     [items, listFilter, filterCtx],
@@ -1041,6 +1057,23 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
           Add
         </button>
       </div>
+      <DuplicateWarning
+        entityType={createType}
+        title={createTitle}
+        projectId={defaultProjectId ?? detailQuery.data?.projectId ?? null}
+        onResolve={async (action, hit) => {
+          const created = await createItem.mutateAsync();
+          if (created.entityType !== "task" && created.entityType !== "todo") return;
+          const args = {
+            entityType: created.entityType,
+            entityId: created.entityId,
+            matchType: hit.entityType,
+            matchId: hit.entityId,
+          };
+          if (action === "ignore") await ignoreDuplicatePair(args);
+          else await linkDuplicatePair(args);
+        }}
+      />
       {createError ? (
         <p className="tag-input__error" role="alert">
           {createError}

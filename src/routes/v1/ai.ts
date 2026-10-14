@@ -19,6 +19,14 @@ import { AiRoutingError, listAiRouting, setUserRoutePreference } from "../../ser
 import { getSystemProperties } from "../../services/systemProperties.js";
 import { listAiActivity, undoJournalEntry } from "../../services/assistant/aiUndo.js";
 import {
+  checkDraftDuplicates,
+  DuplicateActionError,
+  ignoreDuplicatePair,
+  linkDuplicatePair,
+  listPendingDuplicates,
+} from "../../services/assistant/duplicates/service.js";
+import { isDuplicateEntityType } from "../../services/assistant/duplicates/match.js";
+import {
   acceptTagSuggestion,
   dismissTagSuggestion,
   listTagSuggestions,
@@ -378,6 +386,90 @@ aiRouter.post("/tag-suggestions/:id/dismiss", async (req, res) => {
     res.status(204).end();
   } catch (err) {
     if (err instanceof TagSuggestionError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+const duplicateTypeSchema = z.string().refine(isDuplicateEntityType, "Tasks and ToDos only.");
+const duplicatePairSchema = z.object({
+  entityType: duplicateTypeSchema,
+  entityId: z.number().int().positive(),
+  matchType: duplicateTypeSchema,
+  matchId: z.number().int().positive(),
+});
+
+aiRouter.get("/duplicate-check", async (req, res) => {
+  try {
+    const entityType = duplicateTypeSchema.parse(req.query.entityType);
+    const title = z.string().trim().min(1).max(500).parse(req.query.title);
+    const excludeRaw = req.query.excludeId;
+    const projectRaw = req.query.projectId;
+    const excludeId =
+      excludeRaw == null || excludeRaw === ""
+        ? null
+        : z.coerce.number().int().positive().parse(excludeRaw);
+    const projectId =
+      projectRaw == null || projectRaw === ""
+        ? null
+        : z.coerce.number().int().positive().parse(projectRaw);
+    const userId = await getCurrentUserId(db);
+    const hits = await checkDraftDuplicates(db, userId, entityType, title, excludeId, projectId);
+    res.json({ data: { hits } });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.get("/duplicate-pairs", async (req, res) => {
+  try {
+    const entityType = duplicateTypeSchema.parse(req.query.entityType);
+    const entityId = z.coerce.number().int().positive().parse(req.query.entityId);
+    const userId = await getCurrentUserId(db);
+    const hits = await listPendingDuplicates(db, userId, entityType, entityId);
+    res.json({ data: { hits } });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.post("/duplicate-pairs/ignore", async (req, res) => {
+  try {
+    const body = duplicatePairSchema.parse(req.body ?? {});
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = `AI duplicate ignore ${body.entityType}:${body.entityId}`;
+    await ignoreDuplicatePair(
+      db,
+      userId,
+      { entityType: body.entityType, entityId: body.entityId },
+      { entityType: body.matchType, entityId: body.matchId },
+    );
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof DuplicateActionError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.post("/duplicate-pairs/link", async (req, res) => {
+  try {
+    const body = duplicatePairSchema.parse(req.body ?? {});
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = `AI duplicate link ${body.entityType}:${body.entityId}`;
+    await linkDuplicatePair(
+      db,
+      userId,
+      { entityType: body.entityType, entityId: body.entityId },
+      { entityType: body.matchType, entityId: body.matchId },
+    );
+    res.status(201).json({ data: { linked: true } });
+  } catch (err) {
+    if (err instanceof DuplicateActionError) {
       sendError(res, err.status, err.code, err.message);
       return;
     }

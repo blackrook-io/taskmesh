@@ -20,7 +20,7 @@ import {
   type MeshSuggestion,
 } from "./meshLayout.ts";
 
-const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of"]);
+const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of", "duplicate_of"]);
 
 /** Vertical step inside a phase row. Clears the focused record. */
 export const MESH_PLAN_ROW = MESH_FOCUS_BOX_HEIGHT + 22;

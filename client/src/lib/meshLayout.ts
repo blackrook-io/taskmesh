@@ -13,7 +13,7 @@ export const MESH_FOCUS_BOX_HEIGHT = 54;
 export const MESH_NODE_WIDTH = 200;
 export const MESH_NODE_HEIGHT = MESH_BOX_HEIGHT;
 
-const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of"]);
+const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of", "duplicate_of"]);
 
 export type MeshGraphNode = {
   key: string;

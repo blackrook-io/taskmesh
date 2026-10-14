@@ -1,7 +1,7 @@
 import { containmentParent, type MeshGraphEdge, type MeshSuggestion } from "./meshLayout";
 import { isStale, schedule, type MeshSignalNode } from "./meshSignals";
 
-const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of"]);
+const LINK_RELATIONS = new Set(["relates_to", "references", "supports", "part_of", "duplicate_of"]);
 const MS_DAY = 864e5;
 
 const TYPE_LABELS: Record<string, string> = {

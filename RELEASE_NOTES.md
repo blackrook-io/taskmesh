@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.82.0 — 2026-10-14
+
+### New Functionality
+- While you type a task or todo title, TaskMesh warns when it looks like a task or todo you can already see. Open that record, link the two as duplicates, or ignore the pair so it is not raised again. Nothing is merged or deleted.
+
+### Enhancements
+- The duplicate warning uses the same corner radius as text fields.
+
 ## 0.81.0 — 2026-10-14
 
 ### Fixes

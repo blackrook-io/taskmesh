@@ -59,7 +59,7 @@ There is **no database FK** enforcing that `entity_id` exists in the target tabl
 
 ## Entity link relation and origin
 
-`entity_links.relation`: `relates_to` (default) · `references` · `supports` · `part_of`.
+`entity_links.relation`: `relates_to` (default) · `references` · `supports` · `part_of` · `duplicate_of` (user confirmed a task/todo duplicate, T0200).
 
 `entity_links.origin`: `manual` (API create/delete) · `mention` (reserved for markdown sync). The same pair may exist once per origin. Soft-deleted tasks and todos keep their link rows; list APIs hide those ends until the record is restored.
 
