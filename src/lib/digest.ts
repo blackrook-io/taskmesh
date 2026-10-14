@@ -13,6 +13,10 @@ export type DigestSection = (typeof DIGEST_SECTIONS)[number];
 
 export const DIGEST_ITEM_CAP = 25;
 
+export function isDigestSection(value: string): value is DigestSection {
+  return (DIGEST_SECTIONS as readonly string[]).includes(value);
+}
+
 export type DigestItem = {
   entityType: string;
   entityId: number;

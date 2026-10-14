@@ -39,6 +39,7 @@ import { MeshMark } from "./MeshMark";
 import { NavIcon } from "./NavIcon";
 import { ProjectSelectModal } from "./ProjectSelectModal";
 import { shellIcons } from "./shellIcons";
+import { useDigestInbox } from "../../lib/useDigestInbox";
 import { SystemClock } from "./SystemClock";
 import { UpdateAvailableLink } from "./UpdateAvailableLink";
 
@@ -173,6 +174,8 @@ export function AppNav({
   onNavigate,
 }: Props) {
   const less = mode === "less";
+  const digestInbox = useDigestInbox();
+  const digestUnread = digestInbox.data?.unread === true;
   const section = useShellSection();
   const activeProjectId = useActiveProjectId();
   const { items: projectModules } = useActiveProjectNavItems();
@@ -399,6 +402,16 @@ export function AppNav({
                 <NavIcon icon={shellIcons.search} />
               </button>
             ) : null}
+            <NavLink
+              to="/digest"
+              className={({ isActive }) => `app-nav__icon-btn${isActive ? " is-active" : ""}`}
+              title="Digest"
+              aria-label={digestUnread ? "Digest, unread" : "Digest"}
+              onClick={onNavigate}
+            >
+              <NavIcon icon={shellIcons.digest} />
+              {digestUnread ? <span className="app-nav__unread" aria-hidden /> : null}
+            </NavLink>
             {showAdmin ? (
               <button
                 type="button"
@@ -457,6 +470,18 @@ export function AppNav({
                 </button>
               ) : null}
             </div>
+            <NavLink
+              to="/digest"
+              className={({ isActive }) => `app-nav__item${isActive ? " is-active" : ""}`}
+              aria-label={digestUnread ? "Digest, unread" : "Digest"}
+              onClick={onNavigate}
+            >
+              <span className="app-nav__glyph" aria-hidden>
+                <NavIcon icon={shellIcons.digest} />
+                {digestUnread ? <span className="app-nav__unread" aria-hidden /> : null}
+              </span>
+              <span className="app-nav__label">Digest</span>
+            </NavLink>
             {showAdmin ? (
               <button
                 type="button"

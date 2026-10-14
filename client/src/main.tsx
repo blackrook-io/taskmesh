@@ -19,6 +19,7 @@ import { FilesystemPage } from "./pages/FilesystemPage.tsx";
 import { ImageBoardPage } from "./pages/ImageBoardPage.tsx";
 import { ImageBoardEditorPage } from "./pages/ImageBoardEditorPage.tsx";
 import { CalendarPage } from "./pages/CalendarPage.tsx";
+import { DigestPage } from "./pages/DigestPage.tsx";
 import { AdminHubPage } from "./pages/AdminHubPage.tsx";
 import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
 import { TasksListPage } from "./pages/TasksListPage.tsx";
@@ -48,6 +49,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="image-board" element={<ImageBoardPage />} />
                 <Route path="image-board/:id" element={<ImageBoardEditorPage />} />
                 <Route path="calendar" element={<CalendarPage />} />
+                <Route path="digest" element={<DigestPage />} />
                 <Route path="settings" element={<SettingsHubPage />} />
                 <Route path="settings/profile" element={<SettingsHubPage />} />
                 <Route path="settings/tags" element={<SettingsHubPage />} />

@@ -286,6 +286,8 @@ export const users = pgTable("users", {
     timeZone?: string;
     hour?: number;
   }>().notNull().default(sql`'{}'::jsonb`),
+  /** Set when Home or the digest page has shown the latest digest (T0217). */
+  digestSeenAt: timestamp("digest_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1305,6 +1307,48 @@ export const attentionDigests = pgTable(
     summarySourceCheck: check(
       "attention_digests_summary_source_chk",
       sql`${t.summarySource} is null or ${t.summarySource} = 'model'`,
+    ),
+  }),
+);
+
+/**
+ * Per-item snooze or dismiss for the attention digest (T0217).
+ * Dismiss applies to one period. Snooze applies until `until`.
+ * The stored digest row is not rewritten.
+ */
+export const digestItemHides = pgTable(
+  "digest_item_hides",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    section: text("section").notNull(),
+    /** snooze | dismiss */
+    kind: text("kind").notNull(),
+    /** Dismiss hides this period key only. */
+    periodKey: text("period_key"),
+    /** Snooze hides until this instant. */
+    until: timestamp("until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userItemUidx: uniqueIndex("digest_item_hides_user_item_uidx").on(
+      t.userId,
+      t.entityType,
+      t.entityId,
+      t.section,
+    ),
+    kindCheck: check("digest_item_hides_kind_chk", sql`${t.kind} in ('snooze', 'dismiss')`),
+    sectionCheck: check(
+      "digest_item_hides_section_chk",
+      sql`${t.section} in ('overdue', 'at_risk', 'stale', 'blocked', 'changed', 'suggestions', 'duplicates', 'assigned_out')`,
+    ),
+    shapeCheck: check(
+      "digest_item_hides_shape_chk",
+      sql`(${t.kind} = 'snooze' and ${t.until} is not null) or (${t.kind} = 'dismiss' and ${t.periodKey} is not null)`,
     ),
   }),
 );

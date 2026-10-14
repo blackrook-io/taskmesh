@@ -451,6 +451,7 @@ code {
   border-radius: calc(var(--radius) - 2px);
   background: transparent;
   color: var(--text-muted);
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -949,6 +950,110 @@ a.app-nav__item.active {
 .home-landing h1 {
   font-size: 2rem;
   margin-bottom: 0.25rem;
+}
+
+.digest-page {
+  max-width: 42rem;
+}
+
+.digest-panel {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.digest-panel__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.digest-summary {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.digest-summary__label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.35rem;
+}
+
+.digest-summary p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.digest-section h2,
+.digest-prefs h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+
+.digest-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.digest-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+}
+
+.digest-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.digest-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.digest-prefs fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.digest-prefs__check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.app-nav__glyph,
+.app-nav__icon-btn {
+  position: relative;
+}
+
+.app-nav__unread {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.05rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .topbar {

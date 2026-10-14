@@ -1,0 +1,56 @@
+---
+description: T0217 — digest page, home panel, shell unread dot, and digest preferences
+---
+
+# T0217 — AI in-app digest view
+
+**Task:** T0217 · id `232` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0197 AI: Attention digest (id `212`, Blocked). Email sibling T0218 stays Blocked on T0221.
+**Depends on:** T0216 digest engine — complete. No open blockers.
+**Branch (after approval):** `T0217-digest-view`
+**Version on finish-up:** MINOR (`digest_item_hides` plus `users.digest_seen_at`). Update `FEATURES.md` under Assistant.
+
+## Goal
+
+Show the latest stored digest in the app. A page lists every section, a home panel shows a short version, and the left rail shows a dot when a newer digest exists. Each item opens its record. Snooze and dismiss hide an item without changing the stored facts. Frequency, sections, and the AI summary are editable on the page.
+
+## Current state
+
+- `GET /api/v1/digests` and `GET /api/v1/digests/:id` return the signed-in user's stored rows. `POST /api/v1/digests/run` rebuilds the current period. Items already include `href`, `referenceId`, `title`, and `reason`. `summarySource` is `model` or null.
+- Preferences live in `users.digest_prefs` (daily, all sections, summary on, timezone UTC, hour 7). Nothing in the UI writes them.
+- Home (`/`) is only the wordmark. The left rail has no Digest entry. There is no snooze or dismiss table.
+
+## Decisions (confirm or adjust)
+
+| # | Topic | Recommendation |
+|---|--------|----------------|
+| 1 | Page | `/digest`. Sections in engine order, human labels, the AI paragraph labeled **AI-written** when `summarySource` is `model`. Each item is a link. A line under a capped section says how many more exist. Empty digest: short text and **Build now**, which calls the existing run endpoint. Opening the page does not call the model by itself. |
+| 2 | Home panel | Under the wordmark, the same latest digest: the summary if present, then up to 3 items per section, then a link to `/digest`. No digest yet: one line and the same link. |
+| 3 | Unread | `users.digest_seen_at`. Unread when the latest `generatedAt` is newer than that, or when it is null and a digest exists. A dot sits on a **Digest** item in the left rail, in both the full rail and the compact rail. Showing the home panel or opening `/digest` sets `digest_seen_at` to that digest's `generatedAt`. |
+| 4 | Snooze and dismiss | New `digest_item_hides` rows, one per user, record, and section. **Dismiss** hides the item for this period key only; the next period can show it again if it is still true. **Snooze** hides it until tomorrow or next week in the digest timezone, including across periods. The stored digest JSON is not rewritten. Email can apply the same rows later. No confirm — this does not delete a record. |
+| 5 | Preferences | On the digest page: daily or weekly, a checkbox per section, summary on or off. Save writes `digest_prefs` and sets `timeZone` from the browser so 07:00 is local. Hour stays 7. No hour picker and no new Settings section. Saving does not rebuild; **Build now** does. |
+| 6 | API | `GET /api/v1/digests/inbox` returns the latest digest with hides already removed, hidden counts, `unread`, and prefs. `POST /api/v1/digests/seen`, `POST .../items/snooze`, `POST .../items/dismiss`, `PATCH /api/v1/digests/prefs`. Existing list and run routes stay. |
+| 7 | Navigation | Command palette entry **Digest**. Rail item uses the same link. |
+
+## Work items
+
+1. Migration for `digest_item_hides` and `users.digest_seen_at`. Document both. Run `npm run docs:sync-schema`.
+2. Pure filter: dismiss matches the current period key; snooze matches `until` in the future. Tests cover both and the next-period return of a dismissed item.
+3. Inbox, seen, snooze, dismiss, and prefs routes. Prefs validation reuses `parseDigestPrefs` rules (daily/weekly, known sections, summary boolean, IANA timezone).
+4. Client page, home panel, rail dot, palette entry. Buttons stay visible on a narrow screen, not hover-only.
+5. `FEATURES.md` waits for finish-up: one Assistant bullet for the digest page, home panel, and unread dot.
+
+## Out of scope
+
+- Email, unsubscribe, quiet hours (T0218).
+- Changing how facts are computed.
+- An hour-of-day picker.
+- Snooze or dismiss of a whole section.
+
+## Acceptance
+
+- The latest digest is on `/` and on `/digest`. Each item opens its record. The summary is labeled AI-written when the model wrote it.
+- Dismiss hides an item until the next period. Snooze hides it until tomorrow or next week. The stored digest row still contains the item.
+- After a newer digest exists, the rail shows a dot until Home or `/digest` has displayed that digest.
+- Saving weekly, turning a section off, or turning the summary off is what the next build uses. **Build now** replaces the current period.
+- A second user cannot see or change the first user's hides or digest.
