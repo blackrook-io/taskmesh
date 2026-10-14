@@ -70,6 +70,7 @@ const projectPatch = z.object({
   status: projectStatus.optional(),
   aiAccess: aiAccessValue.optional(),
   aiLocalOnly: z.boolean().optional(),
+  aiInstructions: optionalMarkdown(8_000),
 });
 
 const overviewPanelInstanceSchema = z.object({
@@ -234,8 +235,17 @@ projectsRouter.patch("/:id", async (req, res) => {
   try {
     const id = idParam.parse(req.params.id);
     const parsed = projectPatch.parse(req.body);
-    if (!hasDefinedKeys(parsed, ["name", "description", "status", "aiAccess", "aiLocalOnly"])) {
-      sendError(res, 400, "empty_patch", "Provide name, description, status, and/or AI access");
+    if (
+      !hasDefinedKeys(parsed, [
+        "name",
+        "description",
+        "status",
+        "aiAccess",
+        "aiLocalOnly",
+        "aiInstructions",
+      ])
+    ) {
+      sendError(res, 400, "empty_patch", "Provide name, description, status, and/or AI settings");
       return;
     }
     const actorId = await getCurrentUserId(db);
@@ -267,7 +277,8 @@ projectsRouter.patch("/:id", async (req, res) => {
     const needsSettings =
       parsed.description !== undefined ||
       parsed.aiAccess !== undefined ||
-      parsed.aiLocalOnly !== undefined;
+      parsed.aiLocalOnly !== undefined ||
+      parsed.aiInstructions !== undefined;
     const existing = needsSettings
       ? await assertCanAccessProject(db, actorId, id, "settings")
       : await assertCanAccessProject(db, actorId, id, "write");
@@ -279,6 +290,9 @@ projectsRouter.patch("/:id", async (req, res) => {
         ...(parsed.status !== undefined ? { status: parsed.status } : {}),
         ...(parsed.aiAccess !== undefined ? { aiAccess: parsed.aiAccess } : {}),
         ...(parsed.aiLocalOnly !== undefined ? { aiLocalOnly: parsed.aiLocalOnly } : {}),
+        ...(parsed.aiInstructions !== undefined
+          ? { aiInstructions: parsed.aiInstructions?.trim() ? parsed.aiInstructions.trim() : null }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(schema.projects.id, id))

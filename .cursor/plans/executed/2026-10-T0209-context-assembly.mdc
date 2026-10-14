@@ -1,0 +1,57 @@
+---
+description: T0209 — project, user, and instance AI instructions plus a budgeted context assembler
+---
+
+# T0209 — AI context assembly and AI instructions
+
+**Task:** T0209 · id `224` · Ready · high · project 4 (TaskMesh)
+**Parent:** T0194 Knowledge and context foundations (group) · id `209` · Draft. Grandparent T0177 (epic).
+**Depends on:** T0179 data minimization (complete), T0208 knowledge index (complete). No open blockers.
+**Required by (later):** T0214 capture, T0216 digest, T0219 answer. Those stay blocked until this ships.
+**Branch (after approval):** `T0209-context-assembly`
+**Version on finish-up:** MINOR (new columns on `projects` and `users`). Also update `FEATURES.md` (user-facing AI instructions).
+
+## Goal
+
+Store three layers of AI instructions (instance, project, user) and assemble a deterministic context packet for a feature and a focus record: instructions, the focus record, its parent and links, top hybrid-search hits, and recent activity. Every included item is minimized, wrapped as untrusted, and labeled with its display number. The packet stays inside a token budget and records what was dropped.
+
+## Current state
+
+- Minimization and secret redaction live in `src/services/assistant/aiMinimize.ts`. Untrusted fences live in `src/services/assistant/untrustedContent.ts` (`wrapUntrusted`; source charset is `[a-z0-9_:-]+`).
+- Hybrid search is `searchKnowledge` in `src/services/knowledge/search.ts` (ownership and excluded-project filters already applied). Display numbers are `formatEntityRef` (`T0209`, `P0004`, `N0123`).
+- Versioned **code** prompts are the T0212 registry (`src/services/assistant/prompts/`). This task does not add or edit those files. Instructions here are **data** the administrator, the project, and the user write.
+- Projects already have `aiAccess` and `aiLocalOnly`, edited on the project overview. There is no instructions field.
+- Assistant settings (`AssistantSettingsPage`) and Administration → AI (`AdminAiPanel`) have no instructions editors. Profile `PATCH /api/v1/users/me` and admin `PATCH /api/v1/admin/system-properties` are the write paths to extend.
+- No tokenizer dependency. Token counts today are provider usage, not a local estimate.
+
+## Decisions (confirm or adjust)
+
+| # | Topic | Recommendation |
+|---|--------|----------------|
+| 1 | Where instructions live | Nullable text columns, not Documents. `projects.ai_instructions`, `users.ai_instructions`, and system property `ai_instructions` (string). A Document would be indexed and could show up again as a search hit. |
+| 2 | Who can edit | Instance: administrators, on Administration → AI. Project: anyone who can already patch the project, on the project overview under AI access. User: the signed-in user, on Assistant settings. Empty string stores null. Max **8,000 characters** each. |
+| 3 | Packet order (keep first) | Instance instructions, project instructions, user instructions, focus record, parent, links (one item each, display-ref order), recent activity (newest first, up to 8), hybrid hits (score desc, then ref, then chunk id, up to 8). Omit empty sections. |
+| 4 | Budget | Caller passes `budgetTokens`. Default **8,000**. Allowed range 256–32,000. Fill in the order above. The first item that does not fit is truncated to the remaining tokens (header kept when it fits). Everything after that item is dropped. `dropped` lists ref, section, and `truncated` or `budget`. |
+| 5 | Parent | One record. A task uses its parent task when `parentId` is set; otherwise the containing project. A project has no parent. Other types use the containing project. |
+| 6 | Search query | Caller may pass `query`. When omitted, the focus title is the query. Hits that are the focus record itself are skipped. Scoped to the focus project when it has one. |
+| 7 | Excluded projects | If the focus record’s project AI access is `excluded`, the packet is empty, `blocked: "project_excluded"`, and no record text is loaded. Search already hides excluded projects. |
+| 8 | Minimization and fences | Record, parent, link, activity, and hit text go through the existing minimizers (2,000-character excerpt) and `redactSecrets`, then `wrapUntrusted`. Instructions are secret-redacted and wrapped, but they use the 8,000-character field cap instead of the 2,000 excerpt. Fence source is lowercase, e.g. `ref:t0209` or `instructions:project`. The display number the model should cite (`T0209`, and `p.N` when a chunk has a locator) is inside the item. |
+| 9 | Token estimate | Server-only `gpt-tokenizer` `cl100k_base` (pure JS, deterministic). The reported estimate is that count, so it matches cl100k within far less than 10%. Other providers’ tokenizers can differ; the packet still uses this one count for the budget. |
+| 10 | Determinism | Same inputs (rows, hits, budget) always produce the same text and the same `dropped` list. Tests pass hits in and do not call Ollama. Production calls `searchKnowledge` only when the caller does not supply hits. |
+| 11 | Feature label | Required string `[a-z0-9_]{1,40}` (`capture`, `digest`, `answer`, …). It is a header on the packet. It does not select a different instruction document. |
+| 12 | HTTP | `POST /api/v1/ai/context` for the signed-in user: `{ feature, entityType, entityId, query?, budgetTokens? }` → `{ text, estimatedTokens, budgetTokens, blocked, items, dropped }`. Reads the same way other record reads do (not found when the actor cannot see the focus). No audit row of the packet text. |
+| 13 | Not in this task | Capture, digest, and answer behavior. Prompt-registry files. Embedding the instruction fields into the knowledge index. A conversation history. |
+
+## Work items
+
+1. Migration: `projects.ai_instructions` and `users.ai_instructions` (nullable text). Document both, plus system property `ai_instructions`, under `docs/database/`. Run `npm run docs:sync-schema`.
+2. Read/write: project patch, `PATCH /api/v1/users/me`, and admin system-properties. Zod max 8,000. Return the fields on the matching GETs.
+3. UI: textarea on the project overview, Assistant settings, and Administration → AI, with a short hint and a character count.
+4. `assembleContext` in `src/services/assistant/contextAssembly.ts`, plus `estimateTokens`. Wire `POST /api/v1/ai/context`.
+5. Tests: fixed fixtures prove section order, citation labels, secret redaction, untrusted fences, excluded-project block, truncation and `dropped`, and that a known string’s estimate is the cl100k count (within 10% is the tokenizer itself). Same fixture run twice is byte-identical.
+
+## Out of scope
+
+- Calling the model.
+- Changing T0214, T0216, or T0219.
+- Indexing instruction text in `knowledge_chunks`.

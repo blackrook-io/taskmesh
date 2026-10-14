@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
-import { optionalPlainTitle } from "../../lib/markdownFields.js";
+import { optionalMarkdown, optionalPlainTitle } from "../../lib/markdownFields.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { toUserProfile } from "../../lib/userFields.js";
 import {
@@ -52,6 +52,7 @@ const patchBody = z
     displayName: optionalPlainTitle(200),
     email: emailSchema.optional(),
     avatarUploadId: z.union([z.number().int().positive(), z.null()]).optional(),
+    aiInstructions: optionalMarkdown(8_000),
   })
   .strict();
 
@@ -253,7 +254,8 @@ usersRouter.patch("/me", async (req, res) => {
     if (
       parsed.displayName === undefined &&
       parsed.email === undefined &&
-      parsed.avatarUploadId === undefined
+      parsed.avatarUploadId === undefined &&
+      parsed.aiInstructions === undefined
     ) {
       sendError(res, 400, "empty_patch", "No updatable fields provided");
       return;
@@ -264,6 +266,7 @@ usersRouter.patch("/me", async (req, res) => {
       displayName?: string;
       email?: string;
       avatarUploadId?: number | null;
+      aiInstructions?: string | null;
       updatedAt: Date;
     } = { updatedAt: new Date() };
 
@@ -293,6 +296,10 @@ usersRouter.patch("/me", async (req, res) => {
         }
       }
       patch.avatarUploadId = parsed.avatarUploadId;
+    }
+    if (parsed.aiInstructions !== undefined) {
+      const trimmed = parsed.aiInstructions?.trim() ?? "";
+      patch.aiInstructions = trimmed.length ? trimmed : null;
     }
 
     const [row] = await db

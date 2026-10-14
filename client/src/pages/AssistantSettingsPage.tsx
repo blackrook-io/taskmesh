@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { fetchAssistantStatus, type AssistantPluginStatus } from "../api/assistant";
+import { apiJson } from "../api/client";
 import { patchTier1OptIn } from "../api/aiActivity";
 import { fetchUserAiUsage, formatUsdFromMicro } from "../api/aiUsage";
 import {
@@ -23,7 +24,9 @@ import {
   aiPolicyCellKey,
   type AiTier,
 } from "../lib/aiPolicyMatrix";
+import { AI_INSTRUCTIONS_MAX } from "../lib/aiInstructions";
 import { useSettings } from "../lib/settings";
+import type { UserProfile } from "../types";
 
 type Props = {
   embedded?: boolean;
@@ -104,12 +107,39 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
   const credentialsQuery = useQuery({ queryKey: ["ai-credentials"], queryFn: fetchUserAiCredentials });
   const routingQuery = useQuery({ queryKey: ["ai-routing"], queryFn: fetchAiRouting });
   const policyQuery = useQuery({ queryKey: ["ai-policy"], queryFn: fetchUserAiPolicy });
+  const profileQuery = useQuery({
+    queryKey: ["users", "me"],
+    queryFn: async () => {
+      const res = await apiJson<{ data: UserProfile }>("/api/v1/users/me");
+      return res.data;
+    },
+  });
   const [policyDraft, setPolicyDraft] = useState<PolicyDraft | null>(null);
+  const [instructions, setInstructions] = useState("");
+  const [prevInstructions, setPrevInstructions] = useState<string | null | undefined>(undefined);
+  if (profileQuery.data && profileQuery.data.aiInstructions !== prevInstructions) {
+    setPrevInstructions(profileQuery.data.aiInstructions ?? null);
+    setInstructions(profileQuery.data.aiInstructions ?? "");
+  }
 
   const optIn = useMutation({
     mutationFn: patchTier1OptIn,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["assistant-status"] });
+    },
+  });
+  const saveInstructions = useMutation({
+    mutationFn: async () => {
+      const res = await apiJson<{ data: UserProfile }>("/api/v1/users/me", {
+        method: "PATCH",
+        body: JSON.stringify({ aiInstructions: instructions }),
+      });
+      return res.data;
+    },
+    onSuccess: async (saved) => {
+      setPrevInstructions(saved.aiInstructions ?? null);
+      setInstructions(saved.aiInstructions ?? "");
+      await queryClient.invalidateQueries({ queryKey: ["users", "me"] });
     },
   });
   const savePolicy = useMutation({
@@ -139,6 +169,42 @@ export function AssistantSettingsPage({ embedded = false }: Props) {
       <p className="muted" style={{ marginTop: 0 }}>
         Your keys, models, and limits. You can only narrow what an Administrator allows.
       </p>
+
+      <section className="card" style={{ marginTop: "1.25rem" }}>
+        <h2>Your AI instructions</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Personal rules included when AI builds context for you. Instance and project instructions
+          are included as well.
+        </p>
+        {profileQuery.isLoading ? <p className="muted">Loading…</p> : null}
+        {profileQuery.isError ? (
+          <p role="alert">{(profileQuery.error as Error).message}</p>
+        ) : null}
+        <label className="field" htmlFor="user-ai-instructions">
+          Instructions
+        </label>
+        <textarea
+          id="user-ai-instructions"
+          rows={6}
+          maxLength={AI_INSTRUCTIONS_MAX}
+          value={instructions}
+          onChange={(e) => setInstructions(e.target.value)}
+        />
+        <p className="muted small">
+          {instructions.length} / {AI_INSTRUCTIONS_MAX}
+        </p>
+        {saveInstructions.isError ? (
+          <p role="alert">{(saveInstructions.error as Error).message}</p>
+        ) : null}
+        <button
+          type="button"
+          className="btn primary small"
+          disabled={saveInstructions.isPending || profileQuery.isLoading}
+          onClick={() => saveInstructions.mutate()}
+        >
+          Save instructions
+        </button>
+      </section>
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
         <h2>Provider keys</h2>

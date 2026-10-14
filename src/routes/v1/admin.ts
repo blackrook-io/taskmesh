@@ -784,6 +784,12 @@ adminRouter.patch("/system-properties", async (req, res) => {
     ) {
       parts.push(`ai_project_local_only ${before.aiProjectLocalOnly}→${after.aiProjectLocalOnly}`);
     }
+    if (
+      parsed.aiInstructions !== undefined &&
+      before.aiInstructions !== after.aiInstructions
+    ) {
+      parts.push("ai_instructions updated");
+    }
     const settingsReason = describeAiSettingsChange(before, after, parsed);
     if (
       parsed.aiPermissionTiers !== undefined &&

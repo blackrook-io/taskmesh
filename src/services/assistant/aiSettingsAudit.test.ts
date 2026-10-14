@@ -17,6 +17,7 @@ function snapshot(patch: Partial<AiSettingsSnapshot> = {}): AiSettingsSnapshot {
     aiBudgets: { ...EMPTY_AI_BUDGETS },
     aiInstanceUsdPerMillionTokens: 1,
     aiPermissionTiers: defaultStoredAiPermissionTiers(),
+    aiInstructions: null,
     ...patch,
   };
 }
@@ -48,6 +49,15 @@ describe("AI settings audit reasons", () => {
     });
     const reason = describeAiSettingsChange(before, after, { aiPermissionTiers: {} });
     assert.equal(reason, "matrix read:task —→2");
+  });
+
+  it("records that instructions changed and leaves the text out", () => {
+    const secret = "keep sk-abcdefghijklmnopqrstuvwxyz private";
+    const before = snapshot();
+    const after = snapshot({ aiInstructions: secret });
+    const reason = describeAiSettingsChange(before, after, { aiInstructions: secret });
+    assert.equal(reason, "instructions updated");
+    assert.doesNotMatch(reason ?? "", /sk-/);
   });
 
   it("names the plugin and the kind of key change", () => {

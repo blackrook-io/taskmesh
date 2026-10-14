@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
+import { ENTITY_TYPES } from "../../lib/entityType.js";
+import { assembleContext, ContextAssemblyError } from "../../services/assistant/contextAssembly.js";
 import { redactSecret } from "../../services/assistant/aiKeyMode.js";
 import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
 import { listAiCapabilities, readUserAiUsage } from "../../services/assistant/aiCapabilities.js";
@@ -228,6 +230,39 @@ aiRouter.get("/routing", async (_req, res) => {
     const userId = await getCurrentUserId(db);
     res.json({ data: await listAiRouting(db, userId) });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+const contextBody = z
+  .object({
+    feature: z.string().regex(/^[a-z0-9_]{1,40}$/),
+    entityType: z.enum(ENTITY_TYPES),
+    entityId: z.number().int().positive(),
+    query: z.string().max(500).optional(),
+    budgetTokens: z.number().int().min(256).max(32_000).optional(),
+  })
+  .strict();
+
+aiRouter.post("/context", async (req, res) => {
+  try {
+    const body = contextBody.parse(req.body ?? {});
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = `AI context ${body.feature} ${body.entityType} ${body.entityId}`;
+    const data = await assembleContext({
+      actorId: userId,
+      feature: body.feature,
+      entityType: body.entityType,
+      entityId: body.entityId,
+      query: body.query,
+      budgetTokens: body.budgetTokens,
+    });
+    res.json({ data });
+  } catch (err) {
+    if (err instanceof ContextAssemblyError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
     handleRouteError(res, err);
   }
 });

@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson, uploadFileWithMeta } from "../api/client";
+import { AI_INSTRUCTIONS_MAX } from "../lib/aiInstructions";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EpubReader } from "../components/EpubReader";
 import { PdfReader } from "../components/PdfReader";
@@ -162,6 +163,7 @@ export function ProjectDetailPage() {
   const [description, setDescription] = useState("");
   const [aiAccess, setAiAccess] = useState<AiAccess>("full");
   const [aiLocalOnly, setAiLocalOnly] = useState(false);
+  const [aiInstructions, setAiInstructions] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [requestOpenTask, setRequestOpenTask] = useState<Task | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
@@ -516,6 +518,7 @@ export function ProjectDetailPage() {
       setDescription(project.description ?? "");
       setAiAccess(project.aiAccess ?? "full");
       setAiLocalOnly(project.aiLocalOnly === true);
+      setAiInstructions(project.aiInstructions ?? "");
     }
     setOverviewEdit(true);
   };
@@ -527,6 +530,7 @@ export function ProjectDetailPage() {
       setDescription(project.description ?? "");
       setAiAccess(project.aiAccess ?? "full");
       setAiLocalOnly(project.aiLocalOnly === true);
+      setAiInstructions(project.aiInstructions ?? "");
     }
     setOverviewEdit(false);
   };
@@ -542,6 +546,7 @@ export function ProjectDetailPage() {
         if (project && aiLocalOnly !== (project.aiLocalOnly === true)) {
           body.aiLocalOnly = aiLocalOnly;
         }
+        body.aiInstructions = aiInstructions;
       }
       const res = await apiJson<{ data: Project }>(`/api/v1/projects/${projectId}`, {
         method: "PATCH",
@@ -778,6 +783,15 @@ export function ProjectDetailPage() {
               </div>
             </div>
 
+            {!overviewEdit && project.aiInstructions ? (
+              <div className="field">
+                <label>AI instructions</label>
+                <pre className="muted" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                  {project.aiInstructions}
+                </pre>
+              </div>
+            ) : null}
+
             {overviewEdit ? (
               <>
                 <div className="field">
@@ -838,6 +852,23 @@ export function ProjectDetailPage() {
                       {project.aiLocalOnlyCeiling
                         ? "The instance requires local models. This project cannot use a cloud model."
                         : "When this is on, AI for this project uses a local model only. A local error does not fall through to a cloud model. Reads and proposals still follow AI access."}
+                    </p>
+                  </div>
+                ) : null}
+                {canManageSettings ? (
+                  <div className="field">
+                    <label htmlFor="proj-ai-instructions">AI instructions</label>
+                    <textarea
+                      id="proj-ai-instructions"
+                      rows={6}
+                      maxLength={AI_INSTRUCTIONS_MAX}
+                      value={aiInstructions}
+                      onChange={(e) => setAiInstructions(e.target.value)}
+                    />
+                    <p className="muted" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
+                      Rules for AI working in this project, such as how task numbers are used.
+                      {" "}
+                      {aiInstructions.length} / {AI_INSTRUCTIONS_MAX}
                     </p>
                   </div>
                 ) : null}

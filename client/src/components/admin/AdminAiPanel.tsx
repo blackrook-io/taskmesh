@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiJson, applySpaClientHeaders, maybeNotifySessionExpired } from "../../api/client";
+import { AI_INSTRUCTIONS_MAX } from "../../lib/aiInstructions";
 import { AdminAiProvidersSection } from "./AdminAiProvidersSection";
 import { AdminAiQualitySection } from "./AdminAiQualitySection";
 import { AdminAiUsageSection } from "./AdminAiUsageSection";
@@ -38,6 +39,7 @@ type AiSettings = {
   };
   aiInstanceUsdPerMillionTokens?: number;
   aiPermissionTiers?: PermissionTiers;
+  aiInstructions?: string | null;
 };
 
 type AuditRow = {
@@ -134,6 +136,7 @@ export function AdminAiPanel() {
   const [aiWebFetch, setAiWebFetch] = useState(false);
   const [aiProjectAccessDefault, setAiProjectAccessDefault] = useState<AiAccess>("full");
   const [aiProjectLocalOnly, setAiProjectLocalOnly] = useState(false);
+  const [aiInstructions, setAiInstructions] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -173,6 +176,7 @@ export function AdminAiPanel() {
         setAiProjectAccessDefault(propsQuery.data.aiProjectAccessDefault);
       }
       setAiProjectLocalOnly(propsQuery.data.aiProjectLocalOnly === true);
+      setAiInstructions(propsQuery.data.aiInstructions ?? "");
     }
   }
 
@@ -207,6 +211,7 @@ export function AdminAiPanel() {
           maxRecords: records,
           maxProjects: projects,
         },
+        aiInstructions,
       };
       const res = await apiJson<{ data: AiSettings }>("/api/v1/admin/system-properties", {
         method: "PATCH",
@@ -418,6 +423,25 @@ export function AdminAiPanel() {
       </label>
 
       {propsQuery.isLoading ? <p className="muted">Loading…</p> : null}
+      <h2>Instance AI instructions</h2>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Included first whenever AI builds context. Projects and users add their own instructions
+        after this text.
+      </p>
+      <label className="field" htmlFor="instance-ai-instructions">
+        Instructions
+      </label>
+      <textarea
+        id="instance-ai-instructions"
+        rows={6}
+        maxLength={AI_INSTRUCTIONS_MAX}
+        value={aiInstructions}
+        onChange={(e) => setAiInstructions(e.target.value)}
+      />
+      <p className="muted small">
+        {aiInstructions.length} / {AI_INSTRUCTIONS_MAX}
+      </p>
+
       {error ? <p className="error-text">{error}</p> : null}
       {saved ? <p className="ok-text">Saved.</p> : null}
       <button

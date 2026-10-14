@@ -40,6 +40,7 @@ function sample(overrides: Partial<SystemProperties> = {}): SystemProperties {
       writesPerRun: null,
     },
     aiInstanceUsdPerMillionTokens: 1,
+    aiInstructions: null,
     updatedAt: null,
     ...overrides,
   };
@@ -100,6 +101,9 @@ describe("system properties patch schema", () => {
     assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: true }).success, true);
     assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: false }).success, true);
     assert.equal(systemPropertiesPatchSchema.safeParse({ aiWebFetch: "yes" }).success, false);
+    assert.equal(systemPropertiesPatchSchema.safeParse({ aiInstructions: "cite T####" }).success, true);
+    assert.equal(systemPropertiesPatchSchema.safeParse({ aiInstructions: null }).success, true);
+    assert.equal(systemPropertiesPatchSchema.safeParse({ aiInstructions: "x".repeat(8_001) }).success, false);
     assert.equal(
       systemPropertiesPatchSchema.safeParse({ aiProjectAccessDefault: "read_only" }).success,
       true,
