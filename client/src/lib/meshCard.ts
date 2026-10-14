@@ -77,6 +77,21 @@ export type MeshCardNode = MeshSignalNode & {
   lastComment?: MeshCardComment | null;
 };
 
+export type MeshCardDependency = {
+  key: string;
+  referenceId: string;
+  title: string;
+  state: string | null;
+  stateLabel: string | null;
+  blocking: boolean;
+};
+
+export type MeshCardDependencyList = {
+  label: "Waits on" | "Unblocks";
+  entries: MeshCardDependency[];
+  more: number;
+};
+
 export type MeshCardModel = {
   referenceId: string | null;
   type: string;
@@ -88,6 +103,7 @@ export type MeshCardModel = {
   priorityLabel: string | null;
   progress: number | null;
   rows: MeshCardRow[];
+  dependencies: MeshCardDependencyList[];
   hint: string;
   description: string;
 };
@@ -160,6 +176,62 @@ function descendantsOf(
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
+}
+
+const DEPENDENCY_CAP = 5;
+
+function dependencyPhrase(entry: MeshCardDependency): string {
+  const name = `${entry.referenceId} ${entry.title}`.trim();
+  return entry.stateLabel ? `${name} · ${entry.stateLabel}` : name;
+}
+
+function listedDependencies(
+  nodeKey: string,
+  edges: readonly MeshGraphEdge[],
+  byKey: ReadonlyMap<string, MeshCardNode>,
+  role: "waits" | "unblocks",
+): MeshCardDependency[] {
+  const listed: MeshCardDependency[] = [];
+  for (const edge of edges) {
+    if (edge.relation !== "depends_on") continue;
+    const otherKey =
+      role === "waits"
+        ? edge.source === nodeKey
+          ? edge.target
+          : null
+        : edge.target === nodeKey
+          ? edge.source
+          : null;
+    if (!otherKey) continue;
+    const other = byKey.get(otherKey);
+    if (!other) continue;
+    const state = other.state ?? null;
+    listed.push({
+      key: other.key,
+      referenceId: other.referenceId ?? other.key,
+      title: other.title,
+      state,
+      stateLabel: state ? (STATE_LABELS[state] ?? state) : null,
+      blocking: !isDependencySatisfied(state ?? ""),
+    });
+  }
+  listed.sort((left, right) => {
+    if (left.blocking === right.blocking) return 0;
+    return left.blocking ? -1 : 1;
+  });
+  return listed;
+}
+
+function capDependencies(
+  label: MeshCardDependencyList["label"],
+  listed: MeshCardDependency[],
+): MeshCardDependencyList | null {
+  if (listed.length === 0) return null;
+  return {
+    label,
+    entries: listed.slice(0, DEPENDENCY_CAP),
+    more: Math.max(0, listed.length - DEPENDENCY_CAP),
+  };
 }
 
 export function buildMeshCard(input: {
@@ -256,30 +328,18 @@ export function buildMeshCard(input: {
     });
   }
 
-  const blocked = edges.flatMap((edge) => {
-    if (edge.relation !== "depends_on" || edge.source !== node.key) return [];
-    const prerequisite = byKey.get(edge.target);
-    if (!prerequisite || isDependencySatisfied(prerequisite.state ?? "")) return [];
-    const ref = prerequisite.referenceId ?? prerequisite.key;
-    return [`${ref} ${prerequisite.title}`];
-  });
-  if (blocked.length > 0) {
-    rows.push({ label: "Blocked by", value: blocked.join(", "), tone: "danger", quote: null });
-  }
+  const dependencies = [
+    capDependencies("Waits on", listedDependencies(node.key, edges, byKey, "waits")),
+    capDependencies("Unblocks", listedDependencies(node.key, edges, byKey, "unblocks")),
+  ].filter((list): list is MeshCardDependencyList => list != null);
 
   let references = 0;
-  let unblocks = 0;
-  let waitsOn = 0;
   for (const edge of edges) {
     if (edge.source !== node.key && edge.target !== node.key) continue;
     if (LINK_RELATIONS.has(edge.relation)) references += 1;
-    else if (edge.relation === "depends_on" && edge.target === node.key) unblocks += 1;
-    else if (edge.relation === "depends_on" && edge.source === node.key) waitsOn += 1;
   }
   const links: string[] = [];
   if (references > 0) links.push(plural(references, "reference", "references"));
-  if (unblocks > 0) links.push(plural(unblocks, "unblocks", "unblocks"));
-  if (waitsOn > 0) links.push(plural(waitsOn, "waits on", "waits on"));
   const suggested = (input.suggestions ?? []).filter(
     (item) => item.sourceKey === node.key || item.targetKey === node.key,
   ).length;
@@ -308,6 +368,7 @@ export function buildMeshCard(input: {
     priorityLabel,
     progress: node.progress ?? null,
     rows,
+    dependencies,
     hint,
     description: "",
   };
@@ -323,6 +384,11 @@ function cardDescription(card: MeshCardModel): string {
     card.priorityLabel ? `${card.priorityLabel} priority` : null,
     card.progress != null ? `${card.progress}% complete` : null,
     ...card.rows.flatMap((row) => [row.label, row.value, row.quote]),
+    ...card.dependencies.flatMap((list) => [
+      list.label,
+      ...list.entries.map(dependencyPhrase),
+      list.more > 0 ? `+${list.more} more` : null,
+    ]),
     card.hint,
   ];
   return parts.filter((part) => part != null && part !== "").join(". ");

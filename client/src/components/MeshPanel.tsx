@@ -428,11 +428,13 @@ function prefersReducedMotion(): boolean {
 function MeshHoverCard({
   model,
   cardRef,
+  onOpen,
   onPointerEnter,
   onPointerLeave,
 }: {
   model: MeshCardModel;
   cardRef: RefObject<HTMLDivElement | null>;
+  onOpen: (key: string) => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
 }) {
@@ -486,6 +488,40 @@ function MeshHoverCard({
           ))}
         </dl>
       ) : null}
+      {model.dependencies.map((list) => (
+        <div key={list.label} className="mesh-card__deps">
+          <p className="mesh-card__deps-label">{list.label}</p>
+          <ul className="mesh-card__deps-list">
+            {list.entries.map((entry) => {
+              const ink = stateAppearance(entry.state);
+              return (
+                <li key={entry.key}>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className={
+                      list.label === "Waits on" && entry.blocking
+                        ? "mesh-card__dep mesh-card__danger"
+                        : "mesh-card__dep"
+                    }
+                    onClick={() => onOpen(entry.key)}
+                  >
+                    <span className="mesh-card__dep-name">
+                      {entry.referenceId} {entry.title}
+                    </span>
+                    {entry.stateLabel ? (
+                      <span className="mesh-card__pill" style={{ color: ink.color }}>
+                        {entry.stateLabel}
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {list.more > 0 ? <p className="mesh-card__deps-more">+{list.more} more</p> : null}
+        </div>
+      ))}
       <p className="mesh-card__hint">{model.hint}</p>
     </div>
   );
@@ -1849,6 +1885,7 @@ export function MeshPanel({
             <MeshHoverCard
               cardRef={cardRef}
               model={hoverCard}
+              onOpen={openNode}
               onPointerEnter={() => {
                 clearShow();
                 clearHide();
