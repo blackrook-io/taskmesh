@@ -1,0 +1,11 @@
+# Mesh page mounts one canvas
+
+The TaskMesh Mesh tab was stacking several copies of the Mesh panel. Only the bottom copy stayed wired to React, so only that one drew the project.
+
+## Cause
+
+`ProjectDetailPage` renders `MeshPanel` and `AskProjectPanel` as siblings, and both used `key={projectId}`. React keys must be unique among siblings. Each commit of the project page inserted a new Mesh shell and left the previous one in the document.
+
+## Change
+
+Give the two panels distinct keys: `mesh-${projectId}` and `ask-${projectId}`. Both still remount when the open project changes.
