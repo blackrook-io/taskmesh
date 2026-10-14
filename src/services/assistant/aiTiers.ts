@@ -74,6 +74,16 @@ const storedSchema = z.object({
 const MATRIX_KEY =
   /^(read|web_fetch|link|tag|comment|propose_create|propose_update|apply|propose_delete|bulk)(:(idea|project|task|document|todo|todo_list))?$/;
 
+export function isAiMatrixKey(key: string): boolean {
+  return MATRIX_KEY.test(key);
+}
+
+export function splitAiMatrixKey(key: string): { action: string; entityType: string | null } {
+  const splitAt = key.indexOf(":");
+  if (splitAt === -1) return { action: key, entityType: null };
+  return { action: key.slice(0, splitAt), entityType: key.slice(splitAt + 1) };
+}
+
 /** Patch body for the Administrator matrix. Unknown actions and record types are rejected. */
 export const aiPermissionTiersPatchSchema = z.object({
   matrix: z.record(z.string().regex(MATRIX_KEY), tierSchema),
@@ -125,6 +135,15 @@ export function resolveAiPermissionSettings(
 
 export function defaultActionTier(action: string): AiTier {
   return DEFAULT_ACTION_TIERS[action] ?? 3;
+}
+
+/** Administrator tier for one matrix key, including the code default. */
+export function adminCeilingTier(
+  matrix: Record<string, AiTier>,
+  action: string,
+  entityType?: string | null,
+): AiTier {
+  return lookupTier(matrix, action, entityType, true) ?? 3;
 }
 
 function lookupTier(

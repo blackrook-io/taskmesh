@@ -5,7 +5,8 @@ export type AiCapabilityReason =
   | "disabled_by_administrator"
   | "project_excluded"
   | "no_local_model"
-  | "budget_reached";
+  | "budget_reached"
+  | "turned_off";
 
 export type AiCapability = {
   id: string;
@@ -31,6 +32,8 @@ export function aiUnavailableTitle(reason: AiCapabilityReason | null): string {
       return "This project can use local models only, and none is available.";
     case "budget_reached":
       return "You have reached the AI usage budget.";
+    case "turned_off":
+      return "You turned the assistant off in Your AI settings.";
     default:
       return "AI is not available.";
   }

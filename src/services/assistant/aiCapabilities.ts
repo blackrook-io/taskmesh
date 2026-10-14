@@ -7,6 +7,7 @@ import { getSystemProperties } from "../systemProperties.js";
 import { loadedAiProviders } from "./providerLoader.js";
 import { pluginBudgetReason, sumDayUsage, usageWarning, utcDayStart, type AiKeySource } from "./aiBudgets.js";
 import { resolveFeatureRoute } from "./aiRouting.js";
+import { loadUserAiPolicy, type UserAiPolicy } from "./aiUserPolicy.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -16,6 +17,7 @@ export const AI_CAPABILITY_REASONS = [
   "project_excluded",
   "no_local_model",
   "budget_reached",
+  "turned_off",
 ] as const;
 
 export type AiCapabilityReason = (typeof AI_CAPABILITY_REASONS)[number];
@@ -30,10 +32,32 @@ export type AiCapability = {
  * Whether this user can use each AI feature.
  * `budget_reached` means the next plugin call is already over a daily cap.
  */
+function applyUserOff(rows: AiCapability[], policy: UserAiPolicy): AiCapability[] {
+  return rows.map((row) => {
+    if (!policy.featuresOff.includes(row.id)) return row;
+    if (
+      row.reason === "disabled_by_administrator" ||
+      row.reason === "project_excluded" ||
+      row.reason === "no_local_model"
+    ) {
+      return row;
+    }
+    return { id: row.id, available: false, reason: "turned_off" };
+  });
+}
+
 export async function listAiCapabilities(
   db: Db,
-  args: { userId: number; projectId?: number | null; env?: NodeJS.ProcessEnv },
+  args: {
+    userId: number;
+    projectId?: number | null;
+    env?: NodeJS.ProcessEnv;
+    /** When set, a user Off switch does not change the reason. */
+    ignoreUserOff?: boolean;
+  },
 ): Promise<AiCapability[]> {
+  const policy = args.ignoreUserOff ? null : await loadUserAiPolicy(db, args.userId);
+  const finish = (rows: AiCapability[]) => (policy ? applyUserOff(rows, policy) : rows);
   let localOnly = false;
   if (args.projectId != null) {
     const access = await resolveEffectiveAiAccess(db, args.projectId);
@@ -41,7 +65,7 @@ export async function listAiCapabilities(
       throw new AiCredentialsError(404, "not_found", "No such project.");
     }
     if (access === "excluded") {
-      return [{ id: "assistant", available: false, reason: "project_excluded" }];
+      return finish([{ id: "assistant", available: false, reason: "project_excluded" }]);
     }
     localOnly = (await resolveEffectiveLocalOnly(db, args.projectId)) === true;
   }
@@ -49,15 +73,17 @@ export async function listAiCapabilities(
   const props = await getSystemProperties(db);
   const route = await resolveFeatureRoute(db, { userId: args.userId, env: args.env, localOnly });
   if (localOnly && route.attempts.length === 0) {
-    return [{ id: "assistant", available: false, reason: "no_local_model" }];
+    return finish([{ id: "assistant", available: false, reason: "no_local_model" }]);
   }
-  if (!session) return [{ id: "assistant", available: false, reason: await unavailableReason(db) }];
+  if (!session) {
+    return finish([{ id: "assistant", available: false, reason: await unavailableReason(db) }]);
+  }
   const keySource = route.attempts[0]?.keySource ?? null;
   const totals = await sumDayUsage(db, { userId: args.userId });
   if (pluginBudgetReason(props.aiBudgets, totals, keySource)) {
-    return [{ id: "assistant", available: false, reason: "budget_reached" }];
+    return finish([{ id: "assistant", available: false, reason: "budget_reached" }]);
   }
-  return [{ id: "assistant", available: true, reason: null }];
+  return finish([{ id: "assistant", available: true, reason: null }]);
 }
 
 export type UserAiUsage = {

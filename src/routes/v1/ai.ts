@@ -5,6 +5,12 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { redactSecret } from "../../services/assistant/aiKeyMode.js";
 import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
 import { listAiCapabilities, readUserAiUsage } from "../../services/assistant/aiCapabilities.js";
+import {
+  loadUserAiPolicy,
+  lockedUserPolicyKeys,
+  saveUserAiPolicy,
+  UserAiPolicyError,
+} from "../../services/assistant/aiUserPolicy.js";
 import { listUserCredentials, removeUserKey, replaceUserKey } from "../../services/assistant/aiUserKeys.js";
 import { AiRoutingError, listAiRouting, setUserRoutePreference } from "../../services/assistant/aiRouting.js";
 import { getSystemProperties } from "../../services/systemProperties.js";
@@ -86,6 +92,64 @@ aiRouter.delete("/credentials/:pluginId", async (req, res) => {
     res.json({ data: row });
   } catch (err) {
     sendCredentialsError(res, err);
+  }
+});
+
+async function adminLockedFeatureIds(
+  userId: number,
+): Promise<string[]> {
+  const rows = await listAiCapabilities(db, { userId, ignoreUserOff: true });
+  return rows.filter((row) => row.reason === "disabled_by_administrator").map((row) => row.id);
+}
+
+async function userPolicyView(userId: number) {
+  const props = await getSystemProperties(db);
+  const policy = await loadUserAiPolicy(db, userId);
+  const shown = await listAiCapabilities(db, { userId });
+  const raw = await listAiCapabilities(db, { userId, ignoreUserOff: true });
+  return {
+    raised: policy.raised,
+    off: policy.off,
+    featuresOff: policy.featuresOff,
+    ceiling: props.aiPermissionTiers,
+    locked: lockedUserPolicyKeys(props.aiWebFetch),
+    webFetchEnabled: props.aiWebFetch,
+    features: raw.map((row) => {
+      const live = shown.find((item) => item.id === row.id) ?? row;
+      return {
+        id: row.id,
+        available: live.available,
+        reason: live.reason,
+        enabled: !policy.featuresOff.includes(row.id),
+        locked: row.reason === "disabled_by_administrator",
+      };
+    }),
+  };
+}
+
+aiRouter.get("/policy", async (_req, res) => {
+  try {
+    const userId = await getCurrentUserId(db);
+    res.json({ data: await userPolicyView(userId) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+aiRouter.put("/policy", async (req, res) => {
+  try {
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = "AI user policy save";
+    await saveUserAiPolicy(db, userId, req.body ?? {}, {
+      adminLockedFeatures: await adminLockedFeatureIds(userId),
+    });
+    res.json({ data: await userPolicyView(userId) });
+  } catch (err) {
+    if (err instanceof UserAiPolicyError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
   }
 });
 

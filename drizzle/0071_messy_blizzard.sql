@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "ai_policy" jsonb DEFAULT '{}'::jsonb NOT NULL;

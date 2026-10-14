@@ -5,6 +5,7 @@ import type { MutationResult } from "../../lib/mutationResult.js";
 import { writeAiAudit } from "../../services/assistant/aiAudit.js";
 import { AiFeedbackError, recordAiFeedback } from "../../services/assistant/aiFeedback.js";
 import { check, tierForAction, type AiAction, type PolicyDecision } from "../../services/assistant/aiPolicy.js";
+import { loadActorAiPermission } from "../../services/assistant/aiUserPolicy.js";
 import { attachProjectAiAccess } from "../../services/assistant/projectAiAccess.js";
 import { AI_DELETE_DENY_REASON, isAiDeleteProposal } from "../../services/assistant/aiTiers.js";
 import {
@@ -317,6 +318,7 @@ export async function applyAssistantProposal(args: {
     args.body && typeof args.body === "object" ? (args.body as { tier?: unknown }).tier : undefined;
   const started = Date.now();
   const checkedAction: AiAction = proposal.policyAction ?? "apply";
+  const permission = await loadActorAiPermission(db, args.actorId);
   const decision = check(
     await attachProjectAiAccess(db, {
       actorUserId: args.actorId,
@@ -327,7 +329,10 @@ export async function applyAssistantProposal(args: {
       projectId: proposal.projectId ?? null,
       fields,
       tier: declaredTier,
+      userOff: permission.off,
     }),
+    undefined,
+    permission.settings,
   );
 
   const auditBase = {

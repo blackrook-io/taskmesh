@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.75.0 — 2026-10-14
+
+### New Functionality
+- Settings → Assistant is Your AI. Save a personal provider key, choose a model with a right-size recommendation, and turn the assistant off. Raise a permission tier or switch an action off. Cells an Administrator already denied stay locked, and the server rejects a save that would enable them. Usage, the Tier 1 opt-in, and the link to AI activity stay on the page.
+
 ## 0.74.0 — 2026-10-14
 
 ### New Functionality

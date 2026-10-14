@@ -2,7 +2,8 @@ import type { AiProviderPlugin } from "@taskmesh/ai-provider-contract";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import * as schema from "../../db/schema.js";
-import { describeAllowedPolicy } from "./aiPolicy.js";
+import { check, describeAllowedPolicy, type PolicyCheckInput } from "./aiPolicy.js";
+import { loadActorAiPermission } from "./aiUserPolicy.js";
 import { composeAssistantPrompt } from "./promptRegistry.js";
 import { redactSecrets } from "./aiMinimize.js";
 import { wrapUntrusted } from "./untrustedContent.js";
@@ -181,6 +182,11 @@ export async function runConfiguredAssistant(args: {
   localOnly?: boolean;
 }): Promise<boolean> {
   const props = await getSystemProperties(args.db);
+  const permission = await loadActorAiPermission(args.db, args.actorUserId);
+  const checkPolicy =
+    args.handlers.checkPolicy ??
+    ((input: PolicyCheckInput) =>
+      check({ ...input, userOff: permission.off }, undefined, permission.settings));
   const totals = await sumDayUsage(args.db, { userId: args.actorUserId });
   const route = await resolveFeatureRoute(args.db, {
     userId: args.actorUserId,
@@ -221,7 +227,11 @@ export async function runConfiguredAssistant(args: {
           },
           model: attempt.model,
           signal: args.signal,
-          handlers: { ...args.handlers, routeLocalOnly: args.localOnly === true },
+          handlers: {
+            ...args.handlers,
+            routeLocalOnly: args.localOnly === true,
+            checkPolicy,
+          },
           actorUserId: args.actorUserId,
           isAdministrator: args.isAdministrator,
           assertBaseUrl: attempt.plugin.capabilities.local

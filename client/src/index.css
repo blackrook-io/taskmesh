@@ -6981,6 +6981,14 @@ a:focus-visible {
   justify-content: flex-end;
 }
 
+.ai-policy-lock {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  max-width: 11rem;
+}
+
 .assistant-status-list {
   margin: 0.65rem 0 0;
   padding-left: 1rem;

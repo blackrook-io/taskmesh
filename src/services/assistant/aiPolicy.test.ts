@@ -11,6 +11,7 @@ import {
   type PolicyDecision,
 } from "./aiPolicy.js";
 import { executeAssistantTool, OPENAI_TOOLS } from "./tools.js";
+import { defaultStoredAiPermissionTiers, resolveAiPermissionSettings } from "./aiTiers.js";
 import { unwrapUntrusted } from "./untrustedContent.js";
 import { TOOL_REGISTRY } from "./toolRegistry.js";
 import type { AiAuditInput } from "./aiAudit.js";
@@ -79,6 +80,24 @@ describe("aiPolicy.check", () => {
       user: boom,
     });
     assert.equal(decision.decision, "deny");
+  });
+
+  it("denies an action the user turned off", () => {
+    const decision = check(base({ action: "link", entityType: "task", userOff: ["link:task"] }));
+    assert.equal(decision.decision, "deny");
+    assert.match(decision.reason, /user/i);
+  });
+
+  it("still denies an instance-denied action when the user document would allow it", () => {
+    const decision = check(
+      base({ action: "propose_delete", entityType: "task" }),
+      undefined,
+      resolveAiPermissionSettings(defaultStoredAiPermissionTiers(), {
+        userOverrides: { propose_delete: 0 },
+      }),
+    );
+    assert.equal(decision.decision, "deny");
+    assert.match(decision.reason, /instance/i);
   });
 
   it("intersects layers so an instance deny wins over allow-all project and user", () => {
