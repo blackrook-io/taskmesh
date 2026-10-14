@@ -1,0 +1,63 @@
+---
+description: T0220 — Ask panel on the project page and Mesh toolbar, with cited Markdown answers and thumbs
+---
+
+# T0220 — AI: Ask a project UI
+
+**Task:** T0220 · id `235` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0198 AI: Ask a project (id `213`, In Progress). Grandparent T0177.
+**Depends on:** T0219 answer service — complete. No open blockers.
+**Branch (after approval):** `T0220-ask-project-ui`
+**Version on finish-up:** PATCH (no migration). Update `FEATURES.md` — this is the user-facing Ask surface.
+
+## Goal
+
+On a project, the user can ask a question and read a Markdown answer whose citations open the cited record. The same panel opens from the project and from the Mesh toolbar. Each answer lists the records that were used and offers thumbs that store feedback on that answer’s audit row.
+
+The client calls `POST /api/v1/ai/answer`. It does not retrieve, assemble context, or call the model itself.
+
+## Current state
+
+- `POST /api/v1/ai/answer` body is `{ projectId, question, history? }`. Response is `{ answer, citations, grounded }`. Each citation is `{ ref, page, entityType, entityId }`. The server keeps the last six history turns and stores no thread.
+- An excluded project, or a packet with nothing citable, returns “There is nothing in this project to answer from.” with `grounded: false` and does not call the model.
+- The answer audit row is written, but the response does not include `auditId`. Thumbs already go to `PUT /api/v1/assistant/feedback` with `{ auditId, kind, note? }` (T0211).
+- Project records already open from query params on `/projects/:id`: `tab=tasks&open=`, `tab=documents&doc=`, `tab=wiki&node=`, `tab=boards&board=`, `tab=canvases&canvas=`, `tab=todo_lists&list=` and `todo=`. Ideas open at `/ideas/:id`.
+- `PdfReader` always starts on page 1. Feature availability for other AI actions uses `useFeatureBlockedTitle`.
+- No `T0220-*` branch exists. `main` has unrelated uncommitted files; this work will not touch them.
+
+## Decisions (confirm or adjust)
+
+| # | Topic | Recommendation |
+|---|--------|----------------|
+| 1 | Surface | A right-hand Ask drawer on the project page. An **Ask** control sits in the project middle nav (visible on every project tab) and another in the Mesh toolbar. Both open the same drawer for that project. |
+| 2 | Thread | Kept in memory for the current project visit. Leaving the project clears it. Each new question sends prior user and assistant text as `history`. The server still truncates to six turns. |
+| 3 | Answer | Render `answer` as read-only Markdown. A display number that appears in `citations` (and `p.N` when that citation has a page) is a link. Numbers the server did not return stay plain text. |
+| 4 | Open a citation | Task → `?tab=tasks&open=`. Document → `?tab=documents&doc=` and, for a PDF page, `page=`. Wiki, board, canvas, and to-do list use their existing params. A ToDo looks up its list, then opens `list` + `todo`. Idea → `/ideas/:id`. The drawer stays open. |
+| 5 | Records used | Under the answer, list each citation’s display number (and page). The same links as in the prose. |
+| 6 | Thumbs | Return `auditId` from `POST /api/v1/ai/answer` when a model reply was audited; `null` when the model was not called. Thumbs and the optional note use the existing feedback endpoint, same control pattern as the assistant panel. Hide thumbs when `auditId` is null. |
+| 7 | Unavailable | When the `answer` feature is off, unconfigured, or the project is excluded, the Ask control stays visible and disabled with the existing unavailable title. A failed request shows the API message in the drawer. |
+| 8 | PDF page | Add an optional start page to `PdfReader`, honored only when `?page=` is present. Non-PDF documents ignore `page`. |
+
+## Work items
+
+1. Return `auditId` from the answer route when the audited model call produced one.
+2. Client API helper for `POST /api/v1/ai/answer`.
+3. Ask drawer: composer, pending state, Markdown answer, citation links, records-used list, thumbs.
+4. Project nav and Mesh toolbar entry points, sharing one open drawer for the project.
+5. Deep links from a citation, including PDF `page` when the citation has one.
+6. Disable Ask from the existing capabilities query when `answer` is unavailable.
+
+## Out of scope
+
+- A stored conversation table.
+- Retrieval, prompt, or citation-validation changes.
+- Asking from outside a project (global nav, search, ideas list).
+- Streaming the answer.
+
+## Acceptance
+
+- From the project nav and from the Mesh toolbar, a question returns a Markdown answer for that project.
+- A cited display number opens that record; a PDF citation with a page opens that page.
+- The records-used list matches the citations in the response.
+- Thumbs on a grounded answer are stored against that answer’s audit id. An ungrounded “nothing to answer from” reply has no thumbs.
+- A follow-up in the same visit is sent with the prior turns. Refreshing or leaving the project starts a new thread.

@@ -194,6 +194,13 @@ h3 {
   margin: 0 0 var(--space-2);
 }
 
+button.app-nav__module {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
 button,
 input,
 select,
@@ -6867,6 +6874,28 @@ a:focus-visible {
 
 .assistant-bubble__body {
   white-space: pre-wrap;
+}
+
+.ask-answer {
+  white-space: normal;
+}
+
+.ask-sources {
+  margin-top: 0.65rem;
+}
+
+.ask-sources p {
+  margin: 0 0 0.25rem;
+}
+
+.ask-sources ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.ask-sources a {
+  color: var(--accent);
+}
   word-break: break-word;
   font-size: 0.95rem;
   line-height: 1.45;

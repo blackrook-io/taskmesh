@@ -34,6 +34,8 @@ type Props = {
   /** Authenticated same-origin file URL (`/api/v1/files/...`). */
   fileUrl: string;
   title?: string;
+  /** 1-based page to show first. Ignored when missing or below 1. */
+  initialPage?: number;
 };
 
 export type PdfReadingMode = "light" | "dark";
@@ -61,11 +63,24 @@ async function fetchPdfBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 
-export function PdfReader({ fileUrl, title }: Props) {
-  return <PdfReaderInner key={fileUrl} fileUrl={fileUrl} title={title} />;
+export function PdfReader({ fileUrl, title, initialPage }: Props) {
+  return (
+    <PdfReaderInner
+      key={`${fileUrl}:${startPage(initialPage)}`}
+      fileUrl={fileUrl}
+      title={title}
+      initialPage={initialPage}
+    />
+  );
 }
 
-function PdfReaderInner({ fileUrl, title }: Props) {
+function startPage(initialPage: number | undefined): number {
+  if (initialPage == null || !Number.isFinite(initialPage)) return 1;
+  const page = Math.floor(initialPage);
+  return page >= 1 ? page : 1;
+}
+
+function PdfReaderInner({ fileUrl, title, initialPage }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
@@ -77,7 +92,7 @@ function PdfReaderInner({ fileUrl, title }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pageCount, setPageCount] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => startPage(initialPage));
   const [zoom, setZoom] = useState(100);
   const [layoutTick, setLayoutTick] = useState(0);
   const [readingMode, setReadingMode] = useState<PdfReadingMode>(() => readStoredReadingMode());
@@ -143,6 +158,7 @@ function PdfReaderInner({ fileUrl, title }: Props) {
         setPasswordReason(null);
         pdfRef.current = pdf;
         setPageCount(pdf.numPages);
+        setPage((current) => Math.min(pdf.numPages, Math.max(1, current)));
         setLoading(false);
       } catch (err) {
         if (cancelled) return;

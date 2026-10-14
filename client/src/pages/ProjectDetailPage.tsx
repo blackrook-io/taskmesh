@@ -21,6 +21,8 @@ import { KanbanBoardsPanel } from "../components/KanbanBoardsPanel";
 import { WikiPanel } from "../components/WikiPanel";
 import { CanvasesPanel } from "../components/CanvasesPanel";
 import { MeshPanel } from "../components/MeshPanel";
+import { AskProjectPanel } from "../components/AskProjectPanel";
+import { OPEN_ASK_EVENT } from "../lib/askProject";
 import { DocumentsToc } from "../components/DocumentsToc";
 import { ImageBoardList } from "../components/imageBoard/ImageBoardList";
 import { OverviewPanels } from "../components/projectOverview/OverviewPanels";
@@ -73,6 +75,13 @@ const TAB_ALIASES: Record<string, Tab> = {
 function parseTab(raw: string | null): Tab {
   if (!raw) return "overview";
   return TAB_ALIASES[raw] ?? "overview";
+}
+
+function parsePageParam(raw: string | null): number | null {
+  if (!raw) return null;
+  const page = Number(raw);
+  if (!Number.isInteger(page) || page < 1) return null;
+  return page;
 }
 
 const AI_ACCESS_OPTIONS: { value: AiAccess; label: string }[] = [
@@ -135,6 +144,7 @@ export function ProjectDetailPage() {
   const initialCanvasId = parseIdParam(searchParams.get("canvas"));
   const initialNodeId = parseIdParam(searchParams.get("node"));
   const openTaskId = parseIdParam(searchParams.get("open"));
+  const docPage = parsePageParam(searchParams.get("page"));
   const listParam = parseIdParam(searchParams.get("list"));
   const todoOpenId = parseIdParam(searchParams.get("todo"));
 
@@ -183,6 +193,7 @@ export function ProjectDetailPage() {
   const [appliedDocParam, setAppliedDocParam] = useState<number | null>(null);
   const [appliedOpenParam, setAppliedOpenParam] = useState<number | null>(null);
   const [boundProjectId, setBoundProjectId] = useState(projectId);
+  const [askOpen, setAskOpen] = useState(false);
 
   const invalidId = Number.isNaN(projectId);
 
@@ -512,6 +523,12 @@ export function ProjectDetailPage() {
     clearSearchParam("open");
   }, [openTaskId, appliedOpenParam, searchParams, clearSearchParam]);
 
+  useEffect(() => {
+    const open = () => setAskOpen(true);
+    window.addEventListener(OPEN_ASK_EVENT, open);
+    return () => window.removeEventListener(OPEN_ASK_EVENT, open);
+  }, []);
+
   if (boundProjectId !== projectId) {
     setBoundProjectId(projectId);
     setAppliedDocParam(null);
@@ -519,6 +536,7 @@ export function ProjectDetailPage() {
     setSelectedDocId(null);
     setRequestOpenTask(null);
     setOverviewEdit(false);
+    setAskOpen(false);
   }
 
   const beginOverviewEdit = () => {
@@ -1245,7 +1263,10 @@ export function ProjectDetailPage() {
                 <DocumentsToc
                   documents={documents}
                   selectedId={selectedDocId}
-                  onSelect={setSelectedDocId}
+                  onSelect={(id) => {
+                    setSelectedDocId(id);
+                    if (searchParams.has("page")) clearSearchParam("page");
+                  }}
                 />
               )}
             </div>
@@ -1255,6 +1276,7 @@ export function ProjectDetailPage() {
               <DocumentEditor
                 key={selectedDoc.id}
                 doc={selectedDoc}
+                initialPage={docPage}
                 includeAssistantContext={project.aiAccessEffective !== "excluded"}
                 onSaveMarkdown={(title, body) =>
                   saveDocument.mutate({ docId: selectedDoc.id, title, body })
@@ -1334,6 +1356,13 @@ export function ProjectDetailPage() {
           if (pendingDeleteTodoList) deleteTodoList.mutate(pendingDeleteTodoList.id);
         }}
       />
+
+      <AskProjectPanel
+        key={projectId}
+        projectId={projectId}
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+      />
     </div>
   );
 }
@@ -1346,6 +1375,7 @@ function DocumentEditor({
   onDelete,
   busy,
   includeAssistantContext = true,
+  initialPage = null,
 }: {
   doc: ProjectDocument;
   onSaveMarkdown: (title: string, body: string) => void;
@@ -1354,6 +1384,7 @@ function DocumentEditor({
   onDelete: () => void;
   busy: boolean;
   includeAssistantContext?: boolean;
+  initialPage?: number | null;
 }) {
   const kind = doc.kind ?? "markdown";
   const sanitizedTitle = sanitizePlainText(doc.title);
@@ -1525,7 +1556,7 @@ function DocumentEditor({
         ) : null}
         {doc.fileUrl ? (
           kind === "pdf" ? (
-            <PdfReader key={doc.fileUrl} fileUrl={doc.fileUrl} />
+            <PdfReader fileUrl={doc.fileUrl} initialPage={initialPage ?? undefined} />
           ) : (
             <EpubReader key={doc.fileUrl} fileUrl={doc.fileUrl} />
           )

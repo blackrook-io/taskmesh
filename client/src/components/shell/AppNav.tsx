@@ -40,6 +40,8 @@ import { NavIcon } from "./NavIcon";
 import { ProjectSelectModal } from "./ProjectSelectModal";
 import { shellIcons } from "./shellIcons";
 import { useDigestInbox } from "../../lib/useDigestInbox";
+import { dispatchOpenAsk } from "../../lib/askProject";
+import { useFeatureBlockedTitle } from "../../lib/useAssistantAvailability";
 import { SystemClock } from "./SystemClock";
 import { UpdateAvailableLink } from "./UpdateAvailableLink";
 
@@ -108,11 +110,13 @@ function SortableProjectNavItem({
   active,
   modules,
   onNavigate,
+  askBlockedTitle,
 }: {
   project: Project;
   active: boolean;
   modules: ContextNavItem[];
   onNavigate?: () => void;
+  askBlockedTitle: string | null;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: project.id,
@@ -143,6 +147,24 @@ function SortableProjectNavItem({
       </NavLink>
       {active && modules.length > 0 ? (
         <ul className="app-nav__modules" aria-label={`${project.name} modules`}>
+          <li>
+            <button
+              type="button"
+              className={`app-nav__module${askBlockedTitle ? " is-disabled" : ""}`}
+              disabled={askBlockedTitle != null}
+              title={askBlockedTitle ?? "Ask about this project"}
+              onClick={() => {
+                if (askBlockedTitle) return;
+                dispatchOpenAsk();
+                onNavigate?.();
+              }}
+            >
+              <span className="app-nav__glyph" aria-hidden>
+                <NavIcon icon={shellIcons.assistant} />
+              </span>
+              <span className="app-nav__module-label">Ask</span>
+            </button>
+          </li>
           {mainModules.map((item) => (
             <li key={item.id}>
               <ProjectModuleLink item={item} onNavigate={onNavigate} />
@@ -179,6 +201,7 @@ export function AppNav({
   const section = useShellSection();
   const activeProjectId = useActiveProjectId();
   const { items: projectModules } = useActiveProjectNavItems();
+  const askBlockedTitle = useFeatureBlockedTitle("answer");
   const { open: settingsOpen, openSettings } = useSettings();
   const { open: adminOpen, openAdmin } = useAdministration();
   const { user } = useAuth();
@@ -365,6 +388,7 @@ export function AppNav({
                         active={activeProjectId === p.id}
                         modules={activeProjectId === p.id ? projectModules : []}
                         onNavigate={onNavigate}
+                        askBlockedTitle={activeProjectId === p.id ? askBlockedTitle : null}
                       />
                     ))}
                   </SortableContext>
