@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.82.1 — 2026-10-14
+
+### New Functionality
+- Quick capture opens from the command palette or with Ctrl/Cmd+Shift+K. Type one or more sentences, edit each proposed task, todo, or idea, and confirm to save it. A question stays on the card until you pick an answer or leave that field unset.
+
 ## 0.82.0 — 2026-10-14
 
 ### New Functionality

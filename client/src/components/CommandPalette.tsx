@@ -10,6 +10,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   assistantBlockedTitle: string | null;
+  captureBlockedTitle: string | null;
 };
 
 type PaletteItem = {
@@ -19,7 +20,7 @@ type PaletteItem = {
   hint?: string;
   path: string;
   /** Special client action instead of navigation */
-  action?: "open-assistant" | "open-settings" | "open-admin";
+  action?: "open-assistant" | "open-capture" | "open-settings" | "open-admin";
   disabled?: boolean;
   settingsSection?: "profile" | "appearance" | "import-export" | "assistant";
   adminSection?:
@@ -53,6 +54,14 @@ const STATIC_COMMANDS: PaletteItem[] = [
     hint: "Chat",
     path: "/",
     action: "open-assistant",
+  },
+  {
+    id: "open-capture",
+    group: "Assistant",
+    label: "Quick capture",
+    hint: "Ctrl+Shift+K",
+    path: "/",
+    action: "open-capture",
   },
   {
     id: "nav-profile",
@@ -279,17 +288,30 @@ function flattenSearch(data: SearchResults): PaletteItem[] {
   return out;
 }
 
-export function CommandPalette({ open, onClose, assistantBlockedTitle }: Props) {
+export function CommandPalette({
+  open,
+  onClose,
+  assistantBlockedTitle,
+  captureBlockedTitle,
+}: Props) {
   if (!open) return null;
-  return <CommandPaletteDialog onClose={onClose} assistantBlockedTitle={assistantBlockedTitle} />;
+  return (
+    <CommandPaletteDialog
+      onClose={onClose}
+      assistantBlockedTitle={assistantBlockedTitle}
+      captureBlockedTitle={captureBlockedTitle}
+    />
+  );
 }
 
 function CommandPaletteDialog({
   onClose,
   assistantBlockedTitle,
+  captureBlockedTitle,
 }: {
   onClose: () => void;
   assistantBlockedTitle: string | null;
+  captureBlockedTitle: string | null;
 }) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -308,13 +330,17 @@ function CommandPaletteDialog({
     const base = showAdmin
       ? STATIC_COMMANDS
       : STATIC_COMMANDS.filter((c) => c.action !== "open-admin");
-    if (!assistantBlockedTitle) return base;
-    return base.map((item) =>
-      item.action === "open-assistant"
-        ? { ...item, hint: assistantBlockedTitle, disabled: true }
-        : item,
-    );
-  }, [showAdmin, assistantBlockedTitle]);
+    if (!assistantBlockedTitle && !captureBlockedTitle) return base;
+    return base.map((item) => {
+      if (item.action === "open-assistant" && assistantBlockedTitle) {
+        return { ...item, hint: assistantBlockedTitle, disabled: true };
+      }
+      if (item.action === "open-capture" && captureBlockedTitle) {
+        return { ...item, hint: captureBlockedTitle, disabled: true };
+      }
+      return item;
+    });
+  }, [showAdmin, assistantBlockedTitle, captureBlockedTitle]);
 
   const recentItems = useMemo((): PaletteItem[] => {
     return loadRecentNav()
@@ -385,6 +411,11 @@ function CommandPaletteDialog({
       if (item.action === "open-assistant") {
         onClose();
         window.dispatchEvent(new CustomEvent("taskmesh:open-assistant"));
+        return;
+      }
+      if (item.action === "open-capture") {
+        onClose();
+        window.dispatchEvent(new CustomEvent("taskmesh:open-capture"));
         return;
       }
       if (item.action === "open-settings") {

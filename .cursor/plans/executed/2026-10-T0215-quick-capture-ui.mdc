@@ -1,0 +1,59 @@
+---
+description: T0215 — quick-capture box, editable proposal cards, and confirm that writes the record
+---
+
+# T0215 — AI quick-capture UI
+
+**Task:** T0215 · id `230` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0196 Natural-language capture (id `211`, In Progress). Children are T0214 (complete) and this task.
+**Depends on:** T0187 review UX and T0214 capture service — both complete. No open blockers.
+**Branch (after approval):** `T0215-quick-capture-ui`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`).
+
+## Goal
+
+A signed-in user types one or more sentences and reviews structured proposals before anything is saved. Entry is a command-palette action and a global shortcut. Each proposal is an editable card. Confirm writes the record. The dialog works at mobile width.
+
+Parent example: `ToDo: book the exam slot by Friday, urgent, AWS project` becomes a todo card with title, due date, priority, and project filled in, then one click creates it.
+
+## Current state
+
+- `POST /api/v1/ai/capture` (T0214) accepts `{ text, projectId?, todoListId?, timeZone? }` and returns `{ proposal, questions, plan, confirmable, denied, timeZone }`. It does not write.
+- Record types are `task`, `todo`, and `idea`. Ambiguous names come back as `questions` with choices. `confirmable` is true only when questions are empty, type and title are set, and policy allows the create.
+- Tier 2 chat proposals use `AiProposalCard` and `POST /api/v1/assistant/proposals/apply`. That apply body is an assistant proposal (`path` + `fields`), not a capture proposal. Capture confirm should not pretend to be a chat proposal.
+- Ctrl/Cmd+K opens the command palette, and only for an administrator. Ctrl/Cmd+J toggles the assistant. There is no capture UI.
+- Page context already exists for projects: `projectIdFromPath`. Todo lists live at `/todos/:listId`.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Entry | Palette command **Quick capture** (administrators, same people who can open Ctrl/Cmd+K). Global shortcut **Ctrl/Cmd+Shift+K** for every signed-in user. The shortcut does nothing while the user is typing in an input, textarea, or contenteditable, and it does not steal Ctrl/Cmd+K or Ctrl/Cmd+J. |
+| 2 | When capture is off | If the capabilities row for `capture` is unavailable, the palette item is disabled with the same reason text the assistant uses, and the shortcut does not open the dialog. |
+| 3 | One dialog | Palette selection closes the palette and opens a capture dialog (`role="dialog"`, focus trap, Escape closes). The dialog is not a mode inside the palette. |
+| 4 | Input | One textarea. Submit parses. Empty input does not call the API. |
+| 5 | Several lines | Split on newlines, drop blank lines, one `POST /api/v1/ai/capture` per remaining line, up to **10** lines. A longer paste keeps the extra lines in the box and tells the user only the first 10 were sent. Lines run sequentially so a failure on line 3 still shows cards for the lines that succeeded. |
+| 6 | Page context | From the current path, send `projectId` on `/projects/:id` and `todoListId` on `/todos/:listId`. Send `timeZone` from `Intl.DateTimeFormat().resolvedOptions().timeZone`. |
+| 7 | Cards | After parse, the textarea stays so the user can add another batch. Each line becomes a card: record type, title, description, due date, priority, project, list, parent, tags, and links. Resolved refs show their title and display number. Questions render under the field they belong to, with a button per choice. |
+| 8 | Edits | Edits stay on the client. Changing title, description, due date, priority, or record type does not call the model again. Picking a question choice fills that field and drops the question. Clearing a ref or switching type away from a field that does not apply (idea has no project, due date, or priority; a list is only for a todo; a parent is only for a task) removes it. A card is confirmable when type and title are set, no questions remain, and the server did not deny it. |
+| 9 | Confirm | `POST /api/v1/ai/capture/confirm` accepts the edited proposal. The server validates fields, rebuilds operations, and runs the same policy check as propose. It ignores any client `confirmable` flag. Allowed creates go through the existing task, todo, and idea create paths, then existing tag and link applies. A denial is 403 and the card shows the reason. Success returns the new record’s type, id, and display ref. |
+| 10 | Review together | Cards stack in one dialog. **Confirm** on a card writes that line only. **Confirm ready** writes every confirmable card and skips the rest. A per-card error stays on that card. Dismiss removes a card without writing. After a successful create, the card becomes a one-line result with a link to the record. |
+| 11 | Mobile | The dialog uses the viewport width with stacked fields and wrapping buttons. No hover-only control. |
+| 12 | Audit | Confirm writes an AI audit row for feature `capture`, action `apply`, with ids only — no sentence or title text. |
+
+## Work items
+
+1. Confirm route and a unit test that a valid task/todo/idea proposal creates through the existing helpers, a policy denial does not write, and a missing title is 400.
+2. Client API helpers for capture and confirm.
+3. `QuickCaptureDialog`: textarea, parse, cards, questions, edits, per-card confirm, confirm-ready, dismiss, result links.
+4. Wire the dialog from `Layout`: palette item, Ctrl/Cmd+Shift+K, path context, capture capability gate.
+5. Styles that match the dark grey / light green theme and stay usable at a narrow width.
+
+## Out of scope
+
+- A second model call when the user edits a card.
+- Opening the command palette for non-administrators.
+- A user time-zone setting (the browser zone is sent per request, as T0214 defined).
+- Live-model scoring (T0300).
+- Auto-tagging (T0199) and duplicate detection (T0200).
+- Undo beyond whatever the existing create helpers already journal. No new undo design.
