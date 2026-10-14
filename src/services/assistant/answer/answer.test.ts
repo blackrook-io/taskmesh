@@ -106,6 +106,7 @@ describe("answer grounding", () => {
       answer: NOTHING_TO_ANSWER_FROM,
       citations: [],
       grounded: false,
+      auditId: null,
     });
     assert.deepEqual(instructionsOnly, excluded);
   });
@@ -147,5 +148,20 @@ describe("answer grounding", () => {
     assert.equal(joined.includes("turn 1"), false);
     assert.equal(joined.includes("turn 2"), true);
     assert.equal(joined.includes("turn 7"), true);
+    assert.equal(result.auditId, null);
+  });
+
+  it("returns the audit id from the model call", async () => {
+    const result = await runAnswer({
+      question: "Where is the citation rule?",
+      history: [],
+      prompt: "Answer only from context.",
+      packet: projectPacket(),
+      resolved: RESOLVED,
+      complete: async () => ({ text: "See P0004.", auditId: 17 }),
+    });
+    assert.equal(result.auditId, 17);
+    assert.equal(result.grounded, true);
+    assert.equal(result.citations[0]?.ref, "P0004");
   });
 });

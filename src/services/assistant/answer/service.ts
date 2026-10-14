@@ -48,6 +48,8 @@ export type AnswerResult = {
   answer: string;
   citations: AnswerCitation[];
   grounded: boolean;
+  /** Set when a model reply was audited. Null when the model was not called. */
+  auditId: number | null;
 };
 
 export function answerContextRequest(args: {
@@ -71,7 +73,7 @@ export function answerContextRequest(args: {
 }
 
 function ungrounded(): AnswerResult {
-  return { answer: NOTHING_TO_ANSWER_FROM, citations: [], grounded: false };
+  return { answer: NOTHING_TO_ANSWER_FROM, citations: [], grounded: false, auditId: null };
 }
 
 export function groundAnswer(args: {
@@ -82,7 +84,7 @@ export function groundAnswer(args: {
   const answer = args.text.trim();
   if (!answer) return ungrounded();
   const citations = citationsInAnswer(answer, citableRefs(args.packet), args.resolved);
-  return { answer, citations, grounded: citations.length > 0 };
+  return { answer, citations, grounded: citations.length > 0, auditId: null };
 }
 
 export async function runAnswer(args: {
@@ -91,7 +93,7 @@ export async function runAnswer(args: {
   prompt: string;
   packet: AssembledContext;
   resolved: ReadonlyMap<string, ResolvedRef>;
-  complete: (messages: AiChatMessage[]) => Promise<{ text: string }>;
+  complete: (messages: AiChatMessage[]) => Promise<{ text: string; auditId?: number | null }>;
 }): Promise<AnswerResult> {
   if (args.packet.blocked === "project_excluded" || citableRefs(args.packet).length === 0) {
     return ungrounded();
@@ -104,7 +106,8 @@ export async function runAnswer(args: {
       history: args.history,
     }),
   );
-  return groundAnswer({ text: reply.text, packet: args.packet, resolved: args.resolved });
+  const grounded = groundAnswer({ text: reply.text, packet: args.packet, resolved: args.resolved });
+  return { ...grounded, auditId: reply.auditId ?? null };
 }
 
 async function resolveCitable(
@@ -163,6 +166,7 @@ async function completeWithRoute(
   }
   const prompt = loadPrompt({ id: "answer", providerId: attempt.pluginId });
   const complete = async (messages: AiChatMessage[]) => {
+    let auditId: number | null = null;
     const reply = await followRouteAttempts({
       attempts: route.attempts,
       onDeny: async (skipped, code) => {
@@ -207,7 +211,7 @@ async function completeWithRoute(
           outcome: "ok",
           message: "",
         });
-        await writeAiAudit({
+        auditId = await writeAiAudit({
           userId: args.userId,
           feature: "answer",
           provider: chosen.pluginId,
@@ -229,7 +233,7 @@ async function completeWithRoute(
         return result;
       },
     });
-    return { text: reply.text };
+    return { text: reply.text, auditId };
   };
   return { prompt: prompt.body, complete };
 }
@@ -243,7 +247,7 @@ export async function answerProject(
     history?: readonly AnswerTurn[];
     signal?: AbortSignal;
     assemble?: (request: ReturnType<typeof answerContextRequest>) => Promise<AssembledContext>;
-    complete?: (messages: AiChatMessage[]) => Promise<{ text: string }>;
+    complete?: (messages: AiChatMessage[]) => Promise<{ text: string; auditId?: number | null }>;
     resolve?: (packet: AssembledContext) => Promise<ReadonlyMap<string, ResolvedRef>>;
   },
 ): Promise<AnswerResult> {

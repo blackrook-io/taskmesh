@@ -20,7 +20,7 @@ export function useCaptureBlockedTitle(): string | null {
   return useFeatureBlockedTitle("capture");
 }
 
-function useFeatureBlockedTitle(featureId: string): string | null {
+export function useFeatureBlockedTitle(featureId: string): string | null {
   const { pathname } = useLocation();
   const projectId = useMemo(() => projectIdFromPath(pathname), [pathname]);
   const query = useQuery({

@@ -49,6 +49,8 @@ import { isEntityType, type EntityType } from "../lib/entityType";
 import { filterMeshGraph } from "../lib/meshFilters";
 import { applyMeshPins, meshPinsInGraph, type MeshPin } from "../lib/meshPins";
 import { formatEntityRef } from "../lib/entityRef";
+import { dispatchOpenAsk } from "../lib/askProject";
+import { useFeatureBlockedTitle } from "../lib/useAssistantAvailability";
 import { layoutMeshPlan } from "../lib/meshPlanLayout";
 import {
   layoutMesh,
@@ -819,6 +821,7 @@ export function MeshPanel({
   suggestions?: readonly MeshSuggestion[];
 }) {
   const queryClient = useQueryClient();
+  const askBlockedTitle = useFeatureBlockedTitle("answer");
   const rootKey = `project:${projectId}`;
   const [stack, setStack] = useState<string[]>([rootKey]);
   const focusKey = stack[stack.length - 1] ?? rootKey;
@@ -1533,6 +1536,15 @@ export function MeshPanel({
           onClick={goBack}
         >
           Back
+        </button>
+        <button
+          type="button"
+          className="btn small ghost"
+          disabled={askBlockedTitle != null}
+          title={askBlockedTitle ?? "Ask about this project"}
+          onClick={() => dispatchOpenAsk()}
+        >
+          Ask
         </button>
         <nav className="mesh-crumbs" aria-label="Ancestors">
           {(layout?.ancestors ?? []).map((ancestor, index, all) => {
