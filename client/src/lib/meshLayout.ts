@@ -1163,12 +1163,15 @@ export function layoutMesh(input: {
       continue;
     }
     if (!dependsOn || edge.relation !== "depends_on") continue;
+    // Graph edges run dependent → prerequisite. Draw them the other way: unblocks.
+    const prerequisiteKey = target;
+    const dependentKey = source;
     const prerequisite = byKey.get(edge.target);
     pushEdge({
-      id: `d:${source}:${target}`,
-      source,
-      target,
-      ...edgeHandles(source, target),
+      id: `d:${prerequisiteKey}:${dependentKey}`,
+      source: prerequisiteKey,
+      target: dependentKey,
+      ...edgeHandles(prerequisiteKey, dependentKey),
       kind: "depends",
       blocking: !isDependencySatisfied(prerequisite?.state ?? ""),
       sourceOffset: 0,

@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.85.6 — 2026-10-14
+
+### Enhancements
+- Mesh dependency arrows run from the prerequisite to the dependent, so one prerequisite fans out with an arrowhead on each record it unblocks. The Focus legend and hover card say Unblocks and Waits on.
+
 ## 0.85.5 — 2026-10-14
 
 ### Fixes

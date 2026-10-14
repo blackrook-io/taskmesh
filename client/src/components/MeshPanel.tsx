@@ -1898,8 +1898,18 @@ export function MeshPanel({
               <ul>
                 <li><span className="mesh-swatch mesh-swatch--tree" /> Contains</li>
                 <li><span className="mesh-swatch mesh-swatch--ref" /> References</li>
-                <li><span className="mesh-swatch mesh-swatch--dep" /> Depends on (done)</li>
-                <li><span className="mesh-swatch mesh-swatch--block" /> Depends on (still blocking)</li>
+                {view === "plan" ? (
+                  <>
+                    <li><span className="mesh-swatch mesh-swatch--dep" /> Depends on (done)</li>
+                    <li><span className="mesh-swatch mesh-swatch--block" /> Depends on (still blocking)</li>
+                  </>
+                ) : (
+                  <>
+                    <li><span className="mesh-swatch mesh-swatch--dep" /> Unblocks (done)</li>
+                    <li><span className="mesh-swatch mesh-swatch--block" /> Unblocks (still blocking)</li>
+                    <li>prerequisite → dependent</li>
+                  </>
+                )}
                 <li><span className="mesh-swatch mesh-swatch--ai" /> Suggested by AI</li>
               </ul>
             </div>

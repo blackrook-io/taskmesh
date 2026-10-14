@@ -1,0 +1,35 @@
+# T0303 — Mesh dependency arrows point prerequisite → dependent
+
+**Task:** T0303 (id `318`) — Mesh: draw dependencies as prerequisite → dependent (unblocks)
+**Parent:** T0301 (id `316`) — Mesh: dependency and completion clarity (group). Child 2 of 5.
+**Depends on:** none.
+**Required by:** T0305 (line emphasis and Completed dependencies filter, blocked) and T0306 (hover card lists dependencies by name and state, blocked).
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0303-mesh-unblocks-direction`
+
+One session. Stored edges stay dependent → prerequisite. Only the Mesh main view draws them the other way.
+
+## Decisions
+
+1. **Swap only the drawn ends.** Graph edges remain `source` = dependent, `target` = prerequisite (`task_dependencies.task_id` depends on `depends_on_task_id`). In `layoutMesh`, a `depends_on` line is emitted with rendered source = prerequisite and rendered target = dependent. `markerEnd` already sits on the target, so the arrowhead lands on each dependent.
+2. **Blocking still follows the prerequisite.** `blocking` is true when the prerequisite’s state is not satisfied (`isDependencySatisfied`). After the swap that node is the rendered source, not the target.
+3. **Fan-out stays visible, one arrow per dependent.** Ports, lanes, and gutters already group lines that share an end. After the swap they group on the prerequisite’s outgoing side, and each line still ends in its own arrowhead. Dependency lines stay out of the reference corridor trunk (`assignMeshCorridors` skips `kind === "depends"`). That trunk hides its members until hover and would remove the per-dependent arrowheads the acceptance calls for.
+4. **Reference trunks, lanes, and corridors are unchanged.** Link and suggestion edges keep their current source and target. Their bundling tests stay green.
+5. **Legend wording, two swatches.** “Depends on (done)” becomes “Unblocks (done)”. “Depends on (still blocking)” becomes “Unblocks (still blocking)”. A short caption under the pair reads “prerequisite → dependent”. The toolbar chip stays “Depends on”; it toggles the relation, it does not describe direction.
+6. **Hover counts, not the named list.** The Links row stops saying “N dependencies”. It says “N unblocks” for edges where this record is the prerequisite, and “N waits on” for edges where this record is the dependent. The existing “Blocked by” name list stays. Listing every dependency by name and state is T0306.
+7. **Plan view is out.** `meshPlanLayout.ts` is not changed. T0319 retires that view; the Plans timeline already draws prerequisite → dependent.
+
+## Scope
+
+1. `client/src/lib/meshLayout.ts` — swap rendered source and target for `depends_on` only. Edge id becomes `d:{prerequisite}:{dependent}`. Update `meshLayout.test.ts`: the depends-on line’s target is the dependent, and a multi-dependent fixture leaves the prerequisite with one outgoing port group and an arrow target on each dependent.
+2. `client/src/components/MeshPanel.tsx` — legend labels in the main view.
+3. `client/src/lib/meshCard.ts` — split the dependency count into unblocks and waits-on. Update `meshCard.test.ts`.
+4. `npm run lint` clean. No migration, so the finish-up bump is PATCH. No `FEATURES.md` change: this corrects how Mesh already draws dependencies.
+
+## Acceptance
+
+- On the To Do list functionality project, T0104 shows lines leaving it toward T0097–T0102, with an arrowhead on each of those tasks, not seven heads stacked on T0104.
+- A satisfied prerequisite is still a non-blocking line; an open one is still blocking. Color follows the prerequisite, not the dependent.
+- Legend (main view) says Unblocks, with done vs still-blocking swatches, and notes prerequisite → dependent.
+- Hover Links reads “unblocks” and “waits on” instead of a single dependency count. “Blocked by” is unchanged.
+- Plan view arrows are unchanged.
