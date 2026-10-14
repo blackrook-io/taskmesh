@@ -5,6 +5,7 @@ import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { ENTITY_TYPES } from "../../lib/entityType.js";
 import { assembleContext, ContextAssemblyError } from "../../services/assistant/contextAssembly.js";
 import { CaptureError, proposeCapture } from "../../services/assistant/capture/service.js";
+import { AnswerError, answerProject } from "../../services/assistant/answer/service.js";
 import { confirmCaptureRequest } from "./captureConfirm.js";
 import { redactSecret } from "../../services/assistant/aiKeyMode.js";
 import { AiCredentialsError } from "../../services/assistant/aiInstanceKeys.js";
@@ -288,6 +289,45 @@ aiRouter.post("/capture/confirm", async (req, res) => {
     res.status(201).json({ data });
   } catch (err) {
     if (err instanceof CaptureError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
+    handleRouteError(res, err);
+  }
+});
+
+const answerBody = z
+  .object({
+    projectId: z.number().int().positive(),
+    question: z.string().trim().min(1).max(2_000),
+    history: z
+      .array(
+        z
+          .object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string().max(8_000),
+          })
+          .strict(),
+      )
+      .max(40)
+      .optional(),
+  })
+  .strict();
+
+aiRouter.post("/answer", async (req, res) => {
+  try {
+    const body = answerBody.parse(req.body ?? {});
+    const userId = await getCurrentUserId(db);
+    res.locals.logMessage = `AI answer project ${body.projectId}`;
+    const data = await answerProject(db, {
+      actorUserId: userId,
+      projectId: body.projectId,
+      question: body.question,
+      history: body.history,
+    });
+    res.json({ data });
+  } catch (err) {
+    if (err instanceof AnswerError) {
       sendError(res, err.status, err.code, err.message);
       return;
     }
