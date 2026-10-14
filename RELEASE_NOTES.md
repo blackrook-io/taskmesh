@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.85.1 — 2026-10-14
+
+### Enhancements
+- Golden sets for tagging, capture, duplicate pairs, and suggested links fail CI when a canned model reply no longer parses to the expected judgment. `npm run ai:golden` scores the same judgments against a configured provider and skips when no key is set.
+
 ## 0.85.0 — 2026-10-14
 
 ### New Functionality

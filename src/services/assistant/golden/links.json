@@ -1,0 +1,78 @@
+[
+  {
+    "id": "link-shared-topic",
+    "subject": { "key": "task:12", "title": "Book the exam slot", "excerpt": "Schedule the driving exam." },
+    "others": [
+      { "key": "document:4", "title": "Exam checklist", "excerpt": "Forms and times for the driving exam." }
+    ],
+    "stubReply": "{\"items\":[{\"key\":\"document:4\",\"match\":0.82,\"reason\":\"same exam\"}]}",
+    "judgments": { "document:4": "link" }
+  },
+  {
+    "id": "link-mention",
+    "subject": { "key": "task:20", "title": "Follow up", "excerpt": "See T0020 for the exam booking." },
+    "others": [
+      { "key": "task:21", "title": "T0020 Book exam", "excerpt": "The exam booking." }
+    ],
+    "stubReply": "{\"items\":[{\"key\":\"task:21\",\"match\":0.9,\"reason\":\"mentions T0020\"}]}",
+    "judgments": { "task:21": "link" }
+  },
+  {
+    "id": "link-unrelated",
+    "subject": { "key": "todo:7", "title": "Buy milk", "excerpt": "Grocery run." },
+    "others": [
+      { "key": "document:8", "title": "VPC notes", "excerpt": "Networking for the migration." }
+    ],
+    "stubReply": "{\"items\":[{\"key\":\"document:8\",\"match\":0.1,\"reason\":\"unrelated\"}]}",
+    "judgments": { "document:8": "reject" }
+  },
+  {
+    "id": "link-different-work",
+    "subject": { "key": "task:12", "title": "Book the exam slot", "excerpt": "Schedule the driving exam." },
+    "others": [
+      { "key": "todo:9", "title": "Water the plant", "excerpt": "Different work on the same list." }
+    ],
+    "stubReply": "{\"items\":[{\"key\":\"todo:9\",\"match\":0.2,\"reason\":\"different work\"}]}",
+    "judgments": { "todo:9": "reject" }
+  },
+  {
+    "id": "link-mentioned-by",
+    "subject": { "key": "idea:3", "title": "Sketch a logo", "excerpt": "Two color palettes." },
+    "others": [
+      { "key": "document:12", "title": "Launch notes", "excerpt": "The logo sketch is in idea:3." }
+    ],
+    "stubReply": "{\"items\":[{\"key\":\"document:12\",\"match\":0.77,\"reason\":\"mentions the logo sketch\"}]}",
+    "judgments": { "document:12": "link" }
+  },
+  {
+    "id": "link-batch",
+    "subject": { "key": "task:12", "title": "Book the exam slot", "excerpt": "Schedule the driving exam." },
+    "others": [
+      { "key": "document:4", "title": "Exam checklist", "excerpt": "Forms and times for the driving exam." },
+      { "key": "document:8", "title": "VPC notes", "excerpt": "Networking for the migration." }
+    ],
+    "stubReply": "{\"items\":[{\"key\":\"document:4\",\"match\":0.8,\"reason\":\"same exam\"},{\"key\":\"document:8\",\"match\":0.15,\"reason\":\"unrelated\"}]}",
+    "judgments": { "document:4": "link", "document:8": "reject" }
+  },
+  {
+    "id": "link-below-threshold",
+    "stubOnly": true,
+    "subject": { "key": "task:12", "title": "Book the exam slot", "excerpt": "Schedule the driving exam." },
+    "others": [
+      { "key": "document:4", "title": "Exam checklist", "excerpt": "Forms and times for the driving exam." }
+    ],
+    "stubReply": "{\"items\":[{\"key\":\"document:4\",\"match\":0.44,\"reason\":\"weak overlap\"}]}",
+    "judgments": { "document:4": "reject" }
+  },
+  {
+    "id": "link-missing-key",
+    "stubOnly": true,
+    "pass": false,
+    "subject": { "key": "task:12", "title": "Book the exam slot", "excerpt": "Schedule the driving exam." },
+    "others": [
+      { "key": "document:4", "title": "Exam checklist", "excerpt": "Forms and times for the driving exam." }
+    ],
+    "stubReply": "{\"items\":[]}",
+    "judgments": { "document:4": "link" }
+  }
+]

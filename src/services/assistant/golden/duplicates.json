@@ -1,0 +1,58 @@
+[
+  {
+    "id": "dup-case",
+    "left": "Book the exam slot",
+    "right": "book the exam slot",
+    "stubReply": "{\"duplicate\":true,\"confidence\":0.95}",
+    "duplicate": true
+  },
+  {
+    "id": "dup-punctuation",
+    "left": "Book the exam slot.",
+    "right": "Book the exam slot",
+    "stubReply": "{\"duplicate\":true,\"confidence\":0.93}",
+    "duplicate": true
+  },
+  {
+    "id": "dup-task-todo",
+    "left": "Book the exam slot",
+    "right": "Reserve the exam slot",
+    "stubReply": "{\"duplicate\":true,\"confidence\":0.84}",
+    "duplicate": true
+  },
+  {
+    "id": "dup-shorter",
+    "left": "Renew the license",
+    "right": "Renew the business license",
+    "stubReply": "{\"duplicate\":true,\"confidence\":0.8}",
+    "duplicate": true
+  },
+  {
+    "id": "dup-different-object",
+    "left": "Book the exam slot",
+    "right": "Book the flight to Austin",
+    "stubReply": "{\"duplicate\":false,\"confidence\":0.9}",
+    "duplicate": false
+  },
+  {
+    "id": "dup-different-sketch",
+    "left": "Sketch a logo",
+    "right": "Sketch the clinic floor plan",
+    "stubReply": "{\"duplicate\":false,\"confidence\":0.86}",
+    "duplicate": false
+  },
+  {
+    "id": "dup-different-project",
+    "left": "AWS migration cutover",
+    "right": "Website homepage redesign",
+    "stubReply": "{\"duplicate\":false,\"confidence\":0.92}",
+    "duplicate": false
+  },
+  {
+    "id": "dup-shared-word",
+    "left": "Pack a lunch",
+    "right": "Plan the migration lunch-and-learn",
+    "stubReply": "{\"duplicate\":false,\"confidence\":0.88}",
+    "duplicate": false
+  }
+]

@@ -1,0 +1,67 @@
+---
+description: T0300 — small golden sets that score tagging, capture, duplicates, and suggested links as stable judgments
+---
+
+# T0300 — AI golden sets
+
+**Task:** T0300 · id `315` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0195 AI: Quality and operations (group) (id `210`, in progress). Container only; the brief is on T0300.
+**Depends on:** T0168, T0196, T0199, T0200, T0211 — all `complete`. No open blockers.
+**Branch (after approval):** `T0300-ai-golden-sets`
+**Version on finish-up:** PATCH (no new `drizzle/*.sql`). Skip `FEATURES.md` (CI and an explicit script, not a user-facing surface).
+
+## Goal
+
+Ship small synthetic golden sets for suggested links, auto-tagging, capture parsing, and duplicate pairs. CI runs each set through the stub plugin and fails when the parsed judgment regresses. `npm run ai:golden` runs the same sets against one configured chat provider and skips with exit 0 when no key is configured. Expected results are judgments (show/hide, duplicate or not, link or not, parsed capture fields), not prose. No private record text is sent to a provider, from CI or from the script.
+
+## Current state
+
+- `src/services/assistant/golden/cases.json` has one assistant case. The stub plugin always replies `Hello from plugin` (unless the last user message is `TOOL`). `runGoldenCases` checks that substring in stub mode and a non-empty reply in live mode. `plugins/ai-providers/stub/src/contract.test.ts` runs stub mode. `npm run ai:golden` runs live mode and already skips when no chat provider is configured.
+- Scorers exist and are what CI should call:
+  - Tagging: `parseModelScores` then `planTaggingRun` (`SHOW_AT` 0.45).
+  - Duplicates: `parseDuplicateAnswer` → `{ duplicate, confidence }`.
+  - Links: `parseLinkScores`; `MODEL_REJECT_BELOW` 0.45 means do not link.
+  - Capture: `parseCaptureExtraction`. `src/services/assistant/capture/golden.json` already has 50 sentences scored through the resolver with a fixture extraction. That file stays the resolver suite. This task scores model parses of a small subset.
+- Prompts live in `prompts/{tagging,duplicates,links,capture}/v1.md`.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Size | Eight synthetic cases per feature. Capture reuses the text of eight existing resolver sentences (`01`, `03`, `05`, `06`, `21`, `33`, `35`, `40`), not a live run of all fifty. |
+| 2 | Privacy | Every user message is invented fixture text already suitable to publish. The runner never reads a database row into a prompt. |
+| 3 | Stub transport | The stub still has one default reply. If the last user message ends with a line `STUB_REPLY` and a JSON body, `streamChat` yields that body and nothing else. Only stub mode appends that trailer. Live mode sends the real system prompt plus the fixture user text. |
+| 4 | What is scored | Tagging: the set of names `planTaggingRun` would surface (`suggest` ∪ `apply`) with inventing off and a fixed candidate list. Duplicates: the boolean only. Links: each sent key is link or reject at 0.45; the reason string is ignored. Capture: `recordType`, mapped `priority`, `project`, `tags`, title (trim, case-insensitive), and date phrase (the expected phrase must occur inside the parsed phrase, or both null). Description prose is ignored. Invalid JSON fails the case. |
+| 5 | Live tolerance | Same judgments as stub. Confidence values are not compared beyond the threshold the scorer already uses. A live capture date phrase may be longer than the fixture phrase as long as it contains it. |
+| 6 | Where it runs | New `src/services/assistant/golden/features.test.ts` loads the stub plugin and runs all four sets in stub mode (no network). `ai:golden` runs the existing assistant case, then the four sets in live mode, and exits 1 if any case fails. |
+| 7 | Schema | No migration, no admin UI, no prompt rewrite. |
+
+## Cases
+
+**Tagging** — candidates are a closed list on the case; inventing is off. Mix of one clear tag, two tags, none of the candidates, a low-confidence name that must stay hidden, and a reply that names a tag outside the candidate list (dropped).
+
+**Duplicates** — four pairs that are the same work (including a task and a todo) and four that only share a topic. Exact title, punctuation-only change, and “similar project, different work” are in the set.
+
+**Links** — pairs and one two-item batch. Shared topic or a display-number mention links. Unrelated records reject. A below-0.45 score rejects, and a missing key fails. Those two cases are stub-only: a live model sees one prompt, so it cannot be asked to score the same pair both above and below 0.45, and a missing key is a parser check.
+
+**Capture** — the eight sentences above: prefixed todo with date, priority, and project; a plain idea; type unsure; vague “soon”; an exact project name; low priority; an unknown priority word; tags.
+
+## Work items
+
+1. Teach the stub plugin the `STUB_REPLY` trailer. Keep `Hello from plugin` and the `TOOL` path.
+2. Add `tagging.json`, `duplicates.json`, `links.json`, and `capture.json` under `src/services/assistant/golden/`. Each case has id, user text, canned reply, and the expected judgment.
+3. Extend the golden runner with a feature scorer that builds the same system-prompt-plus-user-message shape the services use (`loadPrompt` + `Return JSON only.`), calls `streamChat`, and compares the judgment. Stub mode appends the trailer.
+4. Wire the stub-mode test and `ai:golden`. Do not point CI at a real provider.
+
+## Out of scope
+
+- Re-scoring the capture resolver’s fifty sentences (already in `capture/resolve.test.ts`).
+- Digest, red-team, or assistant-chat corpora beyond the one case T0211 shipped.
+- Changing thresholds, prompts, or parsers except where a scorer must be called.
+- Reading workspace records or sending them to a provider.
+
+## Acceptance
+
+- `npm test` fails if a canned reply no longer parses to the expected judgment.
+- `npm run ai:golden` with no configured chat provider prints a skip line and exits 0.
+- With a provider configured, the same command scores the four sets and exits 1 when a judgment does not match. It does not read private records.

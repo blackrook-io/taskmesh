@@ -10,6 +10,16 @@ const configSchema = z.object({
   defaultModel: z.string().trim().min(1).max(120).default("stub"),
 });
 
+/** Golden stub mode appends this trailer. The following text is the canned reply. */
+const STUB_REPLY_MARK = "\nSTUB_REPLY\n";
+
+function cannedStubReply(content: string): string | null {
+  const at = content.lastIndexOf(STUB_REPLY_MARK);
+  if (at < 0) return null;
+  const reply = content.slice(at + STUB_REPLY_MARK.length);
+  return reply.trim().length > 0 ? reply : null;
+}
+
 /**
  * In-memory provider for the contract kit and later tests.
  * Not loaded by the app (`taskmesh.role` is `test`).
@@ -57,7 +67,8 @@ export const plugin: AiProviderPlugin = {
         calls: [{ id: "call_1", name: "search_records", arguments: '{"q":"mesh"}' }],
       };
     } else {
-      yield { type: "delta", text: "Hello from plugin" };
+      const canned = last && last.role === "user" ? cannedStubReply(last.content) : null;
+      yield { type: "delta", text: canned ?? "Hello from plugin" };
     }
     yield { type: "usage", usage: { inputTokens: 3, outputTokens: 4 } };
     yield { type: "done" };
