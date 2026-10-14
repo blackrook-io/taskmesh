@@ -6874,6 +6874,9 @@ a:focus-visible {
 
 .assistant-bubble__body {
   white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.95rem;
+  line-height: 1.45;
 }
 
 .ask-answer {
@@ -6895,10 +6898,6 @@ a:focus-visible {
 
 .ask-sources a {
   color: var(--accent);
-}
-  word-break: break-word;
-  font-size: 0.95rem;
-  line-height: 1.45;
 }
 
 .assistant-bubble--user .assistant-bubble__body {

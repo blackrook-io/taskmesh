@@ -61,3 +61,7 @@ The client calls `POST /api/v1/ai/answer`. It does not retrieve, assemble contex
 - The records-used list matches the citations in the response.
 - Thumbs on a grounded answer are stored against that answer’s audit id. An ungrounded “nothing to answer from” reply has no thumbs.
 - A follow-up in the same visit is sent with the prior turns. Refreshing or leaving the project starts a new thread.
+
+## CI fix
+
+The first production CSS build failed because the Ask styles closed `.assistant-bubble__body` before its remaining properties. Those properties are back inside that rule.
