@@ -1321,7 +1321,7 @@ export function ProjectDetailPage() {
         />
       ) : null}
 
-      {tab === "mesh" ? <MeshPanel key={projectId} projectId={projectId} /> : null}
+      {tab === "mesh" ? <MeshPanel key={`mesh-${projectId}`} projectId={projectId} /> : null}
 
       <ConfirmDialog
         open={deleteProjectOpen}
@@ -1358,7 +1358,7 @@ export function ProjectDetailPage() {
       />
 
       <AskProjectPanel
-        key={projectId}
+        key={`ask-${projectId}`}
         projectId={projectId}
         open={askOpen}
         onClose={() => setAskOpen(false)}
