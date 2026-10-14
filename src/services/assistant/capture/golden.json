@@ -1,0 +1,324 @@
+{
+  "now": "2026-10-14T15:00:00.000Z",
+  "timeZone": "America/New_York",
+  "hits": [
+    { "entityType": "project", "id": 4, "number": 4, "title": "AWS", "projectId": null },
+    { "entityType": "project", "id": 5, "number": 5, "title": "Website", "projectId": null },
+    { "entityType": "project", "id": 8, "number": 8, "title": "AWS migration", "projectId": null },
+    { "entityType": "todo_list", "id": 3, "number": 2, "title": "Inbox", "projectId": 4 },
+    { "entityType": "todo_list", "id": 9, "number": 9, "title": "Inbox", "projectId": 5 },
+    { "entityType": "todo_list", "id": 11, "number": 11, "title": "Errands", "projectId": 4 },
+    { "entityType": "task", "id": 30, "number": 30, "title": "Phase 1", "projectId": 4 },
+    { "entityType": "task", "id": 40, "number": 40, "title": "Phase 1", "projectId": 5 },
+    { "entityType": "task", "id": 20, "number": 20, "title": "Book exam", "projectId": 4 },
+    { "entityType": "todo", "id": 7, "number": 7, "title": "pack lunch", "projectId": 4 },
+    { "entityType": "idea", "id": 3, "number": 3, "title": "Sketch logo", "projectId": null },
+    { "entityType": "document", "id": 12, "number": 12, "title": "Launch notes", "projectId": 4 }
+  ],
+  "cases": [
+    {
+      "id": "01-todo-friday-urgent-aws",
+      "text": "ToDo: book the exam slot by Friday, urgent, AWS project",
+      "extraction": { "recordType": "todo", "title": "book the exam slot", "priority": "urgent", "datePhrase": "by Friday", "project": "AWS" },
+      "expect": { "confirmable": true, "recordType": "todo", "title": "book the exam slot", "dueDate": "2026-10-16", "priority": "urgent", "project": "P0004", "questionFields": [] }
+    },
+    {
+      "id": "02-task-tomorrow-website",
+      "text": "Task: write the spec by tomorrow, high, Website",
+      "extraction": { "recordType": "task", "title": "write the spec", "priority": "high", "datePhrase": "tomorrow", "project": "Website" },
+      "expect": { "confirmable": true, "recordType": "task", "title": "write the spec", "dueDate": "2026-10-15", "priority": "high", "project": "P0005", "questionFields": [] }
+    },
+    {
+      "id": "03-idea-plain",
+      "text": "Idea: sketch a logo",
+      "extraction": { "recordType": "idea", "title": "sketch a logo" },
+      "expect": { "confirmable": true, "recordType": "idea", "title": "sketch a logo", "dueDate": null, "priority": null, "project": null, "questionFields": [] }
+    },
+    {
+      "id": "04-todo-no-prefix",
+      "text": "buy milk",
+      "extraction": { "recordType": "todo", "title": "buy milk" },
+      "expect": { "confirmable": true, "recordType": "todo", "title": "buy milk", "dueDate": null, "priority": null, "project": null, "questionFields": [] }
+    },
+    {
+      "id": "05-type-unsure",
+      "text": "buy milk",
+      "extraction": { "recordType": "todo", "typeUnsure": true, "title": "buy milk" },
+      "expect": { "confirmable": false, "recordType": null, "title": "buy milk", "questionFields": ["recordType"] }
+    },
+    {
+      "id": "06-soon",
+      "text": "ToDo: file the form soon",
+      "extraction": { "recordType": "todo", "title": "file the form", "datePhrase": "soon" },
+      "expect": { "confirmable": false, "recordType": "todo", "title": "file the form", "dueDate": null, "questionFields": ["dueDate"] }
+    },
+    {
+      "id": "07-next-friday",
+      "text": "ToDo: call the clinic next Friday",
+      "extraction": { "recordType": "todo", "title": "call the clinic", "datePhrase": "next Friday" },
+      "expect": { "confirmable": false, "dueDate": null, "questionFields": ["dueDate"], "choiceRefs": ["2026-10-16", "2026-10-23"] }
+    },
+    {
+      "id": "08-this-friday",
+      "text": "ToDo: call the clinic this Friday",
+      "extraction": { "recordType": "todo", "title": "call the clinic", "datePhrase": "this Friday" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-16", "questionFields": [] }
+    },
+    {
+      "id": "09-monday",
+      "text": "Task: send the draft Monday",
+      "extraction": { "recordType": "task", "title": "send the draft", "datePhrase": "Monday" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-19", "questionFields": [] }
+    },
+    {
+      "id": "10-in-three-days",
+      "text": "ToDo: renew the license in 3 days",
+      "extraction": { "recordType": "todo", "title": "renew the license", "datePhrase": "in 3 days" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-17", "questionFields": [] }
+    },
+    {
+      "id": "11-in-two-weeks",
+      "text": "Task: review the bill in two weeks",
+      "extraction": { "recordType": "task", "title": "review the bill", "datePhrase": "in two weeks" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-28", "questionFields": [] }
+    },
+    {
+      "id": "12-end-of-month",
+      "text": "ToDo: close the books at the end of the month",
+      "extraction": { "recordType": "todo", "title": "close the books", "datePhrase": "end of the month" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-31", "questionFields": [] }
+    },
+    {
+      "id": "13-oct-20",
+      "text": "ToDo: mail the packet by Oct 20",
+      "extraction": { "recordType": "todo", "title": "mail the packet", "datePhrase": "Oct 20" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-20", "questionFields": [] }
+    },
+    {
+      "id": "14-october-1-rolls-forward",
+      "text": "Task: archive October 1",
+      "extraction": { "recordType": "task", "title": "archive", "datePhrase": "October 1" },
+      "expect": { "confirmable": true, "dueDate": "2027-10-01", "questionFields": [] }
+    },
+    {
+      "id": "15-iso-date",
+      "text": "ToDo: ship on 2026-11-02",
+      "extraction": { "recordType": "todo", "title": "ship", "datePhrase": "2026-11-02" },
+      "expect": { "confirmable": true, "dueDate": "2026-11-02", "questionFields": [] }
+    },
+    {
+      "id": "16-slash-date",
+      "text": "ToDo: ship on 10/20",
+      "extraction": { "recordType": "todo", "title": "ship", "datePhrase": "10/20" },
+      "expect": { "confirmable": false, "dueDate": null, "questionFields": ["dueDate"] }
+    },
+    {
+      "id": "17-next-week",
+      "text": "Task: plan next week",
+      "extraction": { "recordType": "task", "title": "plan", "datePhrase": "next week" },
+      "expect": { "confirmable": false, "dueDate": null, "questionFields": ["dueDate"] }
+    },
+    {
+      "id": "18-this-weekend",
+      "text": "ToDo: hike this weekend",
+      "extraction": { "recordType": "todo", "title": "hike", "datePhrase": "this weekend" },
+      "expect": { "confirmable": false, "dueDate": null, "questionFields": ["dueDate"] }
+    },
+    {
+      "id": "19-yesterday",
+      "text": "Task: log yesterday",
+      "extraction": { "recordType": "task", "title": "log", "datePhrase": "yesterday" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-13", "questionFields": [] }
+    },
+    {
+      "id": "20-today",
+      "text": "ToDo: pay the invoice today",
+      "extraction": { "recordType": "todo", "title": "pay the invoice", "datePhrase": "today" },
+      "expect": { "confirmable": true, "dueDate": "2026-10-14", "questionFields": [] }
+    },
+    {
+      "id": "21-aws-migration-exact",
+      "text": "Task: cut over AWS migration",
+      "extraction": { "recordType": "task", "title": "cut over", "project": "AWS migration" },
+      "expect": { "confirmable": true, "project": "P0008", "questionFields": [] }
+    },
+    {
+      "id": "22-missing-project",
+      "text": "Task: deploy cloud",
+      "extraction": { "recordType": "task", "title": "deploy", "project": "cloud" },
+      "expect": { "confirmable": false, "project": null, "questionFields": ["project"] }
+    },
+    {
+      "id": "23-aws-exact-not-migration",
+      "text": "Task: rotate keys for AWS",
+      "extraction": { "recordType": "task", "title": "rotate keys", "project": "AWS" },
+      "expect": { "confirmable": true, "project": "P0004", "questionFields": [] }
+    },
+    {
+      "id": "24-ambiguous-project",
+      "text": "Task: check aw",
+      "extraction": { "recordType": "task", "title": "check", "project": "aw" },
+      "expect": { "confirmable": false, "project": null, "questionFields": ["project"], "choiceRefs": ["P0004", "P0008"] }
+    },
+    {
+      "id": "25-project-display-number",
+      "text": "Task: update P0005",
+      "extraction": { "recordType": "task", "title": "update", "project": "P0005" },
+      "expect": { "confirmable": true, "project": "P0005", "questionFields": [] }
+    },
+    {
+      "id": "26-parent-task",
+      "text": "Task: draft the outline under Phase 1",
+      "extraction": { "recordType": "task", "title": "draft the outline", "project": "AWS", "parent": "T0030" },
+      "expect": { "confirmable": true, "parent": "T0030", "project": "P0004", "questionFields": [] }
+    },
+    {
+      "id": "27-parent-on-todo",
+      "text": "ToDo: draft the outline under Phase 1",
+      "extraction": { "recordType": "todo", "title": "draft the outline", "parent": "T0030" },
+      "expect": { "confirmable": false, "parent": null, "questionFields": ["parent"] }
+    },
+    {
+      "id": "28-ambiguous-list",
+      "text": "ToDo: sort Inbox",
+      "extraction": { "recordType": "todo", "title": "sort", "list": "Inbox" },
+      "expect": { "confirmable": false, "list": null, "questionFields": ["list"], "choiceRefs": ["L0002", "L0009"] }
+    },
+    {
+      "id": "29-page-list",
+      "text": "ToDo: pack the bag",
+      "pageListId": 3,
+      "pageProjectId": 4,
+      "extraction": { "recordType": "todo", "title": "pack the bag" },
+      "expect": { "confirmable": true, "list": "L0002", "project": "P0004", "questionFields": [] }
+    },
+    {
+      "id": "30-page-project",
+      "text": "Task: write the recap",
+      "pageProjectId": 4,
+      "extraction": { "recordType": "task", "title": "write the recap" },
+      "expect": { "confirmable": true, "project": "P0004", "questionFields": [] }
+    },
+    {
+      "id": "31-sentence-project-wins",
+      "text": "Task: write the recap for Website",
+      "pageProjectId": 4,
+      "extraction": { "recordType": "task", "title": "write the recap", "project": "Website" },
+      "expect": { "confirmable": true, "project": "P0005", "questionFields": [] }
+    },
+    {
+      "id": "32-list-project-mismatch",
+      "text": "ToDo: buy stamps for Errands on Website",
+      "extraction": { "recordType": "todo", "title": "buy stamps", "list": "Errands", "project": "Website" },
+      "expect": { "confirmable": false, "list": "L0011", "project": "P0005", "questionFields": ["list"] }
+    },
+    {
+      "id": "33-priority-low",
+      "text": "ToDo: water the plant, low",
+      "extraction": { "recordType": "todo", "title": "water the plant", "priority": "low" },
+      "expect": { "confirmable": true, "priority": "low", "questionFields": [] }
+    },
+    {
+      "id": "34-priority-medium",
+      "text": "Task: read the notes, medium",
+      "extraction": { "recordType": "task", "title": "read the notes", "priority": "medium" },
+      "expect": { "confirmable": true, "priority": "medium", "questionFields": [] }
+    },
+    {
+      "id": "35-priority-unsure",
+      "text": "ToDo: file this, critical",
+      "extraction": { "recordType": "todo", "title": "file this", "priorityUnsure": true },
+      "expect": { "confirmable": false, "priority": null, "questionFields": ["priority"] }
+    },
+    {
+      "id": "36-empty-title",
+      "text": "ToDo:",
+      "extraction": { "recordType": "todo", "title": "" },
+      "expect": { "confirmable": false, "title": "", "questionFields": ["title"] }
+    },
+    {
+      "id": "37-prefix-overrides-model",
+      "text": "Task: book the room",
+      "extraction": { "recordType": "todo", "title": "book the room" },
+      "expect": { "confirmable": true, "recordType": "task", "title": "book the room", "questionFields": [] }
+    },
+    {
+      "id": "38-idea-prefix-overrides",
+      "text": "Idea: book the room",
+      "extraction": { "recordType": "todo", "title": "book the room" },
+      "expect": { "confirmable": true, "recordType": "idea", "title": "book the room", "questionFields": [] }
+    },
+    {
+      "id": "39-todo-hyphen-prefix",
+      "text": "To-Do: book the room",
+      "extraction": { "recordType": "task", "title": "book the room" },
+      "expect": { "confirmable": true, "recordType": "todo", "title": "book the room", "questionFields": [] }
+    },
+    {
+      "id": "40-tags",
+      "text": "ToDo: pack the kit #exam #aws",
+      "extraction": { "recordType": "todo", "title": "pack the kit", "tags": ["exam", "aws"] },
+      "expect": { "confirmable": true, "tags": ["exam", "aws"], "questionFields": [] }
+    },
+    {
+      "id": "41-link-display-number",
+      "text": "Task: follow up on T0020",
+      "extraction": { "recordType": "task", "title": "follow up", "links": ["T0020"] },
+      "expect": { "confirmable": true, "links": ["T0020"], "questionFields": [] }
+    },
+    {
+      "id": "42-link-missing",
+      "text": "Task: follow up on the missing note",
+      "extraction": { "recordType": "task", "title": "follow up", "links": ["missing note"] },
+      "expect": { "confirmable": false, "links": [], "questionFields": ["links"] }
+    },
+    {
+      "id": "43-link-ambiguous",
+      "text": "Task: follow up on Phase 1",
+      "extraction": { "recordType": "task", "title": "follow up", "links": ["Phase 1"] },
+      "expect": { "confirmable": false, "links": [], "questionFields": ["links"], "choiceRefs": ["T0030", "T0040"] }
+    },
+    {
+      "id": "44-link-document",
+      "text": "Task: cite N0012",
+      "extraction": { "recordType": "task", "title": "cite", "links": ["N0012"] },
+      "expect": { "confirmable": true, "links": ["N0012"], "questionFields": [] }
+    },
+    {
+      "id": "45-idea-with-date",
+      "text": "Idea: mural tomorrow",
+      "extraction": { "recordType": "idea", "title": "mural", "datePhrase": "tomorrow" },
+      "expect": { "confirmable": false, "recordType": "idea", "dueDate": null, "questionFields": ["dueDate"] }
+    },
+    {
+      "id": "46-idea-with-priority",
+      "text": "Idea: mural, high",
+      "extraction": { "recordType": "idea", "title": "mural", "priority": "high" },
+      "expect": { "confirmable": false, "recordType": "idea", "priority": null, "questionFields": ["priority"] }
+    },
+    {
+      "id": "47-task-with-list",
+      "text": "Task: put this on Errands",
+      "extraction": { "recordType": "task", "title": "put this", "list": "Errands" },
+      "expect": { "confirmable": false, "recordType": "task", "list": null, "questionFields": ["list"] }
+    },
+    {
+      "id": "48-date-unsure",
+      "text": "ToDo: call sometime",
+      "extraction": { "recordType": "todo", "title": "call", "dateUnsure": true },
+      "expect": { "confirmable": false, "dueDate": null, "questionFields": ["dueDate"] }
+    },
+    {
+      "id": "49-later",
+      "text": "ToDo: paint the door later",
+      "extraction": { "recordType": "todo", "title": "paint the door", "datePhrase": "later" },
+      "expect": { "confirmable": false, "dueDate": null, "questionFields": ["dueDate"] }
+    },
+    {
+      "id": "50-list-adopts-project",
+      "text": "ToDo: drop off the form on Errands",
+      "extraction": { "recordType": "todo", "title": "drop off the form", "list": "Errands" },
+      "expect": { "confirmable": true, "list": "L0011", "project": "P0004", "questionFields": [] }
+    }
+  ]
+}

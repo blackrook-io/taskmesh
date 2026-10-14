@@ -96,6 +96,7 @@ function draftToBody(policy: UserAiPolicyView, draft: PolicyDraft): {
 
 function featureLabel(id: string): string {
   if (id === "assistant") return "Assistant";
+  if (id === "capture") return "Capture";
   return id;
 }
 

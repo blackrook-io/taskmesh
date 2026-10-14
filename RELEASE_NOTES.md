@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.79.1 — 2026-10-14
+
+### New Functionality
+- Send one sentence to Capture and get a task, todo, or idea proposal: title, due date, priority, project, list, tags, parent, and links. Dates use your time zone. Unclear names and dates come back as questions. Nothing is saved until a later confirm.
+
+### Enhancements
+- Settings → Assistant lists Capture beside the assistant, so you can pick its model or turn it off.
+
 ## 0.79.0 — 2026-10-14
 
 ### New Functionality
