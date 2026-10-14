@@ -1,3 +1,4 @@
+import { isDependencySatisfied } from "./dependencySatisfied.ts";
 import { containmentParent, type MeshGraphEdge } from "./meshLayout";
 
 export type MeshColorMode = "type" | "state" | "priority";
@@ -89,9 +90,9 @@ export function isStale(node: MeshSignalNode, today: Date, staleDays: number): b
   return elapsed >= staleDays;
 }
 
-/** A depends-on line is blocking while the prerequisite is not complete. */
+/** A depends-on line is blocking while the prerequisite is not satisfied. */
 export function dependsBlocking(prerequisiteState: string | null | undefined): boolean {
-  return prerequisiteState !== "complete";
+  return !isDependencySatisfied(prerequisiteState ?? "");
 }
 
 /** Overdue descendants that are in the payload but not placed, counted on each placed ancestor. */

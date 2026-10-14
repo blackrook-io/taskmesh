@@ -1,0 +1,62 @@
+---
+description: "T0302 — Shared rule for when a dependency is satisfied"
+todos:
+  - id: helper
+    content: Add synced isDependencySatisfied in src/lib and client/src/lib; point existing blocking helpers at it
+  - id: mesh
+    content: Use the helper for Mesh edge blocking, plan blocked keys, hover Blocked by, and dependsBlocking
+  - id: tests
+    content: Unit tests for every task state, plus canceled/pending Mesh cases
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0302 — Shared rule for when a dependency is satisfied
+
+**Task:** T0302 · id `317` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0301 Mesh: dependency and completion clarity (group) — Ready. First child, work in task-number order.
+**Depends on:** none (required by T0305, T0306, T0310, all Blocked)
+**Branch (after approval):** `T0302-dependency-satisfied`
+
+## Goal
+
+A canceled, pending, or deleted prerequisite must not count as blocking. Mesh currently draws a Depends-on edge as blocking unless the prerequisite state is exactly `complete`. The worktask gate and the server dependency helpers already treat `complete`, `canceled`, `pending`, and `deleted` as satisfied.
+
+## Current split
+
+| Place | Rule today |
+| --- | --- |
+| `src/services/taskDependencies.ts` `SATISFIED_DEPENDENCY_STATES` / `isDependencyBlockingState` | Satisfied: complete, canceled, deleted, pending |
+| `client/src/lib/taskFields.ts` `isDependencyBlockingState` | Same four, duplicated |
+| `client/src/lib/meshLayout.ts` edge `blocking` | Blocking unless `complete` |
+| `client/src/lib/meshCard.ts` "Blocked by" | Lists every prerequisite that is not `complete` |
+| `client/src/lib/meshPlanLayout.ts` `openState` / `meshBlockedKeys` | Open unless `complete` or `canceled` (pending and deleted still block) |
+| `client/src/lib/meshSignals.ts` `dependsBlocking` | Blocking unless `complete` (tests only) |
+| `src/services/graph.ts` `DONE_STATES` | Walk "hide done": complete and canceled only. Not a blocked-record count |
+
+## Decisions
+
+- One predicate, `isDependencySatisfied(state: string): boolean`, true for `complete`, `canceled`, `pending`, and `deleted`. Missing or unknown state is not satisfied (today a null prerequisite state draws as blocking).
+- Copy the helper in `src/lib/dependencySatisfied.ts` and `client/src/lib/dependencySatisfied.ts`, with a comment that the two files must stay in sync (same pattern as `entityType.ts`). The client cannot import server modules.
+- Server `isDependencyBlockingState` and the client copy become `!isDependencySatisfied(state)`. `SATISFIED_DEPENDENCY_STATES` stays as the set the helper reads, moved next to the helper so there is one list. Existing callers (`taskWaitingOn`, `taskBlocked`, dependency lists, complete/delete gates) keep their names.
+- Graph neighbourhood `DONE_STATES` stays as-is. It decides which finished records the walk may hide. It does not count blocked dependents. Pending records stay visible; deleted ends are already dropped.
+
+## Call sites to switch
+
+- `meshLayout.ts` depends edge `blocking`
+- `meshCard.ts` "Blocked by" row
+- `meshPlanLayout.ts` `openState` used by `meshBlockedKeys` and plan-edge `blocking`
+- `dependsBlocking` so the unused signal helper matches the shared rule
+
+## Tests
+
+- New unit file (server and client, or one server file plus client Mesh tests) asserting every `TASK_STATES` value: satisfied for complete, canceled, pending, deleted; blocking for new, blocked, ready, in_progress, on_hold.
+- `meshLayout.test.ts`: a depends-on line toward a canceled prerequisite has `blocking: false`. Same for pending.
+- `meshCard.test.ts`: a canceled prerequisite is omitted from "Blocked by"; an in-progress one still appears.
+- Extend the existing `isDependencyBlockingState` test so canceled and deleted are explicit (pending and complete already are).
+
+## Out of scope
+
+- Arrow direction (T0303), done/canceled node chrome (T0304), line emphasis and the Completed dependencies filter (T0305), hover lists by name and state beyond the existing "Blocked by" row (T0306).
+- Changing which records the graph walk treats as done.
+- Schema or migrations.

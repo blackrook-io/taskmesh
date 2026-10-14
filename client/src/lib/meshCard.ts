@@ -1,3 +1,4 @@
+import { isDependencySatisfied } from "./dependencySatisfied.ts";
 import { containmentParent, type MeshGraphEdge, type MeshSuggestion } from "./meshLayout";
 import { isStale, schedule, type MeshSignalNode } from "./meshSignals";
 
@@ -258,7 +259,7 @@ export function buildMeshCard(input: {
   const blocked = edges.flatMap((edge) => {
     if (edge.relation !== "depends_on" || edge.source !== node.key) return [];
     const prerequisite = byKey.get(edge.target);
-    if (!prerequisite || prerequisite.state === "complete") return [];
+    if (!prerequisite || isDependencySatisfied(prerequisite.state ?? "")) return [];
     const ref = prerequisite.referenceId ?? prerequisite.key;
     return [`${ref} ${prerequisite.title}`];
   });

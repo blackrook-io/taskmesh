@@ -2,9 +2,15 @@ import { and, asc, eq, ne, notInArray, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 import type { ActivitySource } from "../lib/activityRequest.js";
+import {
+  isDependencySatisfied,
+  SATISFIED_DEPENDENCY_STATES,
+} from "../lib/dependencySatisfied.js";
 import { formatTaskNumber } from "../lib/taskFields.js";
 import { ilikeEscaped } from "../lib/ilike.js";
 import { dualScopeListFilter } from "./ownership.js";
+
+export { isDependencySatisfied, SATISFIED_DEPENDENCY_STATES };
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -18,20 +24,12 @@ export type TaskDepSummary = {
 /** States that are done for list/work visibility (not Pending). */
 export const TERMINAL_TASK_STATES = new Set(["complete", "canceled", "deleted"]);
 
-/** States that no longer block Complete / Delete dependency gates. */
-export const SATISFIED_DEPENDENCY_STATES = new Set([
-  "complete",
-  "canceled",
-  "deleted",
-  "pending",
-]);
-
 export function isOpenTaskState(state: string): boolean {
   return !TERMINAL_TASK_STATES.has(state);
 }
 
 export function isDependencyBlockingState(state: string): boolean {
-  return !SATISFIED_DEPENDENCY_STATES.has(state);
+  return !isDependencySatisfied(state);
 }
 
 function depLabel(task: Pick<TaskDepSummary, "number" | "title">): string {

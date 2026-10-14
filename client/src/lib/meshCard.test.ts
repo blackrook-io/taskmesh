@@ -195,6 +195,33 @@ describe("mesh hover card", () => {
     assert.match(card.description, /Blocked by/);
   });
 
+  it("omits canceled, pending, and deleted prerequisites from Blocked by", () => {
+    const nodes = [
+      node({ key: "task:1", title: "Blocked", referenceId: "T0001" }),
+      node({ key: "task:9", title: "Setup", referenceId: "T0009", state: "in_progress" }),
+      node({ key: "task:8", title: "Done dep", referenceId: "T0008", state: "complete" }),
+      node({ key: "task:7", title: "Dropped", referenceId: "T0007", state: "canceled" }),
+      node({ key: "task:6", title: "Waiting", referenceId: "T0006", state: "pending" }),
+      node({ key: "task:5", title: "Gone", referenceId: "T0005", state: "deleted" }),
+    ];
+    const edges = [
+      { source: "task:1", target: "task:9", relation: "depends_on" },
+      { source: "task:1", target: "task:8", relation: "depends_on" },
+      { source: "task:1", target: "task:7", relation: "depends_on" },
+      { source: "task:1", target: "task:6", relation: "depends_on" },
+      { source: "task:1", target: "task:5", relation: "depends_on" },
+    ];
+    const card = buildMeshCard({
+      node: nodes[0]!,
+      nodes,
+      edges,
+      today,
+      staleDays: 30,
+      isFocus: false,
+    });
+    assert.equal(card.rows.find((row) => row.label === "Blocked by")?.value, "T0009 Setup");
+  });
+
   it("adds a suggested count when a proposal touches the record", () => {
     const card = buildMeshCard({
       node: node({ key: "task:1", title: "Focus", referenceId: "T0001" }),

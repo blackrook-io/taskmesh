@@ -168,6 +168,22 @@ describe("mesh cascade layout", () => {
     assert.equal(edge?.blocking, true);
   });
 
+  it("does not draw a satisfied prerequisite as blocking", () => {
+    for (const state of ["complete", "canceled", "pending", "deleted"]) {
+      const nodes = [
+        { ...node("task:1", "First", "T0001"), state },
+        node("task:2", "Needs", "T0002"),
+      ];
+      const edges: MeshGraphEdge[] = [
+        { source: "task:2", target: "task:1", relation: "child_of" },
+        { source: "task:2", target: "task:1", relation: "depends_on" },
+      ];
+      const layout = layoutMesh({ nodes, edges, focusKey: "task:1", meshProjectId: 4 });
+      const edge = layout.edges.find((item) => item.kind === "depends");
+      assert.equal(edge?.blocking, false, state);
+    }
+  });
+
   it("hides reference lines and records that exist only as links", () => {
     const nodes = [
       node("project:4", "TaskMesh", "P0003"),

@@ -1,5 +1,7 @@
 /** Client-side helpers for task display fields. */
 
+import { isDependencySatisfied } from "./dependencySatisfied.ts";
+
 export const TASK_STATES = [
   "new",
   "blocked",
@@ -59,12 +61,7 @@ export function isFinishedChildState(state: string): boolean {
 
 /** Open Depends-on / Required-by blockers (Pending does not block). */
 export function isDependencyBlockingState(state: string): boolean {
-  return (
-    state !== "complete" &&
-    state !== "canceled" &&
-    state !== "deleted" &&
-    state !== "pending"
-  );
+  return !isDependencySatisfied(state);
 }
 
 export function isSelectableTaskState(state: string): state is SelectableTaskState {

@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.85.5 — 2026-10-14
+
+### Fixes
+- A canceled, pending, or deleted prerequisite no longer counts as blocking on Mesh. Dependency lines, the plan view, and the hover card’s Blocked by row use the same satisfied-state rule as the rest of the app.
+
 ## 0.85.4 — 2026-10-14
 
 ### Enhancements
