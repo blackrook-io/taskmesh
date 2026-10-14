@@ -167,16 +167,18 @@ describe("mesh hover card", () => {
     assert.equal(card.hint, "Click to cascade its contents underneath.");
   });
 
-  it("lists open blockers and counts references and dependencies", () => {
+  it("lists open blockers and counts references, unblocks, and waits on", () => {
     const nodes = [
       node({ key: "task:1", title: "Blocked", referenceId: "T0001" }),
       node({ key: "task:9", title: "Setup", referenceId: "T0009", state: "in_progress" }),
       node({ key: "task:8", title: "Done dep", referenceId: "T0008", state: "complete" }),
+      node({ key: "task:4", title: "Later", referenceId: "T0004" }),
       node({ key: "document:1", type: "document", title: "Notes", referenceId: "N0001" }),
     ];
     const edges = [
       { source: "task:1", target: "task:9", relation: "depends_on" },
       { source: "task:1", target: "task:8", relation: "depends_on" },
+      { source: "task:4", target: "task:1", relation: "depends_on" },
       { source: "document:1", target: "task:1", relation: "references" },
       { source: "task:1", target: "document:1", relation: "relates_to" },
     ];
@@ -189,7 +191,7 @@ describe("mesh hover card", () => {
       isFocus: false,
     });
     assert.equal(card.rows.find((row) => row.label === "Blocked by")?.value, "T0009 Setup");
-    assert.equal(card.rows.find((row) => row.label === "Links")?.value, "2 references · 2 dependencies");
+    assert.equal(card.rows.find((row) => row.label === "Links")?.value, "2 references · 1 unblocks · 2 waits on");
     assert.equal(card.hint, "Click to focus and see its links.");
     assert.match(card.description, /T0001 Task/);
     assert.match(card.description, /Blocked by/);

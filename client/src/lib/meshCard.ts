@@ -268,15 +268,18 @@ export function buildMeshCard(input: {
   }
 
   let references = 0;
-  let dependencies = 0;
+  let unblocks = 0;
+  let waitsOn = 0;
   for (const edge of edges) {
     if (edge.source !== node.key && edge.target !== node.key) continue;
     if (LINK_RELATIONS.has(edge.relation)) references += 1;
-    else if (edge.relation === "depends_on") dependencies += 1;
+    else if (edge.relation === "depends_on" && edge.target === node.key) unblocks += 1;
+    else if (edge.relation === "depends_on" && edge.source === node.key) waitsOn += 1;
   }
   const links: string[] = [];
   if (references > 0) links.push(plural(references, "reference", "references"));
-  if (dependencies > 0) links.push(plural(dependencies, "dependency", "dependencies"));
+  if (unblocks > 0) links.push(plural(unblocks, "unblocks", "unblocks"));
+  if (waitsOn > 0) links.push(plural(waitsOn, "waits on", "waits on"));
   const suggested = (input.suggestions ?? []).filter(
     (item) => item.sourceKey === node.key || item.targetKey === node.key,
   ).length;

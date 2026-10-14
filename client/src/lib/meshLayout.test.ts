@@ -153,7 +153,7 @@ describe("mesh cascade layout", () => {
     );
   });
 
-  it("draws a depends-on line toward a placed prerequisite", () => {
+  it("draws an unblocks line from the prerequisite to the dependent", () => {
     const nodes = [
       { ...node("task:1", "First", "T0001"), state: "ready" },
       node("task:2", "Needs", "T0002"),
@@ -164,7 +164,8 @@ describe("mesh cascade layout", () => {
     ];
     const layout = layoutMesh({ nodes, edges, focusKey: "task:1", meshProjectId: 4 });
     const edge = layout.edges.find((item) => item.kind === "depends");
-    assert.equal(edge?.target, "task:1");
+    assert.equal(edge?.source, "task:1");
+    assert.equal(edge?.target, "task:2");
     assert.equal(edge?.blocking, true);
   });
 
@@ -207,6 +208,35 @@ describe("mesh cascade layout", () => {
     assert.deepEqual(keys.sort(), ["project:4", "task:1"]);
     assert.equal(layout.edges.some((edge) => edge.kind === "link"), false);
     assert.deepEqual(layout.headings, []);
+  });
+
+  it("fans unblocks arrows out from one prerequisite", () => {
+    const nodes = [
+      node("project:4", "TaskMesh", "P0003"),
+      { ...node("task:104", "Gate", "T0104"), state: "ready" },
+      node("task:97", "A", "T0097"),
+      node("task:98", "B", "T0098"),
+      node("task:99", "C", "T0099"),
+    ];
+    const edges: MeshGraphEdge[] = [
+      { source: "project:4", target: "task:104", relation: "in_project" },
+      { source: "project:4", target: "task:97", relation: "in_project" },
+      { source: "project:4", target: "task:98", relation: "in_project" },
+      { source: "project:4", target: "task:99", relation: "in_project" },
+      { source: "task:97", target: "task:104", relation: "depends_on" },
+      { source: "task:98", target: "task:104", relation: "depends_on" },
+      { source: "task:99", target: "task:104", relation: "depends_on" },
+    ];
+    const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
+    const depends = layout.edges.filter((edge) => edge.kind === "depends");
+    assert.equal(depends.length, 3);
+    assert.ok(depends.every((edge) => edge.source === "task:104" && edge.blocking));
+    assert.deepEqual(
+      depends.map((edge) => edge.target).sort(),
+      ["task:97", "task:98", "task:99"],
+    );
+    assert.equal(new Set(depends.map((edge) => edge.sourceOffset)).size, 3);
+    assert.ok(depends.every((edge) => edge.trunkCount == null && !edge.bundled));
   });
 
   it("hides a depends-on line without removing the cascade", () => {
@@ -360,15 +390,17 @@ describe("mesh edge handles", () => {
     ];
     const layout = layoutMesh({ nodes, edges, focusKey: "project:4", meshProjectId: 4 });
     const byId = new Map(layout.edges.filter((edge) => edge.kind === "depends").map((edge) => [edge.id, edge]));
-    const sameColumn = byId.get("d:task:2:task:1");
-    const rightward = byId.get("d:task:1:task:3");
-    const leftward = byId.get("d:task:3:task:1");
+    const sameColumn = byId.get("d:task:1:task:2");
+    const towardParent = byId.get("d:task:3:task:1");
+    const towardLeaf = byId.get("d:task:1:task:3");
+    assert.equal(sameColumn?.source, "task:1");
+    assert.equal(sameColumn?.target, "task:2");
     assert.equal(sameColumn?.sourceHandle, "r");
     assert.equal(sameColumn?.targetHandle, "r-in");
-    assert.equal(rightward?.sourceHandle, "r");
-    assert.equal(rightward?.targetHandle, "l");
-    assert.equal(leftward?.sourceHandle, "l-out");
-    assert.equal(leftward?.targetHandle, "r-in");
+    assert.equal(towardParent?.sourceHandle, "l-out");
+    assert.equal(towardParent?.targetHandle, "r-in");
+    assert.equal(towardLeaf?.sourceHandle, "r");
+    assert.equal(towardLeaf?.targetHandle, "l");
   });
 });
 
@@ -404,15 +436,15 @@ describe("mesh line lanes", () => {
     assert.equal(centers.has(lanes[0]!), false);
     assert.equal(centers.has(lanes[1]!), false);
     const headB = layout.nodes.find((item) => item.key === "task:2");
-    const arrivals = layout.edges
-      .filter((edge) => edge.kind === "depends" && edge.target === "task:2")
+    const departures = layout.edges
+      .filter((edge) => edge.kind === "depends" && edge.source === "task:2")
       .map((edge) => ({
-        y: layout.nodes.find((item) => item.key === edge.source)?.centerY ?? 0,
-        offset: edge.targetOffset,
+        y: layout.nodes.find((item) => item.key === edge.target)?.centerY ?? 0,
+        offset: edge.sourceOffset,
       }))
       .sort((a, b) => a.y - b.y);
-    assert.equal(arrivals.length, 2);
-    assert.ok((arrivals[0]?.offset ?? 0) < (arrivals[1]?.offset ?? 0));
+    assert.equal(departures.length, 2);
+    assert.ok((departures[0]?.offset ?? 0) < (departures[1]?.offset ?? 0));
     assert.equal(meshNodesOverlap(layout.nodes), false);
     assert.equal(headB != null, true);
   });
