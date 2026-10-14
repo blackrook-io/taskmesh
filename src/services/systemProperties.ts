@@ -21,6 +21,7 @@ import {
   type AiProvidersFile,
 } from "./assistant/aiProviderConfig.js";
 import {
+  aiPermissionTiersPatchSchema,
   defaultStoredAiPermissionTiers,
   parseStoredAiPermissionTiers,
   type StoredAiPermissionTiers,
@@ -383,6 +384,7 @@ export async function patchSystemProperties(
     aiProjectLocalOnly?: boolean;
     aiBudgets?: AiBudgets;
     aiInstanceUsdPerMillionTokens?: number;
+    aiPermissionTiers?: StoredAiPermissionTiers;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -607,6 +609,19 @@ export async function patchSystemProperties(
         set: { value: patch.aiInstanceUsdPerMillionTokens, updatedAt: now },
       });
   }
+  if (patch.aiPermissionTiers !== undefined) {
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "ai_permission_tiers",
+        value: patch.aiPermissionTiers,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value: patch.aiPermissionTiers, updatedAt: now },
+      });
+  }
   invalidateSystemPropertiesCache();
   return getSystemProperties(db);
 }
@@ -647,5 +662,6 @@ export const systemPropertiesPatchSchema = z
       })
       .optional(),
     aiInstanceUsdPerMillionTokens: z.number().nonnegative().max(1_000_000).optional(),
+    aiPermissionTiers: aiPermissionTiersPatchSchema.optional(),
   })
   .strict();

@@ -31,6 +31,7 @@ type PaletteItem = {
     | "logging"
     | "backups"
     | "system-properties"
+    | "ai"
     | "mesh"
     | "templates";
 };
@@ -164,6 +165,14 @@ const STATIC_COMMANDS: PaletteItem[] = [
     path: "/",
     action: "open-admin",
     adminSection: "system-properties",
+  },
+  {
+    id: "nav-admin-ai",
+    group: "Go to",
+    label: "Admin · AI",
+    path: "/",
+    action: "open-admin",
+    adminSection: "ai",
   },
   {
     id: "nav-admin-mesh",

@@ -1,0 +1,68 @@
+# T0189 — Administrator AI settings panel
+
+**Task:** T0189 (id 204) — AI: Administrator AI settings panel
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Parent:** T0177 AI: per-user keys, provider plugins and guardrails (epic)
+**Depends on:** T0182, T0185, T0188 (all `complete`)
+**Required by:** T0190 AI: user AI settings page (`blocked` until this finishes)
+**Branch (after approval):** `T0189-admin-ai-settings`
+**Version on finish-up:** MINOR (one new `drizzle/*.sql` to allow a `settings` action on `ai_audit_log`)
+
+## Size / dependencies
+
+One Administration section. Plugins, key mode, budgets, web access, and the project-access default already exist inside System Properties. This task moves those blocks into the new section and adds the policy matrix, Tier 1 allowance, blast-radius fields, and the audit viewer. No split. User policy and the Tier 1 opt-in stay on T0190. Feature-route editing stays on T0205 (no UI yet).
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Where it lives | New Administration item **AI** (`/admin/ai`). Move the AI blocks out of System Properties: budgets, web access, project access, providers, usage, and quality. System Properties keeps rates, sessions, MFA, and theme. Nothing is duplicated |
+| 2 | Plugins and keys | Reuse `AdminAiProvidersSection` as-is: enable, configure, verify, instance key, key mode, billing-risk phrase. Plugins are still not installed from the UI |
+| 3 | Policy matrix | Rows are the ten actions in `AI_ACTIONS`. Columns are **Default** plus the six record types the assistant already reads or writes (`idea`, `project`, `task`, `document`, `todo`, `todo_list`). A cell stores `action` or `action:entityType` in `ai_permission_tiers.matrix`. Empty specific cells inherit the action default. Unknown actions stay Tier 3 in the classifier and are not shown |
+| 4 | Floor | Floor resources (`user`, `role`, `group`, `api_key`, `ai_credential`, `backup`, `ownership`, `system_property`, `ai_policy`) are a locked list under the matrix: “Denied — no toggle”. They are not dropdowns and are not written into the matrix |
+| 5 | Tier 1 and blast radius | Three fields already on `ai_permission_tiers`: `tier1Enabled` (default on), `maxRecords` (default 5), `maxProjects` (default 2). Positive integers only. Saving a cell below its code default is allowed; the user page can only raise the tier |
+| 6 | Other controls | Web access, budgets, instance USD rate, project-access default, and local-only move unchanged in behavior. They keep using `PATCH /api/v1/admin/system-properties` |
+| 7 | Audit of changes | Each AI settings save writes one `ai_audit_log` row: feature `admin`, action `settings`, decision `allow`, tier `0`, reason a short diff (field names and new values). No keys, prompts, or record text. Key-mode changes keep today’s `key_mode` row. Provider enable/config/verify/key replace also write a `settings` row if they do not already |
+| 8 | Schema | Add `settings` to the `ai_audit_log` action check. One migration. Docs under `docs/database/` updated in the same change |
+| 9 | Audit viewer | Administrator-only `GET /api/v1/admin/ai/audit` with filters: user, feature, decision (`allow` / `deny`), and a date range. Newest first, paged. Columns: time, user, feature, action, decision, tier, reason, record, project. Export downloads the current filter as CSV, capped at 5,000 rows, with the same columns |
+| 10 | Access | The section and both routes stay behind the existing Administrator gate. A non-admin gets the same denial as other `/api/v1/admin` routes |
+
+## Work items
+
+### 1. Migration and audit writer
+
+- New Drizzle SQL: extend `ai_audit_log_action_chk` to include `settings`.
+- Update the action comment on `aiAuditLog` and `docs/database/` (platform or assistant page that lists the check).
+- `writeAiAudit` accepts `settings`. A small helper builds the reason from a before/after of the AI fields that changed.
+
+### 2. Settings save
+
+- On the system-properties patch, when an AI field changes (`aiWebFetch`, `aiPermissionTiers`, `aiProjectAccessDefault`, `aiProjectLocalOnly`, `aiBudgets`, `aiInstanceUsdPerMillionTokens`), write the `settings` audit row for the acting user.
+- On provider admin routes that change enablement, public config, or the instance key, write a `settings` row whose reason names the plugin and the kind of change, never the key.
+
+### 3. Audit list and export
+
+- `GET /api/v1/admin/ai/audit` query: `userId`, `feature`, `decision`, `from`, `to`, `limit`, `offset`.
+- `GET /api/v1/admin/ai/audit/export` with the same filters, `text/csv`, max 5,000 data rows.
+- Join user display name and project title for the table. Missing user or project renders as a blank.
+
+### 4. Admin AI section
+
+- Add `ai` to `ADMIN_SECTIONS`, label **AI**, path `/admin/ai`, and a panel in `AdministrationModal`.
+- `AdminAiPanel` stacks: providers, policy matrix (Tier 1 checkbox, blast-radius inputs, grid, locked floor list), web access, project access, budgets, usage, quality, audit viewer.
+- Remove those blocks from `AdminSystemPropertiesPanel`.
+- Matrix cells are a tier select (0–3). Save sends the full stored document through the existing system-properties patch.
+
+### 5. Tests
+
+- Classifier unchanged; add a route or service test that a settings patch writes one `settings` audit row and that the reason has no key material.
+- Audit list respects decision and date filters.
+- Export stays within the cap and is Administrator-only (reuse the existing admin-gate test style if one exists; otherwise assert the router uses the same middleware as `/system-properties`).
+
+## Out of scope
+
+- User AI settings, user matrix, and the Tier 1 opt-in control (T0190).
+- Feature-route editor (T0205).
+- Installing or removing provider plugins from the UI.
+- Editing floor resources.
+- Prompt text in the audit viewer (the table does not store it).
