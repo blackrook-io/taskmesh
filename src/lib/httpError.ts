@@ -5,6 +5,7 @@ import { ImmutableFieldError } from "./immutableFields.js";
 import { NotFoundError } from "./notFound.js";
 import { AssigneeError } from "../services/assignees.js";
 import { OwnershipAccessError } from "../services/ownership.js";
+import { PlanRuleError } from "../services/plans.js";
 import { ProjectUsersError } from "../services/projectUsers.js";
 
 export function sendError(
@@ -42,6 +43,19 @@ export function handleRouteError(res: Response, err: unknown): void {
     return;
   }
   if (err instanceof AssigneeError) {
+    sendError(res, err.status, err.code, err.message);
+    return;
+  }
+  if (err instanceof PlanRuleError) {
+    if (err.details) {
+      if (!res.locals.logMessage) {
+        res.locals.logMessage = err.message.slice(0, 500);
+      }
+      res.status(err.status).json({
+        error: { code: err.code, message: err.message, ...err.details },
+      });
+      return;
+    }
     sendError(res, err.status, err.code, err.message);
     return;
   }

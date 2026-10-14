@@ -37,6 +37,7 @@ import {
   afterTaskHierarchyChange,
   resolvePersistedState,
 } from "../../services/taskPending.js";
+import { assertParentChangeRespectsPlans, PlanRuleError } from "../../services/plans.js";
 import {
   allocateTaskNumber,
   assertParentCompatible,
@@ -445,6 +446,16 @@ export async function patchProjectTask(args: {
     const parentOk = await assertParentCompatible(db, args.projectId, parsed.parentId);
     if (!parentOk.ok) {
       return { ok: false, status: 400, code: "invalid_parent", message: parentOk.message };
+    }
+    if (parsed.parentId != null && parsed.parentId !== existing.parentId) {
+      try {
+        await assertParentChangeRespectsPlans(db, "task", args.taskId, parsed.parentId);
+      } catch (err) {
+        if (err instanceof PlanRuleError) {
+          return { ok: false, status: err.status, code: err.code, message: err.message };
+        }
+        throw err;
+      }
     }
   }
 

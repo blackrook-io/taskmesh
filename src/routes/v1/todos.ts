@@ -48,6 +48,7 @@ import {
   recomputeAncestorChain,
   type TodoHierarchyFields,
 } from "../../services/todoHierarchy.js";
+import { assertParentChangeRespectsPlans } from "../../services/plans.js";
 
 const idParam = z.coerce.number().int().positive();
 
@@ -357,6 +358,13 @@ todosRouter.patch("/:id", async (req, res) => {
         const [parent] = await db.select().from(schema.todos).where(eq(schema.todos.id, nextParentId));
         if (parent) await assertCanAccessDualScoped(db, actorId, parent, "write");
       }
+    }
+    if (
+      parsed.parentId !== undefined &&
+      nextParentId != null &&
+      nextParentId !== existing.parentId
+    ) {
+      await assertParentChangeRespectsPlans(db, "todo", id, nextParentId);
     }
     const nextAssigneeId = await resolveAssigneeId(db, {
       projectId: nextProjectId,
