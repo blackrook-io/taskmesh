@@ -62,6 +62,14 @@ export const AI_FEATURES: Record<string, AiFeatureNeeds> = {
     localOnly: false,
     size: "small",
   },
+  answer: {
+    id: "answer",
+    tools: false,
+    longContext: true,
+    embeddings: false,
+    localOnly: false,
+    size: "large",
+  },
 };
 
 export function aiFeatureNeeds(id: string): AiFeatureNeeds | null {

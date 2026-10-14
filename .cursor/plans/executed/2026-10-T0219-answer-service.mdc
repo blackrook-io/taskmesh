@@ -1,0 +1,60 @@
+---
+description: T0219 — project question endpoint that answers only from retrieved items and returns validated citations
+---
+
+# T0219 — AI answer service with citations
+
+**Task:** T0219 · id `234` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0198 AI: Ask a project (id `213`, Blocked). Grandparent T0177.
+**Depends on:** T0183 keys, T0208 knowledge index, T0209 context assembly — all complete. No open blockers.
+**Required by:** T0220 Ask a project UI (Blocked until this ships).
+**Branch (after approval):** `T0219-answer-service`
+**Version on finish-up:** PATCH (no migration). Skip `FEATURES.md` — the ask UI is T0220.
+
+## Goal
+
+`POST /api/v1/ai/answer` takes a project and a question. It retrieves with the existing hybrid search through context assembly, asks the routed model to answer only from those items, and returns citations by display number (and PDF page when the chunk has a locator). If nothing in the packet supports an answer, the response says so and does not guess. A follow-up sends the previous turns with the new question. T0220 renders this; it does not retrieve or call the model itself.
+
+## Current state
+
+- `assembleContext` (`src/services/assistant/contextAssembly.ts`) already builds a budgeted packet for a focus record: instructions, focus, parent, links, activity, and up to 8 hybrid hits. Search hits are scoped to the focus project, skip excluded projects, and label chunks as `T0209` or `N0012 p.3`.
+- `searchKnowledge` applies ownership and excluded-project filters. The model never queries the database.
+- Feature ids today: `assistant`, `capture`, `tagging`, `duplicates`, `digest`, `links`. There is no `answer` route or prompt.
+- Capture and digest call `resolveFeatureRoute` → `streamChat`, load a versioned prompt, and audit the reply with prompt id and version. They do not persist a chat thread.
+- The assistant chat keeps the last 20 turns in the request body. Nothing stores an Ask conversation.
+
+## Decisions (confirm or adjust)
+
+| # | Topic | Recommendation |
+|---|--------|----------------|
+| 1 | Endpoint | `POST /api/v1/ai/answer` for the signed-in user. Body: `{ projectId, question, history? }`. `question` is 1–2,000 characters. `history` is optional, newest last, each item `{ role: "user" \| "assistant", content }`. |
+| 2 | Response | `{ answer, citations, grounded }`. `citations` is `{ ref, page, entityType, entityId }[]` in first-seen order. `page` is null except for a PDF chunk. `grounded` is true only when at least one citation survived validation. |
+| 3 | Retrieval | `assembleContext({ feature: "answer", entityType: "project", entityId: projectId, query: question })`. The current question is the search query, not the prior turns. Default 8,000-token budget. |
+| 4 | Supporting items | A citable item is a packet piece whose section is `focus`, `parent`, `link`, `activity`, or `search`, that was included (not dropped for budget), and that has a display ref. Instructions are not citable. |
+| 5 | Nothing to cite | When the project is excluded, or the included set has no citable item, do not call the model. Return a fixed sentence: there is nothing in this project to answer from. `citations` is empty and `grounded` is false. |
+| 6 | Model | Register feature `answer`: large, long context, no tools, no embeddings, not local-only. Same route, budget, key, and audit path as digest. Prompt `prompts/answer/v1.md` tells the model to use only the packet, to cite display numbers (and `p.N` for a page), and to say it cannot answer when the packet does not support one. |
+| 7 | Citation check | After the reply, keep a citation only when its ref is in the included set. A page is kept only when that ref’s included chunk carried that page. Any other ref or page is removed from the text’s citation list and from `citations`. The prose is left as written. |
+| 8 | History | The client sends prior turns. The server stores nothing. At most the last 6 messages, each truncated to 2,000 characters, wrapped as untrusted. A new question still re-runs retrieval on that question alone. |
+| 9 | Access | Same read gate as other project reads (not found when the user cannot see the project). `featuresOff` containing `answer`, a denied read, or no resolved key returns the existing unconfigured or denied error and does not call the model. `read_only` projects may be answered. `aiLocalOnly` follows the router. |
+| 10 | Tests | Fixture tests, no live model and no live Postgres: empty packet skips the model; a stub reply that cites an included ref (and a PDF page) is kept; a ref or page that was not in the packet is dropped; history over six messages keeps only the last six. |
+
+## Work items
+
+1. Feature id `answer` on `AI_FEATURES`.
+2. `src/services/assistant/prompts/answer/v1.md` and `src/services/assistant/answer/` (`messages`, citation parse and filter, `answerProject`).
+3. `POST /api/v1/ai/answer` on the existing AI router.
+4. Tests from decision 10.
+
+## Out of scope
+
+- Ask page, composer, citation links, and where the thread lives in the UI (T0220).
+- A stored conversation table.
+- Tool use, writes, or a second retrieval pass over the history.
+- Changing context assembly, search, or the prompt registry schema.
+
+## Acceptance
+
+- A question whose packet contains the supporting record returns that record’s display number, and a PDF chunk’s page when the model cites it.
+- A citation whose ref or page was not in the included packet does not appear in `citations`.
+- An excluded project, or a project whose packet has no citable item, returns the fixed “nothing to answer from” sentence and does not call the model.
+- A follow-up that includes prior turns still searches on the new question only.
