@@ -136,13 +136,19 @@ type MeshRelations = {
   references: boolean;
   dependsOn: boolean;
   suggestions: boolean;
+  completedDependencies: boolean;
 };
 
 const EMPTY_SUGGESTIONS: readonly MeshSuggestion[] = [];
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 function readRelations(): MeshRelations {
-  const fallback: MeshRelations = { references: true, dependsOn: true, suggestions: true };
+  const fallback: MeshRelations = {
+    references: true,
+    dependsOn: true,
+    suggestions: true,
+    completedDependencies: false,
+  };
   try {
     const raw = localStorage.getItem("mesh-relations");
     if (!raw) return fallback;
@@ -152,6 +158,7 @@ function readRelations(): MeshRelations {
       references: parsed.references !== false,
       dependsOn: parsed.dependsOn !== false,
       suggestions: parsed.suggestions !== false,
+      completedDependencies: parsed.completedDependencies === true,
     };
   } catch {
     return fallback;
@@ -1519,7 +1526,9 @@ export function MeshPanel({
             : edge.kind === "depends"
               ? edge.blocking
                 ? "mesh-edge--blocking"
-                : "mesh-edge--dep"
+                : relations.completedDependencies
+                  ? "mesh-edge--dep"
+                  : "mesh-edge--dep mesh-edge--dep-quiet"
               : "mesh-edge--ref",
           edge.bundled ? "mesh-edge--bundled" : "",
           edge.trunkCount ? "mesh-edge--trunk" : "",
@@ -1530,14 +1539,14 @@ export function MeshPanel({
           edge.kind === "depends"
             ? {
                 type: MarkerType.ArrowClosed,
-                width: 16,
-                height: 16,
-                color: edge.blocking ? "var(--mesh-signal-overdue)" : "var(--mesh-rel-dep)",
+                width: edge.blocking ? 16 : 8,
+                height: edge.blocking ? 16 : 8,
+                color: edge.blocking ? "var(--mesh-signal-overdue)" : "var(--mesh-rel-dep-done)",
               }
             : undefined,
       }))
         : [],
-    [layout],
+    [layout, relations.completedDependencies],
   );
 
   const suggestionCard = cardKey ? (suggestionCards.get(cardKey) ?? null) : null;
@@ -1641,8 +1650,17 @@ export function MeshPanel({
             aria-pressed={relations.dependsOn}
             onClick={() => toggleRelation("dependsOn")}
           >
-            <span className="mesh-swatch mesh-swatch--dep" aria-hidden="true" />
+            <span className="mesh-swatch mesh-swatch--block" aria-hidden="true" />
             Depends on
+          </button>
+          <button
+            type="button"
+            className="mesh-filter"
+            aria-pressed={relations.completedDependencies}
+            onClick={() => toggleRelation("completedDependencies")}
+          >
+            <span className="mesh-swatch mesh-swatch--dep" aria-hidden="true" />
+            Completed dependencies
           </button>
           {suggestions.length > 0 ? (
             <button

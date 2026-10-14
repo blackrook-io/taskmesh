@@ -26,11 +26,12 @@ const TYPE_FIELDS: { key: EntityType; label: string }[] = [
   { key: "image_board", label: "Image board" },
 ];
 
-const LINE_FIELDS: { key: keyof MeshAppearance["lines"]; label: string }[] = [
-  { key: "tree", label: "Tree" },
-  { key: "ref", label: "References" },
-  { key: "dep", label: "Depends on" },
-  { key: "suggested", label: "Suggested" },
+const LINE_FIELDS: { key: keyof MeshAppearance["lines"]; label: string; css: string }[] = [
+  { key: "tree", label: "Tree", css: "tree" },
+  { key: "ref", label: "References", css: "ref" },
+  { key: "dep", label: "Depends on (blocking)", css: "dep" },
+  { key: "depDone", label: "Completed dependencies", css: "dep-done" },
+  { key: "suggested", label: "Suggested", css: "suggested" },
 ];
 
 function canvasBackground(): string {
@@ -43,6 +44,7 @@ function appearanceError(value: MeshAppearance): string | null {
   const colors = [
     ...TYPE_FIELDS.map((field) => value.types[field.key]),
     value.suggestion,
+    value.depDone,
     value.signals.overdue,
     value.signals.risk,
     value.signals.stale,
@@ -160,11 +162,19 @@ function MeshPreview({ appearance }: { appearance: MeshAppearance }) {
                       : field.key === "ref"
                         ? "var(--mesh-rel-ref)"
                         : field.key === "dep"
-                          ? "var(--mesh-rel-dep)"
-                          : "var(--mesh-rel-tree)",
-                  strokeWidth: `var(--mesh-line-${field.key})`,
+                          ? "var(--mesh-signal-overdue)"
+                          : field.key === "depDone"
+                            ? "var(--mesh-rel-dep-done)"
+                            : "var(--mesh-rel-tree)",
+                  strokeWidth: `var(--mesh-line-${field.css})`,
                   strokeDasharray:
-                    field.key === "ref" ? "5 4" : field.key === "suggested" ? "1 5" : undefined,
+                    field.key === "ref"
+                      ? "5 4"
+                      : field.key === "depDone"
+                        ? "4 5"
+                        : field.key === "suggested"
+                          ? "1 5"
+                          : undefined,
                   strokeLinecap: field.key === "suggested" ? "round" : undefined,
                 }}
               />
@@ -252,6 +262,12 @@ export function AdminMeshPanel() {
           color={draft.suggestion}
           background={background}
           onChange={(color) => setDraft((current) => ({ ...current, suggestion: color }))}
+        />
+        <ColorField
+          label="Completed dependencies"
+          color={draft.depDone}
+          background={background}
+          onChange={(color) => setDraft((current) => ({ ...current, depDone: color }))}
         />
         <ColorField
           label="Overdue"

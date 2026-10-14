@@ -5,8 +5,9 @@ import { ENTITY_TYPES, type EntityType } from "./entityType.js";
 export type MeshAppearance = {
   types: Record<EntityType, string>;
   suggestion: string;
+  depDone: string;
   signals: { overdue: string; risk: string; stale: string };
-  lines: { tree: number; ref: number; dep: number; suggested: number };
+  lines: { tree: number; ref: number; dep: number; depDone: number; suggested: number };
   glyphScale: number;
   labelSizeRem: number;
   badgePx: number;
@@ -30,12 +31,13 @@ export const MESH_APPEARANCE_DEFAULTS: MeshAppearance = {
     image_board: "#e7a3a3",
   },
   suggestion: "#e86aae",
+  depDone: "#6a7582",
   signals: {
     overdue: "#e57373",
     risk: "#f0b53c",
     stale: "#f0b53c",
   },
-  lines: { tree: 1.4, ref: 1.3, dep: 1.3, suggested: 1.8 },
+  lines: { tree: 1.4, ref: 1.3, dep: 1.3, depDone: 0.75, suggested: 1.8 },
   glyphScale: 1,
   labelSizeRem: 0.8,
   badgePx: 13,
@@ -70,6 +72,7 @@ export const meshAppearanceSchema = z
       })
       .strict(),
     suggestion: hexColor,
+    depDone: hexColor,
     signals: z
       .object({
         overdue: hexColor,
@@ -82,6 +85,7 @@ export const meshAppearanceSchema = z
         tree: lineWeight,
         ref: lineWeight,
         dep: lineWeight,
+        depDone: lineWeight,
         suggested: lineWeight,
       })
       .strict(),
@@ -132,6 +136,7 @@ export function normalizeMeshAppearance(value: unknown): MeshAppearance {
   return {
     types: typeColors,
     suggestion: asHex(raw?.suggestion, defaults.suggestion),
+    depDone: asHex(raw?.depDone, defaults.depDone),
     signals: {
       overdue: asHex(signals?.overdue, defaults.signals.overdue),
       risk: asHex(signals?.risk, defaults.signals.risk),
@@ -141,6 +146,7 @@ export function normalizeMeshAppearance(value: unknown): MeshAppearance {
       tree: asRange(lines?.tree, defaults.lines.tree, 0.5, 4),
       ref: asRange(lines?.ref, defaults.lines.ref, 0.5, 4),
       dep: asRange(lines?.dep, defaults.lines.dep, 0.5, 4),
+      depDone: asRange(lines?.depDone, defaults.lines.depDone, 0.5, 4),
       suggested: asRange(lines?.suggested, defaults.lines.suggested, 0.5, 4),
     },
     glyphScale: asRange(raw?.glyphScale, defaults.glyphScale, 0.75, 1.5),

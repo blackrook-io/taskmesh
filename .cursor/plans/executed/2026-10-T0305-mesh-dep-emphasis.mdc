@@ -1,0 +1,49 @@
+# T0305 Mesh dependency line emphasis and Completed dependencies filter
+
+## Goal
+
+On a project where most prerequisites are done, the Mesh shows only blocking dependency lines until the user turns on **Completed dependencies**. Satisfied lines stay thin, dashed, and quiet. Blocking lines stay solid, normal weight, with a red arrowhead.
+
+Parent: **T0301** Mesh: dependency and completion clarity. Depends-on **T0302** and **T0303** are complete. Satisfaction uses `isDependencySatisfied` / `edge.blocking` (already on layout edges).
+
+## Branch
+
+`T0305-mesh-dep-emphasis` from updated `main`, only after this plan is approved. The working tree is currently on `T0304-mesh-done-canceled`; leave that branch as-is.
+
+## Decisions
+
+- **One session.** Styling, one filter chip, appearance tokens, legend. No schema migration.
+- **Depends on** still shows or hides every dependency line. **Completed dependencies** only adds the satisfied subset. Default **off**. Stored on the existing per-user `mesh-relations` localStorage object (`completedDependencies: false` when missing). Not a per-project database setting.
+- Satisfied lines stay in the layout when Depends on is on, so hover and focus can reveal them. A `mesh-edge--dep-quiet` class sets opacity to 0 unless the edge is already `mesh-edge--hot` (either endpoint hovered or focused). While focusing, quiet non-hot edges stay fully hidden (they do not fade to 0.2).
+- **Blocking** (prerequisite not satisfied): unchanged. Solid stroke, `--mesh-line-dep` (default 1.3), arrowhead color `--mesh-signal-overdue`.
+- **Satisfied:** dashed, weight `--mesh-line-dep-done` default **0.75**, color `--mesh-rel-dep-done` default **`#6a7582`** (quieter than references `#8a99ab`). Small closed arrowhead (8×8) in that same color so direction from T0303 still reads when the chip is on. Hot edges keep the existing accent treatment.
+- Both Focus and Plan views. Legend labels stay view-specific (Unblocks vs Depends on) and keep separate done vs still-blocking rows, with swatches that match the new strokes.
+- **Depends on** toolbar swatch uses the blocking (red) stroke. **Completed dependencies** uses the muted dashed stroke. Chip sits in the Relationships group after Depends on.
+- Appearance (T0175): new color and weight on `mesh_appearance`, field-by-field fallback, admin Mesh preview line. Existing `lines.dep` remains the blocking weight. No Drizzle file. Finish-up is a PATCH bump. Update `docs/database/platform.md` and `glossary.md` in the same change.
+
+## Stored shape (additions)
+
+| Field | CSS variable | Default |
+| --- | --- | --- |
+| `depDone` | `--mesh-rel-dep-done` | `#6a7582` |
+| `lines.depDone` | `--mesh-line-dep-done` | `0.75` (range 0.5–4) |
+
+`normalizeMeshAppearance` fills missing keys. Zod accepts the new fields. A stored object from before this task still loads.
+
+## Implementation
+
+1. Client and server appearance types, defaults, normalize, style vars, admin color + weight + preview, tests for default fill and range.
+2. CSS: satisfied edge dash and weight; quiet-hide rule; legend and chip swatches.
+3. `MeshPanel`: relation flag, chip, edge class `mesh-edge--dep` vs `--blocking` vs `--dep-quiet`, smaller marker for satisfied edges.
+4. Docs for `mesh_appearance`.
+
+## Out of scope
+
+- Changing the satisfaction rule (T0302) or arrow direction (T0303).
+- Done and canceled node treatment (T0304).
+- Hover-card dependency lists (T0306).
+- Per-project filter storage.
+
+## Finish-up notes
+
+PATCH version bump. No `FEATURES.md` (polish on an existing Mesh view). No deploy.

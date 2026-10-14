@@ -8309,6 +8309,7 @@ a:focus-visible {
   --mesh-rel-tree: var(--border);
   --mesh-rel-ref: #8a99ab;
   --mesh-rel-dep: #c9d3de;
+  --mesh-rel-dep-done: #6a7582;
   --mesh-rel-suggested: #e86aae;
   --mesh-signal-overdue: var(--danger);
   --mesh-signal-risk: #f0b53c;
@@ -8316,6 +8317,7 @@ a:focus-visible {
   --mesh-line-tree: 1.4;
   --mesh-line-ref: 1.3;
   --mesh-line-dep: 1.3;
+  --mesh-line-dep-done: 0.75;
   --mesh-line-suggested: 1.8;
   --mesh-glyph: 22px;
   --mesh-glyph-focus: 28px;
@@ -8450,8 +8452,16 @@ a:focus-visible {
   stroke-dasharray: 5 4;
 }
 .mesh-canvas .react-flow__edge.mesh-edge--dep .react-flow__edge-path {
-  stroke: var(--mesh-rel-dep);
-  stroke-width: var(--mesh-line-dep);
+  stroke: var(--mesh-rel-dep-done);
+  stroke-width: var(--mesh-line-dep-done);
+  stroke-dasharray: 4 5;
+}
+.mesh-canvas .react-flow__edge.mesh-edge--dep-quiet:not(.mesh-edge--hot) {
+  opacity: 0;
+  pointer-events: none;
+}
+.mesh-canvas--focusing .react-flow__edge.mesh-edge--dep-quiet:not(.mesh-edge--hot) {
+  opacity: 0;
 }
 .mesh-canvas .react-flow__edge.mesh-edge--blocking .react-flow__edge-path {
   stroke: var(--mesh-signal-overdue);
@@ -8471,6 +8481,9 @@ a:focus-visible {
 .mesh-canvas .react-flow__edge.mesh-edge--hot .react-flow__edge-path {
   stroke: var(--accent);
   stroke-width: 2.6;
+}
+.mesh-canvas .react-flow__edge.mesh-edge--hot.mesh-edge--dep .react-flow__edge-path {
+  stroke-dasharray: none;
 }
 .mesh-canvas .react-flow__edge.mesh-edge--bundled:not(.mesh-edge--hot) {
   opacity: 0;
@@ -9001,7 +9014,11 @@ a:focus-visible {
   flex: none;
 }
 .mesh-swatch--ref { border-top-style: dashed; border-top-color: var(--mesh-rel-ref); }
-.mesh-swatch--dep { border-top-color: var(--mesh-rel-dep); }
+.mesh-swatch--dep {
+  border-top-style: dashed;
+  border-top-color: var(--mesh-rel-dep-done);
+  border-top-width: 1px;
+}
 .mesh-swatch--block { border-top-color: var(--mesh-signal-overdue); }
 .mesh-swatch--ai { border-top-style: dotted; border-top-color: var(--mesh-rel-suggested); border-top-width: 3px; }
 .mesh-swatch--ring { border-top-color: var(--text); border-radius: 999px; height: 0.7rem; width: 0.7rem; }

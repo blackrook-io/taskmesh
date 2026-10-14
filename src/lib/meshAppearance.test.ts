@@ -24,6 +24,14 @@ describe("mesh appearance", () => {
     assert.equal(next.glyphScale, MESH_APPEARANCE_DEFAULTS.glyphScale);
     assert.equal(next.staleDays, 14);
     assert.equal(next.suggestion, MESH_APPEARANCE_DEFAULTS.suggestion);
+    assert.equal(next.depDone, MESH_APPEARANCE_DEFAULTS.depDone);
+    assert.equal(next.lines.depDone, MESH_APPEARANCE_DEFAULTS.lines.depDone);
+  });
+
+  it("rejects an out-of-range completed-dependency weight", () => {
+    const bad = structuredClone(MESH_APPEARANCE_DEFAULTS);
+    bad.lines.depDone = 0.1;
+    assert.equal(meshAppearanceSchema.safeParse(bad).success, false);
   });
 
   it("rejects a bad color and an out-of-range glyph scale", () => {
