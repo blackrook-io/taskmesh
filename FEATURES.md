@@ -55,7 +55,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Read EPUBs in-app with table of contents, page turn, font size, and dark/light reading modes
 - Read PDFs in-app with page navigation, zoom, color-safe dark mode, and one-time password unlock (never stored)
 - Cross-link records with typed references such as `#T0042` and `#N0012`
-- Saving a mention in a task, to-do, idea, or document stores a link, and removing the mention removes that link
+- Saving a mention in a task, to-do, idea, document, or canvas text stores a link, and removing the mention removes that link
 
 
 

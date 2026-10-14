@@ -6,6 +6,7 @@ import "dotenv/config";
 import { eq, ne } from "drizzle-orm";
 import { db, pool } from "../db/client.js";
 import * as schema from "../db/schema.js";
+import { canvasMentionText } from "../lib/canvasMentionText.js";
 import type { EntityType } from "../lib/entityType.js";
 import { syncMentionLinks, type MentionSyncResult } from "../services/mentionLinks.js";
 
@@ -82,6 +83,23 @@ async function scan(): Promise<Source[]> {
       srcType: "document",
       srcId: row.id,
       markdown: row.body,
+      actorUserId: row.ownerId,
+    });
+  }
+
+  const canvases = await db
+    .select({
+      id: schema.canvases.id,
+      document: schema.canvases.document,
+      ownerId: schema.projects.ownerId,
+    })
+    .from(schema.canvases)
+    .innerJoin(schema.projects, eq(schema.projects.id, schema.canvases.projectId));
+  for (const row of canvases) {
+    sources.push({
+      srcType: "canvas",
+      srcId: row.id,
+      markdown: canvasMentionText(row.document),
       actorUserId: row.ownerId,
     });
   }

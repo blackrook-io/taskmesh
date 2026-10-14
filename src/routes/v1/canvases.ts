@@ -3,11 +3,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
+import { canvasMentionText } from "../../lib/canvasMentionText.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
 import { optionalPlainTitle } from "../../lib/markdownFields.js";
 import { jsonDocumentSchema } from "../../lib/jsonDocument.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import { allocateCanvasNumber } from "../../services/entityNumbers.js";
+import { syncMentionLinks } from "../../services/mentionLinks.js";
+import { getCurrentUserId } from "../../services/users.js";
 
 const createBody = z.object({
   title: optionalPlainTitle(500),
@@ -90,6 +93,12 @@ canvasesRouter.post("/", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create canvas");
       return;
     }
+    await syncMentionLinks(db, {
+      srcType: "canvas",
+      srcId: row.id,
+      markdown: canvasMentionText(row.document),
+      actorUserId: await getCurrentUserId(db),
+    });
     res.status(201).json({ data: row });
   } catch (err) {
     handleRouteError(res, err);
@@ -196,6 +205,15 @@ canvasesRouter.patch("/:canvasId", async (req, res) => {
             eq(schema.wikiNodes.entityId, canvasId),
           ),
         );
+    }
+
+    if (parsed.document !== undefined && row) {
+      await syncMentionLinks(db, {
+        srcType: "canvas",
+        srcId: row.id,
+        markdown: canvasMentionText(row.document),
+        actorUserId: await getCurrentUserId(db),
+      });
     }
 
     res.json({ data: row });
