@@ -55,13 +55,18 @@ export function stateAppearance(state: string | null | undefined): { color: stri
 export function glyphStyle(
   mode: MeshColorMode,
   node: MeshSignalNode,
+  settle = true,
 ): { color: string; hollow: boolean } {
-  if (mode === "state") return stateAppearance(node.state);
+  const settled = settle && (node.state === "complete" || node.state === "canceled");
+  if (mode === "state") {
+    const appearance = stateAppearance(node.state);
+    return settled ? { ...appearance, hollow: true } : appearance;
+  }
   if (mode === "priority") {
     if (!node.priority || node.priority === "none") return { color: "var(--border)", hollow: true };
-    return { color: `var(--task-priority-${node.priority})`, hollow: false };
+    return { color: `var(--task-priority-${node.priority})`, hollow: settled };
   }
-  return { color: `var(--mesh-type-${node.type ?? "task"})`, hollow: false };
+  return { color: `var(--mesh-type-${node.type ?? "task"})`, hollow: settled };
 }
 
 export function schedule(node: MeshSignalNode, today: Date): MeshSchedule {
@@ -85,7 +90,7 @@ export function schedule(node: MeshSignalNode, today: Date): MeshSchedule {
 }
 
 export function isStale(node: MeshSignalNode, today: Date, staleDays: number): boolean {
-  if (!node.signalAt || node.state === "complete") return false;
+  if (!node.signalAt || node.state === "complete" || node.state === "canceled") return false;
   const elapsed = (today.getTime() - new Date(node.signalAt).getTime()) / MS_DAY;
   return elapsed >= staleDays;
 }

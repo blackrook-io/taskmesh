@@ -17,10 +17,27 @@ describe("mesh signals", () => {
     assert.equal(stateAppearance("in_progress").hollow, true);
     assert.equal(stateAppearance("ready").hollow, false);
     assert.equal(stateAppearance("complete").hollow, true);
+    assert.equal(stateAppearance("canceled").hollow, false);
     assert.equal(stateAppearance("in_progress").color, "var(--task-state-progress)");
     assert.equal(glyphStyle("type", { key: "task:1", type: "task" }).color, "var(--mesh-type-task)");
+    assert.equal(glyphStyle("type", { key: "task:1", type: "task" }).hollow, false);
     assert.equal(glyphStyle("priority", { key: "task:1", priority: "none" }).hollow, true);
     assert.equal(glyphStyle("priority", { key: "task:1", priority: "high" }).color, "var(--task-priority-high)");
+    assert.equal(glyphStyle("priority", { key: "task:1", priority: "high" }).hollow, false);
+  });
+
+  it("outlines complete and canceled records in every color mode", () => {
+    const done = { key: "task:1", type: "task", state: "complete", priority: "high" };
+    const dropped = { key: "task:2", type: "idea", state: "canceled", priority: "low" };
+    assert.equal(glyphStyle("type", done).hollow, true);
+    assert.equal(glyphStyle("type", done).color, "var(--mesh-type-task)");
+    assert.equal(glyphStyle("priority", done).hollow, true);
+    assert.equal(glyphStyle("priority", done).color, "var(--task-priority-high)");
+    assert.equal(glyphStyle("state", done).hollow, true);
+    assert.equal(glyphStyle("state", done).color, "var(--task-state-done)");
+    assert.equal(glyphStyle("type", dropped).hollow, true);
+    assert.equal(glyphStyle("type", dropped).color, "var(--mesh-type-idea)");
+    assert.equal(glyphStyle("state", dropped).color, "var(--task-state-canceled)");
   });
 
   it("marks a past due date overdue and a slow progress share at risk", () => {
@@ -67,6 +84,10 @@ describe("mesh signals", () => {
     );
     assert.equal(
       isStale({ key: "task:1", state: "complete", signalAt: "2026-08-01T12:00:00.000Z" }, today, 30),
+      false,
+    );
+    assert.equal(
+      isStale({ key: "task:1", state: "canceled", signalAt: "2026-08-01T12:00:00.000Z" }, today, 30),
       false,
     );
     assert.equal(

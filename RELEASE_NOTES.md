@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.85.7 — 2026-10-14
+
+### Enhancements
+- Complete records on Mesh are a hollow outline with a check and a muted title in every color mode, so finished work stays distinct from open records and from hover dimming. Canceled records use the same outline with a struck-through title and no check. Priority, stale, and at-risk marks drop on both.
+
 ## 0.85.6 — 2026-10-14
 
 ### Enhancements
