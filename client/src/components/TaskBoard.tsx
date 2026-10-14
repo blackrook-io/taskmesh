@@ -22,6 +22,7 @@ import {
   discardTaskEditSession,
   ensureTaskEditSession,
   flushTaskEditSession,
+  replaceTaskEditSessionBaseline,
 } from "../lib/taskEditSession";
 import type { PatchTaskOptions } from "../lib/patchTask";
 import { sanitizePlainText } from "../lib/plainText";
@@ -425,7 +426,7 @@ export function TaskEditorFields({
   const qc = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
   const initial = snapshotFromTask(task);
-  const { push, undo, canUndo, revision } = useUndoStack(initial);
+  const { push, undo, reset, canUndo, revision } = useUndoStack(initial);
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [dueLocal, setDueLocal] = useState(initial.dueDate ?? "");
@@ -445,6 +446,7 @@ export function TaskEditorFields({
   const [deleting, setDeleting] = useState(false);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
   const [descriptionEditorHeight] = useState(() => loadTaskDescriptionEditorHeight());
+  const [appliedServerState, setAppliedServerState] = useState<string | null>(null);
 
   // One History line for the whole time this task editor is open (survives remounts).
   ensureTaskEditSession(task.id, {
@@ -472,6 +474,22 @@ export function TaskEditorFields({
   const flushSessionHistoryRef = useRef(flushSessionHistory);
   // eslint-disable-next-line react-hooks/refs -- latest callback ref
   flushSessionHistoryRef.current = flushSessionHistory;
+
+  const recheckQuery = useQuery({
+    queryKey: ["task-blocked-recheck", task.id],
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const res = await apiJson<{ data: Task }>(`/api/v1/tasks/${task.id}`);
+      if (res.data.state !== task.state) {
+        void qc.invalidateQueries({ queryKey: ["tasks"] });
+        void qc.invalidateQueries({ queryKey: ["task-activity", task.id] });
+        void qc.invalidateQueries({ queryKey: ["task-for-board", task.id] });
+        void qc.invalidateQueries({ queryKey: ["task-solo", task.id] });
+      }
+      return res.data;
+    },
+  });
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -504,17 +522,44 @@ export function TaskEditorFields({
   // Call sites key TaskEditorFields by task.id; sync project/phase if props change in place.
   const allowedKey = (task.allowedNextStates ?? []).join(",");
   const [syncedAllowedKey, setSyncedAllowedKey] = useState(allowedKey);
-  if (allowedKey !== syncedAllowedKey) {
+  const propStateIsStale = appliedServerState != null && task.state !== appliedServerState;
+  if (!propStateIsStale && allowedKey !== syncedAllowedKey) {
     setSyncedAllowedKey(allowedKey);
     setAllowedNext(task.allowedNextStates ?? []);
   }
 
   const [syncedTaskState, setSyncedTaskState] = useState(task.state);
-  if (task.state !== syncedTaskState) {
+  if (!propStateIsStale && task.state !== syncedTaskState) {
     setSyncedTaskState(task.state);
     setState(task.state);
     setAllowedNext(task.allowedNextStates ?? []);
     setSyncedAllowedKey((task.allowedNextStates ?? []).join(","));
+  }
+
+  const freshTask = recheckQuery.data;
+  if (freshTask && freshTask.state !== appliedServerState) {
+    setAppliedServerState(freshTask.state);
+    if (freshTask.state !== state) {
+      const nextAllowed = freshTask.allowedNextStates ?? [];
+      setState(freshTask.state);
+      setAllowedNext(nextAllowed);
+      setSyncedAllowedKey(nextAllowed.join(","));
+      setSyncedTaskState(freshTask.state);
+      reset(snapshotFromTask({ ...task, state: freshTask.state }));
+      replaceTaskEditSessionBaseline(task.id, {
+        title: task.title,
+        description: task.description ?? null,
+        state: freshTask.state,
+        priority: task.priority,
+        dueDate: taskDue(task),
+        estimateHours: task.estimateHours ?? null,
+        color: task.color,
+        phaseId: task.phaseId,
+        parentId: task.parentId,
+        projectId: task.projectId,
+        assigneeId: task.assigneeId ?? null,
+      });
+    }
   }
 
   const [syncedProjectId, setSyncedProjectId] = useState(task.projectId);

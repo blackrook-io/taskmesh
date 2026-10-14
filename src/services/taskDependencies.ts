@@ -197,6 +197,12 @@ export async function addDependency(
     source: opts.source,
   });
 
+  const { blockReadyTaskIfOpenPrerequisites } = await import("./taskBlocked.js");
+  await blockReadyTaskIfOpenPrerequisites(db, taskId, {
+    actorId: opts.actorId,
+    source: opts.source,
+  });
+
   return {
     ok: true,
     created: true,

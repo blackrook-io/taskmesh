@@ -28,6 +28,14 @@ export function ensureTaskEditSession(
   }
 }
 
+/** Replace the open baseline after a server recheck, before the user edits. */
+export function replaceTaskEditSessionBaseline(
+  taskId: number,
+  baseline: TaskEditSessionBaseline,
+): void {
+  if (baselines.has(taskId)) baselines.set(taskId, baseline);
+}
+
 /** True while the task editor session is open (before History flush). */
 export function hasTaskEditSession(taskId: number): boolean {
   return baselines.has(taskId);

@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.81.0 — 2026-10-14
+
+### Fixes
+- A Ready task that still has an open prerequisite is stored as Blocked when a dependency is added, when the task stops being a parent, when a prerequisite is reopened, or when its editor opens. Ready tasks already in that state were corrected.
+
 ## 0.80.0 — 2026-10-14
 
 ### New Functionality

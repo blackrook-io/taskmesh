@@ -1,0 +1,78 @@
+---
+description: "T0347 — Re-block a Ready task when prerequisites are still open"
+todos:
+  - id: service
+    content: Add Ready→Blocked recheck in taskBlocked and call it from dependency add, hierarchy rollup, and prerequisite reopen
+  - id: read
+    content: Recheck on single-task GET; editor adopts the returned state
+  - id: data
+    content: One-time migration blocks Ready non-derived tasks that still have open prerequisites
+  - id: tests
+    content: Unit tests for each trigger decision
+  - id: qa
+    content: Manual QA checklist
+---
+
+# T0347 — Re-evaluate Blocked after Ready
+
+**Task:** T0347 · id `363` · Ready · high · project 4 (TaskMesh)
+**Parent:** none
+**Depends on:** none
+**Branch (after approval):** `T0347-blocked-reeval`
+
+## Goal
+
+A Task that is already Ready is moved to Blocked when it still has an unsatisfied Depends-on. Today `coerceReadyToBlocked` runs only for Draft → Ready and In Progress → Ready. Adding a dependency, losing the last child, or reopening a prerequisite leaves a Ready task in Ready, and the Ready menu cannot move it to Blocked.
+
+## Decisions (from the Task)
+
+- Unsatisfied means `isDependencyBlockingState`: not Complete, Canceled, Deleted, or Pending.
+- Only **Ready** moves to Blocked. In Progress, On Hold, Draft, and Pending stay put.
+- Derived parents (`stateManual === false` and `rollupTotal != null`) are left to rollup. The check runs once the task is no longer derived.
+- The same service function runs for UI, REST, Kanban, and Assistant. Those writers already share `addDependency`, `patchProjectTask` / standalone PATCH, and `afterTaskHierarchyChange`.
+- One-time data fix covers every Ready non-derived task with an open prerequisite, which includes T0310. Do not hardcode display number 310.
+
+## Proposed confirmations
+
+Approval of this plan accepts these.
+
+1. **Symmetric reopen.** Re-block Ready dependents when a prerequisite moves from any satisfied state (Complete, Canceled, Deleted, Pending) to a blocking state. That matches `shouldPromoteBlockedDependents` in reverse. The Task’s Complete/Canceled example is the common case.
+2. **Edit view is a read-side safety net.** `GET /api/v1/tasks/:id` and `GET /api/v1/projects/:id/tasks/:id` run the same function before responding. List endpoints stay read-only. `TaskEditorFields` refetches the standalone task on open and adopts `state` and `allowedNextStates` when they changed, then invalidates task lists. Kanban and todo-list editors that already GET the task pick this up without a second path.
+3. **History.** Automatic Ready → Blocked writes a task activity change through `recordTaskChanges` (field `state`). The migration inserts the same kind of change row with `created_by_id` null and source `api`.
+4. **No new user transition.** Blocked → Ready stays the existing promote when every Depends-on is satisfied. Users still cannot pick Blocked from the menu.
+
+## Service
+
+`src/services/taskBlocked.ts`
+
+- `shouldBlockReadyDependents(before, after)` — true when a prerequisite leaves a satisfied state for a blocking one.
+- `blockReadyTaskIfOpenPrerequisites(db, taskId, opts)` — no-op unless the task is Ready, not a derived parent, and `openDependsOnBlockers` is non-empty. Then set `state` to `blocked`, stamp `updatedAt` / `updatedById`, and record the change. Do not call rollup (a leaf block does not change children).
+
+Call sites:
+
+- `addDependency` after a new row is inserted (Assistant `applyTaskDependency` and the REST route both use it).
+- `afterTaskHierarchyChange` after `recomputeTaskRollups`, on the task and the previous parent. That covers the last child moved or removed: rollup clears `rollupTotal` and keeps the stored Ready state, then this check blocks it. Not inside `recomputeTaskRollups`, which would cycle with `taskBlocked.ts`.
+- Project PATCH, standalone PATCH, and both DELETE handlers, next to `promoteBlockedDependents`, when `shouldBlockReadyDependents` is true.
+- Both single-task GET handlers, then return the fresh row (and `allowedNextStates`).
+
+## Data fix
+
+New Drizzle SQL migration (next file after `0076`). Update Ready tasks that are not derived parents and have at least one Depends-on in a blocking state. Insert a `task_activity` change (`field = 'state'`, old `Ready` display or stored `ready` — match `recordTaskChanges` wording). No `schema.ts` change, so no `docs/database` edit.
+
+## Tests
+
+Extend `src/services/taskBlocked.test.ts`:
+
+- Ready + open prerequisite + not derived → would block.
+- Ready + only satisfied prerequisites → stay Ready.
+- In Progress + open prerequisite → stay In Progress.
+- Derived parent (rollup still set) → no-op even if Ready.
+- `shouldBlockReadyDependents("complete", "ready")` and `("canceled", "in_progress")` true; `("complete", "pending")` and `("ready", "in_progress")` false.
+
+DB-backed tests are not in this suite today. The pure decisions cover each trigger; route wiring is the call-site list above.
+
+## Out of scope
+
+- Changing the user-facing state menu.
+- Blocking In Progress tasks that gain a dependency.
+- Overriding derived parent status while children still exist.
