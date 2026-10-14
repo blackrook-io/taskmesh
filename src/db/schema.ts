@@ -11,6 +11,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  real,
   serial,
   text,
   timestamp,
@@ -262,12 +263,14 @@ export const users = pgTable("users", {
   aiTier1OptIn: boolean("ai_tier1_opt_in").notNull().default(false),
   /**
    * User narrowing of the AI ceiling (T0190).
-   * `{ raised, off, featuresOff }`. Empty or invalid JSON inherits the ceiling.
+   * `{ raised, off, featuresOff, allowInventTags }`. Empty or invalid JSON inherits the ceiling.
+   * `allowInventTags` (T0199) defaults false: auto-tagging may only use this user's existing tags.
    */
   aiPolicy: jsonb("ai_policy").$type<{
     raised?: Record<string, 0 | 1 | 2 | 3>;
     off?: string[];
     featuresOff?: string[];
+    allowInventTags?: boolean;
   }>().notNull().default(sql`'{}'::jsonb`),
   /** Per-user AI instructions (T0209). Not indexed in knowledge_chunks. */
   aiInstructions: text("ai_instructions"),
@@ -1141,6 +1144,63 @@ export const aiOutputFeedback = pgTable(
     outcomeUidx: uniqueIndex("ai_output_feedback_outcome_uidx")
       .on(t.auditId, t.kind)
       .where(sql`${t.kind} in ('accept', 'dismiss', 'undo')`),
+  }),
+);
+
+/**
+ * Pending and applied AI tag suggestions (T0199).
+ * One row per surfaced tag. Does not store record text.
+ * `pending` waits for Accept or Dismiss. `applied` was auto-applied.
+ * `accepted` and `dismissed` are the one-click outcomes.
+ */
+export const aiTagSuggestions = pgTable(
+  "ai_tag_suggestions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    tagId: integer("tag_id").references(() => tags.id, { onDelete: "cascade" }),
+    proposedName: text("proposed_name"),
+    confidence: real("confidence").notNull(),
+    /** pending | applied | accepted | dismissed */
+    status: text("status").notNull().default("pending"),
+    auditId: integer("audit_id").references(() => aiAuditLog.id, { onDelete: "set null" }),
+    journalId: integer("journal_id").references(() => aiUndoJournal.id, { onDelete: "set null" }),
+    contentHash: text("content_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    entityIdx: index("ai_tag_suggestions_entity_idx").on(t.userId, t.entityType, t.entityId),
+    journalIdx: index("ai_tag_suggestions_journal_idx").on(t.journalId),
+    pendingTagUidx: uniqueIndex("ai_tag_suggestions_pending_tag_uidx")
+      .on(t.userId, t.entityType, t.entityId, t.tagId)
+      .where(sql`${t.status} = 'pending' and ${t.tagId} is not null`),
+    pendingNameUidx: uniqueIndex("ai_tag_suggestions_pending_name_uidx")
+      .on(t.userId, t.entityType, t.entityId, t.proposedName)
+      .where(sql`${t.status} = 'pending' and ${t.proposedName} is not null`),
+    statusCheck: check(
+      "ai_tag_suggestions_status_chk",
+      sql`${t.status} in ('pending', 'applied', 'accepted', 'dismissed')`,
+    ),
+    confidenceCheck: check(
+      "ai_tag_suggestions_confidence_chk",
+      sql`${t.confidence} >= 0 and ${t.confidence} <= 1`,
+    ),
+    targetCheck: check(
+      "ai_tag_suggestions_target_chk",
+      sql`${t.tagId} is not null or ${t.proposedName} is not null`,
+    ),
+    entityTypeCheck: check(
+      "ai_tag_suggestions_entity_type_chk",
+      sql`${t.entityType} in ('idea', 'project', 'task', 'todo', 'document')`,
+    ),
+    nameCheck: check(
+      "ai_tag_suggestions_name_chk",
+      sql`${t.proposedName} is null or char_length(${t.proposedName}) between 1 and 100`,
+    ),
   }),
 );
 

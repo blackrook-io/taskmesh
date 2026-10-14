@@ -4724,6 +4724,23 @@ a:focus-visible {
   gap: 0.3rem;
 }
 
+.tag-input__ai,
+.tag-input__ai-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tag-input__ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-chip, 999px);
+  border: 1px dashed var(--border);
+}
+
 .tag-input__field-wrap {
   position: relative;
   flex: 0 0 auto;

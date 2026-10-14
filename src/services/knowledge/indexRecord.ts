@@ -3,7 +3,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { isEntityType, type EntityType } from "../../lib/entityType.js";
 import { resolveEffectiveAiAccess } from "../assistant/projectAiAccess.js";
-import { chunkMarkdown, contentHash, titleChunkText, type TextChunk } from "./chunk.js";
+import { chunkMarkdown, contentHash, indexedTextChanged, titleChunkText, type TextChunk } from "./chunk.js";
 import { embedTexts, readEmbeddingModel } from "./embed.js";
 import { EMBEDDING_DIM, reusedEmbedding, shouldEmbedRecord, type StoredEmbedding } from "./embedDecision.js";
 
@@ -21,12 +21,17 @@ type Draft = {
   hash: string;
 };
 
-export async function indexKnowledgeRecord(entityType: string, entityId: number): Promise<void> {
-  if (!isEntityType(entityType) || !Number.isInteger(entityId) || entityId <= 0) return;
+export async function indexKnowledgeRecord(
+  entityType: string,
+  entityId: number,
+): Promise<{ textChanged: boolean; contentHash: string | null }> {
+  if (!isEntityType(entityType) || !Number.isInteger(entityId) || entityId <= 0) {
+    return { textChanged: false, contentHash: null };
+  }
   const loaded = await loadRecord(entityType, entityId);
   if (!loaded) {
     await deleteKnowledgeChunks(entityType, entityId);
-    return;
+    return { textChanged: false, contentHash: null };
   }
   const drafts = buildDrafts(entityType, loaded);
   const existing = await db
@@ -53,6 +58,10 @@ export async function indexKnowledgeRecord(entityType: string, entityId: number)
       embedding: row.embedding,
     });
   }
+  const textChanged = indexedTextChanged(
+    existing.map((row) => row.contentHash),
+    drafts.map((draft) => draft.hash),
+  );
   const modelHint = await readEmbeddingModel();
   const vectors = new Array<number[] | null | undefined>(drafts.length);
   const pending: number[] = [];
@@ -123,6 +132,9 @@ export async function indexKnowledgeRecord(entityType: string, entityId: number)
       `);
     }
   });
+  const contentHashValue =
+    drafts.length === 0 ? null : contentHash(drafts.map((draft) => draft.hash).sort().join("\n"));
+  return { textChanged, contentHash: contentHashValue };
 }
 
 export async function deleteKnowledgeChunks(entityType: string, entityId: number): Promise<void> {

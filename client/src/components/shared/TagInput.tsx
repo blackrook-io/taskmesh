@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiJson } from "../../api/client";
+import { acceptAiTagSuggestion, dismissAiTagSuggestion, fetchAiTagSuggestions } from "../../api/aiTagSuggestions";
+import { postAiUndo } from "../../api/aiActivity";
 import type { EntityType } from "../../lib/entityType";
 import type { Tag } from "../../types";
 import { sanitizePlainText } from "../../lib/plainText";
@@ -112,6 +114,53 @@ export function TagInput({ entityType, entityId, disabled, readOnly, className }
     onError: (err: Error) => setError(err.message),
   });
 
+  const taggable =
+    entityType === "idea" ||
+    entityType === "project" ||
+    entityType === "task" ||
+    entityType === "todo" ||
+    entityType === "document";
+  const aiQuery = useQuery({
+    queryKey: ["ai-tag-suggestions", entityType, entityId],
+    enabled: taggable && !readOnly && !disabled,
+    refetchInterval: 4000,
+    queryFn: () => fetchAiTagSuggestions(entityType, entityId),
+  });
+
+  const acceptAi = useMutation({
+    mutationFn: acceptAiTagSuggestion,
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+      void qc.invalidateQueries({ queryKey: ["ai-tag-suggestions", entityType, entityId] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const dismissAi = useMutation({
+    mutationFn: dismissAiTagSuggestion,
+    onSuccess: () => {
+      setError(null);
+      void qc.invalidateQueries({ queryKey: ["ai-tag-suggestions", entityType, entityId] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const undoAi = useMutation({
+    mutationFn: (journalId: number) => postAiUndo(journalId),
+    onSuccess: (result) => {
+      if (result.ok === false) {
+        setError(result.message);
+        return;
+      }
+      setError(null);
+      invalidate();
+      void qc.invalidateQueries({ queryKey: ["ai-tag-suggestions", entityType, entityId] });
+      void qc.invalidateQueries({ queryKey: ["ai-activity"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const attached = tagsQuery.data ?? [];
   const attachedIds = new Set(attached.map((t) => t.id));
   const suggestions = (suggestQuery.data ?? []).filter((t) => !attachedIds.has(t.id));
@@ -140,6 +189,44 @@ export function TagInput({ entityType, entityId, disabled, readOnly, className }
       className={`tag-input${readOnly ? " tag-input--readonly" : ""}${className ? ` ${className}` : ""}`}
       ref={rootRef}
     >
+      {aiQuery.data?.undo ? (
+        <p className="tag-input__ai-undo">
+          <span>{aiQuery.data.undo.summary}</span>
+          <button
+            type="button"
+            className="btn small"
+            disabled={undoAi.isPending}
+            onClick={() => undoAi.mutate(aiQuery.data?.undo?.journalId ?? 0)}
+          >
+            Undo
+          </button>
+        </p>
+      ) : null}
+      {aiQuery.data && aiQuery.data.suggestions.length > 0 ? (
+        <div className="tag-input__ai">
+          {aiQuery.data.suggestions.map((suggestion) => (
+            <span key={suggestion.id} className="tag-input__ai-chip">
+              <span>{suggestion.name}</span>
+              <button
+                type="button"
+                className="btn small"
+                disabled={acceptAi.isPending}
+                onClick={() => acceptAi.mutate(suggestion.id)}
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                className="btn small"
+                disabled={dismissAi.isPending}
+                onClick={() => dismissAi.mutate(suggestion.id)}
+              >
+                Dismiss
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="tag-input__chips">
         {attached.map((tag) => (
           <TagChip

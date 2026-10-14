@@ -1,0 +1,61 @@
+---
+description: T0199 — suggest tags from similar records and the user's tag set, auto-apply with Undo when Tier 1 is on
+---
+
+# T0199 — AI auto-tagging
+
+**Task:** T0199 · id `214` · Ready · medium · project 4 (TaskMesh)
+**Parent:** T0177 AI: per-user keys, provider plugins and guardrails (id `192`).
+**Depends on:** T0183, T0186, T0208 — all complete. No open blockers.
+**Required by:** T0300 golden sets (Draft). This task records accept, dismiss, and undo. It does not build the golden corpus.
+**Branch (after approval):** `T0199-auto-tagging`
+**Version on finish-up:** MINOR (new `ai_tag_suggestions` table).
+
+## Goal
+
+When a taggable record is created or its indexed text changes, suggest tags from that user's existing tags. Candidates come from tags on similar knowledge-index records, then a small model pass scores them and returns a confidence per tag. If the Administrator allows Tier 1 and the user opted in, high-confidence tags are applied and can be undone as one batch. Otherwise they show as one-click suggestions on the record. Excluded projects are never sent to a model or tagged. New tag names are not created unless the user turns that on.
+
+## Current state
+
+- Tags are per user (`tags.owner_id`). Taggings are `(tag, entity_type, entity_id)` on idea, project, task, todo, and document (`TAGGABLE_ENTITY_TYPES`). `TagInput` attaches by id or by a new name.
+- Task-group auto-tag (T0077) is a filter rule. It is separate from this feature.
+- `tag` is already Tier 1 in the permission matrix. Auto-apply and the undo journal (`remove_tagging`) exist for assistant applies (T0186). The toast is fired in the browser during that apply. A background job cannot fire it. AI activity in Settings can undo a journal row.
+- Knowledge search is ownership-scoped and drops excluded projects (T0208). Index jobs already run after create and update.
+- User policy JSON is `{ raised, off, featuresOff }`. Feature toggles on Your AI settings come from `AI_FEATURES`. There is no `tagging` feature and no “allow new tags” switch.
+- `ai_output_feedback` stores one `accept`, one `dismiss`, and one `undo` per audit row (T0211). Accept rate is accept / (accept + dismiss). Undo rate is undo / accept.
+- Capture (T0214) is the pattern for a fixed prompt, a Zod parse, and a server-side resolve step. The model does not choose a tier.
+
+## Decisions
+
+| # | Topic | Decision |
+|---|--------|----------|
+| 1 | Which records | idea, project, task, todo, document. Boards, wiki, canvases, and lists are not taggable and stay out. |
+| 2 | When | After a successful knowledge index, only if the record’s indexed text hash changed (create, or a title/body/notes edit). Color, sort, state, and due date alone do not run it. Singleton job per record so rapid edits collapse. |
+| 3 | Who | The record owner. Their tag set, their provider key, their Tier 1 opt-in. |
+| 4 | Project access | `excluded`: do not enqueue, do not call a model, do not suggest. `read_only`: suggestions only, never auto-apply. `full`: auto-apply when Tier 1 is on. Ideas with no project follow the user policy only. |
+| 5 | Candidates | Similar records from `searchKnowledge` (owner-scoped, self excluded). Collect tags those records already have that this user owns and this record does not. Cap 30 names. No neighbors and an empty tag set → stop, no model call. |
+| 6 | Model | Feature id `tagging` (small, no tools). Prompt `prompts/tagging/v1.md`. Input is title plus a short excerpt, the candidate names, and — only when inventing is allowed — a note that new names are allowed. Output is `{ name, confidence }[]` for names we sent, plus optional new names. The server drops unknown names when inventing is off, drops names already on the record, and clamps confidence to 0..1. Invalid JSON is a no-op, audited, not a guess. |
+| 7 | No key | Index candidates still become suggestions, with a fixed confidence from how often the tag appeared on neighbors. No model call and no auto-apply. |
+| 8 | Thresholds | Show at ≥ 0.45. Auto-apply at ≥ 0.75, and only for existing tags, and only when `shouldAutoApplyTier1` is true and project access is `full`. At most 5 tags per run. |
+| 9 | Inventing tags | New user setting `allowInventTags`, default false, stored on `users.ai_policy` (no new column). Checkbox on Your AI settings. When off, a name that is not already the user’s tag is discarded. When on, a new name can be suggested or, if it clears the auto-apply bar and Tier 1 is on, created and attached. Undo removes the tagging; the tag row is deleted only when this run created it and nothing else uses it. |
+| 10 | Apply and undo | One journal row per run, inverse `{ kind: "remove_taggings", taggingIds }`. Undo deletes those taggings and no others. `TagInput` shows an “AI added …” line with Undo while that row is `applied` and inside the existing undo window. Settings → AI activity lists the same row. |
+| 11 | Suggestions UI | Pending rows render as chips under the existing tags: name, Accept, Dismiss. Accept attaches (and creates the tag only when inventing is on and `tag_id` is null). Dismiss hides it for this record until the text hash changes. |
+| 12 | Feedback | One audit row per surfaced tag, feature `tagging`, no record text. Auto-apply writes `accept`. A click writes `accept` or `dismiss`. Batch undo writes `undo` on each audit from that run. Token counts sit on the model-call audit only. T0300 still owns golden sentences. |
+| 13 | Off switch | Register `tagging` in `AI_FEATURES` so Your AI settings can turn the feature off (`featuresOff`). Off means no job and no suggestions. |
+
+## Work items
+
+1. Migration `ai_tag_suggestions`: user, entity type, entity id, nullable `tag_id`, nullable `proposed_name`, confidence, status (`pending` | `applied` | `accepted` | `dismissed`), `audit_id`, `journal_id`, `content_hash`. Checks: one of tag id or proposed name; status enum. Docs under `docs/database/` and `npm run docs:sync-schema`.
+2. Extend undo inverse with `remove_taggings` (code only). One Undo removes that id list.
+3. `allowInventTags` on the user policy parse/PUT and a checkbox on Your AI settings.
+4. Tagging prompt, candidate gather, score, and apply/suggest. Enqueue from the knowledge indexer only when indexed text changed. Skip excluded projects and users who turned `tagging` off.
+5. `GET/POST /api/v1/ai/tag-suggestions` for the open record (list, accept, dismiss). Wire chips and the batch Undo line into `TagInput`.
+6. Tests with a stub model: hash skip, excluded project, invent-off drops unknown names, threshold split, undo removes only the AI taggings, accept/dismiss/undo feedback rows. No network calls.
+
+## Out of scope
+
+- Live-model golden sets (T0300).
+- Duplicate detection (T0200).
+- Changing task-group auto-tag (T0077).
+- Tagging boards, wiki nodes, canvases, or todo lists.
+- A second confidence model or embeddings of tag names.

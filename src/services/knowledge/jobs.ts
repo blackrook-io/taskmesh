@@ -2,6 +2,8 @@ import { and, asc, eq, gt, ne, sql } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { isEntityType, type EntityType } from "../../lib/entityType.js";
+import { isTaggableEntityType } from "../entities.js";
+import { scheduleAutoTag } from "../assistant/tagging/schedule.js";
 import type { JobDefinition } from "../jobs/definitions.js";
 import { enqueue, registerJob } from "../jobs/queue.js";
 import { KNOWLEDGE_ENTITY_ORDER, readKnowledgeCursor, writeKnowledgeCursor } from "./cursor.js";
@@ -142,7 +144,10 @@ async function indexRecordJob(data: object): Promise<void> {
   const entityId = "entityId" in data ? data.entityId : null;
   if (typeof entityType !== "string" || !isEntityType(entityType)) return;
   if (typeof entityId !== "number" || !Number.isInteger(entityId) || entityId <= 0) return;
-  await indexKnowledgeRecord(entityType, entityId);
+  const indexed = await indexKnowledgeRecord(entityType, entityId);
+  if (indexed.textChanged && isTaggableEntityType(entityType)) {
+    await scheduleAutoTag(entityType, entityId, indexed.contentHash ?? "empty");
+  }
 }
 
 async function reindexBatch(): Promise<void> {

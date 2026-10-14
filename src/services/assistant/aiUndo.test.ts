@@ -5,8 +5,10 @@ import {
   decideUndo,
   isWithinUndoWindow,
   journalDraftFromMutation,
+  parseUndoInverse,
   runUndo,
   shouldAutoApplyTier1,
+  tagIdsToDelete,
   undoAuditInput,
   type UndoInverse,
   type UndoPort,
@@ -224,5 +226,42 @@ describe("undo", () => {
     });
     assert.equal(decision.action, "reject");
     if (decision.action === "reject") assert.equal(decision.code, "undo_expired");
+  });
+
+  it("undoes a tag batch and leaves tags that were not in the batch", async () => {
+    const inverse = parseUndoInverse({
+      kind: "remove_taggings",
+      taggingIds: [3, 4],
+      createdTagIds: [9],
+    });
+    assert.deepEqual(inverse, { kind: "remove_taggings", taggingIds: [3, 4], createdTagIds: [9] });
+    assert.deepEqual(tagIdsToDelete([9, 10], new Set([10])), [9]);
+    const removed: number[] = [];
+    const port: UndoPort = {
+      targetState: async () => ({ kind: "remove_taggings", present: true }),
+      perform: async (value) => {
+        if (value.kind === "remove_taggings") removed.push(...value.taggingIds);
+      },
+    };
+    const decision = await runUndo({
+      status: "applied",
+      appliedAt: now,
+      now,
+      windowDays: 7,
+      force: false,
+      skip: false,
+      inverse: inverse!,
+      port,
+    });
+    assert.equal(decision.action, "undo");
+    assert.deepEqual(removed, [3, 4]);
+    const gone = decideUndo({
+      status: "applied",
+      withinWindow: true,
+      force: false,
+      skip: false,
+      target: { kind: "remove_taggings", present: false },
+    });
+    assert.equal(gone.action, "reject");
   });
 });

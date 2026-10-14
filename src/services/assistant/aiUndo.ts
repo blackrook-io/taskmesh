@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../../db/schema.js";
 import type { MutationResult } from "../../lib/mutationResult.js";
 import { writeAiAudit, type AiAuditInput } from "./aiAudit.js";
+import { recordAiFeedback } from "./aiFeedback.js";
+import { undoFeedbackTargets } from "./tagging/decide.js";
 import { deleteManualLink } from "../entityLinks.js";
 import { removeDependency } from "../taskDependencies.js";
 
@@ -13,6 +15,7 @@ export const DEFAULT_UNDO_WINDOW_DAYS = 7;
 
 export type UndoInverse =
   | { kind: "remove_tagging"; taggingId: number }
+  | { kind: "remove_taggings"; taggingIds: number[]; createdTagIds: number[] }
   | { kind: "remove_link"; linkId: number }
   | { kind: "delete_comment"; activityId: number; bodyHash: string }
   | { kind: "remove_dependency"; taskId: number; dependsOnTaskId: number };
@@ -29,6 +32,7 @@ export type UndoRowStatus = "applied" | "undone" | "skipped";
 
 export type UndoTargetState =
   | { kind: "remove_tagging"; present: boolean }
+  | { kind: "remove_taggings"; present: boolean }
   | { kind: "remove_link"; present: boolean }
   | { kind: "remove_dependency"; present: boolean }
   | { kind: "delete_comment"; present: false }
@@ -69,6 +73,16 @@ function asRecord(data: unknown): Record<string, unknown> | null {
 
 function positiveId(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function idList(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const ids: number[] = [];
+  for (const item of value) {
+    const id = positiveId(item);
+    if (id != null && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 /** A journal row only for a change this apply newly created. */
@@ -191,9 +205,17 @@ export function decideUndo(args: {
   return { action: "undo" };
 }
 
+/** Tag rows created by this run that nothing else still uses. */
+export function tagIdsToDelete(createdTagIds: number[], stillUsed: ReadonlySet<number>): number[] {
+  return [...new Set(createdTagIds)].filter((id) => !stillUsed.has(id));
+}
+
 function conflictFor(target: UndoTargetState): { change: string; canForce: boolean } | null {
   if (target.kind === "remove_tagging" && !target.present) {
     return { change: "The tag is no longer on this record.", canForce: false };
+  }
+  if (target.kind === "remove_taggings" && !target.present) {
+    return { change: "The tags are no longer on this record.", canForce: false };
   }
   if (target.kind === "remove_link" && !target.present) {
     return { change: "The link is no longer there.", canForce: false };
@@ -220,6 +242,11 @@ export function parseUndoInverse(value: unknown): UndoInverse | null {
   if (rec.kind === "remove_tagging") {
     const taggingId = positiveId(rec.taggingId);
     return taggingId == null ? null : { kind: "remove_tagging", taggingId };
+  }
+  if (rec.kind === "remove_taggings") {
+    const taggingIds = idList(rec.taggingIds);
+    if (taggingIds.length === 0) return null;
+    return { kind: "remove_taggings", taggingIds, createdTagIds: idList(rec.createdTagIds) };
   }
   if (rec.kind === "remove_link") {
     const linkId = positiveId(rec.linkId);
@@ -330,6 +357,13 @@ async function targetState(db: Db, inverse: UndoInverse): Promise<UndoTargetStat
       .where(eq(schema.taggings.id, inverse.taggingId));
     return { kind: "remove_tagging", present: Boolean(row) };
   }
+  if (inverse.kind === "remove_taggings") {
+    const rows = await db
+      .select({ id: schema.taggings.id })
+      .from(schema.taggings)
+      .where(inArray(schema.taggings.id, inverse.taggingIds));
+    return { kind: "remove_taggings", present: rows.length > 0 };
+  }
   if (inverse.kind === "remove_link") {
     const [row] = await db
       .select({ id: schema.entityLinks.id })
@@ -367,6 +401,20 @@ async function targetState(db: Db, inverse: UndoInverse): Promise<UndoTargetStat
 async function performInverse(db: Db, inverse: UndoInverse, actorId: number): Promise<void> {
   if (inverse.kind === "remove_tagging") {
     await db.delete(schema.taggings).where(eq(schema.taggings.id, inverse.taggingId));
+    return;
+  }
+  if (inverse.kind === "remove_taggings") {
+    await db.delete(schema.taggings).where(inArray(schema.taggings.id, inverse.taggingIds));
+    if (inverse.createdTagIds.length === 0) return;
+    const still = await db
+      .select({ tagId: schema.taggings.tagId })
+      .from(schema.taggings)
+      .where(inArray(schema.taggings.tagId, inverse.createdTagIds));
+    const used = new Set(still.map((row) => row.tagId));
+    const drop = tagIdsToDelete(inverse.createdTagIds, used);
+    if (drop.length > 0) {
+      await db.delete(schema.tags).where(inArray(schema.tags.id, drop));
+    }
     return;
   }
   if (inverse.kind === "remove_link") {
@@ -469,6 +517,27 @@ export async function undoJournalEntry(
         entityId: row.entityId,
       }),
     );
+    await recordTaggingUndoFeedback(db, row.id, args.userId);
   }
   return { ok: true, status: nextStatus };
+}
+
+/** One undo signal per tag audit from an auto-tag batch. Missing rows are ignored. */
+async function recordTaggingUndoFeedback(db: Db, journalId: number, userId: number): Promise<void> {
+  const rows = await db
+    .select({ auditId: schema.aiTagSuggestions.auditId })
+    .from(schema.aiTagSuggestions)
+    .where(eq(schema.aiTagSuggestions.journalId, journalId));
+  for (const auditId of undoFeedbackTargets(rows.map((row) => row.auditId))) {
+    try {
+      await recordAiFeedback(db, {
+        auditId,
+        actorUserId: userId,
+        isAdministrator: false,
+        kind: "undo",
+      });
+    } catch (err) {
+      console.error("[tagging] undo feedback failed", err);
+    }
+  }
 }
