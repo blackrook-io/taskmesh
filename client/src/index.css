@@ -8875,6 +8875,20 @@ a:focus-visible {
   font-weight: 700;
   line-height: 1.2;
 }
+.mesh-node--complete .mesh-title,
+.mesh-node--complete .mesh-ref,
+.mesh-node--canceled .mesh-title,
+.mesh-node--canceled .mesh-ref {
+  color: var(--text-muted);
+}
+.mesh-node--complete .mesh-ref,
+.mesh-node--canceled .mesh-ref {
+  opacity: 1;
+}
+.mesh-node--canceled .mesh-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
 .mesh-ref {
   font-size: 0.72rem;
   line-height: 1.2;
@@ -8978,6 +8992,7 @@ a:focus-visible {
   min-width: 0;
 }
 .mesh-legend .mesh-shape { width: 16px; height: 16px; }
+.mesh-legend__strike { text-decoration: line-through; text-decoration-thickness: 1px; }
 .mesh-legend .mesh-badge { position: static; }
 .mesh-swatch {
   width: 1.6rem;

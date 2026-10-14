@@ -89,6 +89,7 @@ type MeshNodeData = {
   planMark: MeshLayoutNode["planMark"];
   color: string;
   hollow: boolean;
+  state: string | null;
   progress: number | null;
   priority: string | null;
   schedule: "none" | "ok" | "overdue" | "risk";
@@ -250,7 +251,13 @@ function readColorMode(): MeshColorMode {
   return "type";
 }
 
-function legendColors(mode: MeshColorMode): { color: string; label: string; hollow?: boolean }[] {
+function legendColors(mode: MeshColorMode): {
+  color: string;
+  label: string;
+  hollow?: boolean;
+  check?: boolean;
+  strike?: boolean;
+}[] {
   if (mode === "state") {
     return [
       { color: "var(--task-state-draft)", label: "Draft" },
@@ -258,9 +265,9 @@ function legendColors(mode: MeshColorMode): { color: string; label: string; holl
       { color: "var(--task-state-ready)", label: "Ready" },
       { color: "var(--task-state-progress)", label: "In Progress", hollow: true },
       { color: "var(--task-state-pending)", label: "Pending" },
-      { color: "var(--task-state-done)", label: "Complete", hollow: true },
+      { color: "var(--task-state-done)", label: "Complete", hollow: true, check: true },
       { color: "var(--task-state-hold)", label: "On Hold" },
-      { color: "var(--task-state-canceled)", label: "Canceled" },
+      { color: "var(--task-state-canceled)", label: "Canceled", hollow: true, strike: true },
     ];
   }
   if (mode === "priority") {
@@ -590,6 +597,7 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         data.referenceId,
         data.role === "suggestion" ? "AI suggestion" : null,
         data.planMark === "blocked" ? "blocked" : data.planMark === "next" ? "next" : null,
+        data.state === "complete" ? "complete" : data.state === "canceled" ? "canceled" : null,
         data.title,
         data.projectLabel,
         data.role === "suggestion" ? null : data.schedule === "overdue" ? "overdue" : null,
@@ -598,7 +606,13 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         .filter(Boolean)
         .join(", ");
   const suggested = data.role === "suggestion";
-  const ring = suggested || data.progress == null ? null : Math.max(0, Math.min(100, data.progress));
+  const done = !suggested && data.state === "complete";
+  const canceled = !suggested && data.state === "canceled";
+  const settled = done || canceled;
+  const ring =
+    suggested || data.progress == null || (settled && data.progress >= 100)
+      ? null
+      : Math.max(0, Math.min(100, data.progress));
   return (
     <>
       <Handle id="t" type="target" position={Position.Top} />
@@ -614,6 +628,8 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
           `mesh-node mesh-node--${data.role}`,
           data.group ? "mesh-node--group" : "",
           data.planMark ? `mesh-node--${data.planMark}` : "",
+          done ? "mesh-node--complete" : "",
+          canceled ? "mesh-node--canceled" : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -702,10 +718,10 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
           {data.cardText}
         </span>
         <span className="mesh-mark">
-          {!suggested && data.schedule === "overdue" ? (
+          {!suggested && !settled && data.schedule === "overdue" ? (
             <span className={data.pulse ? "mesh-ring mesh-ring--overdue mesh-ring--pulse" : "mesh-ring mesh-ring--overdue"} />
           ) : null}
-          {!suggested && data.schedule === "risk" ? <span className="mesh-ring mesh-ring--risk" /> : null}
+          {!suggested && !settled && data.schedule === "risk" ? <span className="mesh-ring mesh-ring--risk" /> : null}
           {ring != null ? (
             <svg className="mesh-progress" viewBox="0 0 36 36" aria-hidden>
               <circle cx="18" cy="18" r="15" className="mesh-progress__track" />
@@ -718,13 +734,13 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
               />
             </svg>
           ) : null}
-          <MeshShape type={data.type} color={data.color} hollow={data.hollow} />
-          {!suggested && (data.priority === "urgent" || data.priority === "high") ? (
+          <MeshShape type={data.type} color={data.color} hollow={data.hollow} check={done} />
+          {!suggested && !settled && (data.priority === "urgent" || data.priority === "high") ? (
             <span className={`mesh-badge mesh-badge--${data.priority}`} aria-hidden>
               {data.priority === "urgent" ? "!!" : "!"}
             </span>
           ) : null}
-          {!suggested && data.stale ? (
+          {!suggested && !settled && data.stale ? (
             <svg className="mesh-stale" viewBox="0 0 12 12" aria-hidden>
               <circle cx="6" cy="6" r="5" />
               <path d="M6 3.4 V6.2 L8 7.3" />
@@ -1394,11 +1410,15 @@ export function MeshPanel({
       layout
     ? layout.nodes.map((node) => {
         const record = node.group ? undefined : graphByKey.get(node.key);
-        const ink = glyphStyle(node.group ? "type" : colorMode, {
-          key: node.key,
-          type: node.type,
-          ...record,
-        });
+        const ink = glyphStyle(
+          node.group ? "type" : colorMode,
+          {
+            key: node.key,
+            type: node.type,
+            ...record,
+          },
+          node.role !== "suggestion",
+        );
         const mark = record ? schedule(record, today) : { kind: "none" as const };
         return {
           id: node.key,
@@ -1416,6 +1436,7 @@ export function MeshPanel({
             planMark: node.planMark,
             color: ink.color,
             hollow: ink.hollow,
+            state: record?.state ?? null,
             progress: record?.progress ?? null,
             priority: record?.priority ?? null,
             schedule: mark.kind,
@@ -1887,8 +1908,13 @@ export function MeshPanel({
               <ul>
                 {legendColors(colorMode).map((item) => (
                   <li key={item.label}>
-                    <MeshShape type="task" color={item.color} hollow={item.hollow ?? false} />
-                    {item.label}
+                    <MeshShape
+                      type="task"
+                      color={item.color}
+                      hollow={item.hollow ?? false}
+                      check={item.check}
+                    />
+                    {item.strike ? <span className="mesh-legend__strike">{item.label}</span> : item.label}
                   </li>
                 ))}
               </ul>
@@ -1916,6 +1942,14 @@ export function MeshPanel({
             <div>
               <h2>Signals</h2>
               <ul>
+                <li>
+                  <MeshShape type="task" color="var(--task-state-done)" hollow check />
+                  Complete
+                </li>
+                <li>
+                  <MeshShape type="task" color="var(--task-state-canceled)" hollow />
+                  <span className="mesh-legend__strike">Canceled</span>
+                </li>
                 <li><span className="mesh-swatch mesh-swatch--ring" /> Progress ring</li>
                 <li><span className="mesh-swatch mesh-swatch--over" /> Overdue</li>
                 <li><span className="mesh-swatch mesh-swatch--risk" /> At risk</li>

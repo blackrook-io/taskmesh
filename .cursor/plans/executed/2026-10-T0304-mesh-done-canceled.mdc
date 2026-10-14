@@ -1,0 +1,49 @@
+# T0304 — Mesh done and canceled node treatment
+
+**Task:** T0304 (id `319`) — Mesh: done and canceled node treatment
+**Parent:** T0301 (id `316`) — Mesh: dependency and completion clarity (group). Child 3 of 5. Parent is In Progress.
+**Depends on:** none. T0302 and T0303 are already Complete.
+**Required by:** none.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Branch (after approval):** `T0304-mesh-done-canceled`
+
+One session. No schema. Finish-up is a PATCH bump. Mesh already ships, so `FEATURES.md` stays as it is.
+
+## Problem
+
+Color shows state only in Color = State. A Complete record (T0104) looks like open work in Type and Priority, including its priority badge. Hover already fades unrelated nodes to 20% opacity, so opacity cannot also mean done.
+
+## Decisions
+
+1. **Complete is hollow in every color mode.** Outline uses the color that mode already assigns (type, state, or priority). Fill is `var(--surface)`. A small check sits inside the shape, stroked in that same color, with no fill. In Progress stays hollow only in State mode and does not get a check, so State mode still separates Draft (filled) from In Progress (hollow) and Ready (filled green) from Complete (hollow green + check). That is the T0172 Ready/Complete token overlap.
+2. **Canceled uses the same hollow outline and no check.** The title is struck through. The reference line (T0104) is not struck, so the number stays readable.
+3. **The label is muted with color, not opacity.** Title and reference use `var(--text-muted)`. The node itself stays at full opacity unless hover dim applies. Hover dim (unrelated nodes at 20%) is unchanged and remains a different signal.
+4. **Own-status badges drop on Complete and Canceled.** No priority `!` / `!!`, no stale clock, no at-risk or overdue ring. `schedule` already returns none for those states; `isStale` also returns false for canceled (today it only skips complete). The progress ring stays when `progress` is a number below 100, and hides at 100%. Open records are unchanged, including a 100% ring.
+5. **The red overdue-descendant count stays.** It reports hidden children, not this record’s own status.
+6. **Pending, groups, and AI suggestions are unchanged.** Pending is not done. Group nodes keep type coloring. Suggestions stay dashed.
+7. **Legend.** State mode: Complete is hollow with a check; Canceled is hollow (it is filled today) with a struck label. Signals, in every color mode: the same two entries, drawn with the done and canceled state tokens, so Type and Priority still explain the treatment. Live nodes still outline in the active mode’s color.
+8. **Size and stroke stay on the existing appearance variables.** Glyph size is `--mesh-glyph` / `--mesh-glyph-focus` (Administrator glyph scale). The hollow stroke stays in the shape’s viewBox units, so it scales with that glyph. No new Administrator control.
+9. **Both Mesh views.** The node component is shared, so Plan view gets the same treatment. Arrow direction and the Completed-dependencies filter stay on T0305. Hover-card dependency names stay on T0306.
+10. **Accessible name.** The button label includes “complete” or “canceled”.
+
+## Scope
+
+1. `client/src/lib/meshSignals.ts` — `glyphStyle` forces hollow for `complete` and `canceled` in every mode. `isStale` treats canceled like complete. Tests in `meshSignals.test.ts`.
+2. `client/src/components/MeshShape.tsx` — optional check mark, stroked in the outline color.
+3. `client/src/components/MeshPanel.tsx` — pass the mark; drop priority, stale, at-risk, and overdue chrome on those states; hide the progress ring at 100% for those states; aria-label; legend rows.
+4. `client/src/index.css` — muted label and title strike. No change to `.mesh-canvas--focusing` opacity.
+
+## Out
+
+- Dependency line weight and the Completed dependencies filter (T0305).
+- Hover card listing dependencies by name and state (T0306).
+- App-wide `--task-state-*` token changes.
+- New Mesh appearance settings.
+
+## Acceptance
+
+- On a project Mesh, a Complete task is a hollow outline plus a check in Type, State, and Priority, with a muted title. A Canceled task is the same outline, no check, title struck through.
+- Those records show no priority badge, stale clock, or at-risk ring. A progress ring shows only when progress is under 100%.
+- Hovering an unrelated record still fades it to about 20%. A Complete neighbour that stays bright is still full opacity, distinguished by the hollow shape, check, and muted label.
+- Legend shows Complete and Canceled in every color mode. Ready stays a filled green; Complete is hollow green with a check when Color = State.
+- Readable on all six accent packs, light and dark. `npm run lint` is clean.

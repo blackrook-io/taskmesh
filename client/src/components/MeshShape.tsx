@@ -55,16 +55,28 @@ export function MeshShape({
   type,
   color,
   hollow,
+  check = false,
 }: {
   type: string;
   color: string;
   hollow: boolean;
+  check?: boolean;
 }) {
   const fill = hollow ? "var(--surface)" : color;
   const stroke = hollow ? color : STROKE;
   return (
     <svg className="mesh-shape" viewBox="-12 -12 24 24" aria-hidden>
       {shape(type, fill, stroke)}
+      {check ? (
+        <path
+          d="M-4.2 0.6 L-1.4 3.5 L4.4 -3.2"
+          fill="none"
+          stroke={color}
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : null}
     </svg>
   );
 }
