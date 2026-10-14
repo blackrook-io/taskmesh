@@ -505,6 +505,13 @@
       "when": 1791937503411,
       "tag": "0071_messy_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1791938453587,
+      "tag": "0072_early_lockheed",
+      "breakpoints": true
     }
   ]
 }

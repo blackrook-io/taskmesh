@@ -72,6 +72,11 @@ export const projects = pgTable("projects", {
    * The effective mark is this value OR the instance ceiling `ai_project_local_only`.
    */
   aiLocalOnly: boolean("ai_local_only").notNull().default(false),
+  /**
+   * Project AI instructions (T0209). Plain text, like an AGENTS.md for the project.
+   * Sent with context for this project. Not indexed in knowledge_chunks.
+   */
+  aiInstructions: text("ai_instructions"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -263,6 +268,8 @@ export const users = pgTable("users", {
     off?: string[];
     featuresOff?: string[];
   }>().notNull().default(sql`'{}'::jsonb`),
+  /** Per-user AI instructions (T0209). Not indexed in knowledge_chunks. */
+  aiInstructions: text("ai_instructions"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

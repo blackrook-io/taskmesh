@@ -161,12 +161,14 @@ Exact FK lists are on the domain pages.
   - `ai_key_mode` — `instance_only` \| `user_only` \| `user_preferred_instance_fallback` (default `instance_only`, T0182). Controls who may spend an instance provider key. Missing or invalid values fall back to `instance_only`. The billing-risk acknowledgement is an `ai_audit_log` row, not a value on this key.
   - `ai_permission_tiers` — jsonb permission ceiling (T0185): `matrix` of action (or `action:entityType`) → tier 0–3, `tier1Enabled` (default true), `maxRecords` (default **5**), `maxProjects` (default **2**). Missing or invalid JSON uses those defaults. User opt-in is not stored on this key.
   - `users.ai_policy` — jsonb (default `{}`, T0190). `raised` maps a matrix key to a tier above the administrator ceiling, `off` lists keys the user turned off, and `featuresOff` lists features the user turned off. A lower tier or a cell the administrator already denied is rejected on save. Empty or invalid JSON inherits the ceiling.
+  - `users.ai_instructions` — nullable text (T0209). That user's AI instructions, up to 8,000 characters. Included after instance and project instructions when context is assembled.
   - `ai_undo_window_days` — number of days (default **7**, range **1**–**90**, T0186) that an automatic Tier 1 change can be undone. Missing or invalid values fall back to **7**.
   - `ai_project_access_default` — `full` \| `read_only` \| `excluded` (default `full`, T0184). Instance ceiling for `projects.ai_access`. Projects can only narrow it. Missing or invalid values fall back to `full`.
   - `ai_project_local_only` — boolean (default `false`, T0320). When true, every project is local-model only. A project’s `ai_local_only` can only narrow this (turn it on). Missing or invalid values fall back to `false`.
   - `ai_feature_routes` — jsonb (T0205): `features` maps a feature id to an optional `{ pluginId, model }` default and an ordered `fallbacks` list; `profiles` is a list of per-model overrides (`tools`, `embeddings`, `longContext`, `size`). Missing or invalid JSON is treated as empty. API keys are not stored here.
   - `ai_budgets` — jsonb (T0188): `tokensPerUserPerDay`, `instanceSpendUsdPerDay`, `toolCallsPerRun`, and `writesPerRun`. Each is a positive integer or null. Null means that limit is off. The spend cap is whole USD per UTC day and counts only instance-key calls.
   - `ai_instance_usd_per_million_tokens` — number (default **1**, T0188). Estimated price used to turn instance-key tokens into spend. Missing or invalid values fall back to **1**.
+  - `ai_instructions` — string or null (T0209). Instance-wide AI instructions, up to 8,000 characters. Included first in an assembled context packet. Empty or non-string values are treated as unset.
 - **`mesh_layouts.positions`** — pinned Mesh node key → `{ x, y }` (T0165). **`mesh_layouts.viewport`** — `{ x, y, zoom }` or empty. `view` is `focus` \| `plan`.
 
 ## Uploads vs database

@@ -9,6 +9,7 @@ import {
   normalizeMeshAppearance,
   type MeshAppearance,
 } from "../lib/meshAppearance.js";
+import { sanitizeMarkdown } from "../lib/sanitizeMarkdown.js";
 import { DEFAULT_THEME, isThemeId, THEME_IDS, type ThemeId } from "../lib/theme.js";
 import {
   normalizeAiFeatureRoutes,
@@ -77,6 +78,7 @@ export const SYSTEM_PROPERTY_KEYS = [
   "ai_feature_routes",
   "ai_budgets",
   "ai_instance_usd_per_million_tokens",
+  "ai_instructions",
 ] as const;
 
 export type SystemPropertyKey = (typeof SYSTEM_PROPERTY_KEYS)[number];
@@ -111,6 +113,8 @@ export type SystemProperties = {
   aiBudgets: AiBudgets;
   /** Estimated USD charged per million tokens on instance-key calls. */
   aiInstanceUsdPerMillionTokens: number;
+  /** Instance-wide AI instructions (T0209). Null when unset. */
+  aiInstructions: string | null;
   /** Per-feature model defaults, fallbacks, and model-profile overrides (T0205). */
   aiFeatureRoutes: AiFeatureRoutesFile;
   updatedAt: string | null;
@@ -150,6 +154,7 @@ const DEFAULTS: {
   ai_feature_routes: AiFeatureRoutesFile;
   ai_budgets: AiBudgets;
   ai_instance_usd_per_million_tokens: number;
+  ai_instructions: string;
 } = {
   api_rate_limit_per_minute: 60,
   global_api_rate_limit_per_minute: 300,
@@ -172,6 +177,7 @@ const DEFAULTS: {
   ai_feature_routes: { features: {}, profiles: [] },
   ai_budgets: EMPTY_AI_BUDGETS,
   ai_instance_usd_per_million_tokens: 1,
+  ai_instructions: "",
 };
 
 function asNumber(value: unknown, fallback: number): number {
@@ -191,6 +197,13 @@ function asIntInRange(value: unknown, fallback: number, min: number, max: number
 function asThemeId(value: unknown, fallback: ThemeId): ThemeId {
   if (isThemeId(value)) return value;
   return fallback;
+}
+
+function asInstructions(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 8_000);
 }
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
@@ -346,6 +359,7 @@ export async function getSystemProperties(db: Db, now = Date.now()): Promise<Sys
       map.get("ai_instance_usd_per_million_tokens")?.value ??
         DEFAULTS.ai_instance_usd_per_million_tokens,
     ),
+    aiInstructions: asInstructions(map.get("ai_instructions")?.value),
     updatedAt: latest?.toISOString() ?? null,
   };
   rememberSystemPropertiesCache(resolved, now);
@@ -385,6 +399,7 @@ export async function patchSystemProperties(
     aiBudgets?: AiBudgets;
     aiInstanceUsdPerMillionTokens?: number;
     aiPermissionTiers?: StoredAiPermissionTiers;
+    aiInstructions?: string | null;
   },
 ): Promise<SystemProperties> {
   const now = new Date();
@@ -622,6 +637,22 @@ export async function patchSystemProperties(
         set: { value: patch.aiPermissionTiers, updatedAt: now },
       });
   }
+  if (patch.aiInstructions !== undefined) {
+    const raw =
+      patch.aiInstructions == null ? "" : sanitizeMarkdown(patch.aiInstructions);
+    const value = asInstructions(raw) ?? "";
+    await db
+      .insert(schema.systemProperties)
+      .values({
+        key: "ai_instructions",
+        value,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.systemProperties.key,
+        set: { value, updatedAt: now },
+      });
+  }
   invalidateSystemPropertiesCache();
   return getSystemProperties(db);
 }
@@ -663,5 +694,6 @@ export const systemPropertiesPatchSchema = z
       .optional(),
     aiInstanceUsdPerMillionTokens: z.number().nonnegative().max(1_000_000).optional(),
     aiPermissionTiers: aiPermissionTiersPatchSchema.optional(),
+    aiInstructions: z.string().max(8_000).nullable().optional(),
   })
   .strict();

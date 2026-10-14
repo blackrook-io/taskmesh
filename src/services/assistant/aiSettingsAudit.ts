@@ -9,6 +9,7 @@ export type AiSettingsSnapshot = {
   aiBudgets: AiBudgets;
   aiInstanceUsdPerMillionTokens: number;
   aiPermissionTiers: StoredAiPermissionTiers;
+  aiInstructions: string | null;
 };
 
 export type AiSettingsTouch = {
@@ -18,6 +19,7 @@ export type AiSettingsTouch = {
   aiBudgets?: unknown;
   aiInstanceUsdPerMillionTokens?: unknown;
   aiPermissionTiers?: unknown;
+  aiInstructions?: unknown;
 };
 
 const PLUGIN_ID = /^[a-z0-9-]+$/;
@@ -84,6 +86,12 @@ export function describeAiSettingsChange(
     before.aiInstanceUsdPerMillionTokens !== after.aiInstanceUsdPerMillionTokens
   ) {
     parts.push(`usdPerMillion ${after.aiInstanceUsdPerMillionTokens}`);
+  }
+  if (
+    touched.aiInstructions !== undefined &&
+    before.aiInstructions !== after.aiInstructions
+  ) {
+    parts.push("instructions updated");
   }
   if (touched.aiPermissionTiers !== undefined) {
     const prev = before.aiPermissionTiers;

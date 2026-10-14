@@ -26,6 +26,8 @@ export type Project = {
   aiLocalOnly?: boolean;
   aiLocalOnlyEffective?: boolean;
   aiLocalOnlyCeiling?: boolean;
+  /** Project AI instructions. Null when unset. */
+  aiInstructions?: string | null;
   sortOrder: number;
   sourceIdeaId: number | null;
   ownerId?: number;
@@ -85,6 +87,7 @@ export type UserProfile = UserRef & {
   hasPassword: boolean;
   roles: RoleRef[];
   isAdministrator: boolean;
+  aiInstructions?: string | null;
 };
 
 export type Task = {

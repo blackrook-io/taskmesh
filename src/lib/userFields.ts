@@ -21,6 +21,8 @@ export type UserProfile = UserRef & {
   hasPassword: boolean;
   roles: RoleRef[];
   isAdministrator: boolean;
+  /** Personal AI instructions. Null when unset. */
+  aiInstructions: string | null;
 };
 
 export function toUserRef(user: {
@@ -50,6 +52,7 @@ export function toUserProfile(
     lastLoginAt: Date | null;
     lastApiAt: Date | null;
     passwordHash?: string | null;
+    aiInstructions?: string | null;
   },
   avatarStoredName?: string | null,
 ): UserProfile {
@@ -63,5 +66,6 @@ export function toUserProfile(
     hasPassword: Boolean(user.passwordHash),
     roles: [],
     isAdministrator: false,
+    aiInstructions: user.aiInstructions ?? null,
   };
 }
