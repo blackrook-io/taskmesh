@@ -9,6 +9,7 @@ import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import {
   dueDateSchema,
+  estimateHoursSchema,
   isDeletedTaskState,
   selectableTaskStateSchema,
   taskPrioritySchema,
@@ -56,6 +57,7 @@ const createBody = z.object({
   title: plainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  estimateHours: estimateHoursSchema,
   actionBy: actionBySchema,
   color: z.string().max(64).optional().nullable(),
   state: selectableTaskStateSchema.optional(),
@@ -71,6 +73,7 @@ const patchBody = z.object({
   title: optionalPlainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  estimateHours: estimateHoursSchema,
   actionBy: actionBySchema,
   color: z.string().max(64).optional().nullable(),
   state: selectableTaskStateSchema.optional(),
@@ -220,6 +223,7 @@ todosRouter.post("/", async (req, res) => {
         title: parsed.title,
         description: parsed.description ?? null,
         dueDate: parsed.dueDate ?? null,
+        estimateHours: parsed.estimateHours ?? null,
         actionBy: parseActionBy(parsed.actionBy) ?? null,
         color: parsed.color ?? null,
         state: initial.state,
@@ -283,6 +287,7 @@ todosRouter.patch("/:id", async (req, res) => {
         "title",
         "description",
         "dueDate",
+        "estimateHours",
         "actionBy",
         "color",
         "state",
@@ -378,6 +383,7 @@ todosRouter.patch("/:id", async (req, res) => {
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(parsed.dueDate !== undefined ? { dueDate: parsed.dueDate } : {}),
+        ...(parsed.estimateHours !== undefined ? { estimateHours: parsed.estimateHours } : {}),
         ...(parsed.actionBy !== undefined
           ? { actionBy: parseActionBy(parsed.actionBy) ?? null }
           : {}),
@@ -399,12 +405,20 @@ todosRouter.patch("/:id", async (req, res) => {
     if (progressUpdate?.membershipChecked != null) {
       await syncTodoMembershipChecked(db, id, progressUpdate.membershipChecked);
     }
-    if (progressUpdate) {
+    if (row && (progressUpdate || parsed.estimateHours !== undefined)) {
       await recordTodoFieldChanges(
         db,
         id,
-        { state: existing.state, progress: existing.progress },
-        { state: progressUpdate.state, progress: progressUpdate.progress },
+        {
+          state: existing.state,
+          progress: existing.progress,
+          estimateHours: existing.estimateHours,
+        },
+        {
+          state: progressUpdate?.state ?? row.state,
+          progress: progressUpdate?.progress ?? row.progress,
+          estimateHours: row.estimateHours,
+        },
         actorId,
         activitySourceFromRequest(req),
       );

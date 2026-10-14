@@ -53,11 +53,20 @@ export function projectStatusLabel(status: string): string {
   return PROJECT_STATUS_LABELS[status] ?? status;
 }
 
+function hoursLabel(value: number | null | undefined): string {
+  if (value == null) return "none";
+  return String(value);
+}
+
 export function trackedTodoChanges(
-  before: { state: string; progress: number },
-  after: { state: string; progress: number },
-): Array<{ field: "state" | "progress"; oldValue: string; newValue: string }> {
-  const changes: Array<{ field: "state" | "progress"; oldValue: string; newValue: string }> = [];
+  before: { state: string; progress: number; estimateHours?: number | null },
+  after: { state: string; progress: number; estimateHours?: number | null },
+): Array<{ field: "state" | "progress" | "estimateHours"; oldValue: string; newValue: string }> {
+  const changes: Array<{
+    field: "state" | "progress" | "estimateHours";
+    oldValue: string;
+    newValue: string;
+  }> = [];
   if (before.state !== after.state) {
     changes.push({
       field: "state",
@@ -70,6 +79,17 @@ export function trackedTodoChanges(
       field: "progress",
       oldValue: String(before.progress),
       newValue: String(after.progress),
+    });
+  }
+  if (
+    before.estimateHours !== undefined &&
+    after.estimateHours !== undefined &&
+    before.estimateHours !== after.estimateHours
+  ) {
+    changes.push({
+      field: "estimateHours",
+      oldValue: hoursLabel(before.estimateHours),
+      newValue: hoursLabel(after.estimateHours),
     });
   }
   return changes;

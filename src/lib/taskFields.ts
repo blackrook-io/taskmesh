@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ESTIMATE_HOURS_MAX } from "./estimateHours.js";
 
 export const TASK_STATES = [
   "new",
@@ -49,6 +50,15 @@ export function isDeletedTaskState(state: string): boolean {
 export function isFinishedChildState(state: string): boolean {
   return state === "complete" || state === "canceled" || state === "deleted";
 }
+
+/** Quarter-hour hours, or null to clear. Omitted means leave unchanged. */
+export const estimateHoursSchema = z
+  .number()
+  .min(0)
+  .max(ESTIMATE_HOURS_MAX)
+  .multipleOf(0.25)
+  .nullable()
+  .optional();
 
 /** YYYY-MM-DD only. */
 export const dueDateSchema = z

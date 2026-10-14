@@ -23,6 +23,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Tasks
 
 - Capture work as simple list lines, then expand into due dates, notes, priority, color, phase, and tags
+- Estimate effort in quarter-hour Hours on a Task or To Do, then sort and filter the list by that column
 - Organize with parent/child hierarchies, dependencies, phases, and filterable task groups
 - Parent tasks show a done/total count and progress bar, and their status follows the children unless Manual status is on
 - Drag-and-drop reorder and group membership; right-click for quick state, priority, and due-date changes
@@ -61,7 +62,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 
 - Comment on a To Do or on the list itself, using the same History editor as a Task; an Administrator can delete a comment
 - Build standalone checklists that can mix To Dos, Tasks, and Ideas
-- Filter by state, priority, and tags; drag to reorder, or sort by column and return to that saved order; personalize columns from the header; color-code list accents
+- Filter by state, priority, tags, and Hours; drag to reorder, or sort by column and return to that saved order; personalize columns from the header; color-code list accents
 - See To Do progress on the list as a color bar (red, orange, yellow, green); 100% marks the ToDo complete
 - Nest To Dos on a list and see a parent’s x-of-y completion; marking a parent complete while a sub-item is open leaves it Pending until those sub-items finish
 

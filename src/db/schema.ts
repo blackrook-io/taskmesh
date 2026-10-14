@@ -8,6 +8,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   serial,
@@ -1187,6 +1188,11 @@ export const tasks = pgTable("tasks", {
   priority: text("priority").notNull().default("none"),
   /** Date-only due date (YYYY-MM-DD). */
   dueDate: date("due_date", { mode: "string" }),
+  /**
+   * Effort estimate in hours. Null = not estimated. 0 = trivial.
+   * Quarter-hour steps only (0, 0.25, …, 999.75 at the API).
+   */
+  estimateHours: numeric("estimate_hours", { precision: 6, scale: 2, mode: "number" }),
   /** @deprecated Prefer dueDate; kept for migration compatibility. */
   dueAt: timestamp("due_at", { withTimezone: true }),
   color: text("color"),
@@ -1227,6 +1233,10 @@ export const tasks = pgTable("tasks", {
   rollupPair: check(
     "tasks_rollup_pair",
     sql`(${t.rollupDone} is null and ${t.rollupTotal} is null) or (${t.rollupDone} >= 0 and ${t.rollupTotal} > 0 and ${t.rollupDone} <= ${t.rollupTotal})`,
+  ),
+  estimateHoursQuarter: check(
+    "tasks_estimate_hours_quarter",
+    sql`${t.estimateHours} >= 0 AND ${t.estimateHours} * 4 = trunc(${t.estimateHours} * 4)`,
   ),
 }));
 
@@ -1648,6 +1658,11 @@ export const todos = pgTable("todos", {
   priority: text("priority").notNull().default("none"),
   /** Date-only due date (YYYY-MM-DD). */
   dueDate: date("due_date", { mode: "string" }),
+  /**
+   * Effort estimate in hours. Null = not estimated. 0 = trivial.
+   * Quarter-hour steps only (0, 0.25, …, 999.75 at the API).
+   */
+  estimateHours: numeric("estimate_hours", { precision: 6, scale: 2, mode: "number" }),
   /** When this ToDo should be acted on. */
   actionBy: timestamp("action_by", { withTimezone: true }),
   color: text("color"),
@@ -1687,6 +1702,10 @@ export const todos = pgTable("todos", {
     .defaultNow(),
 }, (t) => ({
   progressRange: check("todos_progress_range", sql`${t.progress} >= 0 AND ${t.progress} <= 100`),
+  estimateHoursQuarter: check(
+    "todos_estimate_hours_quarter",
+    sql`${t.estimateHours} >= 0 AND ${t.estimateHours} * 4 = trunc(${t.estimateHours} * 4)`,
+  ),
   parentIdx: index("todos_parent_id_idx").on(t.parentId),
 }));
 

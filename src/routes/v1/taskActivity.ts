@@ -5,7 +5,7 @@ import { db } from "../../db/client.js";
 import * as schema from "../../db/schema.js";
 import { activitySourceFromRequest } from "../../lib/activityRequest.js";
 import { handleRouteError, sendError } from "../../lib/httpError.js";
-import { dueDateSchema } from "../../lib/taskFields.js";
+import { dueDateSchema, estimateHoursSchema } from "../../lib/taskFields.js";
 import { recordTaskChanges, type TaskLike } from "../../services/tasks.js";
 import { assertCanAccessDualScoped } from "../../services/ownership.js";
 import { getCurrentUserId } from "../../services/users.js";
@@ -20,6 +20,7 @@ const sessionBody = z.object({
     state: z.string(),
     priority: z.string(),
     dueDate: dueDateSchema,
+    estimateHours: estimateHoursSchema,
     color: z.string().nullable(),
     phaseId: z.number().int().positive().nullable(),
     parentId: z.number().int().positive().nullable(),
@@ -54,6 +55,10 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       state: parsed.before.state,
       priority: parsed.before.priority,
       dueDate: parsed.before.dueDate ?? null,
+      estimateHours:
+        parsed.before.estimateHours !== undefined
+          ? parsed.before.estimateHours
+          : task.estimateHours,
       color: parsed.before.color,
       phaseId: parsed.before.phaseId,
       parentId: parsed.before.parentId,
@@ -66,6 +71,7 @@ taskActivityRouter.post("/:taskId/activity/session", async (req, res) => {
       state: task.state,
       priority: task.priority,
       dueDate: task.dueDate,
+      estimateHours: task.estimateHours,
       color: task.color,
       phaseId: task.phaseId,
       parentId: task.parentId,

@@ -19,6 +19,7 @@ import { formatEntityRef } from "../lib/entityRef";
 import { buildTodoListGridTemplate, type ResolvedListColumn } from "../lib/listViewColumns";
 import { sanitizePlainText } from "../lib/plainText";
 import { cycleRecordListSort, MANUAL_RECORD_LIST_SORT, storageKeyForTodoListSort } from "../lib/recordListSort";
+import { compareEstimateHours } from "../../../src/lib/estimateHours.ts";
 import { compareTodoListItems } from "../lib/todoListSort";
 import {
   TODO_ROOT_DROP_ID,
@@ -46,6 +47,7 @@ import {
   TASK_PRIORITY_LABELS,
   TASK_STATE_LABELS,
   formatTaskNumber,
+  isClosedTaskState,
   isSelectableTaskState,
   taskPriorityClass,
   taskStateClass,
@@ -58,6 +60,7 @@ import type { Project, Task, Todo, TodoListDetail, TodoListItem } from "../types
 import { ConfirmDialog } from "./ConfirmDialog";
 import { TodoListFilterBar } from "./TodoListFilterBar";
 import { TaskEditorFields } from "./TaskBoard";
+import { HoursInput } from "./shared/HoursInput";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { EntityLinksPanel } from "./shared/EntityLinksPanel";
@@ -196,6 +199,23 @@ function SortableItem({
             —
           </span>
         );
+      case "estimateHours": {
+        const hoursLocked = item.entityType === "task" && isClosedTaskState(item.state ?? "");
+        return canInline ? (
+          <HoursInput
+            key="estimateHours"
+            className="task-list-row__date"
+            value={item.estimateHours}
+            disabled={hoursLocked}
+            ariaLabel="Hours"
+            onCommit={(next) => onPatchEntity({ estimateHours: next })}
+          />
+        ) : (
+          <span key="estimateHours" className="muted">
+            —
+          </span>
+        );
+      }
       case "dueDate":
         return canInline ? (
           <input
@@ -503,6 +523,17 @@ export function TodoEditorFields({
               <span className="task-color-swatch__hex muted">{color ?? "default"}</span>
             </div>
           </div>
+        </div>
+        <div className="field">
+          <label htmlFor={`d-hours-${todo.id}`}>Hours</label>
+          <HoursInput
+            id={`d-hours-${todo.id}`}
+            value={todo.estimateHours}
+            ariaLabel="Hours"
+            onCommit={(next) => {
+              if (next !== (todo.estimateHours ?? null)) void patch({ estimateHours: next });
+            }}
+          />
         </div>
         <div className="field">
           <label htmlFor={`d-action-${todo.id}`}>Action by</label>
@@ -861,7 +892,14 @@ export function TodoListView({ listId, defaultProjectId }: Props) {
   }, [sortCol, visibleColumns]);
   const displayItems = useMemo(() => {
     const compare = effectiveSortCol
-      ? (a: TodoListItem, b: TodoListItem) => compareTodoListItems(a, b, effectiveSortCol) * sortDir
+      ? (a: TodoListItem, b: TodoListItem) => {
+          if (effectiveSortCol === "estimateHours") {
+            const hours = compareEstimateHours(a.estimateHours, b.estimateHours, sortDir);
+            if (hours !== 0) return hours;
+            return a.sortOrder - b.sortOrder || a.id - b.id;
+          }
+          return compareTodoListItems(a, b, effectiveSortCol) * sortDir;
+        }
       : null;
     return flattenTodoList(visibleItems, compare);
   }, [visibleItems, effectiveSortCol, sortDir]);

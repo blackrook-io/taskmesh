@@ -16,6 +16,7 @@ import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown.js";
 import { parseRouteId } from "../../lib/routeParams.js";
 import {
   dueDateSchema,
+  estimateHoursSchema,
   selectableTaskStateSchema,
   taskPrioritySchema,
 } from "../../lib/taskFields.js";
@@ -64,6 +65,7 @@ const taskBody = z.object({
   title: plainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  estimateHours: estimateHoursSchema,
   /** @deprecated Accept datetime for older clients; stored as dueDate date part. */
   dueAt: z.string().datetime().optional().nullable(),
   color: z.string().max(64).optional().nullable(),
@@ -80,6 +82,7 @@ const taskPatch = z.object({
   title: optionalPlainTitle(2000),
   description: optionalMarkdown(50_000),
   dueDate: dueDateSchema,
+  estimateHours: estimateHoursSchema,
   dueAt: z.string().datetime().optional().nullable(),
   color: z.string().max(64).optional().nullable(),
   phaseId: z.number().int().positive().optional().nullable(),
@@ -192,6 +195,7 @@ export async function createProjectTask(args: {
       state: initialState,
       priority: parsed.priority ?? "none",
       dueDate,
+      estimateHours: parsed.estimateHours ?? null,
       color: parsed.color ?? null,
       sortOrder: nextSort,
       createdById: args.actorId,
@@ -367,6 +371,7 @@ export async function patchProjectTask(args: {
       "title",
       "description",
       "dueDate",
+      "estimateHours",
       "dueAt",
       "color",
       "phaseId",
@@ -444,6 +449,7 @@ export async function patchProjectTask(args: {
         ...(parsed.title !== undefined ? { title: parsed.title } : {}),
         ...(parsed.description !== undefined ? { description: parsed.description } : {}),
         ...(dueDate !== undefined ? { dueDate } : {}),
+        ...(parsed.estimateHours !== undefined ? { estimateHours: parsed.estimateHours } : {}),
         ...(parsed.color !== undefined ? { color: parsed.color } : {}),
         ...(nextPhaseId !== existing.phaseId || parsed.phaseId !== undefined
           ? { phaseId: nextPhaseId }

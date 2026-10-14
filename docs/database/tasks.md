@@ -32,6 +32,7 @@ erDiagram
     text state
     text priority
     date due_date
+    numeric estimate_hours
     int owner_id FK
   }
   task_activity {
@@ -81,6 +82,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 | `rollup_total` | integer | yes | — | Counted leaves: non-deleted, non-canceled tasks with no children of their own, anywhere under this task |
 | `priority` | text | no | `'none'` | `none` \| `low` \| `medium` \| `high` \| `urgent` |
 | `due_date` | date | yes | — | Date-only (`YYYY-MM-DD` string mode in Drizzle) |
+| `estimate_hours` | numeric(6,2) | yes | — | Effort estimate in hours. Null = not estimated. 0 = trivial. Quarter-hour steps only. Drizzle `mode: "number"` maps the driver string to a JSON number |
 | `due_at` | timestamptz | yes | — | **Deprecated**; prefer `due_date` |
 | `color` | text | yes | — | Accent (CSS hex string in app) |
 | `sort_order` | integer | no | `0` | Manual List View order among siblings. Groups and column sort take precedence in the UI; drag-and-drop writes this field and clears column sort so the drop position sticks. |
@@ -104,6 +106,7 @@ Hierarchy (`parent_id`) is separate from **Depends on** edges in `task_dependenc
 - **FK:** `assignee_id` → `users.id` · **ON DELETE SET NULL**
 - **INDEX:** `assignee_id`
 - **CHECK:** `tasks_rollup_pair` — `rollup_done` and `rollup_total` are both null, or both set with `0 <= rollup_done <= rollup_total` and `rollup_total > 0`
+- **CHECK:** `tasks_estimate_hours_quarter` — `estimate_hours >= 0` and `estimate_hours * 4 = trunc(estimate_hours * 4)`. A null estimate passes. The API also caps the value at 999.75
 
 Parent status (T0335) is computed from descendant **leaf** tasks. Canceled and deleted tasks are not counted. Intermediate groups are not items in the fraction; they receive the same kind of rollup from their own leaves. Precedence: all Complete → Complete; any Blocked → Blocked; any In Progress, Pending, or Complete → In Progress; any On Hold → On Hold; any Draft → Draft; otherwise Ready. A task with no counted leaves keeps its stored status. Turning on `state_manual` stops the derived write but still refreshes the counts.
 

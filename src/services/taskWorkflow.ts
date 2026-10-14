@@ -38,6 +38,7 @@ const EDIT_KEYS = [
   "title",
   "description",
   "dueDate",
+  "estimateHours",
   "dueAt",
   "color",
   "phaseId",

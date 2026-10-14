@@ -1,5 +1,6 @@
 /** Client-side compound filters for To Do list views. */
 
+import { estimateHoursMatches } from "../../../src/lib/estimateHours.ts";
 import {
   TODO_LIST_FILTER_COMBINATIONS,
   isAllowedFilterCombination,
@@ -18,6 +19,7 @@ export const TODO_FILTER_FIELDS = [
   "state",
   "priority",
   "dueDate",
+  "estimateHours",
   "tags",
   "title",
   "checked",
@@ -33,6 +35,10 @@ export const TODO_FILTER_OPERATORS = [
   "starts_with",
   "before",
   "after",
+  "gt",
+  "lt",
+  "is_empty",
+  "is_not_empty",
 ] as const;
 export type TodoFilterOperator = (typeof TODO_FILTER_OPERATORS)[number];
 
@@ -57,6 +63,7 @@ export const TODO_FILTER_FIELD_LABELS: Record<TodoFilterField, string> = {
   state: "State",
   priority: "Priority",
   dueDate: "Due",
+  estimateHours: "Hours",
   tags: "Tags",
   title: "Title",
   checked: "Checked",
@@ -71,6 +78,10 @@ export const TODO_FILTER_OPERATOR_LABELS: Record<TodoFilterOperator, string> = {
   starts_with: "starts with",
   before: "before",
   after: "after",
+  gt: "greater than",
+  lt: "less than",
+  is_empty: "is empty",
+  is_not_empty: "is not empty",
 };
 
 export const TODO_FILTER_JOIN_LABELS: Record<TodoFilterJoin, string> = {
@@ -313,6 +324,9 @@ export function clauseMatchesTodoItem(
   if (clause.field === "dueDate") {
     return matchDue(item.dueDate, clause, todayKey);
   }
+  if (clause.field === "estimateHours") {
+    return estimateHoursMatches(item.estimateHours, clause.operator, clause.value);
+  }
   if (clause.field === "tags") {
     return matchTags(item, clause, ctx);
   }
@@ -427,8 +441,14 @@ export function formatTodoFilterBreadcrumb(
     if (i > 0) {
       parts.push(TODO_FILTER_JOIN_LABELS[filter.joins[i - 1] ?? "and"]);
     }
+    const valueLabel =
+      clause.operator === "is_empty" || clause.operator === "is_not_empty"
+        ? ""
+        : clauseValueLabel(clause, ctx);
     parts.push(
-      `${TODO_FILTER_FIELD_LABELS[clause.field]} ${TODO_FILTER_OPERATOR_LABELS[clause.operator]} ${clauseValueLabel(clause, ctx)}`,
+      [TODO_FILTER_FIELD_LABELS[clause.field], TODO_FILTER_OPERATOR_LABELS[clause.operator], valueLabel]
+        .filter((part) => part.length > 0)
+        .join(" "),
     );
   });
   return parts.join(" ");

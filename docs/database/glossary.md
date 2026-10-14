@@ -181,6 +181,7 @@ Exact FK lists are on the domain pages.
 
 - `created_at` / `updated_at` — `timestamptz`
 - `tasks.due_date` — calendar date only
+- `tasks.estimate_hours` and `todos.estimate_hours` — optional quarter-hour effort estimate. Null means not estimated. 0 means trivial
 - `tasks.due_at` — deprecated timestamp; prefer `due_date`
 
 ## Indexes and uniqueness

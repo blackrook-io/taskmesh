@@ -44,6 +44,23 @@ function TodoFilterClauseValueInput({
   onChange: (value: string) => void;
   tags: FilterTagOption[];
 }) {
+  if (clause.operator === "is_empty" || clause.operator === "is_not_empty") {
+    return <span className="muted" aria-hidden />;
+  }
+  if (clause.field === "estimateHours") {
+    return (
+      <input
+        type="number"
+        min={0}
+        max={999.75}
+        step={0.25}
+        aria-label="Filter value"
+        placeholder="1.25"
+        value={clause.value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
   if (clause.field === "state") {
     return (
       <select aria-label="Filter value" value={clause.value} onChange={(e) => onChange(e.target.value)}>
