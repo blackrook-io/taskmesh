@@ -16,7 +16,9 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiRequestError, apiJson } from "../api/client";
 import { StateReasonDialog } from "../components/StateReasonDialog";
+import { PlanAiRange } from "../components/PlanAiRange";
 import { PlanFinishChip } from "../components/PlanFinishChip";
+import { useAssistantBlockedTitle } from "../lib/useAssistantAvailability";
 import { PlanTimeline } from "../components/PlanTimeline";
 import { PlanPhaseTools, type PlanCandidate } from "../components/PlanPhaseTools";
 import { HoursInput } from "../components/shared/HoursInput";
@@ -619,6 +621,7 @@ function PlanPhaseSection({
 }
 
 function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
+  const assistantBlocked = useAssistantBlockedTitle();
   const qc = useQueryClient();
   const storageKey = planPhaseCollapseKey(userId, planId);
   const [collapsed, setCollapsed] = useState<number[]>(() =>
@@ -957,6 +960,11 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
             projection={projectionQuery.data}
             pending={capacityMut.isPending}
             onSaveCapacity={(hours) => capacityMut.mutateAsync(hours)}
+          />
+          <PlanAiRange
+            planId={planId}
+            projection={projectionQuery.data}
+            assistantBlocked={assistantBlocked != null}
           />
         </div>
       </header>

@@ -159,6 +159,13 @@ export async function projectIdForAiEntity(
       .where(eq(schema.todos.id, entityId));
     return row?.projectId ?? null;
   }
+  if (entityType === "plan") {
+    const [row] = await db
+      .select({ projectId: schema.plans.projectId })
+      .from(schema.plans)
+      .where(eq(schema.plans.id, entityId));
+    return row?.projectId ?? null;
+  }
   if (entityType === "todo_list") {
     const [row] = await db
       .select({ projectId: schema.todoLists.projectId })

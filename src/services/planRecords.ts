@@ -49,6 +49,7 @@ import {
 } from "./taskBlocked.js";
 import { scheduleKnowledgeIndex } from "./knowledge/schedule.js";
 import { getLastActivity } from "./entityActivity.js";
+import type { PlanAiItem } from "./planAiProjection.js";
 import { projectPlanFinish, projectionEntityKey } from "./planProjection.js";
 import { schedulePlan } from "./planSchedule.js";
 import { applyTodoProgressResult } from "./todoProgress.js";
@@ -765,7 +766,7 @@ async function completionInstants(
   return completed;
 }
 
-export async function getPlanProjection(db: Db, actorId: number, planId: number) {
+async function projectionCore(db: Db, actorId: number, planId: number) {
   const plan = await requirePlan(db, actorId, planId, "read");
   const graph = await loadGraph(db, planId);
   const canSetCapacity = await actorCanStructurePlan(db, actorId, plan);
@@ -786,7 +787,48 @@ export async function getPlanProjection(db: Db, actorId: number, planId: number)
     })),
     dependencies: graph.dependencies,
   });
-  return { ...projection, canSetCapacity };
+  return { plan, graph, completed, projection: { ...projection, canSetCapacity } };
+}
+
+export async function getPlanProjection(db: Db, actorId: number, planId: number) {
+  return (await projectionCore(db, actorId, planId)).projection;
+}
+
+export async function loadPlanAiContext(db: Db, actorId: number, planId: number) {
+  const { plan, graph, completed, projection } = await projectionCore(db, actorId, planId);
+  const phaseName = new Map(graph.phases.map((phase) => [phase.id, phase.name]));
+  const inPlanTasks = new Set(
+    graph.items.filter((item) => item.entityType === "task").map((item) => item.entityId),
+  );
+  let externalBlockerCount = 0;
+  for (const item of graph.items) {
+    if (item.entityType !== "task") continue;
+    const blockers = await openDependsOnBlockers(db, item.entityId);
+    externalBlockerCount += blockers.filter((blocker) => !inPlanTasks.has(blocker.id)).length;
+  }
+  const items: PlanAiItem[] = graph.items.map((item) => ({
+    entityType: item.entityType,
+    entityId: item.entityId,
+    phaseName: phaseName.get(item.phaseId) ?? "Phase",
+    title: item.title,
+    state: item.state,
+    estimateHours: item.estimateHours,
+    progress: item.progress,
+    parent: item.parent,
+    completedAt: completed.get(projectionEntityKey(item.entityType, item.entityId)) ?? null,
+    createdAt: item.createdAt,
+  }));
+  return {
+    planId: plan.id,
+    projectId: plan.projectId,
+    targetDate: plan.targetDate,
+    capacityHoursPerWeek:
+      plan.capacityHoursPerWeek == null ? null : Number(plan.capacityHoursPerWeek),
+    projection,
+    items,
+    dependencies: graph.dependencies,
+    externalBlockerCount,
+  };
 }
 
 async function loadScheduleMarks(

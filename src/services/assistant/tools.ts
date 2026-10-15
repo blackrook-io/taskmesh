@@ -28,6 +28,9 @@ import {
 import { todoListsVisibleToAi, todosVisibleToAi } from "./projectAiAccess.js";
 import { capUrlQuery, fetchUrlForAssistant } from "./fetchUrl.js";
 import { policyTargetForRegisteredTool } from "./toolRegistry.js";
+import { runPlanAssistantTool } from "./planTools.js";
+import { addPlanItem, getPlanBoard, reorderPlan, setPlanItemState } from "../planRecords.js";
+import { getPlanProjectionWithAi } from "../planAiRun.js";
 import { toolUntrustedSource, withUntrustedFollowup, wrapUntrusted } from "./untrustedContent.js";
 import {
   toolGetNeighbourhood,
@@ -566,6 +569,104 @@ export const OPENAI_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "plan_get",
+      description: "Load one plan: phases, items, order, and dependency edges. Does not include descriptions.",
+      parameters: {
+        type: "object",
+        properties: { planId: { type: "integer" } },
+        required: ["planId"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "plan_add_items",
+      description:
+        "Add tasks or todos to a plan phase. Saves immediately. Set includeChildren only when the user asked to add a parent's children.",
+      parameters: {
+        type: "object",
+        properties: {
+          planId: { type: "integer" },
+          phaseId: { type: "integer" },
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entityType: { type: "string", enum: ["task", "todo"] },
+                entityId: { type: "integer" },
+              },
+              required: ["entityType", "entityId"],
+            },
+          },
+          includeChildren: { type: "boolean" },
+        },
+        required: ["planId", "phaseId", "items"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "plan_reorder",
+      description:
+        "Reorder a plan. Saves immediately. Send the current revision and every phase with every item id.",
+      parameters: {
+        type: "object",
+        properties: {
+          planId: { type: "integer" },
+          revision: { type: "integer" },
+          phases: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                phaseId: { type: "integer" },
+                itemIds: { type: "array", items: { type: "integer" } },
+              },
+              required: ["phaseId", "itemIds"],
+            },
+          },
+        },
+        required: ["planId", "revision", "phases"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "plan_set_item_state",
+      description:
+        "Change a plan item's state through the task or todo workflow. Saves immediately. stateComment is required for the same transitions as the board.",
+      parameters: {
+        type: "object",
+        properties: {
+          planId: { type: "integer" },
+          itemId: { type: "integer" },
+          to: { type: "string" },
+          stateComment: { type: "string" },
+        },
+        required: ["planId", "itemId", "to"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "plan_projection",
+      description:
+        "Return the baseline finish range for a plan, plus a cached AI range when one still matches. Does not start a new model forecast.",
+      parameters: {
+        type: "object",
+        properties: { planId: { type: "integer" } },
+        required: ["planId"],
+      },
+    },
+  },
 ];
 
 export function assistantToolDefinitions(options?: {
@@ -752,6 +853,19 @@ async function dispatchTool(name: string, args: unknown, handlers: ToolHandlers)
       return await toolProposeComment(args, handlers);
     case "propose_task_dependency":
       return await toolProposeTaskDependency(args, handlers);
+    case "plan_get":
+    case "plan_add_items":
+    case "plan_reorder":
+    case "plan_set_item_state":
+    case "plan_projection":
+      return await runPlanAssistantTool(name, args, requireActor(handlers).actorUserId, {
+        getBoard: (actorId, planId) => getPlanBoard(db, actorId, planId),
+        addItem: (actorId, planId, input) => addPlanItem(db, actorId, planId, input),
+        reorder: (actorId, planId, revision, phases) => reorderPlan(db, actorId, planId, revision, phases),
+        setState: (actorId, planId, itemId, to, stateComment) =>
+          setPlanItemState(db, actorId, planId, itemId, to, stateComment, "ai"),
+        projection: (actorId, planId) => getPlanProjectionWithAi(db, actorId, planId),
+      });
     default:
       return JSON.stringify({ error: `Unknown tool: ${name}` });
   }

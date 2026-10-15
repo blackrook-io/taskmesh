@@ -18,7 +18,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Main domain** (full physical documentation):
 
-`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `project_managers`, `project_members`, `project_viewers`, `project_manager_groups`, `project_member_groups`, `project_viewer_groups`, `tasks`, `todos`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `document_extractions`, `document_text_spans`, `knowledge_chunks`, `uploads`, `tags`, `taggings`, `entity_links`, `todo_lists`, `todo_list_items`, `project_modules`, `plans`, `plan_phases`, `plan_items`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
+`ideas`, `projects`, `task_groups`, `task_group_members`, `project_phases`, `project_managers`, `project_members`, `project_viewers`, `project_manager_groups`, `project_member_groups`, `project_viewer_groups`, `tasks`, `todos`, `task_activity`, `task_dependencies`, `task_description_templates`, `project_documents`, `document_extractions`, `document_text_spans`, `knowledge_chunks`, `uploads`, `tags`, `taggings`, `entity_links`, `todo_lists`, `todo_list_items`, `project_modules`, `plans`, `plan_phases`, `plan_items`, `plan_ai_projections`, `boards`, `board_columns`, `board_lanes`, `board_cards`, `wiki_nodes`, `canvases`, `image_boards`
 
 **Non-main** (inventory + minimal on diagrams):
 
@@ -49,6 +49,7 @@ erDiagram
   projects ||--o{ plans : "optional"
   plans ||--o{ plan_phases : has
   plans ||--o{ plan_items : has
+  plans ||--o| plan_ai_projections : "cached range"
   plan_phases ||--o{ plan_items : has
   projects ||--o{ boards : has
   projects ||--o{ wiki_nodes : has

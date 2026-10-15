@@ -216,6 +216,31 @@ describe("aiPolicy.check", () => {
     assert.equal(check(base({ action: "propose_create", entityType: "todo" })).decision, "allow");
     assert.equal(check(base({ action: "propose_create", entityType: "project" })).decision, "deny");
     assert.equal(check(base({ action: "apply" })).decision, "deny");
+    assert.equal(check(base({ action: "propose_create", entityType: "plan" })).decision, "deny");
+    assert.equal(
+      check(base({ action: "read", entityType: "plan", projectId: 4, projectAiAccess: "full" })).decision,
+      "allow",
+    );
+    assert.equal(
+      check(base({ action: "apply", entityType: "plan", projectId: 4, projectAiAccess: "full" })).decision,
+      "allow",
+    );
+    assert.equal(
+      check(base({ action: "read", entityType: "plan", projectId: 4, projectAiAccess: "read_only" })).decision,
+      "allow",
+    );
+    assert.equal(
+      check(base({ action: "apply", entityType: "plan", projectId: 4, projectAiAccess: "read_only" })).decision,
+      "deny",
+    );
+    assert.equal(
+      check(base({ action: "read", entityType: "plan", projectId: 4, projectAiAccess: "excluded" })).decision,
+      "deny",
+    );
+    assert.equal(
+      check(base({ action: "apply", entityType: "plan", projectId: 4, projectAiAccess: "excluded" })).decision,
+      "deny",
+    );
   });
 });
 

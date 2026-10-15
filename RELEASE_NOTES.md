@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.88.0 — 2026-10-15
+
+### New Functionality
+- A plan board can refine its finish with AI. The range sits beside the baseline, with the reasons behind it, and you can mark whether it helped. The baseline dates stay as they are. A result outside the sanity window is discarded and recorded in the AI audit log. The same inputs reuse the last accepted range until the board changes.
+- The assistant can read a plan, add Tasks and ToDos, reorder it, and change item state. Those writes save immediately. A project excluded from AI gets neither the tools nor the forecast. A read-only project can be read and refined without sending item titles.
+
+### Enhancements
+- The AI forecast card uses the same corner radius as the rest of the theme.
+
 ## 0.87.7 — 2026-10-15
 
 ### New Functionality

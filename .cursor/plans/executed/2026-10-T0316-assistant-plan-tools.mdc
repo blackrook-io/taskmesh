@@ -1,0 +1,60 @@
+# T0316 — assistant plan tools and AI finish projection
+
+**Task:** T0316 (id `331`) — Plans: assistant plan tools and AI finish projection
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0315 (id `330`) — `complete`. **Required by:** none.
+**Branch (after approval):** `T0316-assistant-plan-tools`
+**Design:** task description, parent T0307 decisions, and the Plans design doc (AI projected finish date; Assistant and MCP tools). No new deferred Task. MCP stays later (no MCP server in this repo). Timeline stays T0318.
+
+## Context
+
+`projectPlanFinish` and `GET /api/v1/plans/:id/projection` already return the baseline range. The board header shows that range in `PlanFinishChip`. Assistant tools live in `OPENAI_TOOLS` plus `TOOL_REGISTRY`, and `check()` denies any entity type outside the read/write allowlists. `plan` is an `EntityType` but is not in `AI_READ_ENTITY_TYPES`, so a plan tool would be denied before it ran. `projects.ai_access` of `excluded` already denies every action; `read_only` allows `read` only.
+
+There is no MCP server. Thumbs already go through `PUT /api/v1/assistant/feedback` (`thumb_up` / `thumb_down`) against an `ai_audit_log` id. Audit `action` is constrained; `read` is already allowed, so the projection run does not need a new action value.
+
+## Decisions (confirm or adjust)
+
+1. **Plan writes apply immediately.** `plan_add_items`, `plan_reorder`, and `plan_set_item_state` call the plans service as the signed-in user. They are not proposals. `read_only` denies them; `excluded` denies every plan tool. The service still enforces project role, order, revision, and the task workflow. Adding a parent does not add children unless the tool argument `includeChildren` is true.
+2. **`plan_projection` does not call a model.** It returns the baseline plus a cached AI range when the input hash still matches. A provider call happens only from the board button, so a chat turn cannot nest a second model call.
+3. **AI card is opt-in.** Opening the board shows the baseline and, when a matching cache row exists, the P50/P80 beside it. When the hash differs or there is no cache, the card offers “Refine with AI” and does not spend a call on its own. `needs_capacity`, `needs_estimates`, and `excluded` do not offer the button. `read_only` may refine, without item titles or states. A standalone plan (no project) is treated as full access.
+4. **Sanity window.** Reject a result when `p50` or `p80` is before today, `p80` is before `p50`, or either date is later than today plus three times the days from today to the baseline center. A rejected result is audited as deny, not cached, and the card keeps the baseline with a short note.
+5. **Cache is one row per plan.** New table `plan_ai_projections` (`plan_id` unique, `input_hash`, `result` jsonb, `audit_id`, timestamps). Finish-up is a MINOR bump. Schema docs update in the same change.
+
+## Goal
+
+The assistant can read and change a plan through the same service as the board, and the board can show an audited, cached P50/P80 beside the baseline. An excluded project never sends plan content to a model.
+
+## Scope
+
+**In scope**
+
+1. Register five tools in `toolRegistry.ts` and `OPENAI_TOOLS`, and implement them in `executeAssistantTool`:
+   - `plan_get` — board summary the model can use (phases, items, order, rollup). Read.
+   - `plan_add_items` — `{ planId, phaseId, items: [{ entityType, entityId }], includeChildren? }`. Apply.
+   - `plan_reorder` — same body as `POST /plans/:id/reorder`. Apply.
+   - `plan_set_item_state` — `{ planId, itemId, to, stateComment? }` through the existing item-state path. Apply.
+   - `plan_projection` — baseline projection, plus `ai` when the cache hash matches. Read. Does not start a provider call.
+2. Policy: allow `read` of entity type `plan`, and `apply` of entity type `plan` only (do not add `plan` to the propose-create/update set). Update `describeAllowedPolicy`. `excluded` and `read_only` keep their current project-layer behavior. Mention plans in the assistant system prompt.
+3. AI input builder (minimized): remaining hours per phase, critical-path chain and hours, completed hours per week for the last 8 weeks, unestimated share, long-open count, blocked-chain count, external-blocker count, capacity, target date, today, and the baseline center. Item titles and states only when effective access is `full`. Never send descriptions. Hash those inputs.
+4. Provider call returns validated JSON `{ p50, p80, confidence: low|medium|high, drivers: string[] }` (at most 5 drivers, each at most 160 characters). Malformed JSON is a deny, not a cache write.
+5. `POST /api/v1/plans/:planId/projection/ai` runs the call when the caller can read the plan, the project is not excluded, and the baseline has a center date. Returns the cached row when the hash matches, unless `force` is true. Each attempt writes `ai_audit_log` (`feature: "plan_projection"`, `action: "read"`, entity `plan`). `GET` projection gains `ai: null | { p50, p80, confidence, drivers, stale, auditId }` so the board can show a cached range without posting.
+6. Board card beside the baseline chip: P50–P80, confidence, drivers, thumbs wired to the existing feedback endpoint, and “Refine with AI” when stale or missing. Hidden button when excluded, when the baseline has no center, or when the assistant feature is unavailable. A rejected window shows the baseline and the note.
+7. Tests: policy allow/deny for full, read_only, and excluded; tool handlers call the plans service; JSON validation and the sanity window; cache hit skips the provider; excluded never calls it.
+
+**Out of scope**
+
+- MCP server.
+- Writing due dates or item fields from the projection.
+- Changing baseline math (T0315).
+- Timeline / Gantt (T0318).
+
+## Acceptance
+
+- On a full-access project, the assistant can load a plan, add an item, reorder within the revision lock, and check an item off. A read-only project allows get and projection and refuses the three writes. An excluded project refuses all five tools and shows only the baseline chip.
+- “Refine with AI” shows a P50/P80 next to the baseline, writes an audit row, and accepts a thumb. Reloading the board does not call the provider again while inputs are unchanged. Changing hours or checking an item off marks the range stale and offers a new run.
+- A model date before today or beyond 3× the baseline span is not shown as the range and is not cached.
+
+## QA follow-ups
+
+- The AI forecast card used the chip radius (`999px`). On a tall card that becomes a large capsule. It now uses the theme radius (`--radius`, 8px), the same corner as the header buttons.

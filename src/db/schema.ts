@@ -2200,6 +2200,25 @@ export const planItems = pgTable(
   }),
 );
 
+/** One cached AI finish range per plan. The hash is the minimized input packet. */
+export const planAiProjections = pgTable("plan_ai_projections", {
+  planId: integer("plan_id")
+    .primaryKey()
+    .references(() => plans.id, { onDelete: "cascade" }),
+  inputHash: text("input_hash").notNull(),
+  result: jsonb("result")
+    .$type<{
+      p50: string;
+      p80: string;
+      confidence: "low" | "medium" | "high";
+      drivers: string[];
+    }>()
+    .notNull(),
+  auditId: integer("audit_id").references(() => aiAuditLog.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Kanban planning boards (multiple per project). */
 export const boards = pgTable("boards", {
   id: serial("id").primaryKey(),
@@ -2923,6 +2942,7 @@ export const plansRelations = relations(plans, ({ one, many }) => ({
   }),
   phases: many(planPhases),
   items: many(planItems),
+  aiProjection: one(planAiProjections),
 }));
 
 export const planPhasesRelations = relations(planPhases, ({ one, many }) => ({
@@ -2931,6 +2951,17 @@ export const planPhasesRelations = relations(planPhases, ({ one, many }) => ({
     references: [plans.id],
   }),
   items: many(planItems),
+}));
+
+export const planAiProjectionsRelations = relations(planAiProjections, ({ one }) => ({
+  plan: one(plans, {
+    fields: [planAiProjections.planId],
+    references: [plans.id],
+  }),
+  audit: one(aiAuditLog, {
+    fields: [planAiProjections.auditId],
+    references: [aiAuditLog.id],
+  }),
 }));
 
 export const planItemsRelations = relations(planItems, ({ one }) => ({
