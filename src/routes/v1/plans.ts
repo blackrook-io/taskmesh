@@ -18,6 +18,7 @@ import {
   deletePlan,
   getPlan,
   getPlanBoard,
+  getPlanProjection,
   listPlans,
   searchPlanCandidates,
   removePlanItem,
@@ -192,6 +193,16 @@ plansRouter.delete("/:planId", async (req, res) => {
     const actorId = await getCurrentUserId(db);
     await deletePlan(db, actorId, planId);
     res.status(204).end();
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+plansRouter.get("/:planId/projection", async (req, res) => {
+  try {
+    const planId = idParam.parse(req.params.planId);
+    const actorId = await getCurrentUserId(db);
+    res.json({ data: await getPlanProjection(db, actorId, planId) });
   } catch (err) {
     handleRouteError(res, err);
   }

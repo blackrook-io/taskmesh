@@ -1117,6 +1117,15 @@ export async function assertDependencyRespectsPlans(
   }
 }
 
+export { projectPlanFinish } from "./planProjection.js";
+export type {
+  PlanProjection,
+  PlanProjectionDriver,
+  PlanProjectionInput,
+  PlanProjectionInputs,
+  PlanProjectionItem,
+} from "./planProjection.js";
+
 export async function assertParentChangeRespectsPlans(
   db: Db,
   entityType: PlanEntityType,

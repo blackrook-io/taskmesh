@@ -47,6 +47,7 @@ import {
   blockReadyDependents,
 } from "./taskBlocked.js";
 import { scheduleKnowledgeIndex } from "./knowledge/schedule.js";
+import { projectPlanFinish, projectionEntityKey } from "./planProjection.js";
 import { applyTodoProgressResult } from "./todoProgress.js";
 import { recomputeAncestorChain } from "./todoHierarchy.js";
 import { attachAssignees } from "./users.js";
@@ -703,6 +704,77 @@ export async function getPlanBoard(db: Db, actorId: number, planId: number) {
     phases,
     edges: graph.dependencies,
   };
+}
+
+async function completionInstants(
+  db: Db,
+  items: Array<{ entityType: PlanEntityType; entityId: number; state: string }>,
+): Promise<Map<string, string>> {
+  const taskIds = items.filter((item) => item.entityType === "task").map((item) => item.entityId);
+  const todoIds = items.filter((item) => item.entityType === "todo").map((item) => item.entityId);
+  const filters = [
+    taskIds.length > 0
+      ? and(eq(schema.taskActivity.entityType, "task"), inArray(schema.taskActivity.entityId, taskIds))
+      : undefined,
+    todoIds.length > 0
+      ? and(eq(schema.taskActivity.entityType, "todo"), inArray(schema.taskActivity.entityId, todoIds))
+      : undefined,
+  ].filter((filter): filter is SQL => filter != null);
+  if (filters.length === 0) return new Map();
+  const rows = await db
+    .select({
+      entityType: schema.taskActivity.entityType,
+      entityId: schema.taskActivity.entityId,
+      newValue: schema.taskActivity.newValue,
+      createdAt: schema.taskActivity.createdAt,
+    })
+    .from(schema.taskActivity)
+    .where(
+      and(
+        eq(schema.taskActivity.kind, "change"),
+        eq(schema.taskActivity.field, "state"),
+        or(...filters),
+      ),
+    )
+    .orderBy(desc(schema.taskActivity.createdAt), desc(schema.taskActivity.id));
+  const latest = new Map<string, { newValue: string | null; createdAt: Date }>();
+  for (const row of rows) {
+    const key = projectionEntityKey(row.entityType as PlanEntityType, row.entityId);
+    if (latest.has(key)) continue;
+    latest.set(key, { newValue: row.newValue, createdAt: row.createdAt });
+  }
+  const completed = new Map<string, string>();
+  for (const item of items) {
+    if (item.state !== "complete") continue;
+    const row = latest.get(projectionEntityKey(item.entityType, item.entityId));
+    if (!row || row.newValue !== "Complete") continue;
+    completed.set(projectionEntityKey(item.entityType, item.entityId), row.createdAt.toISOString());
+  }
+  return completed;
+}
+
+export async function getPlanProjection(db: Db, actorId: number, planId: number) {
+  const plan = await requirePlan(db, actorId, planId, "read");
+  const graph = await loadGraph(db, planId);
+  const canSetCapacity = await actorCanStructurePlan(db, actorId, plan);
+  const completed = await completionInstants(db, graph.items);
+  const projection = projectPlanFinish({
+    now: new Date(),
+    workdayHours: Number(plan.workdayHours),
+    capacityHoursPerWeek:
+      plan.capacityHoursPerWeek == null ? null : Number(plan.capacityHoursPerWeek),
+    items: graph.items.map((item) => ({
+      entityType: item.entityType,
+      entityId: item.entityId,
+      parent: item.parent,
+      state: item.state,
+      estimateHours: item.estimateHours,
+      progress: item.progress,
+      completedAt: completed.get(projectionEntityKey(item.entityType, item.entityId)) ?? null,
+    })),
+    dependencies: graph.dependencies,
+  });
+  return { ...projection, canSetCapacity };
 }
 
 export async function createPhase(

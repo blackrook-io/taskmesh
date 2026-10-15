@@ -1,0 +1,83 @@
+# T0315 — baseline finish-date projection
+
+**Task:** T0315 (id `330`) — Plans: baseline finish-date projection
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0312 (id `327`) — `complete`. **Required by:** T0316 (assistant / AI range), T0318 (timeline). Those stay blocked until this is complete.
+**Branch (after approval):** `T0315-baseline-projection`
+**Design:** task description plus parent decisions. No new deferred Task. Full scheduling and the Gantt stay T0318. The AI P50/P80 stays T0316 and will call this same projection.
+
+## Context
+
+The board header already renders a muted “Finish date —” chip and does not call a projection endpoint. Rollup leaf rules, `plans.capacity_hours_per_week`, and `plans.workday_hours` (default 8) already exist. Plan PATCH already accepts `capacityHoursPerWeek`, and that write requires structure permission (Owner/Manager, or the standalone plan’s owner). Nothing in the client edits capacity yet.
+
+Completions are `task_activity` change rows: `field = "state"`, `newValue = "Complete"` (the display label). Tasks and ToDos both use that table.
+
+## Decisions (confirm or adjust)
+
+1. **Two clocks, later date wins.** A weekly rate turns all remaining hours into a calendar date. The critical path turns the longest dependency chain into a date on working days. The center of the range is the later date. The same weekly rate applied to both would make the chain irrelevant, because total remaining hours are always at least the longest chain.
+2. **Weekly rate.** Sum current estimate hours of counted leaves that are `complete` and whose latest state change to `Complete` is inside the last 28 days. `velocity = that sum ÷ 4`. Any positive sum uses velocity. Otherwise use `capacityHoursPerWeek` when it is greater than 0. Otherwise the chip asks for capacity and returns no dates.
+3. **Remaining hours use the rollup leaf rule.** Canceled and deleted rows drop out. A parent’s own hours count only when it has no counted in-plan child. A done leaf (task `complete` or `pending`, ToDo `complete` / `pending` / progress 100) contributes 0. A partial ToDo contributes `estimate × (1 − progress/100)`. An unestimated leaf contributes 0 hours.
+4. **Critical path is in-plan task dependencies only.** Node weight is that item’s remaining hours. Edges are task dependencies whose both ends are on this plan. ToDo nesting is not an extra edge. Longest path wins. A cycle drops the critical path out of the comparison and the throughput date stands.
+5. **Calendar is UTC.** Throughput adds `round(remainingHours / hoursPerWeek × 7)` calendar days to today. Critical path adds working days (Mon–Fri) of `round(criticalPathHours / workdayHours)`, counting today when today is a weekday. Zero hours finishes today. Item start dates and `schedulePlan` stay T0318. This response includes `criticalPathFinish` so that later timeline can match this chain’s end.
+6. **Range.** On the counted leaves, `uncertainty = min(1, 0.25 + unestimatedCount / itemCount)`. Half-width is that fraction of the days from today to the center, rounded. Earliest is not before today. The chip names the driver: velocity, weekly capacity, or the critical path (strictly later). A tie keeps the rate source.
+7. **Nothing left to schedule.** No open leaves → “Finished”. Open leaves but no remaining hours (only unestimated work) → “Add estimates to project a finish”, not a fake today.
+8. **Capacity prompt writes the existing field.** Someone who can edit plan structure gets a small dialog and `PATCH` `{ capacityHoursPerWeek }`. A reader sees the prompt without an editor. No migration.
+
+## Goal
+
+The board header shows a deterministic finish-date range that updates when an item is checked off or its hours change, and says which input produced it.
+
+## Scope
+
+**In scope**
+
+1. Pure `projectPlanFinish` in `src/services/planProjection.ts`, re-exported from `src/services/plans.ts`, with unit tests (velocity window, capacity fallback, missing capacity, critical path later than throughput, cycle, parent leaf exclusion, reopen, unestimated widening, finished, unestimated-only).
+2. `GET /api/v1/plans/:planId/projection` for anyone who can read the plan. Body:
+
+```json
+{
+  "earliest": "2026-10-20",
+  "latest": "2026-11-03",
+  "center": "2026-10-27",
+  "driver": "velocity",
+  "canSetCapacity": true,
+  "inputs": {
+    "completedHours28d": 26,
+    "velocityHoursPerWeek": 6.5,
+    "capacityHoursPerWeek": null,
+    "hoursPerWeek": 6.5,
+    "rateSource": "velocity",
+    "remainingHours": 40,
+    "criticalPathHours": 24,
+    "throughputFinish": "2026-11-10",
+    "criticalPathFinish": "2026-10-27",
+    "workdayHours": 8,
+    "unestimatedCount": 2,
+    "itemCount": 8,
+    "uncertainty": 0.5
+  }
+}
+```
+
+`earliest`, `latest`, `center`, and the two finish fields are `null` when `driver` is `needs_capacity` or `needs_estimates`. `driver` is `complete` when nothing is open; the three dates are today and the range fields match. `canSetCapacity` follows structure permission.
+
+3. Replace the header placeholder. Refetch projection after check-off, reopen, and an hours save. Chip text:
+   - range: `Oct 20 – Nov 3` (one date when the ends match), with accessible text “Driven by velocity”, “Driven by weekly capacity”, or “Driven by the critical path”
+   - `needs_capacity`: “Set weekly capacity”
+   - `needs_estimates`: “Add estimates to project a finish”
+   - `complete`: “Finished”
+4. Capacity dialog: positive hours per week, max 999.99, saved with the existing plan PATCH. Errors use the server message.
+
+**Out of scope**
+
+- `schedulePlan`, start-date constraints, Gantt (T0318).
+- Assistant tools and the AI P50/P80 (T0316).
+- Schema migration. Finish-up is a PATCH bump. Revise the plans bullet in `FEATURES.md` on finish-up so the finish range is no longer described as a placeholder.
+
+## Acceptance
+
+- A plan with completions in the last 28 days shows a range driven by velocity, and the response inputs match the hours that produced it.
+- The same plan with those completions removed falls back to capacity. With capacity empty, the chip prompts to set it, and a structure editor can save a value and then see a range.
+- A long dependency chain finishes later than the weekly rate and the chip says the critical path drove it. Checking an item off or editing hours changes the range after refetch.
+- A parent’s hours are not added on top of its in-plan children. A finished plan says “Finished”.
