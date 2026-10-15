@@ -19,6 +19,7 @@ import {
   getPlan,
   getPlanBoard,
   getPlanProjection,
+  getPlanTimeline,
   listPlans,
   searchPlanCandidates,
   removePlanItem,
@@ -203,6 +204,16 @@ plansRouter.get("/:planId/projection", async (req, res) => {
     const planId = idParam.parse(req.params.planId);
     const actorId = await getCurrentUserId(db);
     res.json({ data: await getPlanProjection(db, actorId, planId) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+plansRouter.get("/:planId/timeline", async (req, res) => {
+  try {
+    const planId = idParam.parse(req.params.planId);
+    const actorId = await getCurrentUserId(db);
+    res.json({ data: await getPlanTimeline(db, actorId, planId) });
   } catch (err) {
     handleRouteError(res, err);
   }

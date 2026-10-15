@@ -1118,6 +1118,7 @@ export async function assertDependencyRespectsPlans(
 }
 
 export { projectPlanFinish } from "./planProjection.js";
+export { schedulePlan } from "./planSchedule.js";
 export type {
   PlanProjection,
   PlanProjectionDriver,
