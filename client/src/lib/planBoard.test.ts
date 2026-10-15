@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   planBlockerLabel,
   planCheckAction,
+  planDependencyGutter,
   planCheckboxChecked,
   planHoursSummary,
   planIndentDepth,
@@ -140,6 +141,29 @@ describe("plan board header", () => {
     assert.equal(planPhaseAccent("#3dbe9a"), "#3dbe9a");
     assert.equal(planPhaseAccent("red"), null);
     assert.equal(planPhaseAccent(null), null);
+  });
+
+  it("names in-plan prerequisites and skips todos", () => {
+    const items = [
+      item({ entityId: 1, number: 10 }),
+      item({ entityId: 2, number: 20 }),
+      item({ entityId: 3, entityType: "todo", number: 3 }),
+    ];
+    const edges = [
+      {
+        prerequisite: { entityType: "task" as const, entityId: 1 },
+        dependent: { entityType: "task" as const, entityId: 2 },
+      },
+      {
+        prerequisite: { entityType: "task" as const, entityId: 9 },
+        dependent: { entityType: "task" as const, entityId: 2 },
+      },
+    ];
+    const dependent = items[1];
+    const todo = items[2];
+    assert.ok(dependent && todo);
+    assert.equal(planDependencyGutter(dependent, items, edges), "← T0010");
+    assert.equal(planDependencyGutter(todo, items, edges), "");
   });
 
   it("reads collapsed phase ids", () => {

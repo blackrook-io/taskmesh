@@ -64,6 +64,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { TodoListFilterBar } from "./TodoListFilterBar";
 import { TaskEditorFields } from "./TaskBoard";
 import { HoursInput } from "./shared/HoursInput";
+import { PlanMemberships } from "./PlanMemberships";
 import { ColorPopover } from "./shared/ColorPopover";
 import { ElementShell } from "./shared/ElementShell";
 import { EntityLinksPanel } from "./shared/EntityLinksPanel";
@@ -607,6 +608,7 @@ export function TodoEditorFields({
             }}
           />
         </div>
+        <PlanMemberships entityType="todo" entityId={todo.id} />
         <div className="field">
           <label htmlFor={`d-action-${todo.id}`}>Action by</label>
           <input

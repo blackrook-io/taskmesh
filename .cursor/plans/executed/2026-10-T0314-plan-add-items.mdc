@@ -1,0 +1,62 @@
+# T0314 — add-items picker, parent modal, and Plans entry points
+
+**Task:** T0314 (id `329`) — Plans: add-items picker, parent modal and Plans entry points
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0312 (id `327`) — `complete`. **Required by:** none.
+**Branch (after approval):** `T0314-plan-add-items`
+**Design:** `docs/design/plans-feature-design.pdf`. Add uses the existing `POST /api/v1/plans/:id/items` (`includeChildren` already implemented in T0311).
+
+## Context
+
+`/plans/:planId` renders the board from `GET /api/v1/plans/:id/board`. Adding an item is `POST …/items` with `{ entityType, entityId, phaseId, afterItemId?, includeChildren? }`. `includeChildren` defaults to false and, when true, inserts the item plus its direct non-deleted children that belong to the plan’s project. An item may sit in several plans once each. The `plans` project module exists and is off by default; it is not in the rail and `IMPLEMENTED_MODULES` omits it. Task and ToDo editors have no Plans field. Mesh cards do not link to a plan. The Mesh Plan view stays until T0319.
+
+## Decisions (confirm or adjust)
+
+1. **Candidates are a search on the plan.** `GET /api/v1/plans/:id/candidates?q=` returns Tasks and ToDos that fit the plan and are not already in it. `q` matches the display number (`T####` / `D####` or the digits) or a case-insensitive title substring. An empty `q` returns up to 50 rows, newest number first. Each row includes `childCount` (direct non-deleted children not already in this plan) and `otherPlans: [{ id, number, title }]` for plans the actor can read. Same `structure` permission as add; otherwise 404, matching a hidden plan.
+2. **The picker is per phase.** Each phase header gets **+ Add items** when `permissions.canStructure` is true. Choosing a row with `childCount > 0` opens “Also add its N children?” Yes posts `includeChildren: true`. No posts `false`. N is direct children only. A row with `childCount === 0` adds immediately. A `plan_order_violation` shows the server message and leaves the picker open. Badges on a candidate read `PL####` for each `otherPlans` entry.
+3. **Quick-add creates a Draft task.** The bottom of a phase, for the same structure role, is one line: title and optional hours. Submit creates a task with `state: "new"` on the plan’s project (or a standalone task owned by the actor when the plan has no project), then adds that task to the phase. Hours use the existing quarter-hour field. ToDos are not created here.
+4. **Plans joins the project rail.** Add Plans to the project middle nav (after Mesh) and to `IMPLEMENTED_MODULES`. When the module is enabled, `?tab=plans` lists that project’s plans (`PL####`, title, status) and each row opens `/plans/:id`. A title-only create form calls the existing plan create (phases still seed from the project). The module stays off until enabled in project Settings.
+5. **The record field is read-only links.** `GET /api/v1/plans?entityType=&entityId=` returns plans the actor can read that contain that task or todo. The Task editor and the ToDo editor show a **Plans** field under Hours: one link per plan (`PL####` and title) to `/plans/:id`. Membership is not added or removed from the record.
+6. **The dependency gutter is a board toggle.** **Show dependencies** defaults off and is not stored. When on, a task row names in-plan prerequisites from `edges` in a gutter (`← T####`). External blockers stay the existing row text. ToDos have no dependency edges.
+7. **Mesh cards link out; the Plan view stays.** A task or todo hover card loads that record’s plans and shows **Open in plan** once per membership, navigating to `/plans/:id`. The Mesh Plan view is unchanged (T0319 retires it).
+8. **`canStructure` is separate from item writes.** The board payload gains `permissions.canStructure` from the same settings check that guards add/remove. Members still check off and edit hours. They do not see the picker or quick-add.
+9. **No new deferred Task.** Drag and Fix order stay T0313. Finish date stays T0315. Removing an item from the board, and retiring the Mesh Plan view, stay out of this slice.
+
+## Goal
+
+A person who can change a plan’s structure can put existing work and a new Draft task into a phase, including a parent’s direct children when they say yes, and can find every plan that contains a Task or ToDo.
+
+## Scope
+
+**In scope**
+
+1. `GET /api/v1/plans/:id/candidates` and `GET /api/v1/plans?entityType=&entityId=`.
+2. `permissions.canStructure` on the board payload.
+3. Phase **+ Add items** picker, `PL####` badges, and the parent Yes/No modal.
+4. Inline Draft-task quick-add with optional hours.
+5. Plans rail entry, project Plans tab (list + create), and read-only Plans field on Task and ToDo editors.
+6. **Show dependencies** gutter on the board.
+7. **Open in plan** on Mesh task and todo cards.
+8. `npm run lint`.
+
+**Out of scope**
+
+- Drag, keyboard moves, Fix order (T0313).
+- Finish-date projection (T0315).
+- Removing a plan item from the board.
+- Retiring the Mesh Plan view (T0319).
+- Schema migration. Finish-up is a PATCH bump. `FEATURES.md` gets a short bullet on finish-up because finding and filling plans is user-facing.
+
+## Acceptance
+
+- On a project plan, **+ Add items** lists tasks and todos in that project that are not already in the plan. Search by `T####`, `D####`, or title. A candidate that is already on another readable plan shows that plan’s `PL####`.
+- Adding a parent with three direct children not in the plan asks “Also add its 3 children?”. Yes puts the parent and those three in the phase. No puts only the parent. A second plan can contain the same item, and both `PL####` links show on the Task page.
+- Quick-add with a title and `1.5` hours creates a Draft task in the phase; the row shows 1.5 h after the board refetches.
+- An enabled Plans module appears in the project rail and lists the project’s plans. A Member does not see **+ Add items** or quick-add. A Viewer does not either.
+- **Show dependencies** names an in-plan prerequisite on the dependent’s row and hides that gutter when turned off.
+- A Mesh card for a task in a plan offers **Open in plan** and opens `/plans/:id`. The Mesh Plan view still switches as before.
+
+## QA follow-ups
+
+- Search, draft-task title, draft-task hours, and the project plan title are `type="text"` so they use the shared dark field theme (border, background, text color). The quick-add hours field stays a short inline control.

@@ -1,9 +1,10 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { db as AppDatabase } from "../db/client.js";
 import * as schema from "../db/schema.js";
 import type { ActivitySource } from "../lib/activityRequest.js";
 import { dateOrderViolation, START_AFTER_TARGET_MESSAGE } from "../lib/dateOrder.js";
+import { planCandidateMatches } from "../lib/planCandidates.js";
 import { NotFoundError } from "../lib/notFound.js";
 import { derivedStatePatchRejected } from "../lib/taskRollup.js";
 import { resolveTodoProgressUpdate, resolveTodoCheckToggle } from "../lib/todoProgress.js";
@@ -134,6 +135,17 @@ async function actorCanWritePlan(db: Db, actorId: number, plan: PlanRow): Promis
   if (plan.projectId == null) return canAccessOwned(db, actorId, plan.ownerId);
   try {
     await assertCanAccessProject(db, actorId, plan.projectId, "write");
+    return true;
+  } catch (err) {
+    if (err instanceof OwnershipAccessError || err instanceof NotFoundError) return false;
+    throw err;
+  }
+}
+
+async function actorCanStructurePlan(db: Db, actorId: number, plan: PlanRow): Promise<boolean> {
+  if (plan.projectId == null) return canAccessOwned(db, actorId, plan.ownerId);
+  try {
+    await assertCanAccessProject(db, actorId, plan.projectId, "settings");
     return true;
   } catch (err) {
     if (err instanceof OwnershipAccessError || err instanceof NotFoundError) return false;
@@ -312,28 +324,208 @@ export async function assertCanReorderPlan(db: Db, actorId: number, planId: numb
   await requirePlan(db, actorId, planId, "write");
 }
 
+const CANDIDATE_LIMIT = 50;
+
 export async function listPlans(
   db: Db,
   actorId: number,
-  filter: { projectId?: number; status?: string },
+  filter: {
+    projectId?: number;
+    status?: string;
+    entityType?: PlanEntityType;
+    entityId?: number;
+  },
 ) {
   const isAdmin = await userHasAdministrator(db, actorId);
   if (filter.projectId != null) {
     await assertCanAccessProject(db, actorId, filter.projectId, "read");
   }
   const scope = dualScopeListFilter(db, schema.plans.projectId, schema.plans.ownerId, actorId, isAdmin);
-  const rows = await db
-    .select()
-    .from(schema.plans)
-    .where(
-      and(
-        scope,
-        filter.projectId != null ? eq(schema.plans.projectId, filter.projectId) : undefined,
-        filter.status != null ? eq(schema.plans.status, filter.status) : undefined,
-      ),
-    )
-    .orderBy(asc(schema.plans.number));
+  const where = and(
+    scope,
+    filter.projectId != null ? eq(schema.plans.projectId, filter.projectId) : undefined,
+    filter.status != null ? eq(schema.plans.status, filter.status) : undefined,
+  );
+  if (filter.entityType != null && filter.entityId != null) {
+    const rows = await db
+      .select({ plan: schema.plans })
+      .from(schema.plans)
+      .innerJoin(
+        schema.planItems,
+        and(
+          eq(schema.planItems.planId, schema.plans.id),
+          eq(schema.planItems.entityType, filter.entityType),
+          eq(schema.planItems.entityId, filter.entityId),
+        ),
+      )
+      .where(where)
+      .orderBy(asc(schema.plans.number));
+    return rows.map((row) => presentPlan(row.plan));
+  }
+  const rows = await db.select().from(schema.plans).where(where).orderBy(asc(schema.plans.number));
   return rows.map(presentPlan);
+}
+
+type CandidateSeed = {
+  entityType: PlanEntityType;
+  id: number;
+  number: number;
+  title: string;
+  parentId: number | null;
+  projectId: number | null;
+  ownerId: number;
+};
+
+export async function searchPlanCandidates(db: Db, actorId: number, planId: number, query: string) {
+  const plan = await requirePlan(db, actorId, planId, "structure");
+  const membership = await db
+    .select({ entityType: schema.planItems.entityType, entityId: schema.planItems.entityId })
+    .from(schema.planItems)
+    .where(eq(schema.planItems.planId, planId));
+  const inPlan = new Set(membership.map((row) => `${row.entityType}:${row.entityId}`));
+  const taskWhere =
+    plan.projectId != null
+      ? and(eq(schema.tasks.projectId, plan.projectId), ne(schema.tasks.state, "deleted"))
+      : and(isNull(schema.tasks.projectId), eq(schema.tasks.ownerId, plan.ownerId), ne(schema.tasks.state, "deleted"));
+  const todoWhere =
+    plan.projectId != null
+      ? and(eq(schema.todos.projectId, plan.projectId), ne(schema.todos.state, "deleted"))
+      : and(isNull(schema.todos.projectId), eq(schema.todos.ownerId, plan.ownerId), ne(schema.todos.state, "deleted"));
+  const [tasks, todos] = await Promise.all([
+    db
+      .select({
+        id: schema.tasks.id,
+        number: schema.tasks.number,
+        title: schema.tasks.title,
+        parentId: schema.tasks.parentId,
+        projectId: schema.tasks.projectId,
+        ownerId: schema.tasks.ownerId,
+      })
+      .from(schema.tasks)
+      .where(taskWhere)
+      .orderBy(desc(schema.tasks.number)),
+    db
+      .select({
+        id: schema.todos.id,
+        number: schema.todos.number,
+        title: schema.todos.title,
+        parentId: schema.todos.parentId,
+        projectId: schema.todos.projectId,
+        ownerId: schema.todos.ownerId,
+      })
+      .from(schema.todos)
+      .where(todoWhere)
+      .orderBy(desc(schema.todos.number)),
+  ]);
+  const seeds: CandidateSeed[] = [
+    ...tasks.map((row) => ({ entityType: "task" as const, ...row })),
+    ...todos.map((row) => ({ entityType: "todo" as const, ...row })),
+  ];
+  const matched = seeds
+    .filter((row) => fitsPlan(plan, row) && !inPlan.has(`${row.entityType}:${row.id}`))
+    .filter((row) => planCandidateMatches(row.entityType, row.number, row.title, query))
+    .sort((a, b) => b.number - a.number || a.entityType.localeCompare(b.entityType))
+    .slice(0, CANDIDATE_LIMIT);
+  const childCounts = await candidateChildCounts(db, plan, matched, inPlan);
+  const otherPlans = await candidateOtherPlans(db, actorId, planId, matched);
+  return matched.map((row) => ({
+    entityType: row.entityType,
+    entityId: row.id,
+    number: row.number,
+    title: row.title,
+    childCount: childCounts.get(`${row.entityType}:${row.id}`) ?? 0,
+    otherPlans: otherPlans.get(`${row.entityType}:${row.id}`) ?? [],
+  }));
+}
+
+async function candidateChildCounts(
+  db: Db,
+  plan: PlanRow,
+  seeds: CandidateSeed[],
+  inPlan: Set<string>,
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const taskParents = seeds.filter((row) => row.entityType === "task").map((row) => row.id);
+  const todoParents = seeds.filter((row) => row.entityType === "todo").map((row) => row.id);
+  const bump = (entityType: PlanEntityType, parentId: number) => {
+    const key = `${entityType}:${parentId}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  };
+  if (taskParents.length > 0) {
+    const children = await db
+      .select({
+        id: schema.tasks.id,
+        parentId: schema.tasks.parentId,
+        projectId: schema.tasks.projectId,
+        ownerId: schema.tasks.ownerId,
+      })
+      .from(schema.tasks)
+      .where(and(inArray(schema.tasks.parentId, taskParents), ne(schema.tasks.state, "deleted")));
+    for (const child of children) {
+      if (child.parentId == null || inPlan.has(`task:${child.id}`) || !fitsPlan(plan, child)) continue;
+      bump("task", child.parentId);
+    }
+  }
+  if (todoParents.length > 0) {
+    const children = await db
+      .select({
+        id: schema.todos.id,
+        parentId: schema.todos.parentId,
+        projectId: schema.todos.projectId,
+        ownerId: schema.todos.ownerId,
+      })
+      .from(schema.todos)
+      .where(and(inArray(schema.todos.parentId, todoParents), ne(schema.todos.state, "deleted")));
+    for (const child of children) {
+      if (child.parentId == null || inPlan.has(`todo:${child.id}`) || !fitsPlan(plan, child)) continue;
+      bump("todo", child.parentId);
+    }
+  }
+  return counts;
+}
+
+async function candidateOtherPlans(
+  db: Db,
+  actorId: number,
+  planId: number,
+  seeds: CandidateSeed[],
+): Promise<Map<string, Array<{ id: number; number: number; title: string }>>> {
+  const grouped = new Map<string, Array<{ id: number; number: number; title: string }>>();
+  const taskIds = seeds.filter((row) => row.entityType === "task").map((row) => row.id);
+  const todoIds = seeds.filter((row) => row.entityType === "todo").map((row) => row.id);
+  const entityMatch: SQL[] = [];
+  const taskMatch =
+    taskIds.length > 0
+      ? and(eq(schema.planItems.entityType, "task"), inArray(schema.planItems.entityId, taskIds))
+      : undefined;
+  const todoMatch =
+    todoIds.length > 0
+      ? and(eq(schema.planItems.entityType, "todo"), inArray(schema.planItems.entityId, todoIds))
+      : undefined;
+  if (taskMatch) entityMatch.push(taskMatch);
+  if (todoMatch) entityMatch.push(todoMatch);
+  if (entityMatch.length === 0) return grouped;
+  const isAdmin = await userHasAdministrator(db, actorId);
+  const scope = dualScopeListFilter(db, schema.plans.projectId, schema.plans.ownerId, actorId, isAdmin);
+  const rows = await db
+    .select({
+      entityType: schema.planItems.entityType,
+      entityId: schema.planItems.entityId,
+      id: schema.plans.id,
+      number: schema.plans.number,
+      title: schema.plans.title,
+    })
+    .from(schema.planItems)
+    .innerJoin(schema.plans, eq(schema.plans.id, schema.planItems.planId))
+    .where(and(ne(schema.plans.id, planId), scope, entityMatch.length === 1 ? entityMatch[0] : or(...entityMatch)));
+  for (const row of rows) {
+    const key = `${row.entityType}:${row.entityId}`;
+    const list = grouped.get(key) ?? [];
+    list.push({ id: row.id, number: row.number, title: row.title });
+    grouped.set(key, list);
+  }
+  for (const list of grouped.values()) list.sort((a, b) => a.number - b.number);
+  return grouped;
 }
 
 export async function getPlan(db: Db, actorId: number, planId: number) {
@@ -444,6 +636,7 @@ export async function getPlanBoard(db: Db, actorId: number, planId: number) {
   const plan = await requirePlan(db, actorId, planId, "read");
   const graph = await loadGraph(db, planId);
   const canWrite = await actorCanWritePlan(db, actorId, plan);
+  const canStructure = await actorCanStructurePlan(db, actorId, plan);
   const canReopen = await actorCanReopen(db, actorId, plan.projectId);
   const rollup = computePlanRollup(graph.items);
   const rollupByPhase = new Map(rollup.phases.map((phase) => [phase.phaseSort, phase]));
@@ -506,7 +699,7 @@ export async function getPlanBoard(db: Db, actorId: number, planId: number) {
   return {
     plan: presentPlan(plan),
     rollup: rollup.plan,
-    permissions: { canWriteItems: canWrite },
+    permissions: { canWriteItems: canWrite, canStructure },
     phases,
     edges: graph.dependencies,
   };

@@ -12,6 +12,7 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
+import { Link } from "react-router-dom";
 import {
   Fragment,
   useCallback,
@@ -49,6 +50,7 @@ import { isEntityType, type EntityType } from "../lib/entityType";
 import { filterMeshGraph } from "../lib/meshFilters";
 import { applyMeshPins, meshPinsInGraph, type MeshPin } from "../lib/meshPins";
 import { formatEntityRef } from "../lib/entityRef";
+import { usePlanMemberships } from "../lib/planMemberships";
 import { dispatchOpenAsk } from "../lib/askProject";
 import { useFeatureBlockedTitle } from "../lib/useAssistantAvailability";
 import { layoutMeshPlan } from "../lib/meshPlanLayout";
@@ -425,19 +427,43 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+function MeshPlanLinks({ entityType, entityId }: { entityType: "task" | "todo"; entityId: number }) {
+  const query = usePlanMemberships(entityType, entityId);
+  if (!query.data || query.data.length === 0) return null;
+  return (
+    <div className="mesh-card__plans">
+      <p className="mesh-card__deps-label">Open in plan</p>
+      <ul className="mesh-card__deps-list">
+        {query.data.map((plan) => (
+          <li key={plan.id}>
+            <Link className="mesh-card__dep" to={`/plans/${plan.id}`}>
+              {formatEntityRef("plan", plan.number)} {plan.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function MeshHoverCard({
+  cardKey,
   model,
   cardRef,
   onOpen,
   onPointerEnter,
   onPointerLeave,
 }: {
+  cardKey: string;
   model: MeshCardModel;
   cardRef: RefObject<HTMLDivElement | null>;
   onOpen: (key: string) => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
 }) {
+  const parsed = parseEntityKey(cardKey);
+  const planEntity =
+    parsed && (parsed.entityType === "task" || parsed.entityType === "todo") ? parsed : null;
   const stateInk = stateAppearance(model.state);
   return (
     <div
@@ -522,6 +548,9 @@ function MeshHoverCard({
           {list.more > 0 ? <p className="mesh-card__deps-more">+{list.more} more</p> : null}
         </div>
       ))}
+      {planEntity ? (
+        <MeshPlanLinks entityType={planEntity.entityType} entityId={planEntity.id} />
+      ) : null}
       <p className="mesh-card__hint">{model.hint}</p>
     </div>
   );
@@ -1883,6 +1912,7 @@ export function MeshPanel({
           </ReactFlow>
           {hoverCard ? (
             <MeshHoverCard
+              cardKey={cardKey ?? ""}
               cardRef={cardRef}
               model={hoverCard}
               onOpen={openNode}

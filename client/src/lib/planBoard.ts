@@ -68,7 +68,7 @@ export type PlanBoard = {
     revision: number;
   };
   rollup: PlanRollupSlice;
-  permissions: { canWriteItems: boolean };
+  permissions: { canWriteItems: boolean; canStructure: boolean };
   phases: PlanBoardPhase[];
   edges: PlanBoardEdge[];
 };
@@ -213,6 +213,27 @@ export function readCollapsedPhaseIds(raw: string | null): number[] {
   } catch {
     return [];
   }
+}
+
+/** In-plan prerequisites for a task row. Empty for ToDos and tasks with none in the plan. */
+export function planDependencyGutter(
+  item: Pick<PlanBoardItem, "entityType" | "entityId">,
+  items: readonly Pick<PlanBoardItem, "entityType" | "entityId" | "number">[],
+  edges: readonly PlanBoardEdge[],
+): string {
+  if (item.entityType !== "task") return "";
+  const numbers = new Map(
+    items.filter((row) => row.entityType === "task").map((row) => [row.entityId, row.number]),
+  );
+  const refs: string[] = [];
+  for (const edge of edges) {
+    if (edge.dependent.entityType !== "task" || edge.dependent.entityId !== item.entityId) continue;
+    if (edge.prerequisite.entityType !== "task") continue;
+    const number = numbers.get(edge.prerequisite.entityId);
+    if (number == null) continue;
+    refs.push(formatEntityRef("task", number));
+  }
+  return refs.length === 0 ? "" : `← ${refs.join(", ")}`;
 }
 
 export function planItemRef(item: Pick<PlanBoardItem, "entityType" | "number">): string {

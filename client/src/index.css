@@ -8727,6 +8727,7 @@ a:focus-visible {
   color: inherit;
   font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 .mesh-card__dep-name {
@@ -9655,5 +9656,101 @@ a:focus-visible {
 .plan-board__fix-list {
   margin: 0.35rem 0 0.8rem;
   padding-left: 1.1rem;
+}
+
+.plan-board__table--deps .plan-board__row {
+  grid-template-columns: 5.5rem 1.4rem 2rem minmax(14rem, 1fr) 6.5rem 5.75rem 8rem 4.75rem;
+}
+
+.plan-board__gutter {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted, #9aa89a);
+  overflow-wrap: anywhere;
+}
+
+.plan-phase-tools {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.6rem 0 0.2rem;
+}
+
+.plan-phase-tools__picker,
+.plan-phase-tools__quick,
+.project-plans__create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.plan-phase-tools__quick input[type="text"],
+.project-plans__create input[type="text"] {
+  width: auto;
+  flex: 1 1 12rem;
+  min-width: 8rem;
+}
+
+.plan-phase-tools__quick input.plan-phase-tools__hours {
+  flex: 0 1 6.5rem;
+  width: 6.5rem;
+  min-width: 5.5rem;
+}
+
+.plan-phase-tools__picker {
+  display: grid;
+}
+
+.plan-phase-tools__results,
+.plan-memberships,
+.project-plans__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plan-phase-tools__result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 0.35rem 0.4rem;
+}
+
+.plan-phase-tools__result:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+.plan-phase-tools__badge {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.75rem;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+}
+
+.plan-memberships a,
+.project-plans__list a {
+  color: var(--accent);
+}
+
+.project-plans__list li,
+.plan-memberships li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.project-plans h2 {
+  margin-top: 0;
 }
 

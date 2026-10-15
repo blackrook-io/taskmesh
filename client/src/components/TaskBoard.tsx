@@ -50,6 +50,7 @@ import { StateReasonDialog } from "./StateReasonDialog";
 import { TaskRollupMeter } from "./TaskRollupMeter";
 import { ColorPopover } from "./shared/ColorPopover";
 import { HoursInput } from "./shared/HoursInput";
+import { PlanMemberships } from "./PlanMemberships";
 import { GroupEditModal } from "./GroupEditModal";
 import {
   TaskListContextMenu,
@@ -1016,6 +1017,7 @@ export function TaskEditorFields({
             }}
           />
         </div>
+        <PlanMemberships entityType="task" entityId={task.id} />
         <AssigneeSelectField
           id={`t-assignee-${task.id}`}
           projectId={projectId}
