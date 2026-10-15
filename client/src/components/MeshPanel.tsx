@@ -53,7 +53,6 @@ import { formatEntityRef } from "../lib/entityRef";
 import { usePlanMemberships } from "../lib/planMemberships";
 import { dispatchOpenAsk } from "../lib/askProject";
 import { useFeatureBlockedTitle } from "../lib/useAssistantAvailability";
-import { layoutMeshPlan } from "../lib/meshPlanLayout";
 import {
   layoutMesh,
   meshCorridorPoints,
@@ -88,7 +87,6 @@ type MeshNodeData = {
   projectLabel: string | null;
   type: string;
   role: MeshLayoutNode["role"];
-  planMark: MeshLayoutNode["planMark"];
   color: string;
   hollow: boolean;
   state: string | null;
@@ -436,7 +434,7 @@ function MeshPlanLinks({ entityType, entityId }: { entityType: "task" | "todo"; 
       <ul className="mesh-card__deps-list">
         {query.data.map((plan) => (
           <li key={plan.id}>
-            <Link className="mesh-card__dep" to={`/plans/${plan.id}`}>
+            <Link className="mesh-card__dep" to={`/plans/${plan.id}?view=timeline`}>
               {formatEntityRef("plan", plan.number)} {plan.title}
             </Link>
           </li>
@@ -670,7 +668,6 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
     : [
         data.referenceId,
         data.role === "suggestion" ? "AI suggestion" : null,
-        data.planMark === "blocked" ? "blocked" : data.planMark === "next" ? "next" : null,
         data.state === "complete" ? "complete" : data.state === "canceled" ? "canceled" : null,
         data.title,
         data.projectLabel,
@@ -701,7 +698,6 @@ function MeshRecordNode({ id, data }: NodeProps<MeshFlowNode>) {
         className={[
           `mesh-node mesh-node--${data.role}`,
           data.group ? "mesh-node--group" : "",
-          data.planMark ? `mesh-node--${data.planMark}` : "",
           done ? "mesh-node--complete" : "",
           canceled ? "mesh-node--canceled" : "",
         ]
@@ -924,7 +920,6 @@ export function MeshPanel({
     focus: rootKey,
     ids: EMPTY_IDS,
   });
-  const [view, setView] = useState<"focus" | "plan">("focus");
   const [openGroups, setOpenGroups] = useState<{ focus: string; keys: ReadonlySet<string> }>({
     focus: rootKey,
     keys: EMPTY_IDS,
@@ -933,7 +928,6 @@ export function MeshPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dragPos, setDragPos] = useState<{
     focus: string;
-    view: "focus" | "plan";
     id: string;
     x: number;
     y: number;
@@ -1093,10 +1087,10 @@ export function MeshPanel({
     });
   }, [focusKey, graphQuery.data, hiddenTypes, hideDone, shownSuggestions]);
   const layoutQuery = useQuery({
-    queryKey: ["mesh-layout", focusKey, view] as const,
+    queryKey: ["mesh-layout", focusKey, "focus"] as const,
     queryFn: async () => {
       const res = await apiJson<{ data: SavedMeshLayout | null }>(
-        `/api/v1/mesh-layouts?root=${encodeURIComponent(focusKey)}&view=${view}`,
+        `/api/v1/mesh-layouts?root=${encodeURIComponent(focusKey)}&view=focus`,
       );
       return res.data;
     },
@@ -1114,22 +1108,14 @@ export function MeshPanel({
       dependsOn: relations.dependsOn,
       suggestions: shownSuggestions,
     };
-    const base =
-      view === "plan"
-        ? layoutMeshPlan({
-            ...shared,
-            blockNodes: graphQuery.data?.nodes ?? filteredGraph.nodes,
-            blockEdges: graphQuery.data?.edges ?? filteredGraph.edges,
-          })
-        : layoutMesh({
-            ...shared,
-            expandedGroups: openGroups.focus === focusKey ? openGroups.keys : EMPTY_IDS,
-          });
+    const base = layoutMesh({
+      ...shared,
+      expandedGroups: openGroups.focus === focusKey ? openGroups.keys : EMPTY_IDS,
+    });
     return applyMeshPins(base, savedPins);
   }, [
     filteredGraph,
     focusKey,
-    graphQuery.data,
     projectId,
     projectRefs,
     relations.dependsOn,
@@ -1137,7 +1123,6 @@ export function MeshPanel({
     openGroups,
     savedPins,
     shownSuggestions,
-    view,
   ]);
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -1364,12 +1349,12 @@ export function MeshPanel({
   }, [dismissCard, rememberMotion, stack.length]);
 
   const saveLayout = useMutation({
-    mutationFn: async (input: { root: string; view: "focus" | "plan"; body: SavedMeshLayout }) => {
+    mutationFn: async (input: { root: string; body: SavedMeshLayout }) => {
       const res = await apiJson<{ data: SavedMeshLayout }>(
-        `/api/v1/mesh-layouts?root=${encodeURIComponent(input.root)}&view=${input.view}`,
+        `/api/v1/mesh-layouts?root=${encodeURIComponent(input.root)}&view=focus`,
         { method: "PUT", body: JSON.stringify(input.body) },
       );
-      return { key: ["mesh-layout", input.root, input.view] as const, data: res.data };
+      return { key: ["mesh-layout", input.root, "focus"] as const, data: res.data };
     },
     onSuccess: (result) => {
       queryClient.setQueryData(result.key, result.data);
@@ -1379,12 +1364,11 @@ export function MeshPanel({
   });
 
   const resetSavedLayout = useMutation({
-    mutationFn: async (input: { root: string; view: "focus" | "plan" }) => {
-      await apiJson(
-        `/api/v1/mesh-layouts?root=${encodeURIComponent(input.root)}&view=${input.view}`,
-        { method: "DELETE" },
-      );
-      return ["mesh-layout", input.root, input.view] as const;
+    mutationFn: async (input: { root: string }) => {
+      await apiJson(`/api/v1/mesh-layouts?root=${encodeURIComponent(input.root)}&view=focus`, {
+        method: "DELETE",
+      });
+      return ["mesh-layout", input.root, "focus"] as const;
     },
     onSuccess: (key) => {
       queryClient.setQueryData(key, null);
@@ -1405,21 +1389,20 @@ export function MeshPanel({
         positions,
         viewport: layoutQuery.data?.viewport ?? null,
       };
-      const key = ["mesh-layout", focusKey, view] as const;
+      const key = ["mesh-layout", focusKey, "focus"] as const;
       queryClient.setQueryData(key, body);
-      saveLayout.mutate({ root: focusKey, view, body });
+      saveLayout.mutate({ root: focusKey, body });
     },
-    [focusKey, graphQuery.data?.nodes, layoutQuery.data, layoutQuery.isSuccess, queryClient, saveLayout, view],
+    [focusKey, graphQuery.data?.nodes, layoutQuery.data, layoutQuery.isSuccess, queryClient, saveLayout],
   );
 
   const scheduleViewport = useCallback(
     (viewport: MeshViewport) => {
       const root = focusKey;
-      const mode = view;
       const keys = new Set(graphQuery.data?.nodes.map((node) => node.key) ?? []);
       if (viewportTimer.current != null) window.clearTimeout(viewportTimer.current);
       viewportTimer.current = window.setTimeout(() => {
-        const queryKey = ["mesh-layout", root, mode] as const;
+        const queryKey = ["mesh-layout", root, "focus"] as const;
         if (queryClient.getQueryState(queryKey)?.status !== "success") return;
         const saved = queryClient.getQueryData<SavedMeshLayout | null>(queryKey);
         const body: SavedMeshLayout = {
@@ -1427,10 +1410,10 @@ export function MeshPanel({
           viewport,
         };
         queryClient.setQueryData(queryKey, body);
-        saveLayout.mutate({ root, view: mode, body });
+        saveLayout.mutate({ root, body });
       }, 400);
     },
-    [focusKey, graphQuery.data?.nodes, queryClient, saveLayout, view],
+    [focusKey, graphQuery.data?.nodes, queryClient, saveLayout],
   );
 
   useLayoutEffect(
@@ -1498,7 +1481,7 @@ export function MeshPanel({
           id: node.key,
           type: "mesh" as const,
           position:
-            dragPos?.focus === focusKey && dragPos.view === view && dragPos.id === node.key
+            dragPos?.focus === focusKey && dragPos.id === node.key
               ? { x: dragPos.x, y: dragPos.y }
               : { x: node.x, y: node.y },
           data: {
@@ -1507,7 +1490,6 @@ export function MeshPanel({
             projectLabel: node.projectLabel,
             type: node.type,
             role: node.role,
-            planMark: node.planMark,
             color: ink.color,
             hollow: ink.hollow,
             state: record?.state ?? null,
@@ -1565,7 +1547,6 @@ export function MeshPanel({
       showCardNow,
       suggestionCards,
       today,
-      view,
     ],
   );
   const flowEdges = useMemo(
@@ -1676,31 +1657,6 @@ export function MeshPanel({
             </>
           ) : null}
         </nav>
-        <div className="mesh-view" role="group" aria-label="Mesh view">
-          <span>View</span>
-          <button
-            type="button"
-            aria-pressed={view === "focus"}
-            onClick={() => {
-              if (view === "focus") return;
-              rememberMotion();
-              setView("focus");
-            }}
-          >
-            Focus
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === "plan"}
-            onClick={() => {
-              if (view === "plan") return;
-              rememberMotion();
-              setView("plan");
-            }}
-          >
-            Plan
-          </button>
-        </div>
         <div className="mesh-filters" role="group" aria-label="Relationships">
           <button
             type="button"
@@ -1869,7 +1825,7 @@ export function MeshPanel({
               if (Math.hypot(node.position.x - start.x, node.position.y - start.y) > 4) {
                 skipOpen.current = true;
               }
-              setDragPos({ focus: focusKey, view, id: node.id, x: node.position.x, y: node.position.y });
+              setDragPos({ focus: focusKey, id: node.id, x: node.position.x, y: node.position.y });
             }}
             onNodeDragStop={(_event, node) => {
               const start = dragStart.current;
@@ -1887,7 +1843,7 @@ export function MeshPanel({
             colorMode="dark"
           >
             {layoutQuery.isSuccess && layoutQuery.data?.viewport ? (
-              <RestoreViewport token={`${focusKey}:${view}`} viewport={layoutQuery.data.viewport} />
+              <RestoreViewport token={focusKey} viewport={layoutQuery.data.viewport} />
             ) : layoutQuery.isSuccess ? (
               <FrameFocus
                 focusKey={focusKey}
@@ -2011,18 +1967,9 @@ export function MeshPanel({
               <ul>
                 <li><span className="mesh-swatch mesh-swatch--tree" /> Contains</li>
                 <li><span className="mesh-swatch mesh-swatch--ref" /> References</li>
-                {view === "plan" ? (
-                  <>
-                    <li><span className="mesh-swatch mesh-swatch--dep" /> Depends on (done)</li>
-                    <li><span className="mesh-swatch mesh-swatch--block" /> Depends on (still blocking)</li>
-                  </>
-                ) : (
-                  <>
-                    <li><span className="mesh-swatch mesh-swatch--dep" /> Unblocks (done)</li>
-                    <li><span className="mesh-swatch mesh-swatch--block" /> Unblocks (still blocking)</li>
-                    <li>prerequisite → dependent</li>
-                  </>
-                )}
+                <li><span className="mesh-swatch mesh-swatch--dep" /> Unblocks (done)</li>
+                <li><span className="mesh-swatch mesh-swatch--block" /> Unblocks (still blocking)</li>
+                <li>prerequisite → dependent</li>
                 <li><span className="mesh-swatch mesh-swatch--ai" /> Suggested by AI</li>
               </ul>
             </div>
@@ -2042,16 +1989,6 @@ export function MeshPanel({
                 <li><span className="mesh-swatch mesh-swatch--risk" /> At risk</li>
                 <li><span className="mesh-badge mesh-badge--urgent">!!</span> High or urgent</li>
                 <li>Clock mark: no state change in 30+ days</li>
-                {view === "plan" ? (
-                  <>
-                    <li>
-                      <span className="mesh-swatch mesh-swatch--over" /> Blocked
-                    </li>
-                    <li>
-                      <span className="mesh-swatch mesh-swatch--next" /> Next
-                    </li>
-                  </>
-                ) : null}
                 <li>A red count is overdue work sitting further down, out of view.</li>
               </ul>
             </div>
@@ -2061,12 +1998,12 @@ export function MeshPanel({
       <ConfirmDialog
         open={resetOpen}
         title="Reset layout"
-        message="Clear pinned positions and the saved pan and zoom for this record in this view?"
+        message="Clear pinned positions and the saved pan and zoom for this record?"
         confirmLabel="Reset"
         confirmTone="danger"
         onConfirm={() => {
           setResetOpen(false);
-          resetSavedLayout.mutate({ root: focusKey, view });
+          resetSavedLayout.mutate({ root: focusKey });
         }}
         onCancel={() => setResetOpen(false)}
       />

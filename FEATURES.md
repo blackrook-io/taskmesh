@@ -9,11 +9,10 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Open a plan board to see phased Tasks and ToDos, hour totals, progress, and a finish-date range, and check items off from the list
 - Refine a plan finish with AI and see a likely date range beside the baseline, with the reasons behind it
 - Switch a plan to a timeline and see each item as a bar from its hours, start date, and dependencies, with a hover card for the schedule
-- Add Tasks and ToDos to a plan, create a Draft task in a phase, and open every plan a record belongs to from the Task, To Do, or Mesh card
+- Add Tasks and ToDos to a plan, create a Draft task in a phase, and open every plan a record belongs to from the Task or To Do, or open that plan’s Timeline from the Mesh card
 - Reorder a plan by dragging or with the keyboard, and keep every dependent below its prerequisite
 - Open Mesh to see the focused record centered over its contents, with its own links beside it and links from inside on a rail
-- Switch Mesh to Plan view to read dependencies and parent/child links left to right, one row per phase, and see which Ready work is next or still blocked
-- Drag a Mesh node to pin it; the position and the canvas pan and zoom return for that record and view, and Reset layout clears them
+- Drag a Mesh node to pin it; the position and the canvas pan and zoom return for that record, and Reset layout clears them
 - Color Mesh by type, state, or priority, and see overdue, at-risk, stale, and depends-on signals on the cascade
 - Hover a Mesh record to read its state, due date, last change, contents, blockers, and links without leaving the cascade
 - Administrators set Mesh colors and readability for everyone: record colors, suggestion and signal colors, line weight, size, label halo, overdue pulse, and how soon a quiet record counts as stale

@@ -830,7 +830,7 @@ export const userProjectOverviewPrefs = pgTable(
   ],
 );
 
-/** One saved Mesh canvas per user, focused record, and view (T0165). */
+/** One saved Mesh canvas per user and focused record (T0165). `view` is `focus`. */
 export type MeshLayoutPin = { x: number; y: number };
 export type MeshLayoutViewport = { x: number; y: number; zoom: number };
 
@@ -844,7 +844,7 @@ export const meshLayouts = pgTable(
     /** Graph root type, including `tag`. */
     rootType: text("root_type").notNull(),
     rootId: integer("root_id").notNull(),
-    /** `focus` | `plan` */
+    /** `focus` */
     view: text("view").notNull(),
     /** Pinned node key → top-left. Missing keys stay on the computed layout. */
     positions: jsonb("positions")
@@ -867,7 +867,7 @@ export const meshLayouts = pgTable(
       "mesh_layouts_root_type_chk",
       sql`${t.rootType} in ('idea', 'project', 'task', 'todo', 'document', 'todo_list', 'board', 'canvas', 'wiki_node', 'image_board', 'plan', 'tag')`,
     ),
-    check("mesh_layouts_view_chk", sql`${t.view} in ('focus', 'plan')`),
+    check("mesh_layouts_view_chk", sql`${t.view} in ('focus')`),
   ],
 );
 

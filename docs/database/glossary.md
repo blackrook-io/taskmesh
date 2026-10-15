@@ -179,7 +179,7 @@ Exact FK lists are on the domain pages.
   - `ai_budgets` — jsonb (T0188): `tokensPerUserPerDay`, `instanceSpendUsdPerDay`, `toolCallsPerRun`, and `writesPerRun`. Each is a positive integer or null. Null means that limit is off. The spend cap is whole USD per UTC day and counts only instance-key calls.
   - `ai_instance_usd_per_million_tokens` — number (default **1**, T0188). Estimated price used to turn instance-key tokens into spend. Missing or invalid values fall back to **1**.
   - `ai_instructions` — string or null (T0209). Instance-wide AI instructions, up to 8,000 characters. Included first in an assembled context packet. Empty or non-string values are treated as unset.
-- **`mesh_layouts.positions`** — pinned Mesh node key → `{ x, y }` (T0165). **`mesh_layouts.viewport`** — `{ x, y, zoom }` or empty. `view` is `focus` \| `plan`.
+- **`mesh_layouts.positions`** — pinned Mesh node key → `{ x, y }` (T0165). **`mesh_layouts.viewport`** — `{ x, y, zoom }` or empty. `view` is `focus`.
 
 ## Uploads vs database
 

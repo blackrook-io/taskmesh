@@ -13,7 +13,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { ApiRequestError, apiJson } from "../api/client";
 import { StateReasonDialog } from "../components/StateReasonDialog";
 import { PlanAiRange } from "../components/PlanAiRange";
@@ -630,7 +630,19 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [reopen, setReopen] = useState<PlanBoardItem | null>(null);
   const [showDeps, setShowDeps] = useState(false);
-  const [view, setView] = useState<"board" | "timeline">("board");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get("view") === "timeline" ? "timeline" : "board";
+  const setView = (next: "board" | "timeline") => {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (next === "timeline") params.set("view", "timeline");
+        else params.delete("view");
+        return params;
+      },
+      { replace: true },
+    );
+  };
   const [pickerPhaseId, setPickerPhaseId] = useState<number | null>(null);
   const [pendingParent, setPendingParent] = useState<{ phaseId: number; candidate: PlanCandidate } | null>(
     null,

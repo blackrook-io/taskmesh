@@ -13,7 +13,7 @@ const pinSchema = z.object({
 
 export const meshLayoutQuerySchema = z.object({
   root: z.string().regex(/^(idea|project|task|todo|document|todo_list|board|canvas|wiki_node|image_board|plan|tag):\d+$/),
-  view: z.enum(["focus", "plan"]),
+  view: z.enum(["focus"]),
 });
 
 export const meshLayoutBodySchema = z

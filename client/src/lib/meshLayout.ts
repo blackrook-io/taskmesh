@@ -46,8 +46,6 @@ export type MeshGraphNode = {
   phaseSort?: number | null;
 };
 
-export type MeshPlanMark = "blocked" | "next";
-
 export type MeshGraphEdge = {
   source: string;
   target: string;
@@ -106,8 +104,6 @@ export type MeshLayoutNode = {
   type: string;
   /** Other project's display number, such as `P0009`, when this app already has it. */
   projectLabel: string | null;
-  /** Plan view only. Focus view leaves this null. */
-  planMark: MeshPlanMark | null;
   /** Set when this node stands in for a crowded type. Null for a real record. */
   group: MeshGroup | null;
 };
@@ -397,7 +393,6 @@ function placedNode(
     referenceId: node.referenceId,
     type: node.type,
     projectLabel: projectLabel(node, meshProjectId, projectRefs),
-    planMark: null,
     group: null,
   };
 }
