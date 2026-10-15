@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  addAndMoveOffer,
   assertPlanRevision,
   computePlanRollup,
   conflictsForNewDependency,
   conflictsForParentChange,
+  insertPlanBlock,
+  layoutBelowPrerequisite,
+  planItemActions,
   PlanRuleError,
   previewFixOrder,
   validatePlanOrder,
@@ -317,5 +321,117 @@ describe("assertPlanRevision", () => {
         return true;
       },
     );
+  });
+});
+
+describe("planItemActions", () => {
+  const blocker = { id: 9, number: 102, title: "Blocker", state: "ready" };
+
+  it("offers Start and Start and complete on a clear Ready task", () => {
+    const flags = planItemActions({
+      entityType: "task",
+      state: "ready",
+      canWrite: true,
+      canReopen: false,
+      stateDerived: false,
+      openBlockers: [],
+    });
+    assert.equal(flags.canStart, true);
+    assert.equal(flags.canStartAndComplete, true);
+    assert.equal(flags.canCheck, false);
+    assert.equal(flags.canUncheck, false);
+  });
+
+  it("keeps Start and drops Start and complete when Ready still has open blockers", () => {
+    const flags = planItemActions({
+      entityType: "task",
+      state: "ready",
+      canWrite: true,
+      canReopen: true,
+      stateDerived: false,
+      openBlockers: [blocker],
+    });
+    assert.equal(flags.canStart, true);
+    assert.equal(flags.canStartAndComplete, false);
+    assert.deepEqual(flags.blockedBy, [blocker]);
+  });
+
+  it("hides every flag for a viewer and still names blockers", () => {
+    const flags = planItemActions({
+      entityType: "task",
+      state: "in_progress",
+      canWrite: false,
+      canReopen: true,
+      stateDerived: false,
+      openBlockers: [blocker],
+    });
+    assert.equal(flags.canCheck, false);
+    assert.equal(flags.canStart, false);
+    assert.equal(flags.canUncheck, false);
+    assert.deepEqual(flags.blockedBy, [blocker]);
+  });
+
+  it("lets a writer check an open ToDo and uncheck a complete one", () => {
+    const open = planItemActions({
+      entityType: "todo",
+      state: "new",
+      canWrite: true,
+      canReopen: false,
+      stateDerived: false,
+      openBlockers: [],
+    });
+    assert.equal(open.canCheck, true);
+    assert.equal(open.canStart, false);
+    const done = planItemActions({
+      entityType: "todo",
+      state: "complete",
+      canWrite: true,
+      canReopen: false,
+      stateDerived: false,
+      openBlockers: [],
+    });
+    assert.equal(done.canCheck, false);
+    assert.equal(done.canUncheck, true);
+  });
+});
+
+describe("insertPlanBlock", () => {
+  it("puts a dependent at the last legal index in the phase", () => {
+    const items = [item({ entityId: 1, itemSort: 0 })];
+    const block = [item({ entityId: 2, itemSort: 0 })];
+    const next = insertPlanBlock(items, [edge(1, 2)], 0, block, null);
+    assert.deepEqual(
+      next?.map((row) => row.entityId),
+      [1, 2],
+    );
+  });
+
+  it("returns null when the prerequisite sits in a later phase", () => {
+    const items = [item({ entityId: 1, phaseSort: 1, itemSort: 0 })];
+    const block = [item({ entityId: 2, itemSort: 0 })];
+    const next = insertPlanBlock(items, [edge(1, 2)], 0, block, null);
+    assert.equal(next, null);
+  });
+});
+
+describe("addAndMoveOffer", () => {
+  it("offers the only plan that an in-phase move can fix", () => {
+    const items = [item({ entityId: 2, itemSort: 0 }), item({ entityId: 1, itemSort: 1 })];
+    const offer = addAndMoveOffer([plan(4, items)], edge(1, 2));
+    assert.deepEqual(offer, { planId: 4 });
+    assert.deepEqual(
+      layoutBelowPrerequisite(items, [], edge(1, 2))?.map((row) => row.entityId),
+      [1, 2],
+    );
+  });
+
+  it("offers nothing when two plans conflict or the items are in different phases", () => {
+    const items = [item({ entityId: 2, itemSort: 0 }), item({ entityId: 1, itemSort: 1 })];
+    assert.equal(addAndMoveOffer([plan(4, items), plan(5, items)], edge(1, 2)), null);
+    const split = [
+      item({ entityId: 2, phaseSort: 0, itemSort: 0 }),
+      item({ entityId: 1, phaseSort: 1, itemSort: 0 }),
+    ];
+    assert.equal(addAndMoveOffer([plan(4, split)], edge(1, 2)), null);
   });
 });

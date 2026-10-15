@@ -72,16 +72,22 @@ export type PlanOrderConflict = {
   violations: PlanOrderViolation[];
 };
 
+export type PlanRuleDetails = {
+  plans?: Array<{ id: number; number: number; title: string }>;
+  violations?: PlanOrderViolation[];
+  addAndMove?: { planId: number };
+};
+
 export class PlanRuleError extends Error {
   readonly status: number;
   readonly code: string;
-  readonly details?: { plans: Array<{ id: number; number: number; title: string }> };
+  readonly details?: PlanRuleDetails;
 
   constructor(
     status: number,
     code: string,
     message: string,
-    details?: { plans: Array<{ id: number; number: number; title: string }> },
+    details?: PlanRuleDetails,
   ) {
     super(message);
     this.name = "PlanRuleError";
@@ -612,6 +618,202 @@ export function conflictsForNewDependency(
   return conflicts;
 }
 
+/** Keep the caller's order inside each phase. Do not re-sort by the old itemSort. */
+function renumberLayout(items: PlanLayoutItem[]): PlanLayoutItem[] {
+  const phases = new Map<number, PlanLayoutItem[]>();
+  for (const item of items) {
+    const list = phases.get(item.phaseSort) ?? [];
+    list.push(item);
+    phases.set(item.phaseSort, list);
+  }
+  const out: PlanLayoutItem[] = [];
+  for (const phaseSort of [...phases.keys()].sort((a, b) => a - b)) {
+    const list = phases.get(phaseSort) ?? [];
+    list.forEach((item, itemSort) => {
+      out.push({ ...item, itemSort });
+    });
+  }
+  return out;
+}
+
+function splicePhaseBlock(
+  items: PlanLayoutItem[],
+  phaseSort: number,
+  index: number,
+  block: PlanLayoutItem[],
+): PlanLayoutItem[] {
+  const ordered = orderedItems(items);
+  const phase = ordered.filter((item) => item.phaseSort === phaseSort);
+  const others = ordered.filter((item) => item.phaseSort !== phaseSort);
+  const nextPhase = [
+    ...phase.slice(0, index),
+    ...block.map((item) => ({ ...item, phaseSort })),
+    ...phase.slice(index),
+  ];
+  return renumberLayout([...others, ...nextPhase]);
+}
+
+/**
+ * Insert `block` into one phase. With no `after`, use the last legal index.
+ * Members of `block` already in `items` are lifted out and placed with the block.
+ * Returns null when no index is legal.
+ */
+export function insertPlanBlock(
+  items: PlanLayoutItem[],
+  dependencies: PlanDependencyEdge[],
+  phaseSort: number,
+  block: PlanLayoutItem[],
+  after: PlanItemRef | null,
+): PlanLayoutItem[] | null {
+  const blockKeys = new Set(block.map(itemKey));
+  const remaining = items.filter((item) => !blockKeys.has(itemKey(item)));
+  const phase = orderedItems(remaining).filter((item) => item.phaseSort === phaseSort);
+  if (after) {
+    const index = phase.findIndex((item) => sameRef(item, after));
+    if (index < 0) return null;
+    const next = splicePhaseBlock(remaining, phaseSort, index + 1, block);
+    return validatePlanOrder(next, dependencies).length === 0 ? next : null;
+  }
+  for (let index = phase.length; index >= 0; index -= 1) {
+    const next = splicePhaseBlock(remaining, phaseSort, index, block);
+    if (validatePlanOrder(next, dependencies).length === 0) return next;
+  }
+  return null;
+}
+
+/** Violations for one attempted insert: after `after`, or at the end of the phase when `after` is null. */
+export function rejectedInsertViolations(
+  items: PlanLayoutItem[],
+  dependencies: PlanDependencyEdge[],
+  phaseSort: number,
+  block: PlanLayoutItem[],
+  after: PlanItemRef | null,
+): PlanOrderViolation[] {
+  const blockKeys = new Set(block.map(itemKey));
+  const remaining = items.filter((item) => !blockKeys.has(itemKey(item)));
+  const phase = orderedItems(remaining).filter((item) => item.phaseSort === phaseSort);
+  let index = phase.length;
+  if (after) {
+    const found = phase.findIndex((item) => sameRef(item, after));
+    if (found < 0) {
+      return [{ kind: "dependency", message: "No legal slot in that phase" }];
+    }
+    index = found + 1;
+  }
+  return validatePlanOrder(splicePhaseBlock(remaining, phaseSort, index, block), dependencies);
+}
+
+/**
+ * Move the dependent and its in-plan descendants to just after the prerequisite's
+ * block, staying in that phase. Returns null when the phase cannot be made legal.
+ */
+export function layoutBelowPrerequisite(
+  items: PlanLayoutItem[],
+  dependencies: PlanDependencyEdge[],
+  edge: PlanDependencyEdge,
+): PlanLayoutItem[] | null {
+  const ordered = orderedItems(items);
+  const prerequisite = ordered.find((item) => sameRef(item, edge.prerequisite));
+  const dependent = ordered.find((item) => sameRef(item, edge.dependent));
+  if (!prerequisite || !dependent) return null;
+  if (prerequisite.phaseSort !== dependent.phaseSort) return null;
+  const children = childKeys(ordered);
+  const blockKeys = new Set([
+    itemKey(dependent),
+    ...descendantKeys(itemKey(dependent), children),
+  ]);
+  if (blockKeys.has(itemKey(prerequisite))) return null;
+  const prerequisiteBlock = new Set([
+    itemKey(prerequisite),
+    ...descendantKeys(itemKey(prerequisite), children),
+  ]);
+  const phase = ordered.filter((item) => item.phaseSort === prerequisite.phaseSort);
+  let insertAt = 0;
+  phase.forEach((item, index) => {
+    if (prerequisiteBlock.has(itemKey(item))) insertAt = index + 1;
+  });
+  const block = phase.filter((item) => blockKeys.has(itemKey(item)));
+  const remainingPhase = phase.filter((item) => !blockKeys.has(itemKey(item)));
+  const removedBefore = phase
+    .slice(0, insertAt)
+    .filter((item) => blockKeys.has(itemKey(item))).length;
+  const adjusted = insertAt - removedBefore;
+  const nextPhase = [
+    ...remainingPhase.slice(0, adjusted),
+    ...block,
+    ...remainingPhase.slice(adjusted),
+  ];
+  const others = ordered.filter((item) => item.phaseSort !== prerequisite.phaseSort);
+  const next = renumberLayout([...others, ...nextPhase]);
+  const withEdge = [...dependencies, edge];
+  return validatePlanOrder(next, withEdge).length === 0 ? next : null;
+}
+
+/** Set when exactly one shared plan becomes legal by moving the dependent below the prerequisite. */
+export function addAndMoveOffer(
+  plans: PlanSnapshot[],
+  edge: PlanDependencyEdge,
+): { planId: number } | null {
+  const conflicts = conflictsForNewDependency(plans, edge);
+  if (conflicts.length !== 1) return null;
+  const plan = plans.find((candidate) => candidate.id === conflicts[0]?.id);
+  if (!plan) return null;
+  const moved = layoutBelowPrerequisite(plan.items, plan.dependencies, edge);
+  return moved ? { planId: plan.id } : null;
+}
+
+export type PlanBlockerRef = {
+  id: number;
+  number: number;
+  title: string;
+  state: string;
+};
+
+export type PlanItemActionFlags = {
+  canCheck: boolean;
+  canStart: boolean;
+  canStartAndComplete: boolean;
+  canUncheck: boolean;
+  blockedBy: PlanBlockerRef[];
+};
+
+/** Board checkbox menu. Viewers pass `canWrite: false` and get every flag false. */
+export function planItemActions(input: {
+  entityType: PlanEntityType;
+  state: string;
+  canWrite: boolean;
+  canReopen: boolean;
+  stateDerived: boolean;
+  openBlockers: PlanBlockerRef[];
+}): PlanItemActionFlags {
+  const blockedBy = input.entityType === "task" ? input.openBlockers : [];
+  const hidden: PlanItemActionFlags = {
+    canCheck: false,
+    canStart: false,
+    canStartAndComplete: false,
+    canUncheck: false,
+    blockedBy,
+  };
+  if (!input.canWrite || input.stateDerived || input.state === "deleted") return hidden;
+  if (input.entityType === "todo") {
+    const closed =
+      input.state === "complete" || input.state === "canceled" || input.state === "pending";
+    return {
+      ...hidden,
+      canCheck: !closed,
+      canUncheck: input.state === "complete",
+    };
+  }
+  const open = input.openBlockers.length > 0;
+  return {
+    canCheck: (input.state === "in_progress" || input.state === "on_hold") && !open,
+    canStart: input.state === "ready",
+    canStartAndComplete: input.state === "ready" && !open,
+    canUncheck: input.canReopen && (input.state === "complete" || input.state === "canceled"),
+    blockedBy,
+  };
+}
+
 export function conflictsForParentChange(
   plans: PlanSnapshot[],
   child: PlanItemRef,
@@ -647,11 +849,25 @@ export function conflictsForParentChange(
   return conflicts;
 }
 
-function conflictError(conflicts: PlanOrderConflict[], action: string): PlanRuleError {
+function conflictError(
+  conflicts: PlanOrderConflict[],
+  action: string,
+  addAndMove?: { planId: number } | null,
+): PlanRuleError {
   const names = conflicts.map((plan) => formatEntityRef("plan", plan.number)).join(", ");
   return new PlanRuleError(409, "plan_order_conflict", `${action} conflicts with ${names}`, {
     plans: conflicts.map((plan) => ({ id: plan.id, number: plan.number, title: plan.title })),
+    ...(addAndMove ? { addAndMove } : {}),
   });
+}
+
+export function orderViolationError(violations: PlanOrderViolation[]): PlanRuleError {
+  return new PlanRuleError(
+    409,
+    "plan_order_violation",
+    violations.map((violation) => violation.message).join("; "),
+    { violations },
+  );
 }
 
 function asEntityType(value: string): PlanEntityType | null {
@@ -832,6 +1048,59 @@ async function loadPlansHoldingBoth(db: Db, a: PlanItemRef, b: PlanItemRef): Pro
   });
 }
 
+/**
+ * When `planId` is the single plan that can be fixed in-phase, move the dependent
+ * below the prerequisite and bump that plan's revision. Throws `plan_order_conflict`
+ * when the id is not the offered plan. No-op when the new edge is already legal.
+ */
+export async function relocateForNewDependency(
+  db: Db,
+  planId: number,
+  dependentTaskId: number,
+  prerequisiteTaskId: number,
+): Promise<void> {
+  const edge: PlanDependencyEdge = {
+    prerequisite: { entityType: "task", entityId: prerequisiteTaskId },
+    dependent: { entityType: "task", entityId: dependentTaskId },
+  };
+  const [locked] = await db
+    .select({ id: schema.plans.id, revision: schema.plans.revision })
+    .from(schema.plans)
+    .where(eq(schema.plans.id, planId))
+    .for("update");
+  if (!locked) {
+    throw new PlanRuleError(404, "not_found", "Plan not found");
+  }
+  const plans = await loadPlansHoldingBoth(db, edge.dependent, edge.prerequisite);
+  const conflicts = conflictsForNewDependency(plans, edge);
+  if (conflicts.length === 0) return;
+  const offer = addAndMoveOffer(plans, edge);
+  if (offer?.planId !== planId) {
+    throw conflictError(conflicts, "Adding that dependency", offer);
+  }
+  const plan = plans.find((candidate) => candidate.id === planId);
+  const next = plan ? layoutBelowPrerequisite(plan.items, plan.dependencies, edge) : null;
+  if (!plan || !next) {
+    throw conflictError(conflicts, "Adding that dependency", offer);
+  }
+  for (const item of next) {
+    await db
+      .update(schema.planItems)
+      .set({ sortOrder: item.itemSort })
+      .where(
+        and(
+          eq(schema.planItems.planId, planId),
+          eq(schema.planItems.entityType, item.entityType),
+          eq(schema.planItems.entityId, item.entityId),
+        ),
+      );
+  }
+  await db
+    .update(schema.plans)
+    .set({ revision: locked.revision + 1, updatedAt: new Date() })
+    .where(eq(schema.plans.id, planId));
+}
+
 export async function assertDependencyRespectsPlans(
   db: Db,
   dependentTaskId: number,
@@ -844,7 +1113,7 @@ export async function assertDependencyRespectsPlans(
   const plans = await loadPlansHoldingBoth(db, edge.dependent, edge.prerequisite);
   const conflicts = conflictsForNewDependency(plans, edge);
   if (conflicts.length > 0) {
-    throw conflictError(conflicts, "Adding that dependency");
+    throw conflictError(conflicts, "Adding that dependency", addAndMoveOffer(plans, edge));
   }
 }
 

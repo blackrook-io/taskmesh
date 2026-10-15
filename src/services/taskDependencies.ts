@@ -9,7 +9,12 @@ import {
 import { formatTaskNumber } from "../lib/taskFields.js";
 import { ilikeEscaped } from "../lib/ilike.js";
 import { dualScopeListFilter } from "./ownership.js";
-import { assertDependencyRespectsPlans, PlanRuleError } from "./plans.js";
+import {
+  assertDependencyRespectsPlans,
+  PlanRuleError,
+  relocateForNewDependency,
+  type PlanRuleDetails,
+} from "./plans.js";
 
 export { isDependencySatisfied, SATISFIED_DEPENDENCY_STATES };
 
@@ -122,13 +127,13 @@ async function recordDepChange(
 
 export type AddDependencyResult =
   | { ok: true; created: boolean; dependsOn: TaskDepSummary[]; requiredBy: TaskDepSummary[] }
-  | { ok: false; code: string; message: string };
+  | { ok: false; code: string; message: string; details?: PlanRuleDetails };
 
 export async function addDependency(
   db: Db,
   taskId: number,
   dependsOnTaskId: number,
-  opts: { actorId?: number | null; source?: ActivitySource } = {},
+  opts: { actorId?: number | null; source?: ActivitySource; moveInPlanId?: number } = {},
 ): Promise<AddDependencyResult> {
   if (taskId === dependsOnTaskId) {
     return {
@@ -181,35 +186,38 @@ export async function addDependency(
     };
   }
 
+  const labelBlocker = depLabel(blocker);
+  const labelDependent = depLabel(dependent);
   try {
-    await assertDependencyRespectsPlans(db, taskId, dependsOnTaskId);
+    await db.transaction(async (tx) => {
+      if (opts.moveInPlanId != null) {
+        await relocateForNewDependency(tx, opts.moveInPlanId, taskId, dependsOnTaskId);
+      }
+      await assertDependencyRespectsPlans(tx, taskId, dependsOnTaskId);
+      await tx.insert(schema.taskDependencies).values({ taskId, dependsOnTaskId });
+      await recordDepChange(tx, {
+        taskId,
+        field: "dependsOn",
+        oldValue: null,
+        newValue: labelBlocker,
+        actorId: opts.actorId,
+        source: opts.source,
+      });
+      await recordDepChange(tx, {
+        taskId: dependsOnTaskId,
+        field: "requiredBy",
+        oldValue: null,
+        newValue: labelDependent,
+        actorId: opts.actorId,
+        source: opts.source,
+      });
+    });
   } catch (err) {
     if (err instanceof PlanRuleError) {
-      return { ok: false, code: err.code, message: err.message };
+      return { ok: false, code: err.code, message: err.message, details: err.details };
     }
     throw err;
   }
-
-  await db.insert(schema.taskDependencies).values({ taskId, dependsOnTaskId });
-
-  const labelBlocker = depLabel(blocker);
-  const labelDependent = depLabel(dependent);
-  await recordDepChange(db, {
-    taskId,
-    field: "dependsOn",
-    oldValue: null,
-    newValue: labelBlocker,
-    actorId: opts.actorId,
-    source: opts.source,
-  });
-  await recordDepChange(db, {
-    taskId: dependsOnTaskId,
-    field: "requiredBy",
-    oldValue: null,
-    newValue: labelDependent,
-    actorId: opts.actorId,
-    source: opts.source,
-  });
 
   const { blockReadyTaskIfOpenPrerequisites } = await import("./taskBlocked.js");
   await blockReadyTaskIfOpenPrerequisites(db, taskId, {

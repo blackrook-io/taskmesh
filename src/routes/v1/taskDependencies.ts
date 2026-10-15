@@ -16,6 +16,7 @@ import {
   removeDependency,
   searchTasksForDependency,
 } from "../../services/taskDependencies.js";
+import { assertCanReorderPlan } from "../../services/planRecords.js";
 import { promoteBlockedTaskIfClear } from "../../services/taskBlocked.js";
 import { listWaitingOn } from "../../services/taskWaitingOn.js";
 import { assertCanAccessDualScoped } from "../../services/ownership.js";
@@ -26,6 +27,7 @@ const idParam = z.coerce.number().int().positive();
 
 const addBody = z.object({
   dependsOnTaskId: z.number().int().positive(),
+  moveInPlanId: z.number().int().positive().optional(),
 });
 
 const searchQuery = z.object({
@@ -136,12 +138,23 @@ taskDependenciesRouter.post("/:taskId/dependencies", async (req, res) => {
     const actorId = await getCurrentUserId(db);
     await assertCanAccessDualScoped(db, actorId, task, "write");
     await assertCanAccessDualScoped(db, actorId, dependsOnTask, "write");
+    if (parsed.moveInPlanId != null) {
+      await assertCanReorderPlan(db, actorId, parsed.moveInPlanId);
+    }
     const result = await addDependency(db, taskId, parsed.dependsOnTaskId, {
       actorId,
       source: activitySourceFromRequest(req),
+      moveInPlanId: parsed.moveInPlanId,
     });
     if (!result.ok) {
-      sendError(res, dependencyErrorStatus(result.code), result.code, result.message);
+      const status = dependencyErrorStatus(result.code);
+      if (result.details) {
+        res.status(status).json({
+          error: { code: result.code, message: result.message, ...result.details },
+        });
+        return;
+      }
+      sendError(res, status, result.code, result.message);
       return;
     }
     res.status(201).json({ data: { dependsOn: result.dependsOn, requiredBy: result.requiredBy } });
