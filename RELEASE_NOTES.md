@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.7 — 2026-10-15
+
+### New Functionality
+- A plan can switch from the board to a read-only timeline. Each Task and ToDo is a bar scheduled from its hours, start date, and dependencies, so a dependent never starts before its prerequisite ends. When start dates do not delay the work, the critical chain ends on the same date as the baseline finish.
+- Hovering a bar shows the same summary as a Mesh card, plus hours, scheduled start and end, slack, and what the item is waiting on. Clicking the bar opens the Task or ToDo. Day, week, and month zoom and the Mesh color modes apply to the bars.
+
 ## 0.87.6 — 2026-10-15
 
 ### New Functionality

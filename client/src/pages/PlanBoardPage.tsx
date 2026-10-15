@@ -17,6 +17,7 @@ import { useParams } from "react-router-dom";
 import { ApiRequestError, apiJson } from "../api/client";
 import { StateReasonDialog } from "../components/StateReasonDialog";
 import { PlanFinishChip } from "../components/PlanFinishChip";
+import { PlanTimeline } from "../components/PlanTimeline";
 import { PlanPhaseTools, type PlanCandidate } from "../components/PlanPhaseTools";
 import { HoursInput } from "../components/shared/HoursInput";
 import { useAuth } from "../lib/auth";
@@ -626,6 +627,7 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [reopen, setReopen] = useState<PlanBoardItem | null>(null);
   const [showDeps, setShowDeps] = useState(false);
+  const [view, setView] = useState<"board" | "timeline">("board");
   const [pickerPhaseId, setPickerPhaseId] = useState<number | null>(null);
   const [pendingParent, setPendingParent] = useState<{ phaseId: number; candidate: PlanCandidate } | null>(
     null,
@@ -918,6 +920,20 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
           <h1>{board.plan.title}</h1>
         </div>
         <div className="plan-board__actions">
+          <div className="plan-board__view" role="group" aria-label="Plan view">
+            <button type="button" className="btn" aria-pressed={view === "board"} onClick={() => setView("board")}>
+              Board
+            </button>
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={view === "timeline"}
+              onClick={() => setView("timeline")}
+            >
+              Timeline
+            </button>
+          </div>
+          {view === "board" ? (
           <button
             type="button"
             className="btn"
@@ -926,7 +942,8 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
           >
             Show dependencies
           </button>
-          {canWriteItems ? (
+          ) : null}
+          {view === "board" && canWriteItems ? (
             <button
               type="button"
               className="btn"
@@ -949,6 +966,8 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
         </p>
       ) : null}
       <RollupSummary rollup={board.rollup} />
+      {view === "timeline" ? <PlanTimeline planId={planId} /> : null}
+      {view === "board" ? (
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1022,6 +1041,7 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
           ) : null}
         </DragOverlay>
       </DndContext>
+      ) : null}
       {fixDialog && fixSummary ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setFixDialog(null)}>
           <div

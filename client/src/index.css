@@ -9779,3 +9779,247 @@ button.plan-board__finish {
   margin-top: 0;
 }
 
+.plan-board__view {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.plan-board__view .btn[aria-pressed="true"] {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.plan-timeline__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+
+.plan-timeline__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.plan-timeline__scroll {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.plan-timeline__chart {
+  position: relative;
+  min-width: 100%;
+}
+
+.plan-timeline__axis,
+.plan-timeline__lane,
+.plan-timeline__phase {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+}
+
+.plan-timeline__axis {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-timeline__label-spacer,
+.plan-timeline__name {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.plan-timeline__name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-right: 0.5rem;
+}
+
+.plan-timeline__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-timeline__plot {
+  position: relative;
+  height: 100%;
+}
+
+.plan-timeline__tick {
+  position: absolute;
+  top: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.plan-timeline__body {
+  position: relative;
+}
+
+.plan-timeline__lane {
+  height: 36px;
+}
+
+.plan-timeline__lane,
+.plan-timeline__phase {
+  position: relative;
+}
+
+.plan-timeline__phase {
+  height: 28px;
+  align-items: center;
+  background: color-mix(in srgb, var(--border) 35%, var(--surface));
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.plan-timeline__phase-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-left: 0.5rem;
+  position: sticky;
+  left: 0;
+}
+
+.plan-timeline__shade,
+.plan-timeline__wires,
+.plan-timeline__today {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+
+.plan-timeline__shade,
+.plan-timeline__wires {
+  height: 100%;
+}
+
+.plan-timeline__weekend {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.plan-timeline__today {
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  z-index: 1;
+}
+
+.plan-timeline__hit {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.plan-timeline__hit:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.plan-timeline__bar {
+  position: absolute;
+  top: 8px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--bg);
+  font-size: 0.68rem;
+  line-height: 20px;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.plan-timeline__bar--bracket {
+  top: 6px;
+  height: 10px;
+  background: transparent !important;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  border-radius: 0;
+  color: var(--text);
+}
+
+.plan-timeline__bar--unestimated {
+  background: transparent !important;
+  border: 1.5px dashed currentColor;
+  color: var(--text);
+}
+
+.plan-timeline__bar--critical {
+  box-shadow: inset 0 0 0 2px var(--bg), 0 0 0 1px currentColor;
+}
+
+.plan-timeline__bar--dim {
+  opacity: 0.28;
+}
+
+.plan-timeline__outside {
+  position: absolute;
+  top: 8px;
+  font-size: 0.68rem;
+  line-height: 20px;
+  color: var(--text-muted);
+}
+
+.plan-timeline__due {
+  position: absolute;
+  top: 12px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--text);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.plan-timeline__due--late {
+  background: var(--danger, #e15d5d);
+}
+
+.plan-timeline__wire {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.25;
+}
+
+.plan-timeline__card {
+  z-index: 20;
+}
+
+.plan-timeline__schedule {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.6rem;
+  margin: 0.35rem 0 0;
+}
+
+.plan-timeline__schedule dt {
+  color: var(--text-muted);
+}
+
+.plan-timeline__schedule dd {
+  margin: 0;
+}
+

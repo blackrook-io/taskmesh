@@ -4,6 +4,7 @@ import type { db as AppDatabase } from "../db/client.js";
 import * as schema from "../db/schema.js";
 import type { ActivitySource } from "../lib/activityRequest.js";
 import { dateOrderViolation, START_AFTER_TARGET_MESSAGE } from "../lib/dateOrder.js";
+import { formatEntityRef } from "../lib/entityRef.js";
 import { planCandidateMatches } from "../lib/planCandidates.js";
 import { NotFoundError } from "../lib/notFound.js";
 import { derivedStatePatchRejected } from "../lib/taskRollup.js";
@@ -47,7 +48,9 @@ import {
   blockReadyDependents,
 } from "./taskBlocked.js";
 import { scheduleKnowledgeIndex } from "./knowledge/schedule.js";
+import { getLastActivity } from "./entityActivity.js";
 import { projectPlanFinish, projectionEntityKey } from "./planProjection.js";
+import { schedulePlan } from "./planSchedule.js";
 import { applyTodoProgressResult } from "./todoProgress.js";
 import { recomputeAncestorChain } from "./todoHierarchy.js";
 import { attachAssignees } from "./users.js";
@@ -175,6 +178,9 @@ type GraphItem = PlanLayoutItem & {
   title: string;
   dueDate: string | null;
   startDate: string | null;
+  priority: string;
+  createdAt: string;
+  projectId: number | null;
   assigneeId: number | null;
   parentId: number | null;
   stateManual: boolean;
@@ -249,6 +255,9 @@ async function loadGraph(
         progress: 0,
         dueDate: task.dueDate,
         startDate: task.startDate,
+        priority: task.priority,
+        createdAt: task.createdAt.toISOString(),
+        projectId: task.projectId,
         assigneeId: task.assigneeId,
         stateManual: task.stateManual,
         rollupTotal: task.rollupTotal,
@@ -276,6 +285,9 @@ async function loadGraph(
         progress: todo.progress,
         dueDate: todo.dueDate,
         startDate: todo.startDate,
+        priority: todo.priority,
+        createdAt: todo.createdAt.toISOString(),
+        projectId: todo.projectId,
         assigneeId: todo.assigneeId,
         stateManual: true,
         rollupTotal: null,
@@ -775,6 +787,165 @@ export async function getPlanProjection(db: Db, actorId: number, planId: number)
     dependencies: graph.dependencies,
   });
   return { ...projection, canSetCapacity };
+}
+
+async function loadScheduleMarks(
+  db: Db,
+  items: Array<{ entityType: PlanEntityType; entityId: number; state: string }>,
+): Promise<Map<string, { startedAt: string | null; completedAt: string | null }>> {
+  const taskIds = items.filter((item) => item.entityType === "task").map((item) => item.entityId);
+  const todoIds = items.filter((item) => item.entityType === "todo").map((item) => item.entityId);
+  const filters = [
+    taskIds.length > 0
+      ? and(eq(schema.taskActivity.entityType, "task"), inArray(schema.taskActivity.entityId, taskIds))
+      : undefined,
+    todoIds.length > 0
+      ? and(eq(schema.taskActivity.entityType, "todo"), inArray(schema.taskActivity.entityId, todoIds))
+      : undefined,
+  ].filter((filter): filter is SQL => filter != null);
+  const grouped = new Map<string, Array<{ newValue: string | null; createdAt: Date }>>();
+  if (filters.length > 0) {
+    const rows = await db
+      .select({
+        entityType: schema.taskActivity.entityType,
+        entityId: schema.taskActivity.entityId,
+        newValue: schema.taskActivity.newValue,
+        createdAt: schema.taskActivity.createdAt,
+      })
+      .from(schema.taskActivity)
+      .where(
+        and(
+          eq(schema.taskActivity.kind, "change"),
+          eq(schema.taskActivity.field, "state"),
+          or(...filters),
+        ),
+      )
+      .orderBy(desc(schema.taskActivity.createdAt), desc(schema.taskActivity.id));
+    for (const row of rows) {
+      const key = projectionEntityKey(row.entityType as PlanEntityType, row.entityId);
+      const list = grouped.get(key) ?? [];
+      list.push({ newValue: row.newValue, createdAt: row.createdAt });
+      grouped.set(key, list);
+    }
+  }
+  const marks = new Map<string, { startedAt: string | null; completedAt: string | null }>();
+  for (const item of items) {
+    const key = projectionEntityKey(item.entityType, item.entityId);
+    const list = grouped.get(key) ?? [];
+    if (item.state === "complete") {
+      const completed = list.find((row) => row.newValue === "Complete");
+      const started = completed
+        ? list.find((row) => row.newValue === "In Progress" && row.createdAt.getTime() <= completed.createdAt.getTime())
+        : undefined;
+      marks.set(key, {
+        startedAt: started ? started.createdAt.toISOString() : null,
+        completedAt: completed ? completed.createdAt.toISOString() : null,
+      });
+    } else if (item.state === "in_progress") {
+      const started = list.find((row) => row.newValue === "In Progress");
+      marks.set(key, {
+        startedAt: started ? started.createdAt.toISOString() : null,
+        completedAt: null,
+      });
+    }
+  }
+  return marks;
+}
+
+export async function getPlanTimeline(db: Db, actorId: number, planId: number) {
+  const plan = await requirePlan(db, actorId, planId, "read");
+  const graph = await loadGraph(db, planId);
+  const marks = await loadScheduleMarks(db, graph.items);
+  const lastActivity = await getLastActivity(
+    db,
+    graph.items.map((item) => ({ type: item.entityType, id: item.entityId })),
+  );
+  const scheduled = schedulePlan({
+    now: new Date(),
+    workdayHours: Number(plan.workdayHours),
+    planStart: plan.startDate,
+    items: graph.items.map((item) => {
+      const key = projectionEntityKey(item.entityType, item.entityId);
+      const mark = marks.get(key);
+      return {
+        entityType: item.entityType,
+        entityId: item.entityId,
+        phaseSort: item.phaseSort,
+        itemSort: item.itemSort,
+        parent: item.parent,
+        state: item.state,
+        estimateHours: item.estimateHours,
+        progress: item.progress,
+        startDate: item.startDate,
+        dueDate: item.dueDate,
+        startedAt: mark?.startedAt ?? null,
+        completedAt: mark?.completedAt ?? null,
+      };
+    }),
+    dependencies: graph.dependencies,
+  });
+  const projectIds = [
+    ...new Set(graph.items.map((item) => item.projectId).filter((id): id is number => id != null)),
+  ];
+  const projectRows =
+    projectIds.length === 0
+      ? []
+      : await db
+          .select({ id: schema.projects.id, name: schema.projects.name })
+          .from(schema.projects)
+          .where(inArray(schema.projects.id, projectIds));
+  const projectNames = new Map(projectRows.map((row) => [row.id, row.name]));
+  const todoIds = graph.items.filter((item) => item.entityType === "todo").map((item) => item.entityId);
+  const memberships =
+    todoIds.length === 0
+      ? []
+      : await db
+          .select({
+            listId: schema.todoListItems.listId,
+            entityId: schema.todoListItems.entityId,
+          })
+          .from(schema.todoListItems)
+          .where(
+            and(eq(schema.todoListItems.entityType, "todo"), inArray(schema.todoListItems.entityId, todoIds)),
+          );
+  const listIds = new Map<number, number>();
+  for (const membership of memberships) {
+    const current = listIds.get(membership.entityId);
+    if (current == null || membership.listId < current) listIds.set(membership.entityId, membership.listId);
+  }
+  const itemsByKey = new Map(
+    graph.items.map((item) => [projectionEntityKey(item.entityType, item.entityId), item]),
+  );
+  return {
+    anchor: scheduled.anchor,
+    workdayHours: scheduled.workdayHours,
+    criticalPathFinish: scheduled.criticalPathFinish,
+    cycle: scheduled.cycle,
+    phases: graph.phases.map((phase) => ({
+      id: phase.id,
+      name: phase.name,
+      color: phase.color,
+      sortOrder: phase.sortOrder,
+    })),
+    rows: scheduled.rows.map((row) => {
+      const item = itemsByKey.get(row.key);
+      const activity = lastActivity.get(row.key);
+      return {
+        ...row,
+        number: item?.number ?? null,
+        referenceId: item?.number != null ? formatEntityRef(item.entityType, item.number) : row.key,
+        title: item?.title ?? "",
+        phaseId: item?.phaseId ?? null,
+        priority: item?.priority ?? "none",
+        progress: item?.entityType === "todo" ? (item.progress ?? null) : null,
+        listId: item?.entityType === "todo" ? (listIds.get(item.entityId) ?? null) : null,
+        projectLabel: item?.projectId != null ? (projectNames.get(item.projectId) ?? null) : null,
+        createdAt: item?.createdAt ?? null,
+        lastUpdate: activity?.lastUpdate ?? null,
+        lastComment: activity?.lastComment ?? null,
+      };
+    }),
+  };
 }
 
 export async function createPhase(

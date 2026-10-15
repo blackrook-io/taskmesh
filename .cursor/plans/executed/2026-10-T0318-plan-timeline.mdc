@@ -1,0 +1,51 @@
+# T0318 — plan timeline (Gantt)
+
+**Status:** Finishing up as `0.87.7`. QA follow-ups: none.
+
+**Task:** T0318 (id `333`) — Plans: timeline (Gantt) view with hover cards
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this child does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0315 (id `330`, complete), T0317 (id `332`, complete). Gate clear.
+**Required by:** T0319 (id `334`) — retire the Mesh Plan view. Stays blocked. This task does not remove that view.
+**Branch (after approval):** `T0318-plan-timeline`
+**Design:** task description. The PDF predates the Timeline section; this plan follows the task text plus the decisions below. No new deferred Task. No schema migration (finish-up is a PATCH bump, and `FEATURES.md` gets a timeline bullet because this is a new plan view).
+
+## Goal
+
+A read-only Gantt on the plan page. Bars come from hours, start dates, and dependencies, so a dependent never draws ahead of a prerequisite. With no start-date delay, the end of the critical chain is the same date as the baseline `criticalPathFinish`.
+
+## Decisions (confirm or adjust)
+
+1. **One schedule, packed working days.** `schedulePlan` places work in fractional working days: `hours ÷ plans.workday_hours`, Mon–Fri, UTC dates, same weekday rule as `addWorkingDays`. A successor starts at the predecessor’s end. When that end is the close of a working day, the successor starts the next working day. A fractional remainder continues the same day. That packing is what makes a chain of whole days land on `addWorkingDays(today, round(chainHours / workdayHours))`.
+2. **Forward anchor.** Unstarted work starts on the latest of: the plan Start date, or today when the plan has none (T0317); today, so leftover work is not drawn in the past; the item Start date when set; the successor start from decision 1. A future plan or item Start date may push the chain past `criticalPathFinish`. Acceptance for the match is: plan Start is empty or today, no item Start dates, no cycle, and the critical chain’s last bar ends on `criticalPathFinish`.
+3. **Remaining hours use the projection leaf rule.** Canceled and deleted rows are omitted. A parent with a counted in-plan child contributes 0 hours. Done leaves (`complete` / `pending`, or a ToDo at progress 100) contribute 0. A partial ToDo contributes `estimate × (1 − progress/100)`. Unestimated leaves contribute 0 hours to successors and to the critical chain.
+4. **Unestimated bars are markers.** They draw as a dashed one-day bar on their constrained start and do not push successors. That keeps an unestimated item on the chain from moving `criticalPathFinish`.
+5. **Actual dates.** Completed items draw from the latest `task_activity` transition to In Progress through the completion date (completion day only, when there is no In Progress row). They do not push unfinished work. In-progress items draw from that In Progress date through the scheduled end of their remaining hours, and remaining hours still start at the forward anchor (not before today). Both Tasks and ToDos use `task_activity`.
+6. **Parents are brackets.** A parent with in-plan children is a summary bracket from the earliest child start to the latest child end, not its own hours bar. A parent with no in-plan child is a normal bar.
+7. **Critical path toggle uses the baseline chain.** Highlight the same longest remaining-hours path `projectPlanFinish` already computes (in-plan dependency edges only; ToDo nesting is not an extra edge). Slack on the card is working days the bar can slip before it moves that chain’s finish. A cycle leaves the toggle off and the bars still draw; the projection already drops a cyclic critical path.
+8. **Read-only view.** Header toggle **Board | Timeline** on the existing plan page. The timeline does not drag, reorder, or edit hours. Click a bar or a hover-card dependency opens that Task or ToDo. The finish chip and rollup stay visible in both modes.
+9. **Hover card.** Same fields Mesh already shows (`buildMeshCard`: type, reference, title, state, priority, progress, due, dependency lists) plus a schedule block: hours, scheduled start, scheduled end, slack, and who it is waiting on. Share the card model so the two surfaces cannot drift; append the schedule block only on the timeline.
+
+## Scope
+
+**In scope**
+
+1. Pure `schedulePlan` in `src/services/planSchedule.ts`, re-exported from `src/services/plans.ts`, with unit tests: packed chain matches `criticalPathFinish`; item and plan Start dates delay a bar; a dependent cannot start before its prerequisite ends; weekend skip; unestimated marker does not move the chain; parent bracket; completed and in-progress actual spans; partial ToDo remaining hours; cycle still returns bars with no critical path.
+2. `GET /api/v1/plans/:planId/timeline` for anyone who can read the plan. Each row: entity ref, title, reference id, state, priority, phase id, parent key, estimate and remaining hours, `start`, `end`, `actual` flag, `marker` (`bar` | `bracket` | `unestimated`), `critical`, `slackDays`, due date, and prerequisite keys. Response also includes `criticalPathFinish`, `workdayHours`, `anchor` (the today used), and `cycle`.
+3. Timeline on `PlanBoardPage`: phase bands, one row per item in plan order, reference id inside the bar and outside when the bar is too short, elbow finish-to-start lines, due-date diamond (red when the scheduled end is after the due date, or the item is open and today is after the due date), today line, day / week / month zoom. Weekends are shaded and bars do not occupy them.
+4. Color modes match Mesh: type, state, priority.
+5. Hover card as in decision 9. Keyboard focus on a row shows the same card.
+
+**Out of scope**
+
+- Resource leveling, drag-to-reschedule, and editing from the timeline.
+- Retiring the Mesh Plan view (T0319).
+- Assistant tools and the AI finish range (T0316).
+- A new Drizzle migration. Dates are computed.
+
+## Acceptance
+
+- On a plan with no Start-date delays and no cycle, the critical chain’s last bar ends on the baseline `criticalPathFinish`.
+- A dependent’s bar never starts before its prerequisite has ended.
+- The hover card shows the Mesh card fields plus hours, scheduled start, scheduled end, slack, and waiting on.
+- Board mode is unchanged: drag, check-off, hours, and Fix order still work.
