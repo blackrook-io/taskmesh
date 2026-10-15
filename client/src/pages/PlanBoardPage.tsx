@@ -1,3 +1,16 @@
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -25,6 +38,20 @@ import {
   type PlanBoardPhase,
   type PlanRollupSlice,
 } from "../lib/planBoard";
+import {
+  planAdjacentGap,
+  planApplyGap,
+  planFixSummary,
+  planGapAtPhaseEnd,
+  planGapBeforeItem,
+  planMovingIds,
+  planReorderBody,
+  planSlotVerdicts,
+  type PlanAutoSortPreview,
+  type PlanGap,
+  type PlanGapVerdict,
+  type PlanOrderPhase,
+} from "../lib/planOrder";
 import { TASK_STATE_LABELS, taskStateClass, type TaskState } from "../lib/taskFields";
 
 function isTaskState(state: string): state is TaskState {
@@ -197,11 +224,115 @@ function PlanCheckControl({
   );
 }
 
+type HoverSlot = {
+  gap: PlanGap;
+  target: { kind: "before"; itemId: number } | { kind: "end"; phaseId: number };
+  verdict: PlanGapVerdict;
+};
+
+type ActiveDrag = {
+  itemId: number;
+  movingIds: number[];
+  verdicts: { before: Map<number, PlanGapVerdict>; phaseEnd: Map<number, PlanGapVerdict> };
+  hover: HoverSlot | null;
+};
+
+function orderPhases(board: PlanBoard): PlanOrderPhase[] {
+  return board.phases.map((phase) => ({
+    id: phase.id,
+    name: phase.name,
+    sortOrder: phase.sortOrder,
+    items: phase.items.map((item) => ({
+      id: item.id,
+      entityType: item.entityType,
+      entityId: item.entityId,
+      number: item.number,
+      title: item.title,
+      parentId: item.parentId,
+    })),
+  }));
+}
+
+function activeItemId(id: unknown): number | null {
+  const text = String(id);
+  if (!text.startsWith("item:")) return null;
+  const value = Number(text.slice("item:".length));
+  return Number.isFinite(value) ? value : null;
+}
+
+function pointerInBottomHalf(event: DragMoveEvent | DragEndEvent): boolean {
+  const over = event.over;
+  const activator = event.activatorEvent;
+  if (!over || !activator || !("clientY" in activator) || typeof activator.clientY !== "number") return false;
+  const pointer = activator.clientY + event.delta.y;
+  return pointer > over.rect.top + over.rect.height / 2;
+}
+
+function gapFromEvent(
+  phases: readonly PlanOrderPhase[],
+  movingIds: readonly number[],
+  event: DragMoveEvent | DragEndEvent,
+): PlanGap | null {
+  if (!event.over) return null;
+  const overId = String(event.over.id);
+  if (overId.startsWith("phase:") || overId.startsWith("phase-end:")) {
+    const phaseId = Number(overId.split(":")[1]);
+    return Number.isFinite(phaseId) ? planGapAtPhaseEnd(phases, movingIds, phaseId) : null;
+  }
+  const itemId = activeItemId(overId);
+  if (itemId == null || movingIds.includes(itemId)) return null;
+  if (!pointerInBottomHalf(event)) return planGapBeforeItem(phases, movingIds, itemId);
+  const moving = new Set(movingIds);
+  for (const phase of phases) {
+    const kept = phase.items.filter((item) => !moving.has(item.id));
+    const index = kept.findIndex((item) => item.id === itemId);
+    if (index >= 0) return { phaseId: phase.id, index: index + 1 };
+  }
+  return null;
+}
+
+function hoverFromEvent(
+  phases: readonly PlanOrderPhase[],
+  drag: ActiveDrag,
+  event: DragMoveEvent | DragEndEvent,
+): HoverSlot | null {
+  const gap = gapFromEvent(phases, drag.movingIds, event);
+  if (!gap) return null;
+  const moving = new Set(drag.movingIds);
+  const phase = phases.find((candidate) => candidate.id === gap.phaseId);
+  const kept = phase?.items.filter((item) => !moving.has(item.id)) ?? [];
+  const item = kept[gap.index];
+  const denied: PlanGapVerdict = { legal: false, reason: "That move is not allowed", noop: false };
+  const verdict = item
+    ? (drag.verdicts.before.get(item.id) ?? denied)
+    : (drag.verdicts.phaseEnd.get(gap.phaseId) ?? denied);
+  return {
+    gap,
+    target: item ? { kind: "before", itemId: item.id } : { kind: "end", phaseId: gap.phaseId },
+    verdict,
+  };
+}
+
+function Grip() {
+  return (
+    <svg className="plan-board__grip" viewBox="0 0 10 16" aria-hidden="true">
+      <circle cx="2" cy="2" r="1.1" />
+      <circle cx="8" cy="2" r="1.1" />
+      <circle cx="2" cy="8" r="1.1" />
+      <circle cx="8" cy="8" r="1.1" />
+      <circle cx="2" cy="14" r="1.1" />
+      <circle cx="8" cy="14" r="1.1" />
+    </svg>
+  );
+}
+
 function PlanRow({
   item,
   items,
   canWriteItems,
   pending,
+  drag,
+  onKeyboard,
   onComplete,
   onStart,
   onStartAndComplete,
@@ -212,29 +343,72 @@ function PlanRow({
   items: PlanBoardItem[];
   canWriteItems: boolean;
   pending: boolean;
+  drag: ActiveDrag | null;
+  onKeyboard: (itemId: number, direction: "up" | "down") => void;
   onComplete: () => void;
   onStart: () => void;
   onStartAndComplete: () => void;
   onUncheck: () => void;
   onHours: (hours: number | null) => void;
 }) {
+  const { attributes, listeners, setNodeRef } = useSortable({
+    id: `item:${item.id}`,
+    disabled: !canWriteItems,
+  });
   const depth = planIndentDepth(items, item);
   const hours = planRowHours(items, item);
   const blocker = planBlockerLabel(item.actions.blockedBy);
   const ref = planItemRef(item);
   const editable = canWriteItems && hours.editable;
+  const source = drag?.movingIds.includes(item.id) ?? false;
+  const before = drag?.verdicts.before.get(item.id);
+  const dim = Boolean(drag && !source && before && !before.legal);
+  const hovered = drag?.hover?.target.kind === "before" && drag.hover.target.itemId === item.id;
+  const reject = Boolean(hovered && drag?.hover && !drag.hover.verdict.legal);
   return (
-    <div className="plan-board__row" role="row">
-      <span className="plan-board__handle" aria-hidden="true">
-        <svg className="plan-board__grip" viewBox="0 0 10 16">
-          <circle cx="2" cy="2" r="1.1" />
-          <circle cx="8" cy="2" r="1.1" />
-          <circle cx="2" cy="8" r="1.1" />
-          <circle cx="8" cy="8" r="1.1" />
-          <circle cx="2" cy="14" r="1.1" />
-          <circle cx="8" cy="14" r="1.1" />
-        </svg>
-      </span>
+    <>
+      {hovered && drag?.hover?.verdict.reason ? (
+        <p className="plan-board__reject" role="status">
+          {drag.hover.verdict.reason}
+        </p>
+      ) : null}
+      {hovered && drag?.hover?.verdict.legal && !drag.hover.verdict.noop ? (
+        <div className="plan-board__slot-ok" aria-hidden="true" />
+      ) : null}
+      <div
+        ref={setNodeRef}
+        className={[
+          "plan-board__row",
+          dim ? "plan-board__row--dim" : "",
+          source ? "plan-board__row--source" : "",
+          reject ? "plan-board__row--reject" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        role="row"
+      >
+      {canWriteItems ? (
+        <button
+          type="button"
+          className="plan-board__handle"
+          aria-label={`Reorder ${ref}`}
+          {...attributes}
+          {...listeners}
+          onKeyDown={(event) => {
+            listeners?.onKeyDown?.(event);
+            if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onKeyboard(item.id, event.key === "ArrowUp" ? "up" : "down");
+          }}
+        >
+          <Grip />
+        </button>
+      ) : (
+        <span className="plan-board__handle" aria-hidden="true">
+          <Grip />
+        </span>
+      )}
       <PlanCheckControl
         item={item}
         pending={pending}
@@ -265,6 +439,33 @@ function PlanRow({
       <span className="plan-board__assignee">{item.assignee?.displayName ?? "—"}</span>
       <span className="plan-board__due">{dueLabel(item.dueDate)}</span>
     </div>
+    </>
+  );
+}
+
+function PhaseEndDrop({ phaseId, drag }: { phaseId: number; drag: ActiveDrag | null }) {
+  const { setNodeRef } = useDroppable({ id: `phase-end:${phaseId}` });
+  const verdict = drag?.verdicts.phaseEnd.get(phaseId);
+  const hovered = drag?.hover?.target.kind === "end" && drag.hover.target.phaseId === phaseId;
+  return (
+    <div
+      ref={setNodeRef}
+      className={[
+        "plan-board__phase-end",
+        drag ? "plan-board__phase-end--live" : "",
+        drag && verdict && !verdict.legal ? "plan-board__phase-end--dim" : "",
+        hovered && verdict?.legal && !verdict.noop ? "plan-board__phase-end--ok" : "",
+        hovered && verdict && !verdict.legal ? "plan-board__phase-end--reject" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {hovered && verdict && !verdict.legal && verdict.reason ? (
+        <p className="plan-board__reject" role="status">
+          {verdict.reason}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -273,6 +474,8 @@ function PlanPhaseSection({
   collapsed,
   canWriteItems,
   pendingItemId,
+  drag,
+  onKeyboard,
   onToggle,
   onComplete,
   onStart,
@@ -284,6 +487,8 @@ function PlanPhaseSection({
   collapsed: boolean;
   canWriteItems: boolean;
   pendingItemId: number | null;
+  drag: ActiveDrag | null;
+  onKeyboard: (itemId: number, direction: "up" | "down") => void;
   onToggle: () => void;
   onComplete: (item: PlanBoardItem) => void;
   onStart: (item: PlanBoardItem) => void;
@@ -291,11 +496,16 @@ function PlanPhaseSection({
   onUncheck: (item: PlanBoardItem) => void;
   onHours: (item: PlanBoardItem, hours: number | null) => void;
 }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `phase:${phase.id}`, disabled: !collapsed });
   const accent = planPhaseAccent(phase.color);
   const unestimated = planUnestimatedLabel(phase.rollup.unestimatedCount);
+  const headOver = Boolean(drag && isOver);
   return (
     <section className="plan-board__phase" aria-label={phase.name}>
-      <div className="plan-board__phase-head">
+      <div
+        ref={setNodeRef}
+        className={headOver ? "plan-board__phase-head plan-board__phase-head--over" : "plan-board__phase-head"}
+      >
         <button
           type="button"
           className="plan-board__collapse"
@@ -313,36 +523,43 @@ function PlanPhaseSection({
         <ProgressMeter rollup={phase.rollup} label={`${phase.name} progress`} />
         {unestimated ? <p className="plan-board__warn">{unestimated}</p> : null}
       </div>
-      {collapsed ? null : phase.items.length === 0 ? (
-        <p className="muted plan-board__empty">No items in this phase.</p>
-      ) : (
-        <div className="plan-board__scroll">
-          <div className="plan-board__table" role="table" aria-label={phase.name}>
-            <div className="plan-board__row plan-board__row--head" role="row">
-              <span />
-              <span />
-              <span>Item</span>
-              <span>State</span>
-              <span>Hours</span>
-              <span>Assignee</span>
-              <span>Due</span>
+      {collapsed ? null : (
+        <>
+          {phase.items.length === 0 ? (
+            <p className="muted plan-board__empty">No items in this phase.</p>
+          ) : (
+            <div className="plan-board__scroll">
+              <div className="plan-board__table" role="table" aria-label={phase.name}>
+                <div className="plan-board__row plan-board__row--head" role="row">
+                  <span />
+                  <span />
+                  <span>Item</span>
+                  <span>State</span>
+                  <span>Hours</span>
+                  <span>Assignee</span>
+                  <span>Due</span>
+                </div>
+                {phase.items.map((item) => (
+                  <PlanRow
+                    key={item.id}
+                    item={item}
+                    items={phase.items}
+                    canWriteItems={canWriteItems}
+                    pending={pendingItemId === item.id}
+                    drag={drag}
+                    onKeyboard={onKeyboard}
+                    onComplete={() => onComplete(item)}
+                    onStart={() => onStart(item)}
+                    onStartAndComplete={() => onStartAndComplete(item)}
+                    onUncheck={() => onUncheck(item)}
+                    onHours={(hours) => onHours(item, hours)}
+                  />
+                ))}
+              </div>
             </div>
-            {phase.items.map((item) => (
-              <PlanRow
-                key={item.id}
-                item={item}
-                items={phase.items}
-                canWriteItems={canWriteItems}
-                pending={pendingItemId === item.id}
-                onComplete={() => onComplete(item)}
-                onStart={() => onStart(item)}
-                onStartAndComplete={() => onStartAndComplete(item)}
-                onUncheck={() => onUncheck(item)}
-                onHours={(hours) => onHours(item, hours)}
-              />
-            ))}
-          </div>
-        </div>
+          )}
+          {canWriteItems ? <PhaseEndDrop phaseId={phase.id} drag={drag} /> : null}
+        </>
       )}
     </section>
   );
@@ -356,6 +573,14 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [reopen, setReopen] = useState<PlanBoardItem | null>(null);
+  const [fixDialog, setFixDialog] = useState<{ revision: number; preview: PlanAutoSortPreview } | null>(null);
+  const dragRef = useRef<ActiveDrag | null>(null);
+  const [drag, setDrag] = useState<ActiveDrag | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const rememberDrag = (next: ActiveDrag | null) => {
+    dragRef.current = next;
+    setDrag(next);
+  };
 
   const boardQuery = useQuery({
     queryKey: ["plan-board", planId],
@@ -407,6 +632,51 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
     },
   });
 
+  const reorderMut = useMutation({
+    mutationFn: async (body: { revision: number; phases: Array<{ phaseId: number; itemIds: number[] }> }) => {
+      const res = await apiJson<{ data: PlanBoard }>(`/api/v1/plans/${planId}/reorder`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return res.data;
+    },
+    onSuccess: (next) => {
+      setNotice(null);
+      qc.setQueryData(["plan-board", planId], next);
+    },
+    onError: async (err: Error) => {
+      setNotice(err.message);
+      await refresh();
+    },
+  });
+
+  const fixMut = useMutation({
+    mutationFn: async (body: { revision: number; apply: boolean }) => {
+      const res = await apiJson<{
+        data: { revision: number; preview: PlanAutoSortPreview; board: PlanBoard | null };
+      }>(`/api/v1/plans/${planId}/auto-sort`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return res.data;
+    },
+    onSuccess: (data, variables) => {
+      if (!variables.apply) {
+        setFixDialog({ revision: data.revision, preview: data.preview });
+        return;
+      }
+      setFixDialog(null);
+      setNotice(null);
+      if (data.board) qc.setQueryData(["plan-board", planId], data.board);
+      else void refresh();
+    },
+    onError: async (err: Error) => {
+      setNotice(err.message);
+      setFixDialog(null);
+      await refresh();
+    },
+  });
+
   const togglePhase = (phaseId: number) => {
     setCollapsed((current) => {
       const next = current.includes(phaseId)
@@ -433,6 +703,76 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
     stateMut.mutate({ itemId: item.id, to, stateComment });
   };
 
+  const phases = orderPhases(board);
+  const edges = board.edges ?? [];
+  const canWriteItems = board.permissions.canWriteItems;
+  const sortableIds = board.phases
+    .filter((phase) => !collapsed.includes(phase.id))
+    .flatMap((phase) => phase.items.map((item) => `item:${item.id}`));
+  const fixSummary = fixDialog ? planFixSummary(phases, fixDialog.preview) : null;
+
+  const trackHover = (event: DragMoveEvent) => {
+    const current = dragRef.current;
+    if (!current) return;
+    const hover = hoverFromEvent(phases, current, event);
+    const previous = current.hover;
+    const same =
+      previous?.target.kind === hover?.target.kind &&
+      (previous?.target.kind === "before" ? previous.target.itemId : previous?.target.phaseId) ===
+        (hover?.target.kind === "before" ? hover.target.itemId : hover?.target.phaseId) &&
+      previous?.verdict.legal === hover?.verdict.legal &&
+      previous?.verdict.reason === hover?.verdict.reason;
+    if (same) return;
+    rememberDrag({ ...current, hover });
+  };
+
+  const onDragStart = (event: DragStartEvent) => {
+    if (!canWriteItems || reorderMut.isPending) return;
+    const itemId = activeItemId(event.active.id);
+    if (itemId == null) return;
+    const movingIds = planMovingIds(phases, itemId);
+    rememberDrag({
+      itemId,
+      movingIds,
+      verdicts: planSlotVerdicts(phases, movingIds, edges),
+      hover: null,
+    });
+  };
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const current = dragRef.current;
+    rememberDrag(null);
+    if (!current) return;
+    const hover = event.over ? hoverFromEvent(phases, current, event) : current.hover;
+    if (!hover || !hover.verdict.legal) {
+      if (hover?.verdict.reason) setNotice(hover.verdict.reason);
+      return;
+    }
+    if (hover.verdict.noop) return;
+    setNotice(null);
+    reorderMut.mutate(planReorderBody(board.plan.revision, planApplyGap(phases, current.movingIds, hover.gap)));
+  };
+
+  const onKeyboard = (itemId: number, direction: "up" | "down") => {
+    if (!canWriteItems || reorderMut.isPending) return;
+    const step = planAdjacentGap(phases, itemId, direction, edges);
+    if (!step.gap || !step.verdict.legal) {
+      setNotice(step.verdict.reason);
+      return;
+    }
+    if (step.verdict.noop) {
+      setNotice(null);
+      return;
+    }
+    setNotice(null);
+    const movingIds = planMovingIds(phases, itemId);
+    reorderMut.mutate(planReorderBody(board.plan.revision, planApplyGap(phases, movingIds, step.gap)));
+  };
+
+  const overlay = drag
+    ? phases.flatMap((phase) => phase.items).filter((item) => drag.movingIds.includes(item.id))
+    : [];
+
   return (
     <div className="plan-board">
       <header className="page-head plan-board__head">
@@ -440,7 +780,19 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
           <p className="muted plan-board__ref-line">{formatEntityRef("plan", board.plan.number)}</p>
           <h1>{board.plan.title}</h1>
         </div>
-        <span className="plan-board__finish">Finish date —</span>
+        <div className="plan-board__actions">
+          {canWriteItems ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={fixMut.isPending}
+              onClick={() => fixMut.mutate({ revision: board.plan.revision, apply: false })}
+            >
+              Fix order
+            </button>
+          ) : null}
+          <span className="plan-board__finish">Finish date —</span>
+        </div>
       </header>
       {notice ? (
         <p className="plan-board__notice" role="alert">
@@ -448,29 +800,101 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
         </p>
       ) : null}
       <RollupSummary rollup={board.rollup} />
-      {board.phases.map((phase) => (
-        <PlanPhaseSection
-          key={phase.id}
-          phase={phase}
-          collapsed={collapsed.includes(phase.id)}
-          canWriteItems={board.permissions.canWriteItems}
-          pendingItemId={pendingItemId}
-          onToggle={() => togglePhase(phase.id)}
-          onComplete={(item) => postState(item, "complete")}
-          onStart={(item) => postState(item, "in_progress")}
-          onStartAndComplete={(item) => postState(item, "complete")}
-          onUncheck={(item) => {
-            const action = planCheckAction(item);
-            if (action.kind !== "uncheck") return;
-            if (action.needsComment) {
-              setReopen(item);
-              return;
-            }
-            postState(item, action.to);
-          }}
-          onHours={(item, hours) => hoursMut.mutate({ item, hours })}
-        />
-      ))}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDragStart}
+        onDragMove={trackHover}
+        onDragOver={trackHover}
+        onDragCancel={() => rememberDrag(null)}
+        onDragEnd={onDragEnd}
+      >
+        <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+          {board.phases.map((phase) => (
+            <PlanPhaseSection
+              key={phase.id}
+              phase={phase}
+              collapsed={collapsed.includes(phase.id)}
+              canWriteItems={canWriteItems}
+              pendingItemId={pendingItemId}
+              drag={canWriteItems ? drag : null}
+              onKeyboard={onKeyboard}
+              onToggle={() => togglePhase(phase.id)}
+              onComplete={(item) => postState(item, "complete")}
+              onStart={(item) => postState(item, "in_progress")}
+              onStartAndComplete={(item) => postState(item, "complete")}
+              onUncheck={(item) => {
+                const action = planCheckAction(item);
+                if (action.kind !== "uncheck") return;
+                if (action.needsComment) {
+                  setReopen(item);
+                  return;
+                }
+                postState(item, action.to);
+              }}
+              onHours={(item, hours) => hoursMut.mutate({ item, hours })}
+            />
+          ))}
+        </SortableContext>
+        <DragOverlay>
+          {overlay.length > 0 ? (
+            <div className="plan-board__overlay">
+              {overlay.map((item) => (
+                <div key={item.id}>
+                  {formatEntityRef(item.entityType, item.number)} {item.title}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+      {fixDialog && fixSummary ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setFixDialog(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fix-order-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h2 id="fix-order-title">Fix order</h2>
+            {fixSummary.alreadyLegal ? <p>The order is already legal.</p> : null}
+            {fixSummary.conflicts.length > 0 ? (
+              <>
+                <p>These conflicts stay as they are:</p>
+                <ul className="plan-board__fix-list">
+                  {fixSummary.conflicts.map((conflict) => (
+                    <li key={conflict}>{conflict}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            {fixSummary.moves.map((phase) => (
+              <div key={phase.phaseName}>
+                <p>{phase.phaseName}</p>
+                <ul className="plan-board__fix-list">
+                  {phase.rows.map((row) => (
+                    <li key={row.key}>{row.moved ? `${row.label} — moved` : row.label}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setFixDialog(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!fixSummary.canApply || fixMut.isPending}
+                onClick={() => fixMut.mutate({ revision: fixDialog.revision, apply: true })}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <StateReasonDialog
         open={reopen != null}
         title="Reopen task"

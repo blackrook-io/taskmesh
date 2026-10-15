@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.87.3",
+  "version": "0.87.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -24,7 +24,7 @@
     "ai:redteam": "tsx src/scripts/aiRedteam.ts",
     "security:scan": "python3 security/scan/run.py",
     "security:ci": "python3 security/scan/run.py --modules repo_static --fail-on-findings --no-html",
-    "test": "npm run build:plugins && tsx --test src/**/*.test.ts plugins/ai-providers/openai/src/contract.test.ts plugins/ai-providers/openai-compatible/src/contract.test.ts plugins/ai-providers/anthropic/src/contract.test.ts plugins/ai-providers/gemini/src/contract.test.ts plugins/ai-providers/azure-openai/src/contract.test.ts plugins/ai-providers/ollama/src/contract.test.ts plugins/ai-providers/stub/src/contract.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshPins.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/dependencySatisfied.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts client/src/lib/taskFields.workflow.test.ts client/src/lib/aiReview.test.ts client/src/lib/quickCapture.test.ts client/src/lib/answerCitations.test.ts client/src/lib/planBoard.test.ts"
+    "test": "npm run build:plugins && tsx --test src/**/*.test.ts plugins/ai-providers/openai/src/contract.test.ts plugins/ai-providers/openai-compatible/src/contract.test.ts plugins/ai-providers/anthropic/src/contract.test.ts plugins/ai-providers/gemini/src/contract.test.ts plugins/ai-providers/azure-openai/src/contract.test.ts plugins/ai-providers/ollama/src/contract.test.ts plugins/ai-providers/stub/src/contract.test.ts client/src/lib/todoListTree.test.ts client/src/lib/meshLayout.test.ts client/src/lib/meshPlanLayout.test.ts client/src/lib/meshPins.test.ts client/src/lib/meshSignals.test.ts client/src/lib/meshCard.test.ts client/src/lib/dependencySatisfied.test.ts client/src/lib/meshFilters.test.ts client/src/lib/meshAppearance.test.ts client/src/lib/hiddenDescendantCount.test.ts client/src/lib/taskFields.workflow.test.ts client/src/lib/aiReview.test.ts client/src/lib/quickCapture.test.ts client/src/lib/answerCitations.test.ts client/src/lib/planBoard.test.ts client/src/lib/planOrder.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

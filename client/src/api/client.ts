@@ -6,11 +6,25 @@ export const SPA_CLIENT_VALUE = "ui";
 
 export class ApiRequestError extends Error {
   status: number;
+  code: string;
+  addAndMove?: { planId: number };
+  plans?: Array<{ id: number; number: number; title: string }>;
 
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    status: number,
+    extra?: {
+      code?: string;
+      addAndMove?: { planId: number };
+      plans?: Array<{ id: number; number: number; title: string }>;
+    },
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
+    this.code = extra?.code ?? "";
+    this.addAndMove = extra?.addAndMove;
+    this.plans = extra?.plans;
   }
 }
 
@@ -64,7 +78,12 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     maybeNotifySessionExpired(path, res.status);
     const err = json as ApiErrorBody;
-    const error = new ApiRequestError(err.error?.message ?? res.statusText, res.status);
+    const payload = err.error;
+    const error = new ApiRequestError(payload?.message ?? res.statusText, res.status, {
+      code: payload?.code,
+      addAndMove: payload?.addAndMove,
+      plans: payload?.plans,
+    });
     throw error;
   }
   return json as T;

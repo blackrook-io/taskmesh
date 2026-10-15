@@ -1,7 +1,8 @@
 /* eslint-disable react-refresh/only-export-components -- intentional co-exports (helpers/hooks with components) */
 import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiJson } from "../../api/client";
+import { ApiRequestError, apiJson } from "../../api/client";
+import { formatEntityRef } from "../../lib/entityRef";
 import {
   formatTaskNumber,
   isDeletedTaskState,
@@ -35,6 +36,12 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [moveOffer, setMoveOffer] = useState<{
+    dependsOnTaskId: number;
+    planId: number;
+    label: string;
+    message: string;
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const depsKey = ["task-dependencies", taskId] as const;
@@ -77,25 +84,48 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
   };
 
   const add = useMutation({
-    mutationFn: async (dependsOnTaskId: number) => {
+    mutationFn: async (body: { dependsOnTaskId: number; moveInPlanId?: number }) => {
       const res = await apiJson<{ data: DepPayload }>(`/api/v1/tasks/${taskId}/dependencies`, {
         method: "POST",
-        body: JSON.stringify({ dependsOnTaskId }),
+        body: JSON.stringify(body),
       });
       return res.data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       setQuery("");
       setOpen(false);
       setError(null);
+      setMoveOffer(null);
       qc.setQueryData(depsKey, data);
       invalidate();
+      if (variables.moveInPlanId != null) {
+        void qc.invalidateQueries({ queryKey: ["plan-board"] });
+      }
       // Also refresh activity on the other task when history is viewed later.
       for (const d of data.dependsOn) {
         void qc.invalidateQueries({ queryKey: ["task-activity", d.id] });
       }
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error, variables) => {
+      if (
+        variables.moveInPlanId == null &&
+        err instanceof ApiRequestError &&
+        err.code === "plan_order_conflict" &&
+        err.addAndMove
+      ) {
+        const plan = err.plans?.find((candidate) => candidate.id === err.addAndMove?.planId);
+        setMoveOffer({
+          dependsOnTaskId: variables.dependsOnTaskId,
+          planId: err.addAndMove.planId,
+          label: plan ? formatEntityRef("plan", plan.number) : `plan ${err.addAndMove.planId}`,
+          message: err.message,
+        });
+        setError(err.message);
+        return;
+      }
+      setMoveOffer(null);
+      setError(err.message);
+    },
   });
 
   const remove = useMutation({
@@ -196,6 +226,7 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
                 setQuery(e.target.value);
                 setOpen(true);
                 setError(null);
+                setMoveOffer(null);
               }}
               onFocus={() => setOpen(true)}
               disabled={add.isPending}
@@ -213,7 +244,7 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
                       <button
                         type="button"
                         className="task-dep-lists__suggest-item"
-                        onClick={() => add.mutate(s.id)}
+                        onClick={() => add.mutate({ dependsOnTaskId: s.id })}
                       >
                         <span className="muted">{formatTaskNumber(s.number)}</span> {s.title}
                         <span className={taskStateClass("task-dep-list__state", s.state as TaskState)}>
@@ -244,6 +275,18 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
         <p role="alert" className="tag-input__error">
           {error}
         </p>
+      ) : null}
+      {moveOffer ? (
+        <button
+          type="button"
+          className="btn small"
+          disabled={add.isPending}
+          onClick={() =>
+            add.mutate({ dependsOnTaskId: moveOffer.dependsOnTaskId, moveInPlanId: moveOffer.planId })
+          }
+        >
+          Add and move in {moveOffer.label}
+        </button>
       ) : null}
     </div>
   );

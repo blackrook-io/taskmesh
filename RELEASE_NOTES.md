@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.4 — 2026-10-15
+
+### New Functionality
+- Reorder a plan by dragging a row or with Alt+Up and Alt+Down. A parent moves with its children, a child stays inside that block, and a move that would put a dependent above its prerequisite is refused before it is saved. A stale revision snaps the board back and shows the server message.
+- Fix order previews a dependency-safe sort, then applies it. When a new task dependency would break exactly one plan, Add and move creates the link and shifts that plan so the prerequisite stays first.
+
 ## 0.87.3 — 2026-10-15
 
 ### New Functionality
