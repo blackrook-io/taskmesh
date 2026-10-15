@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { meshLayoutBodySchema, readMeshPositions, readMeshViewport } from "./meshLayoutRecord.js";
+import { meshLayoutBodySchema, meshLayoutQuerySchema, readMeshPositions, readMeshViewport } from "./meshLayoutRecord.js";
 
 describe("mesh layout records", () => {
   it("accepts pins and a viewport", () => {
@@ -20,6 +20,11 @@ describe("mesh layout records", () => {
     const positions: Record<string, { x: number; y: number }> = {};
     for (let i = 1; i <= 501; i += 1) positions[`task:${i}`] = { x: 0, y: 0 };
     assert.equal(meshLayoutBodySchema.safeParse({ positions, viewport: null }).success, false);
+  });
+
+  it("accepts the focus view and rejects the retired plan view", () => {
+    assert.equal(meshLayoutQuerySchema.safeParse({ root: "task:1", view: "focus" }).success, true);
+    assert.equal(meshLayoutQuerySchema.safeParse({ root: "task:1", view: "plan" }).success, false);
   });
 
   it("drops junk stored pins and viewports", () => {

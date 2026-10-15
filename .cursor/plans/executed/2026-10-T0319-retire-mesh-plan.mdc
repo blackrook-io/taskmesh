@@ -1,0 +1,45 @@
+# T0319 — retire Mesh Plan view
+
+**Status:** Finishing up as `0.89.0`. QA follow-ups: none.
+
+**Task:** T0319 (id `334`) — Plans: retire Mesh Plan view in favor of the plan timeline
+**Parent:** T0307 (id `322`) — Plans epic, In Progress. This child does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0318 (id `333`, complete). Gate clear.
+**Branch (after approval):** `T0319-retire-mesh-plan`
+**No existing `T0319-*` branch.** No new deferred Task.
+
+## Goal
+
+Mesh goes back to exploring a record’s relationships. Dependency order for a curated plan lives only on that plan’s Timeline. A Mesh task or to-do that belongs to a plan lists each membership and opens that plan’s Timeline in one click.
+
+## Decisions (confirm or adjust)
+
+1. **Timeline deep link.** Mesh **Open in plan** links go to `/plans/:id?view=timeline`. `PlanBoardPage` reads that query on load and shows the Timeline. Toggling Board or Timeline updates the query with `replace` so a refresh stays on the chosen view. A link with no `view` (project rail, Task and To Do **Plans** field) still opens the Board.
+2. **Saved Plan layouts are deleted.** A Drizzle migration deletes `mesh_layouts` rows where `view = 'plan'` and tightens `mesh_layouts_view_chk` to `focus` only. The API `view` enum becomes `focus`. There is no separate client preference for the Mesh view; it is component state that defaults to Focus. Finish-up is a MINOR bump because of the new migration.
+3. **Plan-only Mesh chrome goes with the layout.** Remove the Focus | Plan toggle, phase lane labels, Blocked and Next marks (`planMark`), and the Plan-only legend rows. Focus legend copy stays. `layoutMeshPlan` and `meshPlanLayout.test.ts` are deleted. The pin test that draws a plan layout is rewritten onto `layoutMesh`.
+4. **FEATURES.md.** Remove the Mesh Plan view bullet. The Plans timeline bullet from T0318 stays. Adjust the “open every plan” bullet so Mesh opens the Timeline. Release notes are written on finish-up, not in the implementation commit.
+
+## Scope
+
+**In**
+
+1. Client: drop Plan mode from `MeshPanel` (toggle, `layoutMeshPlan` branch, lane labels, `planMark` classes, Plan legend). Mesh always lays out with `layoutMesh` and saves layouts as `view=focus`.
+2. Delete `client/src/lib/meshPlanLayout.ts` and `meshPlanLayout.test.ts`. Remove `planMark` from the shared layout node type if nothing else reads it.
+3. Schema and API: migration as in decision 2; `meshLayoutQuerySchema` and `meshLayouts` service accept only `focus`. Update `docs/database/platform.md` and `glossary.md`, then `npm run docs:sync-schema`.
+4. `MeshPlanLinks` href becomes `/plans/:id?view=timeline`. Plan page honors `view=timeline` as in decision 1.
+5. `FEATURES.md` as in decision 4.
+
+**Out**
+
+- Changing Task and To Do **Plans** links (they stay on the Board).
+- Timeline behavior itself (T0318).
+- A new Task for leftover work. Nothing in the description is deferred.
+
+## Acceptance
+
+- Mesh has no Plan toggle. Focus layout, pins, filters, and hover cards still work.
+- A Mesh task or to-do in one or more plans lists each `PL####` under **Open in plan**, and each link opens that plan’s Timeline.
+- Opening a plan from the rail or from a Task’s Plans field still shows the Board.
+- `GET` or `PUT` `/api/v1/mesh-layouts?view=plan` is rejected. Rows with `view = 'plan'` are gone after migrate.
+- `npm run lint` is clean.

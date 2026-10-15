@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.89.0 — 2026-10-15
+
+### Enhancements
+- Mesh no longer has a Plan view. A Task or ToDo on a Mesh card lists each plan it belongs to, and Open in plan opens that plan’s Timeline. Opening a plan from the project rail or from the record’s Plans field still shows the Board.
+
+### Breaking Changes
+- Saved Mesh layouts for the retired Plan view are removed. The layouts API accepts only the Focus view.
+
 ## 0.88.0 — 2026-10-15
 
 ### New Functionality

@@ -8776,16 +8776,6 @@ a:focus-visible {
   display: grid;
   place-items: center;
 }
-.mesh-node--blocked .mesh-mark,
-.mesh-node--next .mesh-mark {
-  border-radius: 999px;
-}
-.mesh-node--blocked .mesh-mark {
-  box-shadow: 0 0 0 2px var(--mesh-signal-overdue);
-}
-.mesh-node--next .mesh-mark {
-  box-shadow: 0 0 0 2px var(--accent);
-}
 .mesh-node--group {
   position: relative;
 }
@@ -8961,8 +8951,7 @@ a:focus-visible {
   background: transparent;
 }
 .mesh-colors,
-.mesh-depth,
-.mesh-view {
+.mesh-depth {
   display: inline-flex;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -8973,8 +8962,7 @@ a:focus-visible {
   margin-left: auto;
 }
 .mesh-colors span,
-.mesh-depth span,
-.mesh-view span {
+.mesh-depth span {
   font-size: 0.68rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -8984,8 +8972,7 @@ a:focus-visible {
   align-self: center;
 }
 .mesh-colors button,
-.mesh-depth button,
-.mesh-view button {
+.mesh-depth button {
   font: inherit;
   font-size: 0.82rem;
   border: 0;
@@ -8996,8 +8983,7 @@ a:focus-visible {
   cursor: pointer;
 }
 .mesh-colors button[aria-pressed="true"],
-.mesh-depth button[aria-pressed="true"],
-.mesh-view button[aria-pressed="true"] {
+.mesh-depth button[aria-pressed="true"] {
   background: var(--text);
   color: var(--bg);
 }
@@ -9067,7 +9053,6 @@ a:focus-visible {
 .mesh-swatch--ai { border-top-style: dotted; border-top-color: var(--mesh-rel-suggested); border-top-width: 3px; }
 .mesh-swatch--ring { border-top-color: var(--text); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
 .mesh-swatch--over { border-top-color: var(--mesh-signal-overdue); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
-.mesh-swatch--next { border-top-color: var(--accent); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
 .mesh-swatch--risk { border-top-style: dashed; border-top-color: var(--mesh-signal-risk); border-radius: 999px; height: 0.7rem; width: 0.7rem; }
 @media (prefers-reduced-motion: reduce) {
   .mesh-canvas .react-flow__node,

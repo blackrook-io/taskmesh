@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { layoutMesh, meshNodesOverlap, type MeshGraphEdge, type MeshGraphNode } from "./meshLayout.ts";
-import { layoutMeshPlan } from "./meshPlanLayout.ts";
 import { applyMeshPins, meshPinsInGraph } from "./meshPins.ts";
 
 function node(key: string, title: string, referenceId: string): MeshGraphNode {
@@ -66,10 +65,10 @@ describe("mesh pins", () => {
     );
   });
 
-  it("redraws a plan parent line to a pinned child", () => {
+  it("redraws a parent line to a pinned child", () => {
     const planNodes = [node("task:1", "Parent", "T0001"), node("task:2", "Child", "T0002")];
     const planEdges: MeshGraphEdge[] = [{ source: "task:2", target: "task:1", relation: "child_of" }];
-    const layout = layoutMeshPlan({
+    const layout = layoutMesh({
       nodes: planNodes,
       edges: planEdges,
       focusKey: "task:1",

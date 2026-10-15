@@ -50,7 +50,7 @@ export async function getMeshLayout(
   actorId: number,
   rootType: EntityType | "tag",
   rootId: number,
-  view: "focus" | "plan",
+  view: "focus",
 ): Promise<MeshLayoutDto | null> {
   await assertMeshRoot(db, actorId, rootType, rootId);
   const [row] = await db
@@ -72,7 +72,7 @@ export async function putMeshLayout(
   actorId: number,
   rootType: EntityType | "tag",
   rootId: number,
-  view: "focus" | "plan",
+  view: "focus",
   body: MeshLayoutBody,
 ): Promise<MeshLayoutDto> {
   await assertMeshRoot(db, actorId, rootType, rootId);
@@ -113,7 +113,7 @@ export async function deleteMeshLayout(
   actorId: number,
   rootType: EntityType | "tag",
   rootId: number,
-  view: "focus" | "plan",
+  view: "focus",
 ): Promise<void> {
   await assertMeshRoot(db, actorId, rootType, rootId);
   await db
