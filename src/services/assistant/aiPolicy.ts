@@ -156,9 +156,10 @@ function instanceAllows(input: PolicyCheckInput): boolean {
     );
   }
   if (input.action === "read") {
-    if (input.entityType == null) return true;
+    if (input.entityType == null || input.entityType === "plan") return true;
     return READ_TYPES.has(input.entityType);
   }
+  if (input.action === "apply" && input.entityType === "plan") return true;
   if (
     input.action === "propose_create" ||
     input.action === "propose_update" ||
@@ -292,8 +293,8 @@ export function describeAllowedPolicy(
   options?: { webFetchEnabled?: boolean },
 ): string {
   const actions = options?.webFetchEnabled
-    ? "read ideas, projects, tasks, documents, todos, and todo lists; propose and apply creates and updates of ideas, documents, tasks, todos, and todo lists; add links, tags, comments, and task dependencies; fetch public web pages. "
-    : "read ideas, projects, tasks, documents, todos, and todo lists; propose and apply creates and updates of ideas, documents, tasks, todos, and todo lists; add links, tags, comments, and task dependencies. ";
+    ? "read ideas, projects, tasks, documents, todos, todo lists, and plans; propose and apply creates and updates of ideas, documents, tasks, todos, and todo lists; apply plan item adds, reorders, and item state changes; add links, tags, comments, and task dependencies; fetch public web pages. "
+    : "read ideas, projects, tasks, documents, todos, todo lists, and plans; propose and apply creates and updates of ideas, documents, tasks, todos, and todo lists; apply plan item adds, reorders, and item state changes; add links, tags, comments, and task dependencies. ";
   return (
     `Allowed for the ${feature} feature (informational only; the server enforces these rules): ` +
     actions +

@@ -23,6 +23,7 @@ When the user asks to add or create a task, idea, document, todo, or list, use t
 When editing an existing record, use the propose_*_update tools after get_entity or search when needed.
 Use get_neighbourhood for nearby records. There is no path-finding tool.
 Prefer get_entity / search_records / list_project_context / list_todos so you work from current content.
+Use plan_get, plan_add_items, plan_reorder, plan_set_item_state, and plan_projection for plans. Those writes save immediately. plan_projection does not start a new forecast. Set includeChildren only when the user asked to add a parent's children.
 If page context is attached, treat it as the user's current draft/record and prefer it over guessing.
 Be concise. Prefer clear Markdown structure.
 

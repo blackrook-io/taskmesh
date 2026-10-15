@@ -12,6 +12,15 @@ export type PlanProjection = {
   center: string | null;
   driver: PlanProjectionDriver;
   canSetCapacity: boolean;
+  aiEnabled?: boolean;
+  ai?: {
+    p50: string;
+    p80: string;
+    confidence: "low" | "medium" | "high";
+    drivers: string[];
+    stale: boolean;
+    auditId: number | null;
+  } | null;
   inputs: {
     completedHours28d: number;
     velocityHoursPerWeek: number | null;

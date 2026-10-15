@@ -8,6 +8,7 @@ import { hasDefinedKeys } from "../../lib/immutableFields.js";
 import { optionalMarkdown, optionalPlainTitle, plainTitle } from "../../lib/markdownFields.js";
 import { startDateSchema } from "../../lib/taskFields.js";
 import { workdayHoursSchema } from "../../lib/workdayHours.js";
+import { getPlanProjectionWithAi, PlanAiRunError, refinePlanProjection } from "../../services/planAiRun.js";
 import { getCurrentUserId } from "../../services/users.js";
 import {
   addPlanItem,
@@ -18,7 +19,6 @@ import {
   deletePlan,
   getPlan,
   getPlanBoard,
-  getPlanProjection,
   getPlanTimeline,
   listPlans,
   searchPlanCandidates,
@@ -203,8 +203,23 @@ plansRouter.get("/:planId/projection", async (req, res) => {
   try {
     const planId = idParam.parse(req.params.planId);
     const actorId = await getCurrentUserId(db);
-    res.json({ data: await getPlanProjection(db, actorId, planId) });
+    res.json({ data: await getPlanProjectionWithAi(db, actorId, planId) });
   } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+plansRouter.post("/:planId/projection/ai", async (req, res) => {
+  try {
+    const planId = idParam.parse(req.params.planId);
+    const force = z.object({ force: z.boolean().optional() }).parse(req.body ?? {}).force === true;
+    const actorId = await getCurrentUserId(db);
+    res.json({ data: await refinePlanProjection(db, actorId, planId, force) });
+  } catch (err) {
+    if (err instanceof PlanAiRunError) {
+      sendError(res, err.status, err.code, err.message);
+      return;
+    }
     handleRouteError(res, err);
   }
 });

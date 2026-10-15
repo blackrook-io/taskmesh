@@ -7,6 +7,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Project Overview dashboard with a pinned description (Owners and Managers can edit it) and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including My Tasks Today); click a panel row to open that Task or To Do
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, Mesh, Plans, and Image Boards
 - Open a plan board to see phased Tasks and ToDos, hour totals, progress, and a finish-date range, and check items off from the list
+- Refine a plan finish with AI and see a likely date range beside the baseline, with the reasons behind it
 - Switch a plan to a timeline and see each item as a bar from its hours, start date, and dependencies, with a hover card for the schedule
 - Add Tasks and ToDos to a plan, create a Draft task in a phase, and open every plan a record belongs to from the Task, To Do, or Mesh card
 - Reorder a plan by dragging or with the keyboard, and keep every dependent below its prerequisite
@@ -130,6 +131,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Confirm ordinary assistant edits one at a time. Riskier or bulk changes open a review list where you check each item before anything is saved, and an edit expires if the record changed
 - Opt in so the assistant applies tags, links, comments, and task dependencies immediately, then undo them from a toast or the AI activity page for 7 days
 - Ask the assistant about todos, lists, links, tags, comments, task dependencies, and the records around one item. Proposed adds still wait for your confirmation
+- Ask the assistant to read a plan, add items, reorder it, or check items off; those changes save immediately, and an excluded project stays off
 - Ask a question about the open project from the project menu or the Mesh toolbar. The answer is Markdown, a cited display number opens that record, and a PDF citation opens on that page
 - Rate an assistant reply with thumbs up or down and an optional note. Administrators see accept, dismiss, and thumb rates by feature and model
 - See today's AI token use, and estimated instance-key spend when a call uses that key. Administrators set daily token and spend caps plus how many tool calls or writes one reply may make. At 80% you get a warning; at the cap the assistant stops

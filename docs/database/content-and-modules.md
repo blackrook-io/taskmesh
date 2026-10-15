@@ -14,6 +14,7 @@ erDiagram
   projects ||--o{ plans : "optional"
   plans ||--o{ plan_phases : has
   plans ||--o{ plan_items : has
+  plans ||--o| plan_ai_projections : "cached range"
   plan_phases ||--o{ plan_items : has
   projects ||--o{ boards : has
   projects ||--o{ wiki_nodes : has
@@ -88,6 +89,10 @@ erDiagram
     int id PK
     text entity_type
     int entity_id
+  }
+  plan_ai_projections {
+    int plan_id PK
+    text input_hash
   }
   boards {
     int id PK
@@ -455,7 +460,7 @@ Known `module_key` values include `tasks`, `documents`, `todo_lists`, `boards`, 
 
 ---
 
-## Plans (`plans`, `plan_phases`, `plan_items`)
+## Plans (`plans`, `plan_phases`, `plan_items`, `plan_ai_projections`)
 
 An ordered, phased sequence of Tasks and ToDos (T0309). Display number → **PL####**. A plan may belong to a project or stand alone (`project_id` null). Phases belong to the plan. `tasks.phase_id` is the separate project-level phase and is not used here. An item may be in any number of plans, once per plan.
 
@@ -509,7 +514,20 @@ An ordered, phased sequence of Tasks and ToDos (T0309). Display number → **PL#
 - **UNIQUE:** `plans.number`. `plan_items` unique on `(plan_id, entity_type, entity_id)` — `plan_items_plan_entity_uidx`.
 - **CHECK:** `plans.status` is `draft`, `active`, `complete`, or `archived`. `plans_start_not_after_target` requires `start_date` null, `target_date` null, or `start_date <= target_date`. `plans_workday_hours_quarter` requires `workday_hours` from 0.25 through 24 in quarter-hour steps. `plan_items.entity_type` is `task` or `todo`.
 - **INDEX:** `plan_items_order_idx` on `(plan_id, phase_id, sort_order)`. `plan_items_entity_idx` on `(entity_type, entity_id)`.
-- **DELETE:** Removing a plan cascades to its phases and items, and triggers purge matching `task_activity` and `entity_links` rows. Removing a phase is refused while it still has items. Hard-deleting a Task or ToDo removes its `plan_items` rows. Soft-deleted items stay in the plan.
+- **DELETE:** Removing a plan cascades to its phases, items, and cached AI projection, and triggers purge matching `task_activity` and `entity_links` rows. Removing a phase is refused while it still has items. Hard-deleting a Task or ToDo removes its `plan_items` rows. Soft-deleted items stay in the plan.
+
+### `plan_ai_projections`
+
+One cached AI finish range per plan (T0316). The server stores it only after a model reply passes the date window. A matching `input_hash` is reused instead of calling the provider again. The projection never writes due dates.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|--------|
+| `plan_id` | integer | no | — | Primary key. FK → `plans.id` · CASCADE |
+| `input_hash` | text | no | — | Hash of the minimized input packet |
+| `result` | jsonb | no | — | `{ p50, p80, confidence, drivers }` |
+| `audit_id` | integer | yes | — | FK → `ai_audit_log.id` · SET NULL |
+| `created_at` | timestamptz | no | `now()` | |
+| `updated_at` | timestamptz | no | `now()` | |
 
 ---
 

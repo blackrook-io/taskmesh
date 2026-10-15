@@ -70,6 +70,14 @@ export const AI_FEATURES: Record<string, AiFeatureNeeds> = {
     localOnly: false,
     size: "large",
   },
+  plan_projection: {
+    id: "plan_projection",
+    tools: false,
+    longContext: false,
+    embeddings: false,
+    localOnly: false,
+    size: "small",
+  },
 };
 
 export function aiFeatureNeeds(id: string): AiFeatureNeeds | null {

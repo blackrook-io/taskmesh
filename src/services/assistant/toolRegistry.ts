@@ -134,6 +134,11 @@ export const TOOL_REGISTRY: Record<string, ToolRegistration> = {
     entityIdArg: "taskId",
     projectIdArg: "projectId",
   },
+  plan_get: { action: "read", entityType: "plan", entityIdArg: "planId" },
+  plan_add_items: { action: "apply", entityType: "plan", entityIdArg: "planId" },
+  plan_reorder: { action: "apply", entityType: "plan", entityIdArg: "planId" },
+  plan_set_item_state: { action: "apply", entityType: "plan", entityIdArg: "planId" },
+  plan_projection: { action: "read", entityType: "plan", entityIdArg: "planId" },
 };
 
 function integerArg(args: unknown, key: string | undefined): number | null {
