@@ -463,7 +463,9 @@ function MeshHoverCard({
 }) {
   const parsed = parseEntityKey(cardKey);
   const planEntity =
-    parsed && (parsed.entityType === "task" || parsed.entityType === "todo") ? parsed : null;
+    parsed?.entityType === "task" || parsed?.entityType === "todo"
+      ? { entityType: parsed.entityType, id: parsed.id }
+      : null;
   const stateInk = stateAppearance(model.state);
   return (
     <div

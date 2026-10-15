@@ -60,3 +60,4 @@ A person who can change a plan’s structure can put existing work and a new Dra
 ## QA follow-ups
 
 - Search, draft-task title, draft-task hours, and the project plan title are `type="text"` so they use the shared dark field theme (border, background, text color). The quick-add hours field stays a short inline control.
+- The Mesh Open in plan link passes a task or todo only, so the client production build accepts the membership type.
