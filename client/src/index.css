@@ -9360,3 +9360,223 @@ a:focus-visible {
   }
 }
 
+.plan-board__head h1 {
+  margin: 0;
+}
+
+.plan-board__ref-line {
+  margin: 0 0 0.15rem;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.plan-board__finish {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip, 999px);
+  padding: 0.25rem 0.7rem;
+  color: var(--text-muted, #9aa89a);
+  font-size: 0.85rem;
+}
+
+.plan-board__summary,
+.plan-board__phase-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.plan-board__summary {
+  margin-bottom: 1.25rem;
+}
+
+.plan-board__hours-total,
+.plan-board__phase-hours,
+.plan-board__counts,
+.plan-board__warn {
+  margin: 0;
+}
+
+.plan-board__warn {
+  color: var(--task-state-hold);
+  font-size: 0.85rem;
+}
+
+.plan-board__notice {
+  color: var(--danger);
+  margin: 0 0 0.75rem;
+}
+
+.plan-board__meter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 10rem;
+  flex: 1 1 12rem;
+  max-width: 18rem;
+}
+
+.plan-board__meter-track {
+  flex: 1;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  overflow: hidden;
+}
+
+.plan-board__meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.plan-board__meter-label {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.plan-board__phase {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.plan-board__collapse {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+}
+
+.plan-board__collapse:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.plan-board__phase-name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.plan-board__swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+}
+
+.plan-board__empty {
+  margin: 0.4rem 0 0.2rem 2rem;
+}
+
+.plan-board__scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.plan-board__table {
+  min-width: 46rem;
+}
+
+.plan-board__row {
+  display: grid;
+  grid-template-columns: 1.4rem 2rem minmax(14rem, 1fr) 6.5rem 5.75rem 8rem 4.75rem;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.35rem 0.15rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.plan-board__row--head {
+  font-size: 0.75rem;
+  color: var(--text-muted, #9aa89a);
+  border-bottom-color: var(--border);
+}
+
+.plan-board__handle {
+  display: flex;
+  color: var(--text-muted, #9aa89a);
+}
+
+.plan-board__grip {
+  width: 0.7rem;
+  height: 1rem;
+  fill: currentColor;
+}
+
+.plan-board__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+  min-width: 0;
+}
+
+.plan-board__ref {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--text-muted, #9aa89a);
+}
+
+.plan-board__title {
+  min-width: 0;
+}
+
+.plan-board__blocked {
+  flex-basis: 100%;
+  font-size: 0.8rem;
+  color: var(--task-state-blocked);
+}
+
+.plan-board__hours {
+  width: 100%;
+  padding: 0.25rem 0.4rem;
+}
+
+.plan-board__hours-text,
+.plan-board__assignee,
+.plan-board__due {
+  font-size: 0.85rem;
+}
+
+.plan-board__menu {
+  position: relative;
+}
+
+.plan-board__menu-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.2rem);
+  left: 0;
+  min-width: 12rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.plan-board__menu-note {
+  margin: 0.2rem 0.45rem 0.35rem;
+  font-size: 0.8rem;
+  color: var(--task-state-blocked);
+}
+
+.plan-board__menu-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+}
+
+.plan-board__menu-item:hover {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+}
+

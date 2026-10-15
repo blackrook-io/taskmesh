@@ -1,0 +1,60 @@
+# T0312 — plan board with phases, rollup header, and check-off
+
+**Task:** T0312 (id `327`) — Plans: plan board with phases, rollup header and check-off
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0311 (id `326`) — `complete`. **Required by:** T0313 (reorder), T0314 (add items and entry points), T0315 (baseline projection). Those stay blocked until this is complete.
+**Branch (after approval):** `T0312-plan-board`
+**Design:** `docs/design/plans-feature-design.pdf` (UI, pages 9–10). Board payload is `GET /api/v1/plans/:id/board`.
+
+## Context
+
+T0311 serves one board document: plan, plan rollup, phases with rollups and items, in-plan edges, and per-item `actions`. Check-off is `POST /api/v1/plans/:id/items/:itemId/state` with `{ to, stateComment? }`. Ready → Complete is two workflow steps on the server. Nothing in the client renders a plan. Drag, Fix order, the add-items picker, the project rail, and the finish-date range are later children.
+
+## Decisions (confirm or adjust)
+
+1. **Direct route only.** Add `/plans/:planId` (database id, same as the API). The header shows `PL####` and the title. The project rail, the Plans field on Task and ToDo pages, and “Open in plan” stay T0314. QA opens the board by URL.
+2. **The drag handle is visible and inert.** Rows include the handle so the layout matches the mockup. No `@dnd-kit` wiring and no reorder calls. T0313 makes the handle live.
+3. **Finish chip is a placeholder.** The header shows a muted “Finish date —” chip. It does not call a projection endpoint. T0315 replaces the chip.
+4. **Parents are summary rows.** Within a phase, an item whose parent is also in that phase is indented under it (one level per in-plan ancestor). A parent with in-plan children shows the children’s counted hours (leaf rule: canceled and deleted drop out; a parent’s own hours count only when it has no counted in-plan child) and that number is read-only. A row with no in-plan children shows its own `estimateHours`.
+5. **Check-off uses only `actions`.** No client re-derivation of workflow.
+   - `canCheck` → `POST` `{ to: "complete" }`.
+   - Ready with `canStart` and `canStartAndComplete` → menu: Start (`in_progress`) and Start and complete (`complete`).
+   - Ready with `canStart` only → menu: Start, and the menu names `blockedBy`.
+   - `canUncheck` on a task → prompt for the reopen comment, then `{ to: "ready", stateComment }`. On a ToDo → `{ to: "in_progress" }`.
+   - Every flag false (Draft, derived parent, Viewer) → checkbox present and disabled.
+   - A non-empty `blockedBy` is also named on the row (“Blocked by T####”).
+   - After a successful change, refetch the board. A refused response shows the server message and refetches.
+6. **Hours edit when the actor can write plan items.** Add `permissions.canWriteItems` on the board payload, from the same `canWrite` already used to build `actions` (Member and up on a project plan; owner-or-admin on a standalone plan). Viewers see hours as text. Writers get `HoursInput` (0.25 steps) on a row that is showing its own estimate, and the value is saved with the existing task or ToDo PATCH. Closed records still fail that PATCH; show the server message. Assignee and due date are display only.
+7. **Phase collapse is per browser user.** `localStorage` key `plan-phase-collapsed:{userId}:{planId}` stores collapsed phase ids. Default is expanded.
+8. **No new deferred Task.** Drag and keyboard (T0313), add-items and entry points (T0314), projection (T0315), and assistant tools (T0316) already exist and already depend on this work.
+
+## Goal
+
+A person who can read a plan can open its board, see phased effort and progress, and check items off only in the ways the API allows.
+
+## Scope
+
+**In scope**
+
+1. `permissions.canWriteItems` on `GET /api/v1/plans/:id/board`.
+2. Client types and `GET`/`POST` helpers for the board and item state.
+3. Route `/plans/:planId` and `PlanBoardPage`: header (hours done of total, effort-weighted or count progress, item counts, unestimated warning, placeholder finish chip), collapsible phase sections (color, hours subtotal, progress), rows (inert handle, checkbox, `T####` / `D####`, title, state chip, hours, assignee, due date, indented children).
+4. Pure helpers for indent depth, parent display hours, and which menu entries the flags allow, with unit tests.
+5. Dark grey / light green styling, usable on a narrow viewport (row scrolls horizontally rather than overflowing the page). `npm run lint`.
+
+**Out of scope**
+
+- Drag, keyboard moves, Fix order, Add and move (T0313).
+- Add-items picker, parent Yes/No modal, project rail, Plans field, dependency gutter (T0314).
+- Real finish-date range (T0315).
+- Schema migration. Finish-up is a PATCH bump. `FEATURES.md` gets one bullet on finish-up because this is the first user-facing plan board.
+
+## Acceptance
+
+- Opening `/plans/:planId` for a readable plan shows the board from one `GET …/board`. A missing or hidden plan shows the existing not-found treatment.
+- Header hours, progress, and the unestimated count match `rollup`. A phase header matches that phase’s rollup. Collapsing a phase hides its rows and stays collapsed after reload for that user.
+- A parent with in-plan children is a summary row: children are indented beneath it, and its hours are the children’s counted total, not an editor.
+- A Ready task offers Start and Start and complete only when those flags are true. A blocked Ready task offers Start only and names the blocker. Draft and Viewer checkboxes do nothing. Start and complete on a Ready task leaves it Complete after refetch.
+- Unchecking a complete task asks for a comment before the reopen request. A Viewer does not get an hours editor. A Member’s quarter-hour edit shows on the row after refetch.
+- The finish chip reads “Finish date —” and does not request a projection.

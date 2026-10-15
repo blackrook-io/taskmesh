@@ -22,6 +22,7 @@ import { CalendarPage } from "./pages/CalendarPage.tsx";
 import { DigestPage } from "./pages/DigestPage.tsx";
 import { AdminHubPage } from "./pages/AdminHubPage.tsx";
 import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
+import { PlanBoardPage } from "./pages/PlanBoardPage.tsx";
 import { TasksListPage } from "./pages/TasksListPage.tsx";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="projects" element={<ProjectsListPage />} />
                 <Route path="projects/new" element={<ProjectNewPage />} />
                 <Route path="projects/:id" element={<ProjectDetailPage />} />
+                <Route path="plans/:planId" element={<PlanBoardPage />} />
                 <Route path="todos" element={<TodoListsPage />} />
                 <Route path="todos/:listId" element={<TodoListsPage />} />
                 <Route path="search" element={<SearchPage />} />

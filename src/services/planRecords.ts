@@ -506,6 +506,7 @@ export async function getPlanBoard(db: Db, actorId: number, planId: number) {
   return {
     plan: presentPlan(plan),
     rollup: rollup.plan,
+    permissions: { canWriteItems: canWrite },
     phases,
     edges: graph.dependencies,
   };
