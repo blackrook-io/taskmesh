@@ -1,0 +1,57 @@
+# T0311 — plans REST API, permissions, and allowed actions
+
+**Task:** T0311 (id `326`) — Plans: REST API, permissions and allowed actions
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0310 (id `325`) — `complete`. **Required by:** T0312 (plan board). Stays blocked until this is complete.
+**Branch (after approval):** `T0311-plans-rest`
+**Design:** `docs/design/plans-feature-design.pdf` (API surface, pages 7–9). T0317 comment on this task: pass `startDate` and `workdayHours` through create/patch.
+
+## Context
+
+`plans`, `plan_phases`, and `plan_items` exist. `src/services/plans.ts` already validates order, computes rollups, previews Fix order, and rejects a new dependency or parent change that would make a shared plan illegal (`plan_order_conflict`). Nothing persists a layout or serves a board. T0312 renders only from this API’s `actions` flags.
+
+## Decisions (confirm or adjust)
+
+1. **Writers live beside the rule module.** Routes in `src/routes/v1/plans.ts` parse and call `src/services/planRecords.ts`. Order checks stay the pure functions in `src/services/plans.ts` (`validatePlanOrder`, `computePlanRollup`, `previewFixOrder`, `assertPlanRevision`, plus insert placement and the add-and-move offer). A successful layout write increments `plans.revision`. Check-off and title edits do not.
+2. **Permissions use the existing project levels.** On a project plan: `read` (Viewer and up) for list, get, and board; `write` (Member and up) for item reorder, auto-sort, and item state; `settings` (Owner, Manager, Administrator) for plan CRUD, phase CRUD and reorder, and add/remove items. A standalone plan (`project_id` null) is owner-or-admin for every read and write, same as a standalone task. A missing plan is 404. A plan the actor cannot see is 404, not 403, matching other owned records.
+3. **What a plan may contain.** A project plan accepts Tasks and ToDos whose `projectId` matches. A standalone plan accepts standalone Tasks and ToDos owned by the plan owner. Anything else is 400 `plan_item_project`. An item already in the plan is 409 `plan_item_exists`.
+4. **Create seeds phases.** A project plan copies that project’s phases (name, color, order) when the body omits `phases`. If the project has none, or the plan is standalone, create one phase named `Phase 1`. The body may instead send `phases: [{ name, color? }]`.
+5. **Dates from T0317.** Create and patch accept `startDate` (nullable `YYYY-MM-DD`) and `workdayHours` (quarter-hours 0.25–24). Omitted `workdayHours` stays the column default 8. Omitted `startDate` on a project plan copies `projects.start_date`. Call `dateOrderViolation` with `START_AFTER_TARGET_MESSAGE` and `workdayHoursSchema`. Do not restate those messages.
+6. **Add placement.** `POST …/items` body is `{ entityType, entityId, phaseId, afterItemId?, includeChildren? }`. `includeChildren` defaults to false: adding a parent does not pull its children (the Yes/No modal is T0314). With no `afterItemId`, the item goes at the last legal index in that phase. If no index in that phase is legal, 409 `plan_order_violation` and nothing is inserted.
+7. **Phase delete.** `DELETE …/phases/:phaseId` with items and no `moveItemsTo` returns 409 `plan_phase_not_empty`. With `moveItemsTo`, items move to that phase and the whole layout is validated before the delete commits.
+8. **Check-off is the existing workflow.** `POST …/items/:itemId/state` body `{ to, stateComment? }` calls the same transition and complete-gate used by task and ToDo patch. Ready → Complete is stored as Ready → In Progress → Complete in one transaction, each step checked; a blocked task stops at the complete gate with the existing `blocked` code and blocker text. Draft has no check action. `actions` on each board item is `{ canCheck, canStart, canStartAndComplete, canUncheck, blockedBy }`, from that workflow plus the actor’s role. Viewers get every flag false. `canUncheck` is the existing reopen (Owner, Manager, Administrator).
+9. **Add and move ships as data plus one apply flag.** `plan_order_conflict` (already thrown from dependency and parent writes) gains `addAndMove: { planId }` only when exactly one shared plan would become legal by moving the dependent below the new prerequisite inside its current phase. Other shared plans still conflict → no option. `POST` dependency accepts `moveInPlanId`; the service inserts the edge and that move in one transaction, or 409 if the id was not the offered plan. The board button stays T0313.
+10. **No new deferred Task.** Projection (`GET …/projection`) is T0315. Assistant and MCP tools are T0316. Board, drag, and the add-items picker are T0312–T0314. Those tasks already exist and already depend on this work.
+
+## Goal
+
+Authenticated clients can create and edit a plan, read one board payload, reorder within the order rules, and check items off through the current workflow. Every documented error code comes back with its documented message.
+
+## Scope
+
+**In scope**
+
+1. Mount `GET/POST /api/v1/plans`, `GET/PATCH/DELETE /api/v1/plans/:id`.
+2. `GET /api/v1/plans/:id/board` — phases, items joined to task/todo (number, title, state, hours, assignee, due date, start date, parent), in-plan edges, external blockers, plan and phase rollups, `revision`, per-item `actions`.
+3. Phase CRUD and `POST …/phases/reorder` `{ revision, orderedPhaseIds }`.
+4. `POST/DELETE …/items`, `POST …/reorder` `{ revision, phases: [{ phaseId, itemIds }] }`, `POST …/auto-sort` `{ revision, apply }`. `apply: false` returns `previewFixOrder` and does not write. `apply: true` writes that preview and bumps `revision`.
+5. `POST …/items/:itemId/state`.
+6. Permission checks in decision 2. Stale `revision` → 409 `plan_revision_stale`.
+7. Unit tests for action flags, last-legal-slot placement, and the add-and-move offer (pure, no database). `npm run lint`.
+
+**Out of scope**
+
+- Board UI, drag, keyboard, Fix order button, add-items picker, parent modal, project rail (T0312–T0314).
+- `GET /plans/:id/projection`, `schedulePlan`, timeline (T0315, T0318).
+- Assistant tools and `projects.ai_access` (T0316).
+- Schema migration. Finish-up is a PATCH bump.
+
+## Acceptance
+
+- A Viewer can read a project plan and its board, and cannot reorder, check off, or edit structure.
+- A Member can reorder, auto-sort, and check off. An Owner or Manager can add a phase, add an item, and delete an empty phase.
+- A reorder that puts a dependent above its prerequisite returns 409 `plan_order_violation` and leaves the layout unchanged. A stale `revision` returns 409 `plan_revision_stale`.
+- Ready → Complete on the state route writes two activity transitions. Completing a task with open blockers returns 400 `blocked` and does not write. A task the workflow has already set to Blocked does not offer Start; Blocked’s allowed next states stay Draft and Canceled. `blockedBy` still names the open blockers.
+- Create/patch rejects an inverted start and target with “Start date cannot be after the target date.” and rejects a non-quarter `workdayHours`.
+- `npm run lint` passes.

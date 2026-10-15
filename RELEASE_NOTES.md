@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.2 — 2026-10-15
+
+### New Functionality
+- Plans can be created and edited over the API: the plan itself, its phases, and which Tasks and ToDos sit in them. A single board response returns phases, items, in-plan dependencies, hour rollups, and the check-off actions the current person is allowed to take. Owners and Managers edit structure; Members can reorder and check items off; Viewers can read. A standalone plan stays with its owner.
+- Reordering a plan, or adding a dependency that would put a dependent above its prerequisite, is refused and nothing moves. A stale revision is refused so two people cannot interleave drags. Checking off a Ready task records Start and then Complete. If open blockers remain, Complete is refused and the response names them.
+
 ## 0.87.1 — 2026-10-14
 
 ### Enhancements
