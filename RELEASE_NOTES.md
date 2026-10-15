@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.3 — 2026-10-15
+
+### New Functionality
+- Open a plan to work its phases on one board. The header shows hours done of the total, progress, and how many items still have no estimate. Each phase can be collapsed, and that choice stays in this browser.
+- Check items off only in the ways the server allows. A Ready task offers Start or Start and complete, a blocked row names what it is waiting on, and reopening a finished task asks for a comment. A parent row shows its children's hours. Quarter-hour estimates can be edited on the row. The finish-date chip stays a placeholder until the baseline projection ships.
+
 ## 0.87.2 — 2026-10-15
 
 ### New Functionality

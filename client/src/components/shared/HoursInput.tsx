@@ -7,10 +7,11 @@ type Props = {
   disabled?: boolean;
   ariaLabel: string;
   className?: string;
+  placeholder?: string;
   onCommit: (next: number | null) => void;
 };
 
-export function HoursInput({ id, value, disabled, ariaLabel, className, onCommit }: Props) {
+export function HoursInput({ id, value, disabled, ariaLabel, className, placeholder, onCommit }: Props) {
   const display = formatEstimateHours(value);
   const [text, setText] = useState(display);
   const [synced, setSynced] = useState(display);
@@ -33,6 +34,7 @@ export function HoursInput({ id, value, disabled, ariaLabel, className, onCommit
       value={text}
       disabled={disabled}
       aria-label={ariaLabel}
+      placeholder={placeholder}
       aria-invalid={invalid || undefined}
       title={invalid ? "Use quarter hours, such as 1.25" : "Hours"}
       onPointerDown={(e) => e.stopPropagation()}
