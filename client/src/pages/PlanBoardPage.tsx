@@ -16,11 +16,13 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiRequestError, apiJson } from "../api/client";
 import { StateReasonDialog } from "../components/StateReasonDialog";
+import { PlanFinishChip } from "../components/PlanFinishChip";
 import { PlanPhaseTools, type PlanCandidate } from "../components/PlanPhaseTools";
 import { HoursInput } from "../components/shared/HoursInput";
 import { useAuth } from "../lib/auth";
 import { formatEntityRef } from "../lib/entityRef";
 import { patchTaskRecord } from "../lib/patchTask";
+import type { PlanProjection } from "../lib/planProjection";
 import {
   planBlockerLabel,
   planCheckboxChecked,
@@ -645,8 +647,19 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
     },
   });
 
+  const projectionQuery = useQuery({
+    queryKey: ["plan-projection", planId],
+    queryFn: async () => {
+      const res = await apiJson<{ data: PlanProjection }>(`/api/v1/plans/${planId}/projection`);
+      return res.data;
+    },
+  });
+
   const refresh = async () => {
-    await qc.invalidateQueries({ queryKey: ["plan-board", planId] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["plan-board", planId] }),
+      qc.invalidateQueries({ queryKey: ["plan-projection", planId] }),
+    ]);
   };
 
   const stateMut = useMutation({
@@ -684,6 +697,19 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
     },
     onError: (err: Error) => {
       setNotice(err.message);
+    },
+  });
+
+  const capacityMut = useMutation({
+    mutationFn: async (hours: number) => {
+      await apiJson(`/api/v1/plans/${planId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ capacityHoursPerWeek: hours }),
+      });
+    },
+    onSuccess: async () => {
+      setNotice(null);
+      await refresh();
     },
   });
 
@@ -728,6 +754,7 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
       setPendingParent(null);
       setPickerPhaseId(null);
       qc.setQueryData(["plan-board", planId], next);
+      void qc.invalidateQueries({ queryKey: ["plan-projection", planId] });
       void qc.invalidateQueries({ queryKey: ["plan-candidates", planId] });
       void qc.invalidateQueries({ queryKey: ["plan-memberships"] });
     },
@@ -909,7 +936,11 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
               Fix order
             </button>
           ) : null}
-          <span className="plan-board__finish">Finish date —</span>
+          <PlanFinishChip
+            projection={projectionQuery.data}
+            pending={capacityMut.isPending}
+            onSaveCapacity={(hours) => capacityMut.mutateAsync(hours)}
+          />
         </div>
       </header>
       {notice ? (

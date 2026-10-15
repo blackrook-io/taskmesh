@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.6 — 2026-10-15
+
+### New Functionality
+- A plan board shows a finish-date range. It uses hours completed in the last 28 days when that history exists, and weekly capacity otherwise. A long dependency chain can push the date later, and the chip says which of those inputs produced the range. Checking an item off or editing its hours updates the range.
+- When a plan has no recent completions and no weekly capacity, someone who can edit the plan can set hours per week from the finish chip.
+
 ## 0.87.5 — 2026-10-15
 
 ### New Functionality
