@@ -54,6 +54,11 @@ export type PlanBoardPhase = {
   items: PlanBoardItem[];
 };
 
+export type PlanBoardEdge = {
+  prerequisite: { entityType: PlanEntityType; entityId: number };
+  dependent: { entityType: PlanEntityType; entityId: number };
+};
+
 export type PlanBoard = {
   plan: {
     id: number;
@@ -65,7 +70,7 @@ export type PlanBoard = {
   rollup: PlanRollupSlice;
   permissions: { canWriteItems: boolean };
   phases: PlanBoardPhase[];
-  edges: unknown[];
+  edges: PlanBoardEdge[];
 };
 
 const EXCLUDED_STATES = new Set(["canceled", "deleted"]);

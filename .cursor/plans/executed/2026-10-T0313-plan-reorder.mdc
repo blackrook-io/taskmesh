@@ -1,0 +1,52 @@
+# T0313 — drag reorder, keyboard moves, and Fix order
+
+**Task:** T0313 (id `328`) — Plans: drag reorder, keyboard moves and Fix order
+**Parent:** T0307 (id `322`) — Plans epic. Stays blocked; this slice does not change the parent.
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0312 (id `327`) — `complete`. **Required by:** none.
+**Branch (after approval):** `T0313-plan-reorder`
+**Design:** `docs/design/plans-feature-design.pdf`. Order rules already live in `src/services/plans.ts`. Writers are `POST /api/v1/plans/:id/reorder` and `POST /api/v1/plans/:id/auto-sort`. Add-and-move is `moveInPlanId` on `POST /api/v1/tasks/:id/dependencies`.
+
+## Context
+
+T0312 renders `/plans/:planId` from `GET /api/v1/plans/:id/board`. Each row has a visible, inert drag handle. The board payload includes `revision`, `permissions.canWriteItems`, phases and items (with `parentId`), and `edges` (in-plan task dependencies). `reorderPlan` accepts the full layout plus `revision`, rejects a dependent above its prerequisite or a broken parent block (`plan_order_violation`), and rejects a stale revision (`plan_revision_stale`). `autoSortPlan` with `apply: false` returns `previewFixOrder` and writes nothing; `apply: true` writes that preview. A new task dependency that would break exactly one shared plan returns `plan_order_conflict` with `addAndMove: { planId }`. The client currently drops that offer and shows only the message.
+
+## Decisions (confirm or adjust)
+
+1. **The client previews legality; the server still decides.** A pure helper in `client/src/lib/planOrder.ts` mirrors the enclosure and dependency rules already in `validatePlanOrder`: a parent and its in-plan descendants are one contiguous block in one phase, the parent stays at the top of that block, and a prerequisite stays strictly above its dependent in phase-then-item order. On drag start every insertion gap is classified. Illegal gaps are dimmed. Hovering an illegal gap draws a red line and the first violation reason (dependency, enclosure, or cycle). A legal drop sends the full layout and the board `revision`. An illegal drop never sends a request. A 409 snaps the rows back to the refetched board and shows the server message.
+2. **What moves.** Dragging a parent (or any row with in-plan descendants in its phase) moves that whole block, keeping the descendants’ relative order, including into another phase when the resulting layout is legal. A child with an in-plan parent reorders only inside that parent’s block, and never above the parent or into another phase. A root row with no in-plan children moves by itself, including across phases when legal.
+3. **Collapsed phases stay reachable.** A phase header is a drop target meaning “end of this phase.” It lights up only when placing the dragged block there is legal. Expanded phases also show per-gap lines between rows.
+4. **Keyboard matches the pointer.** With a row handle focused, Alt+Up and Alt+Down move that same block to the previous or next legal gap (across a phase boundary when that gap is legal). The keypress is `preventDefault`’d. No request is sent when the next gap is illegal; the row stays and the reason is announced. Viewers do not get a focusable handle.
+5. **Fix order is a preview, then apply.** Writers see **Fix order** on the board header. It calls `POST …/auto-sort` with `{ revision, apply: false }`. A dialog lists rows that would move (current phase name and title, in the preview order) and any conflicts the preview cannot repair (cross-phase or cycle; those phases stay unchanged). **Apply** sends `apply: true` and replaces the board with the response. **Cancel** writes nothing. If nothing would change and there are no conflicts, the dialog says the order is already legal.
+6. **Add and move stays on the dependency picker.** `TaskDependencyLists` is where a dependency is added. On `409 plan_order_conflict` with `addAndMove.planId`, the error offers **Add and move in PL####**. Confirming retries the same POST with `moveInPlanId`. Several conflicting plans, or a conflict with no offer, keep the server message and do not move anything. `ApiRequestError` keeps `code` and the error object so the button can read `addAndMove`. The plan board does not add dependencies.
+7. **No new deferred Task.** Phase-header reordering (`POST …/phases/reorder`) is not in this task. The add-items picker and project rail stay T0314. The finish-date chip stays the T0312 placeholder.
+
+## Goal
+
+A writer can reorder a plan with the pointer or the keyboard, see why a drop is illegal before it is sent, repair an in-phase order with Fix order, and accept Add and move when a new dependency conflicts with exactly one plan. No drag, key, or API sequence leaves a dependent above its prerequisite.
+
+## Scope
+
+**In scope**
+
+1. `planOrder.ts` plus unit tests: block membership, legal gaps, violation text, and the layout body `{ revision, phases: [{ phaseId, itemIds }] }`.
+2. `@dnd-kit` on the plan board for writers. Drag overlay shows the block. Illegal gaps dim; hover shows a red line and the reason. Legal drop posts reorder; 409 refetches and shows the message.
+3. Alt+Up/Down on the focused handle, same gaps and the same POST.
+4. Fix order button and preview/apply dialog wired to `POST …/auto-sort`.
+5. Dependency add: surface **Add and move** when the error includes `addAndMove`, and send `moveInPlanId` on confirm.
+6. Dark grey / light green, usable on a narrow viewport. `npm run lint`.
+
+**Out of scope**
+
+- Phase header reorder, add-items picker, parent Yes/No modal, project rail (T0314).
+- Finish-date projection (T0315).
+- Schema migration. Finish-up is a PATCH bump. `FEATURES.md` gains one bullet that the plan board can be reordered without breaking dependencies.
+
+## Acceptance
+
+- A Member can drag a root row or a parent block onto a legal gap, including the end of another phase, and the refetched board matches that order. Dropping on a dimmed gap leaves the board unchanged and does not POST.
+- Dragging a child moves it only inside its parent block. A layout that would put a dependent above its prerequisite is dimmed, and a forced reorder POST still returns 409 with the rows snapped back and the server message visible.
+- Alt+Up/Down on a focused handle moves to the next legal gap. At a boundary with no legal gap, the row does not move and the reason is shown.
+- A stale `revision` (409 `plan_revision_stale`) snaps back and shows “Plan revision is stale; refresh and try again.”
+- Fix order preview lists the moves and any unfixable conflicts without writing. Apply writes and refreshes. A Viewer sees no Fix order button and an inert handle.
+- Adding a dependency that conflicts with exactly one plan offers Add and move; confirming creates the dependency and moves that plan. A conflict with no offer does not create the dependency.

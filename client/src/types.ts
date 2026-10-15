@@ -401,7 +401,14 @@ export type ImageBoard = ImageBoardSummary & {
   document: Record<string, unknown>;
 };
 
-export type ApiErrorBody = { error: { code: string; message: string } };
+export type ApiErrorBody = {
+  error?: {
+    code?: string;
+    message?: string;
+    addAndMove?: { planId: number };
+    plans?: Array<{ id: number; number: number; title: string }>;
+  };
+};
 
 export type { EntityType } from "./lib/entityType";
 export { ENTITY_TYPES, isEntityType } from "./lib/entityType";

@@ -9580,3 +9580,80 @@ a:focus-visible {
   background: color-mix(in srgb, var(--accent) 28%, var(--surface));
 }
 
+.plan-board__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.plan-board__handle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--text-muted, #9aa89a);
+  cursor: grab;
+}
+
+.plan-board__handle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.plan-board__row--dim {
+  opacity: 0.38;
+}
+
+.plan-board__row--source {
+  opacity: 0.5;
+}
+
+.plan-board__row--reject {
+  box-shadow: inset 0 2px 0 var(--danger);
+}
+
+.plan-board__reject {
+  margin: 0.1rem 0 0.2rem;
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+.plan-board__slot-ok {
+  height: 2px;
+  margin: 0.1rem 0;
+  background: var(--accent);
+}
+
+.plan-board__phase-head--over {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.plan-board__phase-end--live {
+  min-height: 1.75rem;
+}
+
+.plan-board__phase-end--dim {
+  opacity: 0.45;
+}
+
+.plan-board__phase-end--ok {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.plan-board__phase-end--reject {
+  box-shadow: inset 0 2px 0 var(--danger);
+}
+
+.plan-board__overlay {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.plan-board__fix-list {
+  margin: 0.35rem 0 0.8rem;
+  padding-left: 1.1rem;
+}
+
