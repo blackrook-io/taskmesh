@@ -19,6 +19,7 @@ import {
   getPlan,
   getPlanBoard,
   listPlans,
+  searchPlanCandidates,
   removePlanItem,
   reorderPhases,
   reorderPlan,
@@ -64,9 +65,19 @@ const patchBody = z.object({
   capacityHoursPerWeek: capacitySchema,
 });
 
-const listQuery = z.object({
-  projectId: z.coerce.number().int().positive().optional(),
-  status: planStatus.optional(),
+const listQuery = z
+  .object({
+    projectId: z.coerce.number().int().positive().optional(),
+    status: planStatus.optional(),
+    entityType: z.enum(["task", "todo"]).optional(),
+    entityId: z.coerce.number().int().positive().optional(),
+  })
+  .refine((query) => (query.entityType == null) === (query.entityId == null), {
+    message: "entityType and entityId are required together",
+  });
+
+const candidatesQuery = z.object({
+  q: z.string().max(200).optional(),
 });
 
 const reorderPhasesBody = z.object({
@@ -191,6 +202,17 @@ plansRouter.get("/:planId/board", async (req, res) => {
     const planId = idParam.parse(req.params.planId);
     const actorId = await getCurrentUserId(db);
     res.json({ data: await getPlanBoard(db, actorId, planId) });
+  } catch (err) {
+    handleRouteError(res, err);
+  }
+});
+
+plansRouter.get("/:planId/candidates", async (req, res) => {
+  try {
+    const planId = idParam.parse(req.params.planId);
+    const parsed = candidatesQuery.parse(req.query);
+    const actorId = await getCurrentUserId(db);
+    res.json({ data: await searchPlanCandidates(db, actorId, planId, parsed.q ?? "") });
   } catch (err) {
     handleRouteError(res, err);
   }

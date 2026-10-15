@@ -4,6 +4,15 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.87.5 — 2026-10-15
+
+### New Functionality
+- Add Tasks and ToDos to a plan phase by number or title. A candidate already on another plan shows that plan's PL#### badge. Adding a parent asks whether to include its direct children. A short form in the phase creates a Draft task with optional hours.
+- When Plans is enabled, the project rail lists that project's plans. A Task or ToDo shows every plan it belongs to, and a Mesh card offers Open in plan. Show dependencies names in-plan prerequisites on the board.
+
+### Enhancements
+- The plan search, draft-task, and new-plan fields use the same dark text-field theme as the rest of the app.
+
 ## 0.87.4 — 2026-10-15
 
 ### New Functionality

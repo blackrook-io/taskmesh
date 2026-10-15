@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiRequestError, apiJson } from "../api/client";
 import { StateReasonDialog } from "../components/StateReasonDialog";
+import { PlanPhaseTools, type PlanCandidate } from "../components/PlanPhaseTools";
 import { HoursInput } from "../components/shared/HoursInput";
 import { useAuth } from "../lib/auth";
 import { formatEntityRef } from "../lib/entityRef";
@@ -24,6 +25,7 @@ import {
   planBlockerLabel,
   planCheckboxChecked,
   planCheckAction,
+  planDependencyGutter,
   planHoursSummary,
   planIndentDepth,
   planItemRef,
@@ -332,6 +334,7 @@ function PlanRow({
   canWriteItems,
   pending,
   drag,
+  gutter,
   onKeyboard,
   onComplete,
   onStart,
@@ -344,6 +347,7 @@ function PlanRow({
   canWriteItems: boolean;
   pending: boolean;
   drag: ActiveDrag | null;
+  gutter: string | null;
   onKeyboard: (itemId: number, direction: "up" | "down") => void;
   onComplete: () => void;
   onStart: () => void;
@@ -387,6 +391,7 @@ function PlanRow({
           .join(" ")}
         role="row"
       >
+      {gutter != null ? <span className="plan-board__gutter">{gutter}</span> : null}
       {canWriteItems ? (
         <button
           type="button"
@@ -471,12 +476,23 @@ function PhaseEndDrop({ phaseId, drag }: { phaseId: number; drag: ActiveDrag | n
 
 function PlanPhaseSection({
   phase,
+  planId,
   collapsed,
   canWriteItems,
+  canStructure,
+  showDeps,
+  allItems,
+  edges,
   pendingItemId,
+  addBusy,
+  pickerOpen,
   drag,
   onKeyboard,
   onToggle,
+  onOpenPicker,
+  onClosePicker,
+  onPick,
+  onQuickAdd,
   onComplete,
   onStart,
   onStartAndComplete,
@@ -484,12 +500,23 @@ function PlanPhaseSection({
   onHours,
 }: {
   phase: PlanBoardPhase;
+  planId: number;
   collapsed: boolean;
   canWriteItems: boolean;
+  canStructure: boolean;
+  showDeps: boolean;
+  allItems: PlanBoardItem[];
+  edges: PlanBoard["edges"];
   pendingItemId: number | null;
+  addBusy: boolean;
+  pickerOpen: boolean;
   drag: ActiveDrag | null;
   onKeyboard: (itemId: number, direction: "up" | "down") => void;
   onToggle: () => void;
+  onOpenPicker: () => void;
+  onClosePicker: () => void;
+  onPick: (candidate: PlanCandidate) => void;
+  onQuickAdd: (title: string, hours: number | null) => Promise<void>;
   onComplete: (item: PlanBoardItem) => void;
   onStart: (item: PlanBoardItem) => void;
   onStartAndComplete: (item: PlanBoardItem) => void;
@@ -519,6 +546,11 @@ function PlanPhaseSection({
           {accent ? <span className="plan-board__swatch" style={{ background: accent }} /> : null}
           {phase.name}
         </h2>
+        {canStructure ? (
+          <button type="button" className="btn small" onClick={pickerOpen ? onClosePicker : onOpenPicker}>
+            {pickerOpen ? "Close" : "+ Add items"}
+          </button>
+        ) : null}
         <p className="plan-board__phase-hours">{planHoursSummary(phase.rollup.hoursDone, phase.rollup.hoursTotal)}</p>
         <ProgressMeter rollup={phase.rollup} label={`${phase.name} progress`} />
         {unestimated ? <p className="plan-board__warn">{unestimated}</p> : null}
@@ -529,8 +561,13 @@ function PlanPhaseSection({
             <p className="muted plan-board__empty">No items in this phase.</p>
           ) : (
             <div className="plan-board__scroll">
-              <div className="plan-board__table" role="table" aria-label={phase.name}>
+              <div
+                className={showDeps ? "plan-board__table plan-board__table--deps" : "plan-board__table"}
+                role="table"
+                aria-label={phase.name}
+              >
                 <div className="plan-board__row plan-board__row--head" role="row">
+                  {showDeps ? <span>Depends</span> : null}
                   <span />
                   <span />
                   <span>Item</span>
@@ -547,6 +584,7 @@ function PlanPhaseSection({
                     canWriteItems={canWriteItems}
                     pending={pendingItemId === item.id}
                     drag={drag}
+                    gutter={showDeps ? planDependencyGutter(item, allItems, edges) : null}
                     onKeyboard={onKeyboard}
                     onComplete={() => onComplete(item)}
                     onStart={() => onStart(item)}
@@ -559,6 +597,18 @@ function PlanPhaseSection({
             </div>
           )}
           {canWriteItems ? <PhaseEndDrop phaseId={phase.id} drag={drag} /> : null}
+          {canStructure && !collapsed ? (
+            <PlanPhaseTools
+              planId={planId}
+              phaseId={phase.id}
+              phaseName={phase.name}
+              pickerOpen={pickerOpen}
+              busy={addBusy}
+              onClosePicker={onClosePicker}
+              onPick={onPick}
+              onQuickAdd={onQuickAdd}
+            />
+          ) : null}
         </>
       )}
     </section>
@@ -573,6 +623,11 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [reopen, setReopen] = useState<PlanBoardItem | null>(null);
+  const [showDeps, setShowDeps] = useState(false);
+  const [pickerPhaseId, setPickerPhaseId] = useState<number | null>(null);
+  const [pendingParent, setPendingParent] = useState<{ phaseId: number; candidate: PlanCandidate } | null>(
+    null,
+  );
   const [fixDialog, setFixDialog] = useState<{ revision: number; preview: PlanAutoSortPreview } | null>(null);
   const dragRef = useRef<ActiveDrag | null>(null);
   const [drag, setDrag] = useState<ActiveDrag | null>(null);
@@ -650,6 +705,59 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
     },
   });
 
+  const addMut = useMutation({
+    mutationFn: async (body: {
+      phaseId: number;
+      entityType: "task" | "todo";
+      entityId: number;
+      includeChildren: boolean;
+    }) => {
+      const res = await apiJson<{ data: PlanBoard }>(`/api/v1/plans/${planId}/items`, {
+        method: "POST",
+        body: JSON.stringify({
+          entityType: body.entityType,
+          entityId: body.entityId,
+          phaseId: body.phaseId,
+          includeChildren: body.includeChildren,
+        }),
+      });
+      return res.data;
+    },
+    onSuccess: (next) => {
+      setNotice(null);
+      setPendingParent(null);
+      setPickerPhaseId(null);
+      qc.setQueryData(["plan-board", planId], next);
+      void qc.invalidateQueries({ queryKey: ["plan-candidates", planId] });
+      void qc.invalidateQueries({ queryKey: ["plan-memberships"] });
+    },
+    onError: (err: Error) => {
+      setNotice(err.message);
+    },
+  });
+
+  const quickAdd = async (phaseId: number, title: string, hours: number | null) => {
+    const projectId = boardQuery.data?.plan.projectId ?? null;
+    try {
+      const created = await apiJson<{ data: { id: number } }>(
+        projectId != null ? `/api/v1/projects/${projectId}/tasks` : "/api/v1/tasks",
+        {
+          method: "POST",
+          body: JSON.stringify({ title, state: "new", estimateHours: hours }),
+        },
+      );
+      addMut.mutate({
+        phaseId,
+        entityType: "task",
+        entityId: created.data.id,
+        includeChildren: false,
+      });
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not add the task");
+      throw err;
+    }
+  };
+
   const fixMut = useMutation({
     mutationFn: async (body: { revision: number; apply: boolean }) => {
       const res = await apiJson<{
@@ -706,6 +814,8 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
   const phases = orderPhases(board);
   const edges = board.edges ?? [];
   const canWriteItems = board.permissions.canWriteItems;
+  const canStructure = board.permissions.canStructure;
+  const allItems = board.phases.flatMap((phase) => phase.items);
   const sortableIds = board.phases
     .filter((phase) => !collapsed.includes(phase.id))
     .flatMap((phase) => phase.items.map((item) => `item:${item.id}`));
@@ -781,6 +891,14 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
           <h1>{board.plan.title}</h1>
         </div>
         <div className="plan-board__actions">
+          <button
+            type="button"
+            className="btn"
+            aria-pressed={showDeps}
+            onClick={() => setShowDeps((current) => !current)}
+          >
+            Show dependencies
+          </button>
           {canWriteItems ? (
             <button
               type="button"
@@ -814,12 +932,37 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
             <PlanPhaseSection
               key={phase.id}
               phase={phase}
+              planId={planId}
               collapsed={collapsed.includes(phase.id)}
               canWriteItems={canWriteItems}
+              canStructure={canStructure}
+              showDeps={showDeps}
+              allItems={allItems}
+              edges={edges}
               pendingItemId={pendingItemId}
+              addBusy={addMut.isPending}
+              pickerOpen={pickerPhaseId === phase.id}
               drag={canWriteItems ? drag : null}
               onKeyboard={onKeyboard}
               onToggle={() => togglePhase(phase.id)}
+              onOpenPicker={() => {
+                if (collapsed.includes(phase.id)) togglePhase(phase.id);
+                setPickerPhaseId(phase.id);
+              }}
+              onClosePicker={() => setPickerPhaseId((current) => (current === phase.id ? null : current))}
+              onPick={(candidate) => {
+                if (candidate.childCount > 0) {
+                  setPendingParent({ phaseId: phase.id, candidate });
+                  return;
+                }
+                addMut.mutate({
+                  phaseId: phase.id,
+                  entityType: candidate.entityType,
+                  entityId: candidate.entityId,
+                  includeChildren: false,
+                });
+              }}
+              onQuickAdd={(title, hours) => quickAdd(phase.id, title, hours)}
               onComplete={(item) => postState(item, "complete")}
               onStart={(item) => postState(item, "in_progress")}
               onStartAndComplete={(item) => postState(item, "complete")}
@@ -890,6 +1033,57 @@ function PlanBoardView({ planId, userId }: { planId: number; userId: number }) {
                 onClick={() => fixMut.mutate({ revision: fixDialog.revision, apply: true })}
               >
                 Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {pendingParent ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingParent(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-children-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h2 id="plan-children-title">
+              Also add its {pendingParent.candidate.childCount}{" "}
+              {pendingParent.candidate.childCount === 1 ? "child" : "children"}?
+            </h2>
+            <div className="modal-actions">
+              <button type="button" className="btn ghost" onClick={() => setPendingParent(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={addMut.isPending}
+                onClick={() =>
+                  addMut.mutate({
+                    phaseId: pendingParent.phaseId,
+                    entityType: pendingParent.candidate.entityType,
+                    entityId: pendingParent.candidate.entityId,
+                    includeChildren: false,
+                  })
+                }
+              >
+                No
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={addMut.isPending}
+                onClick={() =>
+                  addMut.mutate({
+                    phaseId: pendingParent.phaseId,
+                    entityType: pendingParent.candidate.entityType,
+                    entityId: pendingParent.candidate.entityId,
+                    includeChildren: true,
+                  })
+                }
+              >
+                Yes
               </button>
             </div>
           </div>

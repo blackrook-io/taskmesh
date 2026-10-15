@@ -42,6 +42,7 @@ export const IMPLEMENTED_MODULES = new Set<ProjectModuleKey>([
   "wiki",
   "canvases",
   "mesh",
+  "plans",
 ]);
 
 export function isProjectModuleKey(value: string): value is ProjectModuleKey {

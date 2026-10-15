@@ -37,6 +37,7 @@ import { useRegisterAssistantAttach } from "../lib/assistantAttach";
 import { useAuth } from "../lib/auth";
 import { userIsAdministrator } from "../lib/roles";
 import { patchTaskRecord } from "../lib/patchTask";
+import { ProjectPlansPanel } from "../components/ProjectPlansPanel";
 import { formatEntityRef } from "../lib/entityRef";
 import { documentExtractionStatus } from "../lib/documentExtraction";
 import { resolveEpubDocumentTitle } from "../lib/epubMeta";
@@ -71,6 +72,7 @@ const TAB_ALIASES: Record<string, Tab> = {
   wiki: "wiki",
   canvases: "canvases",
   mesh: "mesh",
+  plans: "plans",
 };
 
 function parseTab(raw: string | null): Tab {
@@ -1338,6 +1340,10 @@ export function ProjectDetailPage() {
       ) : null}
 
       {tab === "mesh" ? <MeshPanel key={`mesh-${projectId}`} projectId={projectId} /> : null}
+
+      {tab === "plans" ? (
+        <ProjectPlansPanel projectId={projectId} canCreate={canManageSettings} />
+      ) : null}
 
       <ConfirmDialog
         open={deleteProjectOpen}
