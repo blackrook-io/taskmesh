@@ -662,7 +662,8 @@ importExportRouter.post(
   withRestoredRequestAuth(upload.single("file")),
   async (req, res) => {
   try {
-    const entity = entityParam(req.params.entity ?? "");
+    const entityRaw = req.params.entity;
+    const entity = entityParam(typeof entityRaw === "string" ? entityRaw : "");
     if (!entity) {
       sendError(res, 400, "validation_error", "entity must be projects or tasks");
       return;

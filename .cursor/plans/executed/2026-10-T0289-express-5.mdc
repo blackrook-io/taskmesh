@@ -1,0 +1,56 @@
+# T0289 — Upgrade Express 4.22 to 5.x
+
+**Task:** T0289 (id 304) — Upgrade Express 4.22 to 5.x
+**State at plan:** `ready` · `stateManual: true` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** T0380 (complete), T0381 (complete)
+**Required by:** T0334 Create Release Candidate (`new`)
+**Branch (after approval):** `T0289-express-5`
+**Version on finish-up:** PATCH (no migration). Skip `FEATURES.md` (dependency upgrade).
+
+## Why
+
+The API is on Express **4.22.2** (`package.json` range `^4.21.2`) with `@types/express` `^4.17.21`. Current Express 5 is **5.3.0**; current `@types/express` 5 is **5.0.6**.
+
+T0380 and T0381 already landed the two code breaks that had to ship while still on Express 4:
+
+- Query sanitizer replaces `req.query` with `Object.defineProperty` (`src/middleware/sanitizeIncomingStrings.ts`) and tests the getter case.
+- `beginAfterListen` exits on a listen error before background jobs (`src/lib/listenStartup.ts`, wired from `src/index.ts`).
+
+This task is the package and types bump, plus the remaining checks from the task description.
+
+## Target
+
+- `express@5` → `^5.3.0` (5.3.0, the current 5.x release)
+- `@types/express@5` → `^5.0.6`
+- Leave the existing `qs` override (`^6.16.0`); Express 5.3 already pulls a patched `qs`.
+
+`scripts/package_upgrade.sh` is an untracked stub that feeds `npm list` into `npm install --save-dev`. Replace it with the commands for this upgrade: install those two packages at the versions above, then `npm test`, `npm run lint`, and `npm run build:all`. Commit the script on the feature branch. Do not commit the other dirty files already on `main` (`UPGRADES.md` local edit, moved plan files, `docs/design/*`, `scripts/enable-pgvector.sh`).
+
+## Change
+
+1. **Install** Express 5.3 and `@types/express` 5. Run `tsc` and fix compile errors. Expect stricter handler, `params`, and `query` typing. Keep fixes mechanical (narrow a param, adjust a callback signature). If a type error needs a behavior change, stop and call it out before expanding scope.
+2. **`req.body` when no body is sent.** Express 5 leaves `req.body` `undefined` instead of `{}`. Audit routes that `parse(req.body)` against client calls that POST or DELETE with no body. Where a handler should accept that, use `parse(req.body ?? {})`. Do not blanket-wrap every parse.
+3. **`res.sendFile` and hidden folders.** Upload download (`src/routes/v1/uploads.ts`) and the production SPA fallback (`src/index.ts`) pass absolute paths. Express 5 `send` 404s `dotfiles: "ignore"` when any path segment is hidden (a directory starting with `.`). Default `UPLOAD_DIR` (`data/uploads`) and a normal client `dist/` are fine. Add a short note in `INSTALL.md` (next to `UPLOAD_DIR`) and `UPGRADES.md`: an `UPLOAD_DIR` under a hidden directory (for example `/home/user/.taskmesh/uploads`) will 404 downloads. Apply that note without taking the unrelated uncommitted `UPGRADES.md` edits.
+4. **5.1–5.3 skim (no code unless a check fails):**
+   - 5.1: `Uint8Array` in `res.send`, `res.sendFile` `etag` option, `res.links` — unused.
+   - 5.2.0 / 5.2.1: extended query-parser change was reverted. `res.redirect(undefined)` warns; existing redirects use `res.redirect(302, url)`. `urlencoded` stays `extended: false`.
+   - 5.3: `res.send` omits `Content-Length` when `Transfer-Encoding` is set (we do not set it). QUERY can 304 (we do not route QUERY). Invalid `body-parser` `limit` now throws; `"10mb"` and `"1mb"` stay valid. `content-disposition` 2 no longer quotes token filenames from `res.download` / `res.attachment` / `res.sendFile`. Our downloads set `Content-Disposition` themselves, with quotes. Confirm `sendFile` does not replace that header. Update a test only if one asserts the exact header from Express.
+
+## Tests and checks
+
+- Existing sanitizer and listen-startup tests stay green under Express 5.
+- Add or extend a test only if the body audit finds a handler that must tolerate a missing body.
+- `npm test`, `npm run lint`, `npm run build:all`.
+- Smoke on the DEV API (`:3001`): login, one upload download, and a JSON route that reads `req.query` after the sanitizer. Production SPA deep-link (`sendFile` of `index.html`) needs a production build; hit that route if `client/dist` is present, and say so in the QA checklist if it is not.
+
+## Out of scope
+
+Re-doing T0380 or T0381. Route-syntax changes (none of the wildcard / optional / regexp forms). `FEATURES.md`. Schema migrations. Deploy.
+
+## Finish-up
+
+PATCH bump from current `package.json`, `RELEASE_NOTES.md` enhancement for the Express 5 upgrade, archive this plan on the feature branch. Mention that `stateManual` stayed on so child completion did not auto-complete this task.
+
+## Shipped
+
+Express 5.3.0 and `@types/express` 5.0.6. Version `0.90.4`. No QA follow-ups.

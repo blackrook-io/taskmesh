@@ -513,6 +513,8 @@ sudo mkdir -p /var/lib/taskmesh/uploads
 sudo chown "$USER":"$USER" /var/lib/taskmesh/uploads
 ```
 
+Express 5 `res.sendFile` returns 404 when any directory in the absolute path starts with `.`. Keep `UPLOAD_DIR` on a normal path such as `/var/lib/taskmesh/uploads` or the default `data/uploads`. A path under a hidden folder, such as `/home/you/.taskmesh/uploads`, makes every upload download fail.
+
 Do **not** commit `.env` (it is gitignored). Keep the password aligned with the Postgres role from §6.
 
 ### Assistant (OpenAI provider plugin)
