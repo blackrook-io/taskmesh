@@ -4,6 +4,22 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.95.0 — 2026-10-19
+
+Release candidate for testers, published as pre-release `v0.95.0-rc1`. This summarizes everything shipped after `v0.50.0-beta` (app `0.50.0`). The in-app Update link ignores pre-releases.
+
+### New Functionality
+- Plans can be turned on per project. A plan board groups Tasks and ToDos into phases, shows hours and progress, and can be reordered without placing a dependent above its prerequisite. The board shows a finish-date range, a read-only timeline, and an optional AI refinement that sits beside the baseline.
+- Mesh opens a focused record over its contents, with pins, color modes, dependency signals, and hover cards. Records can be linked (relates to, references, supports, or part of). Suggested links offer a match percent and a reason.
+- The assistant can use OpenAI, Anthropic, Gemini, Azure OpenAI, or local Ollama. Keys are encrypted. A project can be full, read-only, excluded, or local-models only. Chat can capture tasks, suggest tags, warn about duplicates, answer a project question with citations, and build an attention digest.
+- Tasks and ToDos store a quarter-hour Hours estimate and a Start date. Task lists can hide completed work, and a parent row shows its done/total count. Project Overview includes Next Up for work assigned to you.
+
+### Breaking Changes
+- TaskMesh requires Node.js 24 or newer. Node 22 is no longer supported.
+- Migrations run through `0086`. A bare-metal database needs the PostgreSQL `vector` extension before migrate. Docker Compose already includes it.
+- Saved Mesh layouts for the retired Plan view are removed. The layouts API accepts only the Focus view.
+- An `UPLOAD_DIR` under a hidden directory returns 404, because Express 5 `res.sendFile` refuses a path segment that starts with `.`.
+
 ## 0.90.8 — 2026-10-19
 
 ### Enhancements
