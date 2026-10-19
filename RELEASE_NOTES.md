@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.90.1 — 2026-10-19
+
+### Enhancements
+- Project Overview’s Next Up panel lists incomplete Tasks and ToDos assigned to you that are due in the next few days. The window starts at three days, including today, and you can change it. Layouts that already had My Tasks Today keep the same panel.
+
 ## 0.90.0 — 2026-10-19
 
 ### New Functionality

@@ -1,0 +1,45 @@
+# T0361 — Overview Next Up
+
+**Branch (after approval):** `T0361-overview-next-up`  
+**Task:** T0361 (id 377) · Project 4 (TaskMesh) · Ready · Medium · 0.25h  
+**Depends on:** none
+
+## Goal
+
+On the Project Overview dashboard, turn the **My Tasks Today** panel into **Next Up**: a short mixed list of incomplete Tasks and ToDos due in the next few days.
+
+## Proposed decisions (confirm on approval)
+
+| Topic | Proposal |
+|-------|----------|
+| Title | Display name **Next Up** in the panel heading, Add-panel catalog, and remove dialogs. |
+| Stored type | Keep catalog key `my_tasks_today` so existing layouts keep the panel. No migration. |
+| Window | Due date from **local today through today + 2** (three calendar days, inclusive). Enable the existing **Days** control, default **3**, so the window is adjustable (1–365) like Upcoming ToDos. |
+| Who | **Assigned to the current user only** (`assigneeId` = session user), for both Tasks and ToDos. Same “mine” rule as today’s My Tasks Today panel. |
+| What | Incomplete Tasks **and** ToDos (`complete` / `canceled` excluded). Overdue items stay off this panel (still covered by Overdue ToDos / Next tasks due). |
+| Order | Due date ascending, then Tasks before ToDos on the same day, then id. Existing **Show** limit (5 / 10 / 20) still caps the list. |
+| Row | Due date as the meta; number uses the Task or ToDo formatter. Click opens the matching editor. |
+| Empty | Keep “Nothing to show”. |
+
+## Out of scope
+
+- New catalog panel (this is a rename + query change of the existing type).
+- Changing Overdue ToDos, Upcoming ToDos, Next tasks due, or Recently completed.
+- Showing unassigned or other people’s items, priority sort, or a separate “today only” mode.
+- Schema migration.
+
+## Implementation
+
+1. Client registry (`client/src/lib/projectOverview.ts`): title **Next Up**; mark the type as mixed (task + todo) and `usesDays: true`. Replace `selectMyTasksToday` with a selector that merges incomplete tasks and todos assigned to the current user with `dueDate` in `[today, today + (days - 1)]` (days default 3). Row objects include `entity: "task" | "todo"` so open and number labels are per row.
+2. Panel UI (`OverviewPanels.tsx`): `openRow` and the number label use the row entity. Days control appears for this panel. New instances default `days: 3` (not 14).
+3. Server mirror (`src/lib/projectOverviewQueries.ts` + tests) and `src/services/overviewPrefs.ts` default days for this type so saved layouts without `days` read as 3. Client and server selectors stay aligned.
+4. Update `projectOverviewQueries.test.ts` (and any client tests) for the mixed window. `FEATURES.md` “My Tasks Today” bullet updates on finish-up only.
+
+## QA
+
+- Existing Overview that already has My Tasks Today shows **Next Up** after reload, still in the same grid slot.
+- Panel lists incomplete Tasks and ToDos **assigned to you** due today, tomorrow, and the day after; hides other people’s items, later dates, overdue items, and complete/canceled.
+- Changing Days (for example to 1 or 7) and Show limit persists across reload.
+- Clicking a Task opens the task editor; clicking a ToDo opens the todo editor.
+- Add panel catalog offers **Next Up**.
+- Other overview panels are unchanged.

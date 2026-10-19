@@ -23,6 +23,7 @@ export type OverviewPanelLimit = (typeof OVERVIEW_PANEL_LIMITS)[number];
 export const OVERVIEW_PANELS_WITH_DAYS: ReadonlySet<OverviewPanelType> = new Set([
   "recently_completed_tasks",
   "todos_upcoming",
+  "my_tasks_today",
 ]);
 
 /** Seed order for project default / legacy conversion (T0135 four). */
@@ -35,6 +36,12 @@ export const OVERVIEW_DEFAULT_PANEL_TYPES: readonly OverviewPanelType[] = [
 
 export const DEFAULT_OVERVIEW_PANEL_LIMIT: OverviewPanelLimit = 5;
 export const DEFAULT_OVERVIEW_PANEL_DAYS = 14;
+/** Next Up (stored type my_tasks_today) looks ahead this many calendar days, including today. */
+export const DEFAULT_NEXT_UP_DAYS = 3;
+
+export function defaultDaysForType(type: OverviewPanelType): number {
+  return type === "my_tasks_today" ? DEFAULT_NEXT_UP_DAYS : DEFAULT_OVERVIEW_PANEL_DAYS;
+}
 
 export function isOverviewPanelType(value: string): value is OverviewPanelType {
   return (OVERVIEW_PANEL_TYPES as readonly string[]).includes(value);
@@ -46,7 +53,7 @@ export function isOverviewPanelLimit(value: number): value is OverviewPanelLimit
 
 export function defaultPrefForType(type: OverviewPanelType): OverviewPanelPref {
   if (OVERVIEW_PANELS_WITH_DAYS.has(type)) {
-    return { limit: DEFAULT_OVERVIEW_PANEL_LIMIT, days: DEFAULT_OVERVIEW_PANEL_DAYS };
+    return { limit: DEFAULT_OVERVIEW_PANEL_LIMIT, days: defaultDaysForType(type) };
   }
   return { limit: DEFAULT_OVERVIEW_PANEL_LIMIT };
 }
@@ -65,7 +72,7 @@ export function makePanelInstance(
     const days =
       typeof daysRaw === "number" && Number.isInteger(daysRaw) && daysRaw >= 1 && daysRaw <= 365
         ? daysRaw
-        : (base.days ?? DEFAULT_OVERVIEW_PANEL_DAYS);
+        : (base.days ?? defaultDaysForType(type));
     return { id, type, limit, days };
   }
   return { id, type, limit };

@@ -107,20 +107,32 @@ export function selectUpcoming<T extends OverviewDueRecord>(
     .slice(0, limit);
 }
 
-export function selectMyTasksToday<T extends OverviewAssigneeRecord>(
-  rows: T[],
+/** Incomplete tasks and todos assigned to the user, due today through today+(days-1). */
+export function selectNextUp<T extends OverviewAssigneeRecord>(
+  tasks: T[],
+  todos: T[],
   userId: number,
   limit: number,
+  days: number,
   now = new Date(),
-): T[] {
+): Array<T & { entity: "task" | "todo" }> {
   const today = localYmd(now);
-  return rows
-    .filter(
-      (t) =>
-        isIncomplete(t.state) &&
-        t.assigneeId === userId &&
-        t.dueDate === today,
-    )
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)
+  const latest = addDaysYmd(today, Math.max(1, days) - 1);
+  const inWindow = (row: T) =>
+    isIncomplete(row.state) &&
+    row.assigneeId === userId &&
+    row.dueDate != null &&
+    row.dueDate >= today &&
+    row.dueDate <= latest;
+  return [
+    ...tasks.filter(inWindow).map((row) => ({ ...row, entity: "task" as const })),
+    ...todos.filter(inWindow).map((row) => ({ ...row, entity: "todo" as const })),
+  ]
+    .sort((a, b) => {
+      const due = (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
+      if (due !== 0) return due;
+      if (a.entity !== b.entity) return a.entity === "task" ? -1 : 1;
+      return a.id - b.id;
+    })
     .slice(0, limit);
 }
