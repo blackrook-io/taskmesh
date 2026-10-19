@@ -1,0 +1,40 @@
+# T0380 — Express 5 prep: replace req.query assignment in the sanitizer
+
+**Task:** T0380 (id 407) — Express 5 prep: replace req.query assignment in the sanitizer
+**Parent:** T0289 (id 304) — Upgrade Express 4.22 to 5.x (`blocked`; required-by, not a Depends-on)
+**State at plan:** `ready` · Priority: high · Project: TaskMesh (4)
+**Depends on:** none
+**Branch (after approval):** `T0380-express-query-sanitizer`
+**Version on finish-up:** PATCH (no migration)
+
+## Why
+
+`sanitizeIncomingStrings` assigns `req.query = sanitizeIncomingValue(req.query)`. Express 5 makes `req.query` a getter. That assignment throws in strict mode, so every `/api/v1` request would 500. Mutating the object the getter returns is also wrong, because the getter can re-parse the query string. `req.body` stays a normal assignment.
+
+Stay on the current Express 4. No package or `@types/express` bump (that stays on T0289).
+
+## Change
+
+In `src/middleware/sanitizeIncomingStrings.ts`, when `req.query` is a non-null object, replace the assignment with:
+
+```ts
+Object.defineProperty(req, "query", {
+  value: sanitizeIncomingValue(req.query),
+  writable: true,
+  configurable: true,
+  enumerable: true,
+});
+```
+
+Keep the existing skip when `req.query` is null or not an object. Leave the body path unchanged.
+
+## Tests
+
+New `src/middleware/sanitizeIncomingStrings.test.ts` (node:test, same style as the other middleware tests):
+
+1. Writable `req.query` (Express 4): a value containing HTML is stripped before `next()`, and `req.body` HTML is still stripped by assignment.
+2. Getter `req.query` (Express 5 shape): define `query` with a getter and no setter, call the middleware, and assert it does not throw, `next()` runs, and the handler sees the stripped value.
+
+## Out of scope
+
+Express 5 package bump, `@types/express` ^5, `app.listen` bind-error handling (T0381), `res.sendFile` hidden-folder notes, and an HTTP integration test through the full app.

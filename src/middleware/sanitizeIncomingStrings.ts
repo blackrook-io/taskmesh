@@ -7,7 +7,14 @@ export function sanitizeIncomingStrings(req: Request, _res: Response, next: Next
     req.body = sanitizeIncomingValue(req.body);
   }
   if (req.query != null && typeof req.query === "object") {
-    req.query = sanitizeIncomingValue(req.query) as Request["query"];
+    // Express 5 exposes req.query as a getter. Assignment throws, and mutating
+    // the returned object is unsafe because the getter can re-parse the URL.
+    Object.defineProperty(req, "query", {
+      value: sanitizeIncomingValue(req.query),
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
   }
   next();
 }
