@@ -6,11 +6,11 @@ Steps for an administrator who already has TaskMesh installed and wants a newer 
 
 Releases: [github.com/blackrook-io/taskmesh/releases](https://github.com/blackrook-io/taskmesh/releases)
 
-## 0.5 Beta is for testers
+## This release candidate is for testers
 
-Tag **`v0.50.0-beta`** is a GitHub **pre-release**. It is not a stable production release. The in-app Update link ignores pre-releases, so a stable install will not offer this beta. Check out the tag when you want this build. Tracking `main` moves on to later development after the tag.
+Tag **`v0.95.0-rc1`** is a GitHub **pre-release** of app version **0.95.0**. It is not a stable production release. The in-app Update link ignores pre-releases, so a stable install will not offer this candidate. Check out the tag when you want this build. Tracking `main` moves on to later development after the tag.
 
-Release page: [v0.50.0-beta](https://github.com/blackrook-io/taskmesh/releases/tag/v0.50.0-beta)
+Release page: [v0.95.0-rc1](https://github.com/blackrook-io/taskmesh/releases/tag/v0.95.0-rc1)
 
 ## Before you start
 
@@ -19,7 +19,9 @@ Release page: [v0.50.0-beta](https://github.com/blackrook-io/taskmesh/releases/t
 3. Leave `.env` and `.env.docker` in place. Git does not replace them. If the release says a variable is now required, edit the file yourself.
 4. Keep `UPLOAD_DIR` off hidden directories. Express 5 `res.sendFile` returns 404 when any folder in the absolute path starts with `.` (for example `/home/you/.taskmesh/uploads`). `/var/lib/taskmesh/uploads` and the default `data/uploads` are fine.
 
-On the 0.5 Beta line, migrations run through `0046`. If you set `MFA_TOTP_KEY` or `OAUTH_CREDENTIALS_KEY`, each value must be at least 32 characters or the API will refuse to start. Do not re-run `deploy/install-ubuntu.sh` to upgrade an install that is already serving the site.
+This candidate runs migrations through `0086`. On bare metal, enable the PostgreSQL `vector` extension before `npm run db:migrate`. `sudo bash scripts/enable-pgvector.sh` installs the matching `postgresql-<major>-pgvector` package and creates the extension. `sudo bash scripts/enable-pgvector.sh --check` only reports whether it is already active. Docker Compose uses `pgvector/pgvector:pg16` and does not need that script.
+
+If you set `MFA_TOTP_KEY`, `OAUTH_CREDENTIALS_KEY`, or `AI_CREDENTIALS_KEY`, each value must be at least 32 characters or the API will refuse to start. Do not re-run `deploy/install-ubuntu.sh` to upgrade an install that is already serving the site. Saved Mesh layouts for the retired Plan view are removed on migrate.
 
 ## Bare metal (systemd + nginx)
 
@@ -28,7 +30,7 @@ From the clone (often `/srv/taskmesh`), as the user that owns the checkout:
 ```bash
 cd /srv/taskmesh
 git fetch --tags origin
-git checkout v0.50.0-beta
+git checkout v0.95.0-rc1
 npm install
 npm install --prefix client
 npm run db:migrate
@@ -48,7 +50,7 @@ From the clone:
 ```bash
 cd taskmesh
 git fetch --tags origin
-git checkout v0.50.0-beta
+git checkout v0.95.0-rc1
 docker compose --env-file .env.docker up -d --build
 docker compose --env-file .env.docker ps
 ```
