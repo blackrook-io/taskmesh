@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.89.2 — 2026-10-19
+
+### Enhancements
+- A parent row in the task list shows its done/total count and progress bar beside the chevron, whether the group is expanded or collapsed. The count and bar no longer repeat next to the title.
+
 ## 0.89.1 — 2026-10-19
 
 ### Fixes
