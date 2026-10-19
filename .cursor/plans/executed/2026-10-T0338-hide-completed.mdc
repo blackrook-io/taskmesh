@@ -1,0 +1,54 @@
+# T0338 — List view: global “Hide completed” toggle
+
+**Status:** Complete — finishing up  
+**Branch:** `T0338-hide-completed`  
+**App version:** `0.90.0` (MINOR; new `user_task_list_state.hide_completed` column)  
+**DEV Task:** T0338 (`id` 354), project 4, state `in_progress`, priority medium  
+**Depends on:** T0335 List view: derived parent status and progress indicator (`complete`)  
+**Schema:** yes — `hide_completed` on `user_task_list_state` (finish-up MINOR)
+
+## Decisions (proposed — confirm before implement)
+
+| # | Decision |
+|---|----------|
+| A | One user-wide preference, shared by the project Tasks list (grouped and nav list) and All Tasks / Unassigned. Same control on both filter bars. Default **off**. |
+| B | Persist `hideCompleted` on `user_task_list_state` (existing per-user row). Survives sessions and browsers. Toggling it does **not** write group or parent collapse ids. |
+| C | The toggle hides `complete` and `canceled`. Pending, Blocked, On Hold, Draft, Ready, and In Progress stay visible. The button label stays **Hide completed**. |
+| D | Hide walks the tree after the current list/group filter. A row is omitted when every task in its subtree that would otherwise show is Complete or Canceled — a closed leaf, or a parent whose visible descendants are all closed. A parent with any open descendant stays, with Complete and Canceled children omitted. A Complete or Canceled parent that still has an open descendant stays. |
+| E | Group and Unassigned headers stay, including when every member row is hidden. Their collapse flags are unchanged, so turning the toggle off shows the same expanded and collapsed groups as before. |
+| F | `rollupDone` / `rollupTotal` stay the server counts (T0335). Hiding does not recompute them. Group header task counts stay the matched-root count. |
+| G | While the toggle is on, a visible parent’s progress meter tooltip adds the hidden closed descendants under that row, after the existing “N of M complete” text. Example: `Hidden: 3 Completed, 1 Canceled`. Omit a zero count. No tooltip change when nothing under that row is hidden or the toggle is off. |
+
+## Context
+
+`TaskListFilterBar` is the shared toolbar on `TasksListPage` and the project Tasks tab. Rows are built in `buildGlobalDisplayRows` and `TaskBoard` `buildRows`, which already honor per-user collapse from `GET /api/v1/users/me/task-list-state`. Progress sits on the parent twist (`TaskRollupMeter`) and already uses persisted rollup fields.
+
+## Goals / acceptance
+
+1. A **Hide completed** control sits in the filter bar, immediately to the right of Filter.
+2. Its on/off state persists per user across sessions.
+3. When on, Complete and Canceled leaves are hidden at every level even if the group or parent is expanded.
+4. A parent whose descendants are all Complete or Canceled is hidden. A parent with any open descendant stays, and its Complete and Canceled children are hidden.
+5. Progress fractions stay the full counts (3/4 stays 3/4).
+6. The progress meter tooltip notes hidden Complete and Canceled descendants while the toggle is on.
+7. Turning the toggle off shows each group and parent in the expand/collapse state it had before.
+
+## Out of scope
+
+- Kanban board, Mesh, Plans, To-do lists, Ideas
+- Changing rollup math or derived parent status (T0335)
+- A per-project or per-list hide preference
+
+## Approach
+
+1. **Schema** — `hide_completed boolean not null default false` on `user_task_list_state`. Update `docs/database/platform.md` (and the tasks.md sentence if it mentions this table) and run `npm run docs:sync-schema`.
+2. **API** — include `hideCompleted` on the task-list-state payload. Accept a dedicated patch `{ "hideCompleted": true|false }` alongside the existing collapse toggle body (discriminated, strict).
+3. **Client state** — extend `useTaskListViewState` with the flag and a setter (optimistic, same revision guard as collapse).
+4. **Hide walk** — pure function used by both row builders: given the post-filter child list, drop subtrees that are entirely Complete or Canceled; keep ancestors that still have an open descendant. `hasChildren` follows remaining visible children so a parent with only hidden closed kids does not keep an empty twist.
+5. **Toolbar** — `aria-pressed` button labeled “Hide completed” in `TaskListFilterBar`, right of Filter, styled like the active filter button when on.
+6. **Tooltip** — optional hidden closed counts on `TaskRollupMeter`. Count Complete and Canceled tasks in the subtree that the hide walk omitted, and show only the non-zero parts.
+7. **Tests** — unit tests for the hide walk (mixed parent, all-complete parent, complete parent with an open grandchild, canceled leaf hidden, canceled parent with an open child kept, collapse ids untouched) and the task-list-state parse/patch for the new flag.
+
+## QA notes
+
+Check project Tasks (a group expanded, a parent expanded, a parent collapsed), All Tasks, a 3/4 parent whose three Complete children disappear while the fraction stays 3/4, a Canceled sibling that disappears with them, the tooltip (`Hidden: N Completed, M Canceled`), reload persistence, and that turning the toggle off restores the same group and parent twist states.

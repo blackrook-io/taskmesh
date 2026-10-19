@@ -1,0 +1,1 @@
+ALTER TABLE "user_task_list_state" ADD COLUMN "hide_completed" boolean DEFAULT false NOT NULL;

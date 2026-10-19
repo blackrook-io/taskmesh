@@ -4,15 +4,19 @@ export type TaskListState = {
   collapsedGroupIds: number[];
   collapsedUngroupedProjectIds: number[];
   collapsedParentIds: number[];
+  hideCompleted: boolean;
 };
 
 export const EMPTY_TASK_LIST_STATE: TaskListState = {
   collapsedGroupIds: [],
   collapsedUngroupedProjectIds: [],
   collapsedParentIds: [],
+  hideCompleted: false,
 };
 
-function columnForKind(kind: TaskListStateKind): keyof TaskListState {
+type CollapseKey = Exclude<keyof TaskListState, "hideCompleted">;
+
+function columnForKind(kind: TaskListStateKind): CollapseKey {
   if (kind === "group") return "collapsedGroupIds";
   if (kind === "ungrouped") return "collapsedUngroupedProjectIds";
   return "collapsedParentIds";
@@ -31,4 +35,10 @@ export function applyTaskListStateToggle(
   if (collapsed === has) return state;
   const nextIds = collapsed ? [...current, id] : current.filter((n) => n !== id);
   return { ...state, [key]: nextIds };
+}
+
+/** Set Hide completed. Returns the same object when nothing changes. */
+export function applyHideCompleted(state: TaskListState, hideCompleted: boolean): TaskListState {
+  if (state.hideCompleted === hideCompleted) return state;
+  return { ...state, hideCompleted };
 }

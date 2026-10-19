@@ -11,15 +11,19 @@ export type TaskListState = {
   collapsedGroupIds: number[];
   collapsedUngroupedProjectIds: number[];
   collapsedParentIds: number[];
+  hideCompleted: boolean;
 };
 
 export const EMPTY_TASK_LIST_STATE: TaskListState = {
   collapsedGroupIds: [],
   collapsedUngroupedProjectIds: [],
   collapsedParentIds: [],
+  hideCompleted: false,
 };
 
-function columnForKind(kind: TaskListStateKind): keyof TaskListState {
+type CollapseKey = Exclude<keyof TaskListState, "hideCompleted">;
+
+function columnForKind(kind: TaskListStateKind): CollapseKey {
   if (kind === "group") return "collapsedGroupIds";
   if (kind === "ungrouped") return "collapsedUngroupedProjectIds";
   return "collapsedParentIds";
@@ -43,12 +47,20 @@ export function taskListStateFromRow(row: {
   collapsedGroupIds: unknown;
   collapsedUngroupedProjectIds: unknown;
   collapsedParentIds: unknown;
+  hideCompleted?: unknown;
 }): TaskListState {
   return {
     collapsedGroupIds: normalizeIdList(row.collapsedGroupIds),
     collapsedUngroupedProjectIds: normalizeIdList(row.collapsedUngroupedProjectIds),
     collapsedParentIds: normalizeIdList(row.collapsedParentIds),
+    hideCompleted: row.hideCompleted === true,
   };
+}
+
+/** Set the Hide completed flag. Returns the same object when nothing changes. */
+export function applyHideCompleted(state: TaskListState, hideCompleted: boolean): TaskListState {
+  if (state.hideCompleted === hideCompleted) return state;
+  return { ...state, hideCompleted };
 }
 
 /** Add or remove one id. Returns the same object when nothing changes. */
@@ -72,6 +84,7 @@ export async function getTaskListState(db: Db, userId: number): Promise<TaskList
       collapsedGroupIds: schema.userTaskListState.collapsedGroupIds,
       collapsedUngroupedProjectIds: schema.userTaskListState.collapsedUngroupedProjectIds,
       collapsedParentIds: schema.userTaskListState.collapsedParentIds,
+      hideCompleted: schema.userTaskListState.hideCompleted,
     })
     .from(schema.userTaskListState)
     .where(eq(schema.userTaskListState.userId, userId))
@@ -98,6 +111,7 @@ export async function patchTaskListState(
         collapsedGroupIds: schema.userTaskListState.collapsedGroupIds,
         collapsedUngroupedProjectIds: schema.userTaskListState.collapsedUngroupedProjectIds,
         collapsedParentIds: schema.userTaskListState.collapsedParentIds,
+        hideCompleted: schema.userTaskListState.hideCompleted,
       })
       .from(schema.userTaskListState)
       .where(eq(schema.userTaskListState.userId, userId))
@@ -119,6 +133,41 @@ export async function patchTaskListState(
         collapsedParentIds: next.collapsedParentIds,
         updatedAt: new Date(),
       })
+      .where(eq(schema.userTaskListState.userId, userId));
+    return next;
+  });
+}
+
+/** Persist Hide completed without changing collapse id lists. */
+export async function patchHideCompleted(
+  db: Db,
+  userId: number,
+  hideCompleted: boolean,
+): Promise<TaskListState> {
+  return db.transaction(async (tx) => {
+    await tx.insert(schema.userTaskListState).values({ userId }).onConflictDoNothing();
+    const [row] = await tx
+      .select({
+        collapsedGroupIds: schema.userTaskListState.collapsedGroupIds,
+        collapsedUngroupedProjectIds: schema.userTaskListState.collapsedUngroupedProjectIds,
+        collapsedParentIds: schema.userTaskListState.collapsedParentIds,
+        hideCompleted: schema.userTaskListState.hideCompleted,
+      })
+      .from(schema.userTaskListState)
+      .where(eq(schema.userTaskListState.userId, userId))
+      .for("update");
+    if (!row) {
+      throw Object.assign(new Error("Task list state row missing after insert"), {
+        status: 500,
+        code: "task_list_state_missing",
+      });
+    }
+    const current = taskListStateFromRow(row);
+    const next = applyHideCompleted(current, hideCompleted);
+    if (next === current) return current;
+    await tx
+      .update(schema.userTaskListState)
+      .set({ hideCompleted: next.hideCompleted, updatedAt: new Date() })
       .where(eq(schema.userTaskListState.userId, userId));
     return next;
   });

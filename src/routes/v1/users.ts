@@ -30,6 +30,7 @@ import { clearMfaChallengeCookie } from "../../lib/mfaChallengeCookie.js";
 import { attachRolesToProfile } from "../../services/roles.js";
 import {
   getTaskListState,
+  patchHideCompleted,
   patchTaskListState,
   TASK_LIST_STATE_KINDS,
 } from "../../services/taskListState.js";
@@ -56,13 +57,21 @@ const patchBody = z
   })
   .strict();
 
-const taskListStatePatchBody = z
+const taskListCollapsePatchBody = z
   .object({
     kind: z.enum(TASK_LIST_STATE_KINDS),
     id: z.number().int().positive(),
     collapsed: z.boolean(),
   })
   .strict();
+
+const taskListHidePatchBody = z
+  .object({
+    hideCompleted: z.boolean(),
+  })
+  .strict();
+
+const taskListStatePatchBody = z.union([taskListCollapsePatchBody, taskListHidePatchBody]);
 
 const passwordBody = z
   .object({
@@ -129,7 +138,10 @@ usersRouter.patch("/me/task-list-state", async (req, res) => {
   try {
     const user = await getCurrentUser(db);
     const body = taskListStatePatchBody.parse(req.body);
-    const data = await patchTaskListState(db, user.id, body.kind, body.id, body.collapsed);
+    const data =
+      "hideCompleted" in body
+        ? await patchHideCompleted(db, user.id, body.hideCompleted)
+        : await patchTaskListState(db, user.id, body.kind, body.id, body.collapsed);
     res.json({ data });
   } catch (err) {
     handleRouteError(res, err);
