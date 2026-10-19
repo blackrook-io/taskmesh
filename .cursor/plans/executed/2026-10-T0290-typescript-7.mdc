@@ -1,0 +1,46 @@
+# T0290 — Upgrade server TypeScript 5.9 to 7.0
+
+**Task:** T0290 (id 305) — Upgrade server TypeScript 5.9 to 7.0 (via 6.0)
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** none
+**Required by:** T0334 Create Release Candidate (`new`)
+**Branch (after approval):** `T0290-typescript-7`
+**Version on finish-up:** PATCH (no migration). Skip `FEATURES.md` (toolchain upgrade).
+
+## Why
+
+The API lockfile resolves `typescript` **5.9.3** (`package.json` range `^5.7.2`). TypeScript 7.0 is the native compiler and matches 6.0’s type-checking once a project compiles cleanly on 6.0 with no `ignoreDeprecations`. The client stays on its own TypeScript (`~6.0.2` in `client/package.json`).
+
+`npm run build` is `tsc -b plugins/ai-providers && tsc`. Plugin projects do not inherit the root `tsconfig.json`. `plugins/ai-providers/contract` imports `node:net` and `node:assert/strict`, so the 6.0 `types: []` default breaks that build unless those configs list `node` too.
+
+## Target
+
+- Root devDependency `typescript` → latest **7.0.x** (7.0.2 was current on 2026-10-11; pin whatever `npm view typescript@7 version` reports at install time, range `^7.0.0`).
+- Path: install **6.0.x** first, add `types`, build with no deprecation warnings and no `ignoreDeprecations`, then install **7.0.x** and build again.
+- If 7.0 fails in a way 6.0 does not (compiler bug, or the workspace package breaks the editor language service), stop at 6.0, match the client major, and record why in a Task comment. That outcome is in the task.
+
+## Change
+
+1. **`types`.** Add `"types": ["node"]` to the root `tsconfig.json` and to every `plugins/ai-providers/*/tsconfig.json` that `tsc -b` compiles (contract, stub, openai, openai-compatible, anthropic, gemini, azure-openai, ollama). Leave `target`, `module`, `moduleResolution`, `rootDir`, and `strict` as they are.
+2. **Keep `declaration` and `declarationMap`.** Plugin projects are `composite` and need declarations. Nothing consumes server `dist/*.d.ts`, but turning those flags off is not required for the upgrade.
+3. **Install 6, then 7.** Fix only compile errors the new compiler reports. No `ignoreDeprecations`. Do not change application behavior.
+4. **`scripts/package_upgrade.sh`.** Keep the Express 5.3 install from T0289. Add a `typescript@7` dev install before the shared `npm test` / `npm run lint` / `npm run build:all` so one run upgrades both. Do not commit the other dirty files already on `main`.
+5. **Editor.** Do not set `typescript.tsdk`. TypeScript 7 ships an LSP server, not `tsserver.js`. After the bump, open a server file and confirm diagnostics still appear. If selecting the workspace TypeScript breaks that, fall back to 6.0 and say so.
+
+## Out of scope
+
+Client TypeScript and `typescript-eslint` (they need the JS compiler API; 7.0 does not ship it). Side-by-side `@typescript/typescript6` / `@typescript/native`. `FEATURES.md`. Schema. Deploy. Version bump until finish-up.
+
+## Checks
+
+- `npm run build`, `npm test`, `npm run lint` (CI “API TypeScript build” is `npm run build`).
+- `npm run db:generate` still starts (drizzle-kit uses esbuild).
+- DEV API already on `:3001` still serves `/api/health` under `tsx`.
+
+## Finish-up
+
+PATCH from current `package.json` (`0.90.4`), `RELEASE_NOTES.md` enhancement for the server TypeScript upgrade, archive this plan on the feature branch.
+
+## Shipped
+
+TypeScript 7.0.2 after a clean 6.0.3 build. `"types": ["node"]` on the server tsconfig and the eight AI-provider project configs. `scripts/package_upgrade.sh` installs Express 5.3 and TypeScript 7.0.2, then test, lint, and `build:all`. Version `0.90.5`. No QA follow-ups.
