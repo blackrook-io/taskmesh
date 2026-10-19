@@ -1,0 +1,40 @@
+# T0381 — Express 5 prep: exit when listen fails, before background jobs
+
+**Task:** T0381 (id 408) — Express 5 prep: exit when listen fails, before background jobs
+**Parent:** T0289 (id 304) — Upgrade Express 4.22 to 5.x (`blocked`; required-by, not a Depends-on)
+**State at plan:** `ready` · Priority: medium · Project: TaskMesh (4)
+**Depends on:** none
+**Branch (after approval):** `T0381-listen-error-exit`
+**Version on finish-up:** PATCH (no migration)
+
+## Why
+
+`src/index.ts` starts `getSystemProperties`, the job queue, the document-extraction sweep, and the knowledge-index resume inside the `app.listen` callback and ignores the callback argument.
+
+Express 5 passes a listen failure (for example `EADDRINUSE`) into that callback. Express 4 does not: it emits `error` on the server and throws if nobody handles it. The current callback would treat an Express 5 bind failure as success and start background work against a server that is not listening.
+
+Stay on the current Express 4. No package or `@types/express` bump (that stays on T0289).
+
+## Change
+
+Extract the post-listen decision so `src/index.ts` does not have to be imported by tests (importing it boots the process).
+
+New `src/lib/listenStartup.ts`:
+
+- `beginAfterListen(err, start)` — if `err` is set, `console.error` it and `process.exit(1)`, and do not call `start`. If `err` is absent, call `start()`.
+- `start` stays the existing success body: listen log, then `getSystemProperties`, `startJobQueue`, `sweepDocumentExtractions`, and `resumeKnowledgeRebuild` in the current order and with the current catch logging.
+
+Wire `app.listen` as `(err?: Error) => beginAfterListen(err, () => { … })`. An explicit callback parameter is required because `@types/express` 4 types the listen callback with no arguments.
+
+Do not add a separate `server.on("error")` handler. On Express 4 a busy port still surfaces as an unhandled `error` event (jobs never start, because the callback never runs). On Express 5 the framework already forwards that event into this callback; a second listener would handle the same failure twice.
+
+## Tests
+
+New `src/lib/listenStartup.test.ts` (node:test):
+
+1. No error: `start` runs once, and `process.exit` is not called.
+2. `EADDRINUSE` (and any other error): log includes the error, `process.exit(1)` is called, and `start` is not called. Stub `process.exit` so the test runner stays alive.
+
+## Out of scope
+
+Express 5 package bump, `@types/express` ^5, query sanitizer (T0380), `res.sendFile` hidden-folder notes, and a live second-process bind test (that path does not enter the callback on Express 4).

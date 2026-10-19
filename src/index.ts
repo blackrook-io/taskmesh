@@ -20,6 +20,7 @@ import { warnIfRateLimitDisableIgnored } from "./middleware/rateLimits.js";
 import { assertConfiguredEnvKeys } from "./lib/envKeys.js";
 import { parseTrustProxy } from "./lib/trustProxy.js";
 import { loadAiProviderPlugins } from "./services/assistant/providerLoader.js";
+import { beginAfterListen } from "./lib/listenStartup.js";
 import { getSystemProperties } from "./services/systemProperties.js";
 
 assertConfiguredEnvKeys();
@@ -121,27 +122,29 @@ await loadAiProviderPlugins();
 
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "127.0.0.1";
-const server = app.listen(port, host, () => {
-  console.log(`TaskMesh API listening on http://${host}:${port}`);
-  void getSystemProperties(db).catch((err) => {
-    console.error("System property startup failed", err);
-  });
-  void startJobQueue()
-    .then(async () => {
-      try {
-        await sweepDocumentExtractions();
-      } catch (err) {
-        console.error("[jobs] document extraction sweep failed", err);
-      }
-      try {
-        await resumeKnowledgeRebuild();
-      } catch (err) {
-        console.error("[jobs] knowledge index resume failed", err);
-      }
-    })
-    .catch((err) => {
-      console.error("[jobs] failed to start", err);
+const server = app.listen(port, host, (err?: Error) => {
+  beginAfterListen(err, () => {
+    console.log(`TaskMesh API listening on http://${host}:${port}`);
+    void getSystemProperties(db).catch((err) => {
+      console.error("System property startup failed", err);
     });
+    void startJobQueue()
+      .then(async () => {
+        try {
+          await sweepDocumentExtractions();
+        } catch (err) {
+          console.error("[jobs] document extraction sweep failed", err);
+        }
+        try {
+          await resumeKnowledgeRebuild();
+        } catch (err) {
+          console.error("[jobs] knowledge index resume failed", err);
+        }
+      })
+      .catch((err) => {
+        console.error("[jobs] failed to start", err);
+      });
+  });
 });
 
 async function shutdown(signal: string) {
