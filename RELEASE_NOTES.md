@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.90.2 — 2026-10-19
+
+### Fixes
+- Query-string sanitizing replaces `req.query` instead of assigning it. HTML in query values is still stripped, and the same path does not throw when `req.query` is a getter.
+
 ## 0.90.1 — 2026-10-19
 
 ### Enhancements
