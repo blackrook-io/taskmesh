@@ -208,8 +208,8 @@ Migrations run automatically on container start. Review `drizzle/` when upgradin
 `Dockerfile` and `compose.yaml` pin base images by digest. To refresh after upstream rebuilds:
 
 ```bash
-docker buildx imagetools inspect node:22-bookworm
-docker buildx imagetools inspect node:22-bookworm-slim
+docker buildx imagetools inspect node:24-bookworm
+docker buildx imagetools inspect node:24-bookworm-slim
 docker buildx imagetools inspect postgres:16-alpine
 docker buildx imagetools inspect nginx:alpine
 ```
@@ -297,7 +297,7 @@ The sections below are the manual reference, including a private LAN layout that
 | **build-essential** | Native module builds some npm packages may need |
 | **TaskMesh** | Express API (`src/`) + SPA (`client/`); uploads under `data/uploads/` by default |
 
-Minimum runtime: **Node.js 22+** (`engines` in root `package.json`). This guide installs **Node.js 22.x** from NodeSource.
+Minimum runtime: **Node.js 24+** (`engines` in root `package.json`). This guide installs **Node.js 24.x** from NodeSource. Node 22 is no longer supported.
 
 ---
 
@@ -424,13 +424,13 @@ References: [`CREATE ROLE`](https://www.postgresql.org/docs/current/sql-createro
 
 ## 7. Install Node.js
 
-### Recommended: NodeSource 22.x
+### Recommended: NodeSource 24.x
 
-Follow [NodeSource distributions](https://github.com/nodesource/distributions) (Node.js **22.x**):
+Follow [NodeSource distributions](https://github.com/nodesource/distributions) (Node.js **24.x**):
 
 ```bash
 sudo apt-get install -y curl
-curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh
+curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh
 sudo -E bash /tmp/nodesource_setup.sh
 sudo apt-get install -y nodejs
 ```
@@ -442,11 +442,11 @@ node -v
 npm -v
 ```
 
-Expect Node **v22.x** or newer (`package.json` `engines` requires **22+**).
+Expect Node **v24.x** or newer (`package.json` `engines` requires **24+**).
 
 ### Alternative: Ubuntu distro packages
 
-Ubuntu’s own `nodejs` package may work if it is **22 or newer**, but versions lag. Prefer NodeSource or [nodejs.org](https://nodejs.org/en/download) for Node.js 22.
+Ubuntu’s own `nodejs` package may work if it is **24 or newer**, but versions lag. Prefer NodeSource or [nodejs.org](https://nodejs.org/en/download) for Node.js 24.
 
 ```bash
 # Only if you intentionally use distro Node:

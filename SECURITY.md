@@ -68,7 +68,7 @@ Always: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Fr
 
 ### Image digests (Compose / Dockerfile)
 
-Base images are digest-pinned (`node:22-bookworm`, `node:22-bookworm-slim`, `postgres:16-alpine`, `nginx:alpine`). Refresh with `docker buildx imagetools inspect <image>:<tag>` and update the digests in `Dockerfile` / `compose.yaml` (see [INSTALL.md](INSTALL.md) § A.6).
+Base images are digest-pinned (`node:24-bookworm`, `node:24-bookworm-slim`, `postgres:16-alpine`, `nginx:alpine`). Refresh with `docker buildx imagetools inspect <image>:<tag>` and update the digests in `Dockerfile` / `compose.yaml` (see [INSTALL.md](INSTALL.md) § A.6).
 
 ## Runnable scan suite (T0121)
 
