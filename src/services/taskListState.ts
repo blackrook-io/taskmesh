@@ -21,7 +21,9 @@ export const EMPTY_TASK_LIST_STATE: TaskListState = {
   hideCompleted: false,
 };
 
-function columnForKind(kind: TaskListStateKind): keyof TaskListState {
+type CollapseKey = Exclude<keyof TaskListState, "hideCompleted">;
+
+function columnForKind(kind: TaskListStateKind): CollapseKey {
   if (kind === "group") return "collapsedGroupIds";
   if (kind === "ungrouped") return "collapsedUngroupedProjectIds";
   return "collapsedParentIds";
