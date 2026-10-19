@@ -68,7 +68,7 @@ const IDEA_TRACK: Record<string, string> = {
   assignee: "6.5rem",
 };
 
-const TASK_CHROME = "6px 1.5rem 1.75rem";
+const TASK_CHROME = "6px 1.5rem";
 const IDEA_CHROME = "1.5rem";
 const IDEA_CHROME_END = "4.5rem";
 

@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiJson } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { StateReasonDialog } from "../components/StateReasonDialog";
-import { CHILD_TITLE_INDENT_PX, StateCheckbox, TaskEditorFields } from "../components/TaskBoard";
+import { CHILD_TITLE_INDENT_PX, TaskEditorFields } from "../components/TaskBoard";
 import { maybeNotifyBlockedReady } from "../lib/blockedStateNotice";
 import {
   TaskListContextMenu,
@@ -36,7 +36,6 @@ import {
   TASK_STATE_SORT_RANK,
   allowedTaskStates,
   formatTaskNumber,
-  nextAllowedTaskState,
   stateChangeNeedsComment,
   stateReasonPrompt,
   type TaskState,
@@ -481,7 +480,6 @@ export function TasksListPage() {
         >
           <span className="task-list-header__stripe" />
           <span />
-          <span />
           <TaskListColumnHeaders
             columns={visibleColumns}
             sortCol={sortCol}
@@ -522,14 +520,6 @@ export function TasksListPage() {
               <span className="task-drag-handle" style={{ visibility: "hidden" }} aria-hidden>
                 ::
               </span>
-              <StateCheckbox
-                state={task.state}
-                canCycle={nextAllowedTaskState(task.allowedNextStates) != null}
-                onCycle={() => {
-                  const next = nextAllowedTaskState(task.allowedNextStates);
-                  if (next) requestTaskState(task, next);
-                }}
-              />
               {visibleColumns.map((col) =>
                 renderTaskColumnCell(col.fieldKey, {
                   task,

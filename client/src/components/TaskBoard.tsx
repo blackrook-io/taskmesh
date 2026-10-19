@@ -36,11 +36,9 @@ import {
   formatTaskNumber,
   isClosedTaskState,
   isDerivedTaskStatus,
-  nextAllowedTaskState,
   stateChangeNeedsComment,
   stateReasonPrompt,
   TASK_STATE_SORT_RANK,
-  taskStateClass,
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
@@ -354,60 +352,6 @@ function buildRows(
   }
   pushGroup(null, "none", unassigned);
   return rows;
-}
-
-export function StateCheckbox({
-  state,
-  onCycle,
-  canCycle = true,
-}: {
-  state: TaskState;
-  onCycle: () => void;
-  canCycle?: boolean;
-}) {
-  const glyph =
-    state === "blocked"
-      ? "!"
-      : state === "ready"
-      ? "○"
-      : state === "in_progress"
-        ? "/"
-        : state === "pending"
-          ? "…"
-          : state === "complete"
-            ? "✓"
-            : state === "canceled"
-              ? "X"
-              : state === "on_hold"
-                ? "-"
-                : "";
-  const hint = !canCycle
-    ? state === "pending"
-      ? `${TASK_STATE_LABELS[state]} — waiting on child tasks`
-      : state === "blocked"
-        ? `${TASK_STATE_LABELS[state]} — waiting on prerequisites`
-        : `${TASK_STATE_LABELS[state]} — no further state change`
-    : state === "pending"
-      ? `${TASK_STATE_LABELS[state]} — waiting on child tasks — click to cycle`
-      : state === "blocked"
-        ? `${TASK_STATE_LABELS[state]} — waiting on prerequisites — click to return to Draft`
-        : `${TASK_STATE_LABELS[state]} — click to cycle`;
-  return (
-    <button
-      type="button"
-      className={taskStateClass("task-state-cb", state)}
-      title={hint}
-      aria-label={`State ${TASK_STATE_LABELS[state]}`}
-      disabled={!canCycle}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (canCycle) onCycle();
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-    >
-      {glyph}
-    </button>
-  );
 }
 
 export function TaskEditorFields({
@@ -1197,7 +1141,6 @@ function SortableTaskRow({
   collapsed,
   onToggleCollapse,
   onOpen,
-  onCycleState,
   onPatch,
   onRequestState,
   onContextMenu,
@@ -1214,7 +1157,6 @@ function SortableTaskRow({
   collapsed: boolean;
   onToggleCollapse: () => void;
   onOpen: () => void;
-  onCycleState: () => void;
   onPatch: (patch: TaskPatch) => void;
   onRequestState: (next: TaskState) => void;
   onContextMenu: (e: React.MouseEvent, task: Task) => void;
@@ -1251,11 +1193,6 @@ function SortableTaskRow({
       <span className="task-drag-handle" title="Drag to reorder">
         ::
       </span>
-      <StateCheckbox
-        state={task.state}
-        canCycle={nextAllowedTaskState(task.allowedNextStates) != null}
-        onCycle={onCycleState}
-      />
       {visibleColumns.map((col) =>
         renderTaskColumnCell(col.fieldKey, {
           task,
@@ -1901,12 +1838,6 @@ export function TaskBoard({
     applyTaskState(task, next);
   };
 
-  const cycleTaskState = (task: Task) => {
-    const next = nextAllowedTaskState(task.allowedNextStates);
-    if (!next) return;
-    requestTaskState(task, next);
-  };
-
   const renderTaskRow = (row: Extract<FlatRow, { kind: "task" }>) => (
     <SortableTaskRow
       key={row.key}
@@ -1919,7 +1850,6 @@ export function TaskBoard({
       collapsed={collapsedParents.has(row.task.id)}
       onToggleCollapse={() => toggleParentCollapse(row.task.id)}
       onOpen={() => setModalTaskId(row.task.id)}
-      onCycleState={() => cycleTaskState(row.task)}
       onPatch={(patch) => void onPatchTask(row.task.id, patch)}
       onRequestState={(next) => requestTaskState(row.task, next)}
       visibleColumns={visibleColumns}
@@ -2034,7 +1964,6 @@ export function TaskBoard({
           }}
         >
           <span className="task-list-header__stripe" />
-          <span />
           <span />
           <TaskListColumnHeaders
             columns={visibleColumns}
