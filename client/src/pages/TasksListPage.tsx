@@ -55,6 +55,7 @@ import {
 } from "../lib/taskListSort";
 import { usePersistedTaskListFilter } from "../lib/usePersistedTaskListFilter";
 import { usePersistedTaskListSort } from "../lib/usePersistedTaskListSort";
+import { hiddenClosedCounts, isHiddenClosedSubtree } from "../lib/hideCompletedTasks";
 import { hiddenDescendantCount } from "../lib/hiddenDescendantCount";
 import { compareOptionalYmd } from "../../../src/lib/dateOrder.ts";
 import { compareEstimateHours } from "../../../src/lib/estimateHours.ts";
@@ -67,6 +68,8 @@ type DisplayRow = {
   depth: number;
   hasChildren: boolean;
   hiddenCount: number;
+  hiddenCompleted: number;
+  hiddenCanceled: number;
 };
 
 function taskDue(task: Task): string | null {
@@ -126,23 +129,34 @@ function buildGlobalDisplayRows(
   sortCol: SortCol | null,
   sortDir: 1 | -1,
   projectName: (id: number | null) => string,
+  hideCompleted: boolean,
 ): DisplayRow[] {
   const matchedIds = new Set(filtered.map((t) => t.id));
   const visualRoots = filtered.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
   const sortedRoots = sortTasks(visualRoots, sortCol, sortDir, projectName);
   const rows: DisplayRow[] = [];
   const countCache = new Map<number, number>();
+  const closedCache = new Map<number, boolean>();
   const visibleKidsOf = (id: number) => childrenOf(filtered, id).filter((c) => matchedIds.has(c.id));
   const walk = (t: Task, depth: number) => {
+    if (hideCompleted && isHiddenClosedSubtree(t, visibleKidsOf, closedCache)) return;
     const visibleKids = visibleKidsOf(t.id);
+    const shownKids = hideCompleted
+      ? visibleKids.filter((child) => !isHiddenClosedSubtree(child, visibleKidsOf, closedCache))
+      : visibleKids;
+    const hidden = hideCompleted
+      ? hiddenClosedCounts(t.id, visibleKidsOf, closedCache)
+      : { completed: 0, canceled: 0 };
     rows.push({
       task: t,
       depth,
-      hasChildren: visibleKids.length > 0,
+      hasChildren: shownKids.length > 0,
       hiddenCount: hiddenDescendantCount(t.id, visibleKidsOf, countCache),
+      hiddenCompleted: hidden.completed,
+      hiddenCanceled: hidden.canceled,
     });
     if (collapsedParents.has(t.id)) return;
-    for (const c of visibleKids) walk(c, depth + 1);
+    for (const c of shownKids) walk(c, depth + 1);
   };
   for (const root of sortedRoots) walk(root, 0);
   return rows;
@@ -162,7 +176,7 @@ export function TasksListPage() {
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [completeBlockMsg, setCompleteBlockMsg] = useState<string | null>(null);
   const [stateReason, setStateReason] = useState<{ task: Task; to: TaskState } | null>(null);
-  const { collapsedParents, toggle: toggleListState } = useTaskListViewState();
+  const { collapsedParents, hideCompleted, toggle: toggleListState } = useTaskListViewState();
   const sortStorageKey = storageKeyForGlobalTaskSort(filter);
   const { sortCol, sortDir, setSort } = usePersistedTaskListSort(
     sortStorageKey,
@@ -256,8 +270,9 @@ export function TasksListPage() {
         effectiveSortCol,
         sortDir,
         (id) => (id == null ? "—" : (projectNameById.get(id) ?? `Project #${id}`)),
+        hideCompleted,
       ),
-    [filteredTasks, collapsedParents, effectiveSortCol, sortDir, projectNameById],
+    [filteredTasks, collapsedParents, effectiveSortCol, sortDir, projectNameById, hideCompleted],
   );
 
   /** Flat filtered list still used for modal lookup / editor “all tasks”. */
@@ -491,10 +506,14 @@ export function TasksListPage() {
 
         {displayRows.length === 0 ? (
           <p className="muted" style={{ padding: "0.75rem 0.5rem" }}>
-            {isFilterActive(taskListFilter) ? "No tasks match this filter." : "No tasks yet."}
+            {filteredTasks.length > 0 && hideCompleted
+              ? "Completed and canceled tasks are hidden."
+              : isFilterActive(taskListFilter)
+                ? "No tasks match this filter."
+                : "No tasks yet."}
           </p>
         ) : (
-          displayRows.map(({ task, depth, hasChildren, hiddenCount }) => {
+          displayRows.map(({ task, depth, hasChildren, hiddenCount, hiddenCompleted, hiddenCanceled }) => {
             const showTagsInTitle = !visibleColumns.some((c) => c.fieldKey === "tags");
             return (
             <div
@@ -526,6 +545,8 @@ export function TasksListPage() {
                   depth,
                   hasChildren,
                   hiddenCount,
+                  hiddenCompleted,
+                  hiddenCanceled,
                   collapsed: collapsedParents.has(task.id),
                   onToggleCollapse: () => toggleParentCollapse(task.id),
                   onPatch: (patch) => void patchTask.mutateAsync({ id: task.id, patch }),

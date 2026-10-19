@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  applyHideCompleted,
   applyTaskListStateToggle,
   EMPTY_TASK_LIST_STATE,
   normalizeIdList,
@@ -30,6 +31,7 @@ describe("applyTaskListStateToggle", () => {
       collapsedGroupIds: [4, 9],
       collapsedUngroupedProjectIds: [2],
       collapsedParentIds: [7],
+      hideCompleted: false,
     };
     const next = applyTaskListStateToggle(start, "group", 4, false);
     assert.deepEqual(next.collapsedGroupIds, [9]);
@@ -42,6 +44,7 @@ describe("applyTaskListStateToggle", () => {
       collapsedGroupIds: [4],
       collapsedUngroupedProjectIds: [],
       collapsedParentIds: [],
+      hideCompleted: true,
     };
     assert.equal(applyTaskListStateToggle(start, "group", 4, true), start);
     assert.equal(applyTaskListStateToggle(start, "parent", 3, false), start);
@@ -55,7 +58,29 @@ describe("applyTaskListStateToggle", () => {
       collapsedGroupIds: [],
       collapsedUngroupedProjectIds: [4],
       collapsedParentIds: [88],
+      hideCompleted: false,
     });
+  });
+});
+
+describe("applyHideCompleted", () => {
+  it("sets the flag and leaves collapse ids unchanged", () => {
+    const start = {
+      collapsedGroupIds: [4],
+      collapsedUngroupedProjectIds: [2],
+      collapsedParentIds: [7],
+      hideCompleted: false,
+    };
+    const next = applyHideCompleted(start, true);
+    assert.equal(next.hideCompleted, true);
+    assert.deepEqual(next.collapsedGroupIds, [4]);
+    assert.deepEqual(next.collapsedUngroupedProjectIds, [2]);
+    assert.deepEqual(next.collapsedParentIds, [7]);
+  });
+
+  it("returns the same object when the flag is unchanged", () => {
+    const start = { ...EMPTY_TASK_LIST_STATE, hideCompleted: true };
+    assert.equal(applyHideCompleted(start, true), start);
   });
 });
 
@@ -66,11 +91,13 @@ describe("taskListStateFromRow", () => {
         collapsedGroupIds: [1, 1, -2],
         collapsedUngroupedProjectIds: "nope",
         collapsedParentIds: [5],
+        hideCompleted: true,
       }),
       {
         collapsedGroupIds: [1],
         collapsedUngroupedProjectIds: [],
         collapsedParentIds: [5],
+        hideCompleted: true,
       },
     );
   });

@@ -82,6 +82,10 @@ export type TaskColumnCellContext = {
   hasChildren?: boolean;
   /** Descendants the list would show if this parent were expanded. Not displayed. */
   hiddenCount?: number;
+  /** Complete descendants omitted by Hide completed. */
+  hiddenCompleted?: number;
+  /** Canceled descendants omitted by Hide completed. */
+  hiddenCanceled?: number;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onPatch?: (patch: {
@@ -285,6 +289,8 @@ export function renderTaskColumnCell(
     depth,
     duplicate,
     hasChildren,
+    hiddenCompleted = 0,
+    hiddenCanceled = 0,
     collapsed,
     onToggleCollapse,
     onPatch,
@@ -320,6 +326,8 @@ export function renderTaskColumnCell(
                   done={task.rollupDone}
                   total={task.rollupTotal}
                   labelled={false}
+                  hiddenCompleted={hiddenCompleted}
+                  hiddenCanceled={hiddenCanceled}
                 />
               ) : null}
             </span>

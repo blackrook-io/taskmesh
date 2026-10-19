@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.90.0 — 2026-10-19
+
+### New Functionality
+- Task lists have a Hide completed control beside Filter. It hides Complete and Canceled tasks at every level, including a parent whose descendants are all closed, and keeps a parent that still has open work. Progress counts stay the same, and the progress tooltip says how many closed tasks are hidden. The choice is saved for that user. Turning it off shows each group and parent as expanded or collapsed as before.
+
 ## 0.89.3 — 2026-10-19
 
 ### Enhancements

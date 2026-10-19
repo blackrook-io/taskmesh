@@ -81,6 +81,7 @@ import {
   buildTaskListGridTemplate,
   type ResolvedListColumn,
 } from "../lib/listViewColumns";
+import { hiddenClosedCounts, isHiddenClosedSubtree } from "../lib/hideCompletedTasks";
 import { hiddenDescendantCount } from "../lib/hiddenDescendantCount";
 import { useListViewColumns } from "../lib/useListViewColumns";
 import { useTaskListViewState } from "../lib/useTaskListViewState";
@@ -242,6 +243,8 @@ type FlatRow =
       duplicate: boolean;
       hasChildren: boolean;
       hiddenCount: number;
+      hiddenCompleted: number;
+      hiddenCanceled: number;
     };
 
 /** Pixels of title indent per nesting depth (T0103). */
@@ -260,6 +263,7 @@ function buildRows(
   sortCol: SortCol | null,
   sortDir: 1 | -1,
   navListView: boolean,
+  hideCompleted: boolean,
   filterCtx?: FilterMatchContext,
 ): FlatRow[] {
   const rows: FlatRow[] = [];
@@ -269,9 +273,17 @@ function buildRows(
     const matchedIds = new Set(matched.map((t) => t.id));
     const visualRoots = matched.filter((t) => t.parentId == null || !matchedIds.has(t.parentId));
     const countCache = new Map<number, number>();
+    const closedCache = new Map<number, boolean>();
     const visibleKidsOf = (id: number) => childrenOf(tasks, id).filter((c) => matchedIds.has(c.id));
     const walk = (t: Task, depth: number) => {
+      if (hideCompleted && isHiddenClosedSubtree(t, visibleKidsOf, closedCache)) return;
       const visibleKids = visibleKidsOf(t.id);
+      const shownKids = hideCompleted
+        ? visibleKids.filter((child) => !isHiddenClosedSubtree(child, visibleKidsOf, closedCache))
+        : visibleKids;
+      const hidden = hideCompleted
+        ? hiddenClosedCounts(t.id, visibleKidsOf, closedCache)
+        : { completed: 0, canceled: 0 };
       rows.push({
         kind: "task",
         task: t,
@@ -279,11 +291,13 @@ function buildRows(
         key: `task-nav-${t.id}`,
         groupKey: "none",
         duplicate: false,
-        hasChildren: visibleKids.length > 0,
+        hasChildren: shownKids.length > 0,
         hiddenCount: hiddenDescendantCount(t.id, visibleKidsOf, countCache),
+        hiddenCompleted: hidden.completed,
+        hiddenCanceled: hidden.canceled,
       });
       if (collapsedParents.has(t.id)) return;
-      for (const c of visibleKids) {
+      for (const c of shownKids) {
         walk(c, depth + 1);
       }
     };
@@ -316,6 +330,7 @@ function buildRows(
   const unassigned = evaluateTaskListFilter(allRoots, listFilter, filterCtx).filter((t) => !claimed.has(t.id));
 
     const countCache = new Map<number, number>();
+    const closedCache = new Map<number, boolean>();
     const kidsOf = (id: number) => childrenOf(tasks, id);
     const pushGroup = (group: TaskGroup | null, groupKey: number | "none", groupRoots: Task[]) => {
     rows.push({
@@ -326,7 +341,14 @@ function buildRows(
     });
     if (collapsed.has(groupKey)) return;
     const pushTree = (t: Task, depth: number) => {
+      if (hideCompleted && isHiddenClosedSubtree(t, kidsOf, closedCache)) return;
       const kids = kidsOf(t.id);
+      const shownKids = hideCompleted
+        ? kids.filter((child) => !isHiddenClosedSubtree(child, kidsOf, closedCache))
+        : kids;
+      const hidden = hideCompleted
+        ? hiddenClosedCounts(t.id, kidsOf, closedCache)
+        : { completed: 0, canceled: 0 };
       rows.push({
         kind: "task",
         task: t,
@@ -334,11 +356,13 @@ function buildRows(
         key: `task-${groupKey}-${t.id}`,
         groupKey,
         duplicate: (appearCount.get(t.id) ?? 0) > 1,
-        hasChildren: kids.length > 0,
+        hasChildren: shownKids.length > 0,
         hiddenCount: hiddenDescendantCount(t.id, kidsOf, countCache),
+        hiddenCompleted: hidden.completed,
+        hiddenCanceled: hidden.canceled,
       });
       if (collapsedParents.has(t.id)) return;
-      for (const c of kids) {
+      for (const c of shownKids) {
         pushTree(c, depth + 1);
       }
     };
@@ -1138,6 +1162,8 @@ function SortableTaskRow({
   groupKey,
   hasChildren,
   hiddenCount,
+  hiddenCompleted,
+  hiddenCanceled,
   collapsed,
   onToggleCollapse,
   onOpen,
@@ -1154,6 +1180,8 @@ function SortableTaskRow({
   groupKey: number | "none";
   hasChildren: boolean;
   hiddenCount: number;
+  hiddenCompleted: number;
+  hiddenCanceled: number;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onOpen: () => void;
@@ -1200,6 +1228,8 @@ function SortableTaskRow({
           duplicate,
           hasChildren,
           hiddenCount,
+          hiddenCompleted,
+          hiddenCanceled,
           collapsed,
           onToggleCollapse,
           onPatch,
@@ -1436,6 +1466,7 @@ export function TaskBoard({
     collapsedGroupIds,
     collapsedUngroupedProjectIds,
     collapsedParents,
+    hideCompleted,
     toggle: toggleListState,
   } = useTaskListViewState();
   const collapsed = useMemo(() => {
@@ -1508,6 +1539,7 @@ export function TaskBoard({
       effectiveSort,
       sortDir,
       navListView,
+      hideCompleted,
       filterCtx,
     );
   }, [
@@ -1516,6 +1548,7 @@ export function TaskBoard({
     listFilter,
     collapsed,
     collapsedParents,
+    hideCompleted,
     sortCol,
     sortDir,
     navListView,
@@ -1847,6 +1880,8 @@ export function TaskBoard({
       groupKey={row.groupKey}
       hasChildren={row.hasChildren}
       hiddenCount={row.hiddenCount}
+      hiddenCompleted={row.hiddenCompleted}
+      hiddenCanceled={row.hiddenCanceled}
       collapsed={collapsedParents.has(row.task.id)}
       onToggleCollapse={() => toggleParentCollapse(row.task.id)}
       onOpen={() => setModalTaskId(row.task.id)}
@@ -1973,6 +2008,12 @@ export function TaskBoard({
             sortTrigger="doubleClick"
           />
         </div>
+
+        {navListView && hideCompleted && !isFilterActive(listFilter) && displayRows.length === 0 && tasks.length > 0 ? (
+          <p className="muted" style={{ padding: "0.75rem 0.5rem" }}>
+            Completed and canceled tasks are hidden.
+          </p>
+        ) : null}
 
         <DndContext
           sensors={sensors}

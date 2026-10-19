@@ -737,8 +737,9 @@ export const userListViewPrefs = pgTable(
 );
 
 /**
- * Per-user Task List open/closed state (T0191).
- * One row per user. Missing row means every group and parent is expanded.
+ * Per-user Task List open/closed state (T0191) and Hide completed (T0338).
+ * One row per user. Missing row means every group and parent is expanded
+ * and Complete / Canceled tasks stay visible.
  * Arrays store collapsed ids only.
  */
 export const userTaskListState = pgTable("user_task_list_state", {
@@ -760,6 +761,8 @@ export const userTaskListState = pgTable("user_task_list_state", {
     .$type<number[]>()
     .notNull()
     .default(sql`'[]'::jsonb`),
+  /** When true, task lists hide Complete and Canceled tasks (T0338). */
+  hideCompleted: boolean("hide_completed").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

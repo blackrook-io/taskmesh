@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { useTaskListViewState } from "../lib/useTaskListViewState";
 import {
   FILTER_FIELD_LABELS,
   FILTER_JOIN_LABELS,
@@ -226,6 +227,7 @@ export function TaskListFilterBar({
   projectId,
   includeProject = false,
 }: Props) {
+  const { hideCompleted, isLoading: hideStateLoading, setHideCompleted } = useTaskListViewState();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<TaskListFilter>(() => draftFromFilter(filter));
   const titleId = useId();
@@ -311,6 +313,15 @@ export function TaskListFilterBar({
         >
           <FilterIcon />
           <span>Filter</span>
+        </button>
+        <button
+          type="button"
+          className={`btn ghost task-list-filter-bar__btn${hideCompleted ? " task-list-filter-bar__btn--active" : ""}`}
+          aria-pressed={hideCompleted}
+          disabled={hideStateLoading}
+          onClick={() => setHideCompleted(!hideCompleted)}
+        >
+          Hide completed
         </button>
       </div>
 

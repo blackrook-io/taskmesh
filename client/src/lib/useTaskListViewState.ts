@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiJson } from "../api/client";
 import {
+  applyHideCompleted,
   applyTaskListStateToggle,
   EMPTY_TASK_LIST_STATE,
   type TaskListState,
@@ -41,6 +42,37 @@ export function useTaskListViewState() {
 
   const collapsedParents = useMemo(() => new Set(collapsedParentIds), [collapsedParentIds]);
 
+  const setHideCompleted = useMutation({
+    mutationFn: async (hideCompleted: boolean) => {
+      const res = await apiJson<{ data: TaskListState }>("/api/v1/users/me/task-list-state", {
+        method: "PATCH",
+        body: JSON.stringify({ hideCompleted }),
+      });
+      return res.data;
+    },
+    onMutate: async (hideCompleted) => {
+      await qc.cancelQueries({ queryKey: TASK_LIST_STATE_KEY });
+      const previous = qc.getQueryData<TaskListState>(TASK_LIST_STATE_KEY);
+      if (previous) {
+        qc.setQueryData(TASK_LIST_STATE_KEY, applyHideCompleted(previous, hideCompleted));
+      }
+      toggleRevision += 1;
+      return { revision: toggleRevision, previous };
+    },
+    onSuccess: (data, _hideCompleted, ctx) => {
+      if (ctx?.revision === toggleRevision) {
+        qc.setQueryData(TASK_LIST_STATE_KEY, data);
+      }
+    },
+    onError: (_err, _hideCompleted, ctx) => {
+      if (ctx && ctx.revision === toggleRevision && ctx.previous) {
+        qc.setQueryData(TASK_LIST_STATE_KEY, ctx.previous);
+      } else {
+        void qc.invalidateQueries({ queryKey: TASK_LIST_STATE_KEY });
+      }
+    },
+  });
+
   const toggle = useMutation({
     mutationFn: async (input: ToggleInput) => {
       const res = await apiJson<{ data: TaskListState }>("/api/v1/users/me/task-list-state", {
@@ -76,7 +108,9 @@ export function useTaskListViewState() {
     collapsedGroupIds,
     collapsedUngroupedProjectIds,
     collapsedParents,
+    hideCompleted: state.hideCompleted === true,
     isLoading: query.isLoading,
     toggle: toggle.mutate,
+    setHideCompleted: setHideCompleted.mutate,
   };
 }
