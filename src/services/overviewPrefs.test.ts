@@ -50,6 +50,13 @@ describe("overviewPrefs", () => {
     const layout = validateLayoutInput([inst]);
     assert.equal(layout[0]?.type, "my_tasks_today");
     assert.equal(layout[0]?.limit, 10);
-    assert.equal(layout[0]?.days, undefined);
+    assert.equal(layout[0]?.days, 3);
+  });
+
+  it("fills a default 3-day window when Next Up has no stored days", () => {
+    const layout = normalizeLayoutStored([
+      { id: "next-up", type: "my_tasks_today", limit: 5 },
+    ]);
+    assert.equal(layout?.[0]?.days, 3);
   });
 });

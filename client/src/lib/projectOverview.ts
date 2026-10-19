@@ -33,11 +33,20 @@ export type OverviewPanelInstance = {
 export const OVERVIEW_PANELS_WITH_DAYS: ReadonlySet<OverviewPanelType> = new Set([
   "recently_completed_tasks",
   "todos_upcoming",
+  "my_tasks_today",
 ]);
+
+/** Lookahead for day-window panels. Next Up includes today and defaults to 3. */
+export const DEFAULT_OVERVIEW_PANEL_DAYS = 14;
+export const DEFAULT_NEXT_UP_DAYS = 3;
+
+export function defaultOverviewDays(type: OverviewPanelType): number {
+  return type === "my_tasks_today" ? DEFAULT_NEXT_UP_DAYS : DEFAULT_OVERVIEW_PANEL_DAYS;
+}
 
 export const OVERVIEW_PANEL_META: Record<
   OverviewPanelType,
-  { title: string; entity: "task" | "todo"; usesDays: boolean }
+  { title: string; entity: "task" | "todo" | "mixed"; usesDays: boolean }
 > = {
   recently_completed_tasks: {
     title: "Recently completed tasks",
@@ -60,9 +69,9 @@ export const OVERVIEW_PANEL_META: Record<
     usesDays: true,
   },
   my_tasks_today: {
-    title: "My Tasks Today",
-    entity: "task",
-    usesDays: false,
+    title: "Next Up",
+    entity: "mixed",
+    usesDays: true,
   },
 };
 
@@ -162,23 +171,67 @@ export function selectUpcomingTodos(
     .slice(0, limit);
 }
 
-/** Assignee = user, due date = local today, incomplete. */
-export function selectMyTasksToday(
-  tasks: Task[],
+export type OverviewPanelRow = {
+  id: number;
+  number: number;
+  title: string;
+  meta: string | null;
+  color: string | null;
+  entity: "task" | "todo";
+};
+
+type NextUpSource = {
+  id: number;
+  number: number;
+  title: string;
+  state: string;
+  dueDate: string | null;
+  assigneeId?: number | null;
+  color: string | null;
+};
+
+/** Assigned to the user, incomplete, due from today through today+(days-1). */
+export function selectNextUp(
+  tasks: NextUpSource[],
+  todos: NextUpSource[],
   userId: number,
   limit: number,
+  days: number,
   now = new Date(),
-): Task[] {
+): OverviewPanelRow[] {
   const today = localYmd(now);
-  return tasks
-    .filter(
-      (t) =>
-        isIncomplete(t.state) &&
-        t.assigneeId === userId &&
-        t.dueDate === today,
-    )
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)
-    .slice(0, limit);
+  const latest = addDaysYmd(today, Math.max(1, days) - 1);
+  const inWindow = (row: NextUpSource) =>
+    isIncomplete(row.state) &&
+    row.assigneeId === userId &&
+    row.dueDate != null &&
+    row.dueDate >= today &&
+    row.dueDate <= latest;
+  const tagged: OverviewPanelRow[] = [
+    ...tasks.filter(inWindow).map((row) => ({
+      id: row.id,
+      number: row.number,
+      title: row.title,
+      meta: row.dueDate,
+      color: row.color,
+      entity: "task" as const,
+    })),
+    ...todos.filter(inWindow).map((row) => ({
+      id: row.id,
+      number: row.number,
+      title: row.title,
+      meta: row.dueDate,
+      color: row.color,
+      entity: "todo" as const,
+    })),
+  ];
+  tagged.sort((a, b) => {
+    const due = (a.meta ?? "").localeCompare(b.meta ?? "");
+    if (due !== 0) return due;
+    if (a.entity !== b.entity) return a.entity === "task" ? -1 : 1;
+    return a.id - b.id;
+  });
+  return tagged.slice(0, limit);
 }
 
 export function rowsForPanel(
@@ -187,9 +240,9 @@ export function rowsForPanel(
   todos: Todo[],
   pref: OverviewPanelPref,
   opts?: { userId?: number | null },
-): Array<{ id: number; number: number; title: string; meta: string | null; color: string | null }> {
+): OverviewPanelRow[] {
   const limit = pref.limit;
-  const days = pref.days ?? 14;
+  const days = pref.days ?? defaultOverviewDays(type);
   if (type === "recently_completed_tasks") {
     return selectRecentlyCompletedTasks(tasks, limit, days).map((t) => ({
       id: t.id,
@@ -197,6 +250,7 @@ export function rowsForPanel(
       title: t.title,
       meta: t.updatedAt ? localYmd(new Date(t.updatedAt)) : null,
       color: t.color,
+      entity: "task" as const,
     }));
   }
   if (type === "next_tasks_due") {
@@ -206,6 +260,7 @@ export function rowsForPanel(
       title: t.title,
       meta: t.dueDate,
       color: t.color,
+      entity: "task" as const,
     }));
   }
   if (type === "todos_overdue") {
@@ -215,18 +270,13 @@ export function rowsForPanel(
       title: t.title,
       meta: t.dueDate,
       color: t.color,
+      entity: "todo" as const,
     }));
   }
   if (type === "my_tasks_today") {
     const userId = opts?.userId;
     if (userId == null) return [];
-    return selectMyTasksToday(tasks, userId, limit).map((t) => ({
-      id: t.id,
-      number: t.number,
-      title: t.title,
-      meta: t.dueDate,
-      color: t.color,
-    }));
+    return selectNextUp(tasks, todos, userId, limit, days);
   }
   return selectUpcomingTodos(todos, limit, days).map((t) => ({
     id: t.id,
@@ -234,6 +284,7 @@ export function rowsForPanel(
     title: t.title,
     meta: t.dueDate,
     color: t.color,
+    entity: "todo" as const,
   }));
 }
 
@@ -247,7 +298,7 @@ export function newPanelInstance(type: OverviewPanelType): OverviewPanelInstance
     id,
     type,
     limit: 5,
-    ...(usesDays ? { days: 14 } : {}),
+    ...(usesDays ? { days: defaultOverviewDays(type) } : {}),
   };
 }
 

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   addDaysYmd,
   localYmd,
-  selectMyTasksToday,
+  selectNextUp,
   selectNextDue,
   selectOverdue,
   selectRecentlyCompleted,
@@ -96,23 +96,38 @@ describe("projectOverviewQueries", () => {
     );
   });
 
-  it("my tasks today filters assignee and due today", () => {
+  it("next up keeps assigned tasks and todos inside the day window", () => {
     const today = localYmd(now);
-    const rows = selectMyTasksToday(
+    const tomorrow = addDaysYmd(today, 1);
+    const dayAfter = addDaysYmd(today, 2);
+    const later = addDaysYmd(today, 3);
+    const tasks = [
+      assigneeRow({ id: 1, assigneeId: 7, dueDate: today }),
+      assigneeRow({ id: 2, assigneeId: 7, dueDate: "2026-09-17" }),
+      assigneeRow({ id: 3, assigneeId: 9, dueDate: today }),
+      assigneeRow({ id: 4, assigneeId: 7, dueDate: today, state: "complete" }),
+      assigneeRow({ id: 5, assigneeId: 7, dueDate: dayAfter, state: "in_progress" }),
+      assigneeRow({ id: 8, assigneeId: 7, dueDate: later }),
+    ];
+    const todos = [
+      assigneeRow({ id: 1, assigneeId: 7, dueDate: today }),
+      assigneeRow({ id: 6, assigneeId: 7, dueDate: tomorrow }),
+      assigneeRow({ id: 7, assigneeId: 8, dueDate: tomorrow }),
+      assigneeRow({ id: 9, assigneeId: 7, dueDate: today, state: "canceled" }),
+    ];
+    const rows = selectNextUp(tasks, todos, 7, 10, 3, now);
+    assert.deepEqual(
+      rows.map((r) => [r.entity, r.id]),
       [
-        assigneeRow({ id: 1, assigneeId: 7, dueDate: today }),
-        assigneeRow({ id: 2, assigneeId: 7, dueDate: "2026-09-17" }),
-        assigneeRow({ id: 3, assigneeId: 9, dueDate: today }),
-        assigneeRow({ id: 4, assigneeId: 7, dueDate: today, state: "complete" }),
-        assigneeRow({ id: 5, assigneeId: 7, dueDate: today, state: "in_progress" }),
+        ["task", 1],
+        ["todo", 1],
+        ["todo", 6],
+        ["task", 5],
       ],
-      7,
-      5,
-      now,
     );
     assert.deepEqual(
-      rows.map((r) => r.id),
-      [1, 5],
+      selectNextUp(tasks, todos, 7, 1, 3, now).map((r) => [r.entity, r.id]),
+      [["task", 1]],
     );
   });
 });

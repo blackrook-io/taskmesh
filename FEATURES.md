@@ -4,7 +4,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Projects
 
 - Turn Ideas into structured projects with Markdown overviews, tags, and status
-- Project Overview dashboard with a pinned description (Owners and Managers can edit it) and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including My Tasks Today); click a panel row to open that Task or To Do
+- Project Overview dashboard with a pinned description (Owners and Managers can edit it) and a personalizable panel canvas (add/remove/rearrange, project default + Reset, including Next Up for Tasks and ToDos assigned to you); click a panel row to open that Task or To Do
 - Enable only the modules you need per project: Tasks, Documents, To Dos, Boards, Wiki, Canvases, Mesh, Plans, and Image Boards
 - Open a plan board to see phased Tasks and ToDos, hour totals, progress, and a finish-date range, and check items off from the list
 - Refine a plan finish with AI and see a likely date range beside the baseline, with the reasons behind it

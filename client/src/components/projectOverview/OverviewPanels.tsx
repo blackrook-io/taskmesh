@@ -24,11 +24,13 @@ import {
   OVERVIEW_PANEL_META,
   OVERVIEW_PANEL_TYPES,
   OVERVIEW_PANELS_WITH_DAYS,
+  defaultOverviewDays,
   isDefaultOriginPanel,
   newPanelInstance,
   rowsForPanel,
   type OverviewPanelInstance,
   type OverviewPanelLimit,
+  type OverviewPanelRow,
   type OverviewPanelType,
 } from "../../lib/projectOverview";
 import type { Task, Todo } from "../../types";
@@ -166,9 +168,8 @@ export function OverviewPanels({
     }
   };
 
-  const openRow = (type: OverviewPanelType, id: number) => {
-    const meta = OVERVIEW_PANEL_META[type];
-    if (meta.entity === "task") {
+  const openRow = (entity: OverviewPanelRow["entity"], id: number) => {
+    if (entity === "task") {
       const t = tasks.find((x) => x.id === id) ?? null;
       setOpenTodo(null);
       setOpenTask(t);
@@ -278,7 +279,7 @@ export function OverviewPanels({
               const pref = {
                 limit: panel.limit,
                 ...(OVERVIEW_PANELS_WITH_DAYS.has(panel.type)
-                  ? { days: panel.days ?? 14 }
+                  ? { days: panel.days ?? defaultOverviewDays(panel.type) }
                   : {}),
               };
               const rows = rowsForPanel(panel.type, tasks, todos, pref, { userId });
@@ -287,13 +288,13 @@ export function OverviewPanels({
                   key={panel.id}
                   panel={panel}
                   rows={rows}
-                  onOpen={(id) => openRow(panel.type, id)}
+                  onOpen={(row) => openRow(row.entity, row.id)}
                   onPrefChange={(next) =>
                     updatePanel(panel.id, {
                       ...panel,
                       limit: next.limit,
                       ...(OVERVIEW_PANELS_WITH_DAYS.has(panel.type)
-                        ? { days: next.days }
+                        ? { days: next.days ?? defaultOverviewDays(panel.type) }
                         : { days: undefined }),
                     })
                   }
@@ -423,14 +424,8 @@ function SortableOverviewPanel({
   saving,
 }: {
   panel: OverviewPanelInstance;
-  rows: Array<{
-    id: number;
-    number: number;
-    title: string;
-    meta: string | null;
-    color: string | null;
-  }>;
-  onOpen: (id: number) => void;
+  rows: OverviewPanelRow[];
+  onOpen: (row: OverviewPanelRow) => void;
   onPrefChange: (next: { limit: OverviewPanelLimit; days?: number }) => void;
   onRemove: () => void;
   saving: boolean;
@@ -445,7 +440,7 @@ function SortableOverviewPanel({
     zIndex: isDragging ? 2 : undefined,
   };
   const meta = OVERVIEW_PANEL_META[panel.type];
-  const prefDays = panel.days ?? 14;
+  const prefDays = panel.days ?? defaultOverviewDays(panel.type);
   const [daysDraft, setDaysDraft] = useState(String(prefDays));
   const [daysSource, setDaysSource] = useState(prefDays);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -465,8 +460,8 @@ function SortableOverviewPanel({
     onPrefChange({ limit: panel.limit, days: n });
   };
 
-  const numberLabel = (n: number) =>
-    meta.entity === "task" ? formatTaskNumber(n) : formatEntityRef("todo", n);
+  const numberLabel = (entity: OverviewPanelRow["entity"], n: number) =>
+    entity === "task" ? formatTaskNumber(n) : formatEntityRef("todo", n);
 
   return (
     <section
@@ -495,7 +490,9 @@ function SortableOverviewPanel({
               onChange={(e) => {
                 const limit = Number(e.target.value) as OverviewPanelLimit;
                 onPrefChange(
-                  meta.usesDays ? { limit, days: panel.days ?? 14 } : { limit },
+                  meta.usesDays
+                    ? { limit, days: panel.days ?? defaultOverviewDays(panel.type) }
+                    : { limit },
                 );
               }}
             >
@@ -543,18 +540,20 @@ function SortableOverviewPanel({
       ) : (
         <ul className="overview-panel__list">
           {rows.map((row) => (
-            <li key={row.id}>
+            <li key={`${row.entity}-${row.id}`}>
               <button
                 type="button"
                 className="overview-panel__row"
-                onClick={() => onOpen(row.id)}
+                onClick={() => onOpen(row)}
               >
                 <span
                   className="overview-panel__stripe"
                   style={{ background: row.color ?? "transparent" }}
                   aria-hidden
                 />
-                <span className="muted overview-panel__num">{numberLabel(row.number)}</span>
+                <span className="muted overview-panel__num">
+                  {numberLabel(row.entity, row.number)}
+                </span>
                 <span className="overview-panel__row-title">{row.title}</span>
                 {row.meta ? <span className="muted overview-panel__meta">{row.meta}</span> : null}
               </button>
