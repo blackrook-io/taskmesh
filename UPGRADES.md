@@ -17,6 +17,7 @@ Release page: [v0.50.0-beta](https://github.com/blackrook-io/taskmesh/releases/t
 1. Read that release, especially **Breaking Changes**.
 2. Back up the database and the uploads directory. In the app, use **Settings → Backups**, or follow [INSTALL.md § Backups](INSTALL.md#18-backups) (bare metal) or [INSTALL.md § A.5](INSTALL.md#a5-data-backups-and-updates) (Compose).
 3. Leave `.env` and `.env.docker` in place. Git does not replace them. If the release says a variable is now required, edit the file yourself.
+4. Keep `UPLOAD_DIR` off hidden directories. Express 5 `res.sendFile` returns 404 when any folder in the absolute path starts with `.` (for example `/home/you/.taskmesh/uploads`). `/var/lib/taskmesh/uploads` and the default `data/uploads` are fine.
 
 On the 0.5 Beta line, migrations run through `0046`. If you set `MFA_TOTP_KEY` or `OAUTH_CREDENTIALS_KEY`, each value must be at least 32 characters or the API will refuse to start. Do not re-run `deploy/install-ubuntu.sh` to upgrade an install that is already serving the site.
 
