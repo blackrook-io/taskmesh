@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useNavigate } from "react-router-dom";
 import StarterKit from "@tiptap/starter-kit";
+import Code from "@tiptap/extension-code";
 import { Markdown } from "@tiptap/markdown";
 import Link from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
@@ -37,6 +38,15 @@ import { ResizableMarkdownImage } from "./ResizableMarkdownImage";
 import { MermaidCodeBlock } from "./mermaidCodeBlock";
 import { isAllowedHref } from "../../lib/safeHref";
 import { sanitizeMarkdown } from "../../lib/sanitizeMarkdown";
+
+/**
+ * StarterKit's code mark uses `excludes: "_"`, so a word cannot be both code and
+ * bold (or italic, strike, underline, link). Markdown such as `` **`name`** ``
+ * still parses to that pair, and the paste is rejected (T0377).
+ */
+const InlineCode = Code.extend({
+  excludes: "",
+});
 
 const DEFAULT_MIN_HEIGHT = 120;
 const DEFAULT_MAX_HEIGHT = 720;
@@ -207,8 +217,10 @@ export function MarkdownEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        code: false,
         codeBlock: false,
       }),
+      InlineCode,
       MermaidCodeBlock,
       Underline,
       Link.configure({

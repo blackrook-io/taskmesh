@@ -1,0 +1,32 @@
+# T0377 — Document paste stops partway through
+
+**Task:** T0377 (id 404) — Documents have a small max-size limit
+**State at plan:** `ready` · Priority: urgent · Project: TaskMesh (4)
+**Depends on:** none
+**Branch (after approval):** `T0377-document-size-limit`
+**Version on finish-up:** PATCH (no migration)
+
+## What actually fails
+
+`docs/design/L01_readme.md` is 316 lines and about 19,000 characters. That is far under the API cap of 500,000 characters. Pasting it into the document editor throws:
+
+`Invalid collection of marks for node text: bold,code`
+
+The editor’s inline `code` mark is configured with `excludes: "_"`, so a text node cannot be both bold and code. The Markdown parser still builds that pair for common emphasis-around-code, and `insertContent` then throws. The paste handler has already cancelled the browser’s own paste, so the chunk is dropped.
+
+Reproduced on the DEV editor with this file:
+
+- One paste of the whole file inserts nothing.
+- Pasting about 40 lines at a time works until a chunk that contains the pattern, then that chunk is rejected. Later chunks that do not contain it still insert.
+- The first hits in this file are the note `**Why \`Minimum\` and \`breaching\` on nginx-down?**` and the bullet `` **`treat-missing-data`** ``.
+
+The 720px editor height and system properties are not involved. The 500,000-character save cap stays as it is.
+
+## Fix
+
+1. In `MarkdownEditor`, turn off StarterKit’s code mark and register an extended code mark with `excludes: ""`, so inline code can sit inside bold, italic, strike, underline, and links.
+2. Leave the paste handler on the Markdown insert path. Once the schema accepts the marks, this file inserts in one paste and in successive chunks.
+
+## Out of scope
+
+Raising the 500,000-character body cap, and a system-property setting for it.
