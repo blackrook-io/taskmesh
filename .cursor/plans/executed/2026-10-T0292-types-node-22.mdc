@@ -1,0 +1,50 @@
+# T0292 — Align @types/node with Node 22 and raise engines to >=22
+
+**Task:** T0292 (id 307) — Align @types/node with the Node 22 runtime and raise engines to >=22
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Depends on:** none
+**Required by:** T0293 Plan the Node 22 to Node 24 LTS runtime move (`blocked`); T0334 Create Release Candidate (`new`)
+**Branch (after approval):** `T0292-types-node-22`
+**Version on finish-up:** PATCH from `0.90.6` (no migration). Skip `FEATURES.md` (toolchain floor, not a product feature).
+
+## Why
+
+TaskMesh runs Node 22 (this host is v22.22.1; Docker images are `node:22`; INSTALL.md already installs NodeSource 22.x). Root `@types/node` is ranged `^22.10.2` and locked at **22.19.21**. The client ranges `^24.12.3` and locks **24.13.6**, which can type Node 23–24 APIs that `vite.config.ts` would then compile against while the process still runs on Node 22. Latest `@types/node` 22.x today is **22.20.5**. Node 20 went EOL in March 2026; `engines.node` is still `>=20`, and Security CI still sets `node-version: "20"`.
+
+Stay on the 22 line. Moving the runtime to Node 24 LTS stays on T0293.
+
+## Target
+
+- Root and client `@types/node` → **22.20.5**. Ranges whatever `npm install` writes (expect `^22.20.5`).
+- Root `engines.node`: `>=20` → `>=22` (floor only; no upper cap).
+- Docs: INSTALL.md and UPGRADES.md state Node 22 as the minimum.
+- Security CI runs on Node 22 so the required check matches `engines`.
+- `scripts/package_upgrade.sh` installs both copies of `@types/node@22.20.5` with the existing Express / TypeScript / dotenv pins. The task’s path `package_ugrade.sh` is this file.
+
+## Change
+
+1. **Install.** From the repo root: `npm install --save-dev @types/node@22.20.5`, then `npm install --prefix client --save-dev @types/node@22.20.5`.
+2. **`package.json`.** Set `engines.node` to `>=22`. Confirm the lockfile root `engines` entry matches.
+3. **`scripts/package_upgrade.sh`.** Add the two `@types/node@22.20.5` installs before the shared `npm test` / `npm run lint` / `npm run build:all`. Update the header comment.
+4. **INSTALL.md.** Minimum runtime and the verify lines say Node.js 22+ (the NodeSource 22.x install steps stay). Drop the “at least v20+” and “distro package may work if ≥ 20” wording.
+5. **UPGRADES.md.** Add a short Node 22 minimum note under Before you start. Do not rewrite the unrelated dirty paragraph already in the working tree.
+6. **`.github/workflows/security-ci.yml`.** `node-version: "20"` → `"22"`.
+7. **Do not edit** other dirty files already on `main` (plan moves, untracked docs and scripts).
+
+## Out of scope
+
+Node 24 runtime, images, or `@types/node` `^24` (T0293). Docker digest refresh. `FEATURES.md`. Schema. Deploy. Version bump and `RELEASE_NOTES.md` until finish-up. That notes block should record the engines floor under Breaking Changes (Node 20 is no longer supported) and the types alignment under Enhancements.
+
+## Checks
+
+- `npm test`, `npm run lint`, `npm run build`, `npm run build --prefix client`.
+- `package.json` and `client/package.json` both depend on `@types/node` 22.20.5; neither lockfile resolves a 24.x `@types/node` for the app packages.
+- `engines.node` is `>=22`.
+
+## Finish-up
+
+PATCH from `0.90.6`, `RELEASE_NOTES.md` as above, archive this plan on the feature branch.
+
+## Shipped
+
+Root and client `@types/node` 22.20.5. `engines.node` is `>=22`. INSTALL.md, UPGRADES.md, and Security CI match that floor. `scripts/package_upgrade.sh` installs both copies. Version `0.90.7`. No QA follow-ups.

@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.90.7 — 2026-10-19
+
+### Enhancements
+- Root and client `@types/node` are 22.20.5, aligned with the Node 22 runtime. The shared package upgrade script installs both copies with Express 5.3, TypeScript 7, and dotenv 18. Security CI runs on Node 22.
+
+### Breaking Changes
+- TaskMesh requires Node.js 22 or newer. INSTALL and UPGRADES state that minimum.
+
 ## 0.90.6 — 2026-10-19
 
 ### Enhancements

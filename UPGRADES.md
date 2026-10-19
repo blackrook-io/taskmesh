@@ -14,7 +14,7 @@ Release page: [v0.50.0-beta](https://github.com/blackrook-io/taskmesh/releases/t
 
 ## Before you start
 
-1. Read that release, especially **Breaking Changes**.
+1. Read that release, especially **Breaking Changes**. This app requires **Node.js 22+** (`engines` in root `package.json`). Node 20 is no longer supported.
 2. Back up the database and the uploads directory. In the app, use **Settings → Backups**, or follow [INSTALL.md § Backups](INSTALL.md#18-backups) (bare metal) or [INSTALL.md § A.5](INSTALL.md#a5-data-backups-and-updates) (Compose).
 3. Leave `.env` and `.env.docker` in place. Git does not replace them. If the release says a variable is now required, edit the file yourself.
 4. Keep `UPLOAD_DIR` off hidden directories. Express 5 `res.sendFile` returns 404 when any folder in the absolute path starts with `.` (for example `/home/you/.taskmesh/uploads`). `/var/lib/taskmesh/uploads` and the default `data/uploads` are fine.

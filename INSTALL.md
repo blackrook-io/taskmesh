@@ -297,7 +297,7 @@ The sections below are the manual reference, including a private LAN layout that
 | **build-essential** | Native module builds some npm packages may need |
 | **TaskMesh** | Express API (`src/`) + SPA (`client/`); uploads under `data/uploads/` by default |
 
-Minimum runtime: **Node.js 20+** (`engines` in root `package.json`). This guide installs **Node.js 22.x** from NodeSource (current Active LTS-style track commonly used on servers).
+Minimum runtime: **Node.js 22+** (`engines` in root `package.json`). This guide installs **Node.js 22.x** from NodeSource.
 
 ---
 
@@ -442,11 +442,11 @@ node -v
 npm -v
 ```
 
-Expect Node **v22.x** (or at least **v20+** per `package.json` `engines`).
+Expect Node **v22.x** or newer (`package.json` `engines` requires **22+**).
 
 ### Alternative: Ubuntu distro packages
 
-Ubuntu’s own `nodejs` package may work if it is ≥ 20, but versions lag. Prefer NodeSource or [nodejs.org](https://nodejs.org/en/download) for a current LTS.
+Ubuntu’s own `nodejs` package may work if it is **22 or newer**, but versions lag. Prefer NodeSource or [nodejs.org](https://nodejs.org/en/download) for Node.js 22.
 
 ```bash
 # Only if you intentionally use distro Node:

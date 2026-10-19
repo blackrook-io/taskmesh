@@ -1,6 +1,6 @@
 {
   "name": "taskmesh",
-  "version": "0.90.6",
+  "version": "0.90.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.20.5",
     "@types/pg": "^8.11.10",
     "concurrently": "^10.0.3",
     "drizzle-kit": "^0.31.10",
@@ -54,7 +54,7 @@
     "typescript": "^7.0.2"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "workspaces": [
     "plugins/ai-providers/*"
