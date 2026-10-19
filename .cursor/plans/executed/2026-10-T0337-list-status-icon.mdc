@@ -1,0 +1,57 @@
+---
+description: "T0337 — Remove the left status glyph from task list rows and keep state changes on the Status column and context menu"
+todos:
+  - id: drop-glyph
+    content: Remove StateCheckbox from project and global task list rows and the matching header spacer
+  - id: grid
+    content: Drop the 1.75rem chrome track from the task list grid (JS template and CSS fallback)
+  - id: keep-state
+    content: Leave Status column, completed-row dimming, and the Set state context submenu in place
+  - id: qa
+    content: Check both list surfaces, completed dimming, and narrow width
+---
+
+# T0337 — Remove the left status icon from task lists
+
+**Task:** T0337 · id `353` · project 4 (TaskMesh) · priority medium · state Ready  
+**Branch (on approval):** `T0337-list-status-icon`  
+**Depends-on:** none  
+**Parent:** none
+
+## Goal
+
+Task list rows drop the entire left status control: the rounded box and the glyph inside it (`/`, `!`, `○`, `✓`, and the other marks). ID, collapse count, and title shift left into that space. Status stays in the Status column. Completed rows stay dimmed. Changing state from the row uses the existing **Set state** context submenu (and the Status column control).
+
+## Size
+
+One client pass. No schema, no API. No split.
+
+## Decisions
+
+| # | Decision |
+|---|----------|
+| 1 | **Both task lists.** Project Tasks (`SortableTaskRow` in `TaskBoard`) and global Tasks (`TasksListPage`) both render `StateCheckbox`. Remove it from both. |
+| 2 | **Chrome track.** `TASK_CHROME` is `6px 1.5rem 1.75rem` (color stripe, drag handle, glyph). Drop the `1.75rem` track and the extra empty header cell so columns stay aligned. Update the CSS fallback grids the same way. |
+| 3 | **Quick-set already exists.** Right-click → **Set state** lists allowed next states on both lists and uses the same confirm/reason path as the glyph’s cycle. Keep that menu. Do not add a second one-click Complete control. |
+| 4 | **Status column stays.** The column dropdown remains the in-row editor. Completed dimming is `.task-list-row--complete` and does not depend on the glyph. |
+| 5 | **Glyph component.** `StateCheckbox` is only used by those two lists. Remove the component and the completed-row rule that only styles `.task-state-cb--done` inside a list row. Leave `task-state-cb` styles used by the plan board. |
+
+## Out of scope
+
+- Plan board check marks, mesh glyphs, and ToDo / Idea list chrome.
+- Changing which states the menu offers, or the Status column control.
+- Drag handle and color stripe.
+
+## Implementation
+
+1. Remove `<StateCheckbox>` from `SortableTaskRow` and the global list row, and drop the unused cycle props if nothing else calls them.
+2. Remove the third header spacer on both list headers.
+3. Set `TASK_CHROME` to `6px 1.5rem` and trim the matching `grid-template-columns` fallbacks in `index.css`.
+4. Delete `StateCheckbox` if nothing else imports it.
+
+## QA
+
+- Project Tasks and global Tasks: no left glyph; ID, collapse count, and title sit immediately after the drag handle; header labels line up with cells.
+- A completed row is still greyed. Other states are readable from the Status column.
+- Right-click → **Set state** still changes state (including Complete), including any reason prompt that state already required.
+- Narrow width: no leftover empty column and no overlap between the drag handle and the ID.

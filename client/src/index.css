@@ -2023,7 +2023,7 @@ textarea.raw-md {
 .task-list-header,
 .task-list-row {
   display: grid;
-  grid-template-columns: 6px 1.5rem 1.75rem 12.75rem minmax(8rem, 1.4fr) 9rem 6.5rem 6.5rem 8rem;
+  grid-template-columns: 6px 1.5rem 12.75rem minmax(8rem, 1.4fr) 9rem 6.5rem 6.5rem 8rem;
   gap: 0.35rem;
   align-items: center;
   padding: 0.35rem 0.5rem;
@@ -2032,7 +2032,7 @@ textarea.raw-md {
 
 .task-list--global.task-list .task-list-header,
 .task-list--global.task-list .task-list-row {
-  grid-template-columns: 6px 1.5rem 1.75rem 12.75rem minmax(8rem, 1.2fr) 9rem 6.5rem 6.5rem 8rem minmax(5rem, 8rem);
+  grid-template-columns: 6px 1.5rem 12.75rem minmax(8rem, 1.2fr) 9rem 6.5rem 6.5rem 8rem minmax(5rem, 8rem);
 }
 
 .task-list-row__assignee {
@@ -2139,11 +2139,6 @@ textarea.raw-md {
 
 .task-list-row--complete .row-tag-chips {
   opacity: 0.55;
-}
-
-.task-list-row--complete .task-state-cb--done {
-  color: #888;
-  border-color: #888;
 }
 
 .task-list-row__stripe {
@@ -2377,7 +2372,7 @@ textarea.raw-md {
   background: color-mix(in srgb, var(--accent) 28%, var(--surface));
 }
 
-/* Shared task-state accents (checkbox + list State column). */
+/* Shared task-state accents (plan-board checkbox + list State column). */
 .task-state-cb {
   width: 1.5rem;
   height: 1.5rem;

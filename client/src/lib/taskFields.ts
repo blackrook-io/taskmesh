@@ -153,7 +153,7 @@ export function formatTaskNumber(n: number): string {
   return `T${String(n).padStart(4, "0")}`;
 }
 
-/** CSS modifier shared by StateCheckbox and list State labels. */
+/** CSS modifier shared by the plan-board checkbox and list State labels. */
 export type TaskStateTone =
   | "draft"
   | "blocked"
