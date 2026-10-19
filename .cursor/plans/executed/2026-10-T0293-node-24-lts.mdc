@@ -1,0 +1,55 @@
+# T0293 — Move the runtime from Node 22 to Node 24 LTS
+
+**Task:** T0293 (id 308) — Plan the Node 22 to Node 24 LTS runtime move
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Depends on:** T0292 Align @types/node with Node 22 (`complete`)
+**Required by:** T0334 Create Release Candidate (`new`)
+**Branch (after approval):** `T0293-node-24-lts`
+**Version on finish-up:** PATCH from `0.90.7` (no migration). Skip `FEATURES.md` (toolchain floor, not a product feature).
+
+## Why
+
+T0292 left the runtime on Node 22 and pointed this task at the Node 24 LTS move. Node 22 support ends April 2027. This host is still **v22.22.1**. Docker, the Ubuntu installer, INSTALL / UPGRADES / SECURITY, `engines.node` (`>=22`), Security CI (`node-version: "22"`), and both `@types/node` copies (**22.20.5**) all describe that floor.
+
+This task does the cutover in the repo now. There is one tree: the release that contains it is what Production upgrades to, so DEV and Production move together. The running DEV process on this host stays on the system Node 22 until an administrator installs Node 24. Verification uses a side-by-side Node 24 so `:3001` keeps running.
+
+Latest `@types/node` on the 24 line is **24.19.2**. The `latest` dist-tag is 26.x; do not take it.
+
+## Target
+
+- `engines.node`: `>=22` → `>=24`.
+- Root and client `@types/node` → **24.19.2** (`^24.19.2` if that is what `npm install` writes).
+- `scripts/package_upgrade.sh` installs both copies of `@types/node@24.19.2` with the existing Express 5.3, TypeScript 7, and dotenv 18 pins. Header comment names T0293.
+- Security CI `node-version`: `"22"` → `"24"`.
+- Docker: `node:24-bookworm` and `node:24-bookworm-slim`, digest-pinned. SECURITY.md and the INSTALL.md inspect examples match.
+- Bare metal: NodeSource `setup_24.x`. `deploy/install-ubuntu.sh` `NODE_MAJOR_TARGET` and `NODE_MAJOR_MIN` both **24** (22 no longer meets `engines`). INSTALL.md and UPGRADES.md say Node.js 24+ and that Node 22 is no longer supported.
+
+## Change
+
+1. **Install types.** `npm install --save-dev @types/node@24.19.2` and the same with `--prefix client`.
+2. **`package.json`.** `engines.node` `>=24`. Confirm the lockfile root `engines` entry matches.
+3. **`scripts/package_upgrade.sh`.** Replace the two `@types/node@22.20.5` lines with `@types/node@24.19.2`. Update the header comment.
+4. **`.github/workflows/security-ci.yml`.** `node-version: "24"`.
+5. **`Dockerfile`.** Switch both stages to Node 24 tags and refresh digests with `docker buildx imagetools inspect`.
+6. **`deploy/install-ubuntu.sh`.** `NODE_MAJOR_TARGET=24`, `NODE_MAJOR_MIN=24`, `setup_24.x`. Prompt text that still says 20 or 22 follows those constants.
+7. **INSTALL.md, UPGRADES.md, SECURITY.md.** Node 24 minimum, NodeSource 24.x, image names `node:24-bookworm` / `node:24-bookworm-slim`.
+8. **Do not edit** other dirty files already on `main` (plan moves, untracked docs and scripts).
+9. **Do not replace** the system Node that serves DEV. Run `npm test`, `npm run lint`, and `npm run build:all` under a temporary Node 24 binary.
+
+## Out of scope
+
+Installing Node 24 as the system runtime on this host or on Production (administrator step when taking the release; UPGRADES.md tells them). Node 26. `FEATURES.md`. Schema. Deploy. Version bump and `RELEASE_NOTES.md` until finish-up. That notes block should record the engines floor under Breaking Changes (Node 22 is no longer supported) and the types / CI / image alignment under Enhancements.
+
+## Checks
+
+- `npm test`, `npm run lint`, `npm run build:all` on Node 24.
+- `package.json` and `client/package.json` both depend on `@types/node` 24.19.2.
+- `engines.node` is `>=24`. Security CI uses Node 24. Dockerfile tags are `node:24-*` with digests. Installer target and minimum are 24.
+
+## Finish-up
+
+PATCH from `0.90.7`, `RELEASE_NOTES.md` as above, archive this plan on the feature branch.
+
+## Shipped
+
+`engines.node` is `>=24`. Root and client `@types/node` are 24.19.2. Security CI, digest-pinned `node:24-bookworm` images, and the NodeSource 24 installer match that floor. `scripts/package_upgrade.sh` installs both type copies. Version `0.90.8`. No QA follow-ups. This host’s system Node stayed on 22; the suite ran on Node 24.22.0.

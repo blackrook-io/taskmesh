@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.90.8 — 2026-10-19
+
+### Enhancements
+- Root and client `@types/node` are 24.19.2. Security CI, the digest-pinned Docker images, and the Ubuntu installer all use Node 24. The shared package upgrade script installs both type packages with Express 5.3, TypeScript 7, and dotenv 18.
+
+### Breaking Changes
+- TaskMesh requires Node.js 24 or newer. Node 22 is no longer supported. INSTALL and UPGRADES describe the NodeSource 24.x upgrade.
+
 ## 0.90.7 — 2026-10-19
 
 ### Enhancements

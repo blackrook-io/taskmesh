@@ -36,8 +36,8 @@ UPLOAD_DIR="${APP_HOME}/uploads"
 BACKUP_DIR="${APP_HOME}/backups"
 ACME_WEBROOT="/var/www/letsencrypt"
 GIT_URL="https://github.com/blackrook-io/taskmesh.git"
-NODE_MAJOR_TARGET=22
-NODE_MAJOR_MIN=20
+NODE_MAJOR_TARGET=24
+NODE_MAJOR_MIN=24
 SITE_TEMPLATE_NAME="nginx-taskmesh-site.conf"
 NGINX_SITE_AVAILABLE="/etc/nginx/sites-available/taskmesh"
 NGINX_SITE_ENABLED="/etc/nginx/sites-enabled/taskmesh"
@@ -479,7 +479,7 @@ install_postgres_packages() {
 install_nodesource() {
   local setup
   setup="$(mktemp)"
-  curl -fsSL https://deb.nodesource.com/setup_22.x -o "$setup"
+  curl -fsSL https://deb.nodesource.com/setup_24.x -o "$setup"
   run_root bash "$setup"
   rm -f "$setup"
   run_root "${APT_INSTALL[@]}" nodejs
@@ -503,7 +503,7 @@ install_node() {
         ensure_packages nodejs
       fi
     elif ((major >= NODE_MAJOR_MIN)); then
-      echo "Node.js $(node -v) meets the minimum (20). TaskMesh installs ${NODE_MAJOR_TARGET}.x on new servers."
+      echo "Node.js $(node -v) meets the minimum (${NODE_MAJOR_MIN}). TaskMesh installs ${NODE_MAJOR_TARGET}.x on new servers."
       if [[ "$CHECK_ONLY" -eq 1 ]]; then
         return 0
       fi
