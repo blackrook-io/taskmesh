@@ -1,0 +1,43 @@
+# T0291 — Upgrade dotenv 16 to 18 and silence the load log
+
+**Task:** T0291 (id 306) — Upgrade dotenv 16 to 18 and silence the load log
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Depends on:** none
+**Required by:** T0334 Create Release Candidate (`new`)
+**Branch (after approval):** `T0291-dotenv-18`
+**Version on finish-up:** PATCH (no migration). Skip `FEATURES.md` (dependency upgrade).
+
+## Why
+
+`package.json` ranges `dotenv` at `^16.4.5`; the lockfile resolves **16.6.1**. Every app entry uses `import "dotenv/config"` (`src/index.ts`, `src/db/client.ts`, `src/db/migrate.ts`, `drizzle.config.ts`, backup and assistant scripts, and the installer helper embedded in `deploy/install-ubuntu.sh`). 18 still exports `./config`. `.env.vault` and `node -r dotenv/config` are removed in 18 and are unused here.
+
+The task text was written against **18.0.0** (2026-09-17), which logs `injected env (N) from .env` on stderr. Current **18.0.8** (2026-10-14) changed that: `config.js` passes `quiet: true` unless `DOTENV_QUIET` or `DOTENV_CONFIG_QUIET` is already set. Keeping the side-effect import is enough to meet “print no dotenv line.” A shared `config({ quiet: true })` module, or setting `DOTENV_CONFIG_QUIET` in the unit file, Compose, and `.env.example`, would repeat a default 18.0.8 already applies.
+
+## Target
+
+- Dependency `dotenv` → **18.0.8** (latest 18.x at plan time; `engines.node` is `>=12`). Range whatever `npm install dotenv@18.0.8` writes (expect `^18.0.8`).
+- Leave every `import "dotenv/config"` in place. Do not add `DOTENV_CONFIG_QUIET`.
+- If 18.0.8’s preload stops defaulting to quiet, stop and switch the entrypoints to one `src/lib/loadEnv.ts` that calls `config({ quiet: true })`.
+
+## Change
+
+1. **Install.** `npm install dotenv@18.0.8` from the repo root. Confirm `node_modules/dotenv/config.js` still sets `quiet: true` when those env vars are unset.
+2. **`scripts/package_upgrade.sh`.** Keep the Express 5.3 and TypeScript 7.0.2 installs. Add `npm install dotenv@18.0.8` before the shared `npm test` / `npm run lint` / `npm run build:all`. Update the header comment. The task’s path `package_ugrade.sh` is this file.
+3. **Do not edit** the unrelated dirty files already on `main` (`UPGRADES.md`, plan moves, untracked docs and scripts).
+
+## Out of scope
+
+Service, Compose, and `.env.example` quiet flags. Replacing side-effect imports. Worktask skill snippets that also import `dotenv/config` (they pick up the same package and stay quiet). `FEATURES.md`. Schema. Deploy. Version bump until finish-up.
+
+## Checks
+
+- `npm test`, `npm run lint`, `npm run build`.
+- `npm run dev` (or the API already on `:3001`), `node dist/index.js` started the way production does, `npm run db:migrate`, and `npm run backup` still read `.env` and print no `injected env` line. Do not leave a second production server running on `:3000`.
+
+## Finish-up
+
+PATCH from current `package.json` (`0.90.5`), `RELEASE_NOTES.md` enhancement for the dotenv upgrade, archive this plan on the feature branch.
+
+## Shipped
+
+dotenv 18.0.8. Side-effect `import "dotenv/config"` left in place; that entry passes `quiet: true` unless `DOTENV_QUIET` or `DOTENV_CONFIG_QUIET` is set. `scripts/package_upgrade.sh` installs `dotenv@18.0.8` with Express 5.3 and TypeScript 7.0.2. Version `0.90.6`. No QA follow-ups.
