@@ -1,0 +1,61 @@
+---
+description: "T0336 — Always show done/total beside the task-list parent chevron, sharing the rollup count with the progress meter"
+todos:
+  - id: count-component
+    content: Extract the done/total label so the chevron and TaskRollupMeter use one component
+  - id: always-show
+    content: Render that count beside the chevron expanded and collapsed, in a fixed-width slot
+  - id: qa
+    content: Check global Tasks, project Tasks, and a nested parent at two depths
+---
+
+# T0336 — Always show child counts on parent rows
+
+**Task:** T0336 · id `352` · project 4 (TaskMesh) · priority medium · state Ready  
+**Branch (on approval):** `T0336-parent-child-counts`  
+**Depends-on:** none  
+**Parent:** none
+
+## Goal
+
+On task list parent rows, the child count sits next to the chevron when the group is expanded and when it is collapsed. The count uses the same `done/total` format as the T0335 progress indicator (`3/4`) and the same component. The chevron and count occupy a fixed-width slot at every indent level.
+
+## Size
+
+One client pass. No schema, no API. Rollup fields already come from T0335. No split.
+
+## Decisions
+
+| # | Decision |
+|---|----------|
+| 1 | **Same numbers as the progress meter.** Show `rollupDone/rollupTotal` (leaves complete / leaves counted). This replaces the collapsed-only hidden-descendant integer (`10`, `8`). Canceled leaves stay out of the fraction, matching T0335. |
+| 2 | **Shared component.** Extract the fraction from `TaskRollupMeter` into a small count component. The meter (title) and the chevron both render it. The title keeps `3/4` plus the bar, as T0335 shipped. |
+| 3 | **Both states.** Render the count whenever `rollupDone` and `rollupTotal` are set, expanded or collapsed. A parent with no counted leaves (chevron only) keeps the chevron and leaves the count slot empty. |
+| 4 | **Fixed slot.** The twist control has a constant width that fits chevron + `99/99`, so expanding does not reflow the row. It stays in the number cell. Title indent is unchanged, so the slot lines up at every depth. Widen the number track if `T####` plus that slot clips. |
+| 5 | **Surfaces.** Global Tasks, project Tasks, and the Task Group nav sub-list — all go through `renderTaskColumnCell`. |
+| 6 | **Screen reader.** The twist label includes the fraction in both states (for example “Collapse child tasks, 3 of 4 complete”). |
+
+## Out of scope
+
+- ToDo lists, Ideas, wiki, document folders, and Task Group / Unassigned section headers.
+- Filter-scoped counts. The fraction is the server rollup, not “rows this filter would reveal.”
+- Moving or removing the title progress bar.
+
+## Implementation
+
+1. Add the shared count component next to `TaskRollupMeter` and use it inside the meter.
+2. In the number cell, always render that count for a parent with a rollup. Drop the `collapsed && hiddenCount` gate.
+3. Give the twist control a fixed width; bump the `number` grid track only if the current `8.25rem` clips.
+4. Point the accessible name at the rollup fraction. `hiddenCount` can remain on the row builders; the cell no longer displays it.
+
+## QA
+
+- Expanded and collapsed parent both show `3/4` (or the live rollup) beside the chevron, and the same fraction beside the title bar.
+- Collapse and expand do not shift the title.
+- A nested parent at depth 1 lines its chevron and count up with the root parent.
+- A leaf row has no chevron and no count.
+- A parent whose children are all canceled keeps the chevron and an empty count slot.
+
+## QA follow-ups
+
+The list row showed the fraction twice. The title copy of `done/total` and its bar are removed. The twist slot now holds the chevron, the one `done/total`, and the progress bar. The task editor still shows the meter under State.

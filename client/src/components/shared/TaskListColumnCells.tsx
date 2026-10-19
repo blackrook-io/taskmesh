@@ -80,7 +80,7 @@ export type TaskColumnCellContext = {
   depth: number;
   duplicate?: boolean;
   hasChildren?: boolean;
-  /** Descendants hidden while this parent is collapsed. */
+  /** Descendants the list would show if this parent were expanded. Not displayed. */
   hiddenCount?: number;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -266,6 +266,16 @@ function ListRowSelect({
   );
 }
 
+function childTwistLabel(
+  collapsed: boolean | undefined,
+  done: number | null | undefined,
+  total: number | null | undefined,
+): string {
+  const action = collapsed ? "Expand child tasks" : "Collapse child tasks";
+  if (done == null || total == null) return action;
+  return `${action}, ${done} of ${total} complete`;
+}
+
 export function renderTaskColumnCell(
   fieldKey: string,
   ctx: TaskColumnCellContext,
@@ -275,7 +285,6 @@ export function renderTaskColumnCell(
     depth,
     duplicate,
     hasChildren,
-    hiddenCount = 0,
     collapsed,
     onToggleCollapse,
     onPatch,
@@ -292,26 +301,28 @@ export function renderTaskColumnCell(
         <span key="number" className="task-list-row__num">
           <span className="muted">{formatTaskNumber(task.number)}</span>
           {hasChildren ? (
-            <button
-              type="button"
-              className="task-list-row__twist"
-              aria-expanded={!collapsed}
-              aria-label={
-                collapsed
-                  ? `Expand child tasks, ${hiddenCount} hidden`
-                  : "Collapse child tasks"
-              }
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleCollapse?.();
-              }}
-            >
-              {collapsed ? "▸" : "▾"}
-              {collapsed && hiddenCount > 0 ? (
-                <span className="task-list-row__hidden-count">{hiddenCount}</span>
+            <span className="task-list-row__twist-slot">
+              <button
+                type="button"
+                className="task-list-row__twist"
+                aria-expanded={!collapsed}
+                aria-label={childTwistLabel(collapsed, task.rollupDone, task.rollupTotal)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleCollapse?.();
+                }}
+              >
+                {collapsed ? "▸" : "▾"}
+              </button>
+              {task.rollupDone != null && task.rollupTotal != null ? (
+                <TaskRollupMeter
+                  done={task.rollupDone}
+                  total={task.rollupTotal}
+                  labelled={false}
+                />
               ) : null}
-            </button>
+            </span>
           ) : null}
         </span>
       );
@@ -328,9 +339,6 @@ export function renderTaskColumnCell(
             </span>
           ) : null}
           <span className="task-list-row__title-text">{task.title}</span>
-          {task.rollupTotal != null && task.rollupDone != null ? (
-            <TaskRollupMeter done={task.rollupDone} total={task.rollupTotal} />
-          ) : null}
           {duplicate ? (
             <span className="task-list-row__duplicate" title="Also shown in another group">
               Duplicate

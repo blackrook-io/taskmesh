@@ -27,7 +27,7 @@ export type ResolvedListColumn = ListViewField & { visible: boolean };
 export type ListViewSurface = "project" | "global" | "ideas" | "todos";
 
 const TASK_TRACK: Record<string, string> = {
-  number: "8.25rem",
+  number: "12.75rem",
   title: "minmax(8rem, 1.4fr)",
   state: "9rem",
   assignee: "6.5rem",
