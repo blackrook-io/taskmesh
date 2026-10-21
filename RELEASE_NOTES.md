@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.95.2 — 2026-10-21
+
+### Enhancements
+- Related Tasks can ship as one epic. Starting an epic confirms which children of a parent Task share one branch. Each child is implemented and QA’d in its own chat, and finishing the epic publishes one version and one pull request. A Task that is not in an epic still finishes up on its own.
+
 ## 0.95.1 — 2026-10-21
 
 ### Fixes

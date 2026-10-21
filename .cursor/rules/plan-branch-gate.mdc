@@ -14,7 +14,11 @@ are **already in the midst of one**:
   - an active plan exists for this work (a `.cursor/plans/*.mdc`, or a plan just
     approved this session), OR
   - the user explicitly invoked `/worktask` / the worktask skill this session
-    and you are following that skill’s workflow.
+    and you are following that skill’s workflow, OR
+  - an epic plan under `.cursor/plans/` has `Epic status: open` **and** the
+    requested work is a member of that epic (the branch is that parent’s
+    `T####-*`). An open epic plan is not approval to start unrelated work.
+    A dirty worktree still blocks `/startepic` from switching branches.
 - **Not in progress** (challenge required): the branch is `main` (or another
   base branch) and there is no active plan for the requested work.
 

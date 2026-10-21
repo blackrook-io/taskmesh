@@ -6,7 +6,9 @@ description: >-
   plans and interviews, creates a T#### git branch, marks the task In Progress
   with a plan comment, implements, records QA follow-ups in plan + Task
   comments + commits, then on finish-up marks Complete with a completion
-  comment. Finish-up does not deploy.
+  comment. When the Task is a member of an open epic, joins that epic branch
+  instead, commits the slice only after QA acceptance, and does not publish
+  on finish up. Finish-up does not deploy.
   Use only when the user explicitly invokes /worktask or names this skill.
 disable-model-invocation: true
 ---
@@ -33,6 +35,7 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 8. **Child Task → Parent** — if the Agent needs more context or information on a Child Task, it should refer to the Parent. Load the Parent from the DEV API (`parentId` → `GET /api/v1/tasks/{parentId}` plus description/comments as needed). Do not invent missing background.
 9. **Deferred scope → new Task** — if interview/sizing defers work out of the current Task, create a Task on the DEV API with full context and relate it via dependencies to the working Task (see §4 and [reference.md](reference.md)). Never leave deferrals only in the plan.
 10. **Do not deploy** — finish-up merges to `main` and closes the Task. Production updates are the Administrator’s Upgrade from a GitHub Release ([UPGRADES.md](../../../UPGRADES.md)). Never run `npm run deploy:prod` as part of `/worktask` or finish-up.
+11. **Open epic** — after load, detect an epic plan under `.cursor/plans/` (not `executed/`) with `Epic status: open` whose member table lists this `T####` and whose status is not `dropped`. If it does, follow § 1b and stop. That path replaces steps 2–7. **Finish up** does not publish an epic member. `/finishepic` is the only publish. See [reference.md](reference.md) § Epic.
 
 ## Workflow checklist
 
@@ -42,6 +45,7 @@ Copy and track:
 Worktask:
 - [ ] 0. Auth (DEV session or API key; start `npm run dev` if :3001 is down)
 - [ ] 1. Load task + activity from the DEV API
+- [ ] 1b. Open epic? If this Task is a non-dropped member, follow the epic path and stop
 - [ ] 2. Scope / size check (split recommendation if needed)
 - [ ] 2b. Depends-on gate (stop if open blockers)
 - [ ] 3. State gate (`ready` to start; Draft/`new` or other → alert & wait)
@@ -49,7 +53,7 @@ Worktask:
 - [ ] 5. User approves plan → branch + In Progress + start comment
 - [ ] 6. Implement + QA checklist
 - [ ] 6b. QA follow-ups → update plan + Task comment + commit message
-- [ ] 7. User “finish up” → version bump + PR merge + Complete + finish comment (no deploy)
+- [ ] 7. User “finish up” → version bump + PR merge + Complete + finish comment (no deploy). Epic members: do not run this step
 ```
 
 ### 0. Auth (DEV)
@@ -81,6 +85,36 @@ Requires step 0 (authenticated curls).
 6. If `parentId` is set: fetch the Parent from the DEV API. If the Child’s title, description, or comments are thin, ambiguous, or incomplete — or you otherwise need more context or information on the Child Task — **refer to the Parent** (title, description, comments, activity). Use that as the missing brief; do not ask the user to restate what the Parent already records.
 
 If not found, auth fails, or the DEV API is unhealthy after starting `npm run dev` → stop and report.
+
+### 1b. Open epic member
+
+Run this before sizing, the Depends-on gate, the state gate, or any branch.
+
+1. Find `**Epic status:** open` in `.cursor/plans/*.mdc` only. Ignore `.cursor/plans/executed/`.
+2. If no open epic lists this Task with a status other than `dropped`, leave this section and continue at § 2. If two open epics list it, stop and name both files.
+3. This section **replaces steps 2–7**. Do not create a branch from `main`. Do not open a pull request.
+
+Then:
+
+1. **Tree.** If `HEAD` is not the epic branch and `git status --porcelain` is non-empty, stop. Do not stash or discard. If `HEAD` is the epic branch, a dirty tree is this slice in progress.
+2. **One writer.** If another member row is `in_progress`, stop and name that Task.
+3. **Order.** If an in-epic Depends-on row is not `qa_accepted` or `dropped`, stop and name it. A Depends-on Task that is **not** in the member table still uses the lone-Task gate: stop unless its state is `complete`, `canceled`, or `pending`.
+4. **Parent `no_work`.** When this Task is the parent row and its status is `no_work`, do not implement. Print the next paste line (lowest `Order` whose status is `not_started`). When every in-scope row is `qa_accepted` or `no_work`, tell the user to open a new Agent chat and run `/finishepic`. Stop.
+5. **Already accepted.** When this row is `qa_accepted`, do not start another slice. Print the next paste line, or point at `/finishepic`. Stop.
+6. **Resume.** When this row is `in_progress`, continue that section. Do not reset the status.
+7. **Start.** When this row is `not_started`, set it to `in_progress`, `PATCH` `{ "state": "in_progress" }`, and post the epic-member start comment ([reference.md](reference.md) § Epic). Implement **only** that plan section. End the pass with a QA checklist.
+8. **QA follow-ups** append to that section and post a Task comment. Re-issue the checklist.
+9. **QA accepted** when the user says `QA passed`, `QA pass`, or `this task passed`. If the wording is only vaguely positive, ask once. Then commit the slice on the epic branch (HEREDOC; author env vars if needed). The message names `T####` and any QA follow-ups. No version bump, no `RELEASE_NOTES.md`, no archive, no pull request. Set the row to `qa_accepted`. Post the QA-accepted comment. Print the next paste line, or tell the user to open a new chat and run `/finishepic` when no `not_started` row remains.
+10. **Finish up.** Do not commit, bump, archive, open a pull request, or `PATCH` `complete`. Say that finish up does not apply during an epic. If this section is not `qa_accepted`, say so. If every in-scope row is `qa_accepted` or `no_work`, point at `/finishepic`.
+11. **Add / drop / defer** when the user asks, using the rules in [reference.md](reference.md) § Epic. Update the member table and post a comment on the parent.
+
+Paste line, and only the next child:
+
+```text
+Next — open a new Agent chat and paste:
+
+/worktask T0160
+```
 
 ### 2. Size / split check
 
@@ -136,14 +170,16 @@ Only after the user approves the plan:
 
 When the user requests **new functionality or corrections** during QA:
 
-1. **Update the plan** — append a “QA follow-ups” section (what changed / why). Keep the plan file current before the next checklist or finish-up.
+1. **Update the plan** — append a “QA follow-ups” section (what changed / why). Keep the plan file current before the next checklist or finish-up. On an epic member, append that note under the member’s section of the epic plan.
 2. **Task comment** — post a progress comment on the DEV API summarizing the QA changes (template in [reference.md](reference.md)). Do this when the follow-up pass lands, not only at Complete.
 3. **Commit message** — when committing that work (or on finish-up), name the QA additions/fixes explicitly alongside any original scope.
 4. Re-issue an updated **QA checklist** for the new/changed behavior.
 
 ### 6. Finish up (user says “finish up”)
 
-Do **all** of the following in order (same as development-rules, with Task bookkeeping last). **`main` is protected** (required status checks) — never push commits directly to `main`.
+If § 1b applied, do not run this section.
+
+Do **all** of the following in order (same as development-rules, with Task bookkeeping last). **`main` is protected** (required status checks) — never push commits directly to `main`. This is the lone-Task publish. An open epic publishes only through `/finishepic`.
 
 1. **Commit** remaining work on the feature branch (HEREDOC message; author env vars if needed). If QA follow-ups shipped, mention them in the message. **Bump app version** in this commit if it is not already on the branch — follow [.cursor/rules/versioning.mdc](../../rules/versioning.mdc) (MINOR +1 / PATCH reset if this Task added a new `drizzle/*.sql` file; otherwise PATCH +1; set `createdAt` to UTC now; keep MAJOR at `0` unless breaking). T0076 ships `0.22.1`; increment from current `package.json`, do not re-count migrations. **Same commit:** update [`RELEASE_NOTES.md`](../../../RELEASE_NOTES.md) — recreate stub if missing/empty, then prepend the new version block (outcome-focused bullets; omit empty sections; Breaking Changes when schema/API breaks). If this Task shipped **major user-facing functionality**, update [`FEATURES.md`](../../../FEATURES.md) in that commit too (single-line website bullets; skip for bugfixes-only / internal workflow). See [development-rules.mdc](../../rules/development-rules.mdc).
 2. **Archive the plan on the feature branch** — `git mv` active `.cursor/plans/<file>.mdc` → `.cursor/plans/executed/` (same filename), commit on the feature branch (can be the same finish-up commit as step 1, or immediately after). Archived plan must include any QA follow-up notes. Do **not** leave the archive commit for after merge to `main`.
@@ -165,6 +201,8 @@ If the user wants finish-up **without** closing the Task (follow-ups remain), as
 |------|---------|---------|
 | Branch | `T####-<slug>` | `T0036-wiki-search` |
 | Plan file | `<YYYY-MM>-T####-<slug>.mdc` | `2026-08-T0036-wiki-search.mdc` |
+| Epic branch | `T####-<slug>` (parent number) | `T0159-mesh` |
+| Epic plan | `<YYYY-MM>-T####-epic-<slug>.mdc` | `2026-10-T0159-epic-mesh.mdc` |
 
 Do not use `phase-N-` prefixes for `/worktask` workstreams.
 
