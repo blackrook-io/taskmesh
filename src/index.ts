@@ -12,6 +12,8 @@ import { securityHeaders } from "./middleware/securityHeaders.js";
 import { v1Router } from "./routes/v1/index.js";
 import { registerDocumentExtractJob, sweepDocumentExtractions } from "./services/documents/extractJob.js";
 import { registerDigestJobs } from "./services/digest/jobs.js";
+import { registerMailJobs } from "./services/mail/jobs.js";
+import { registerNotificationJobs } from "./services/notifications/jobs.js";
 import { registerKnowledgeJobs, resumeKnowledgeRebuild } from "./services/knowledge/jobs.js";
 import { registerDuplicateJobs } from "./services/assistant/duplicates/jobs.js";
 import { registerTaggingJobs } from "./services/assistant/tagging/jobs.js";
@@ -32,6 +34,8 @@ registerKnowledgeJobs();
 registerTaggingJobs();
 registerDuplicateJobs();
 registerDigestJobs();
+registerMailJobs();
+registerNotificationJobs();
 
 const app = express();
 app.set("trust proxy", parseTrustProxy());

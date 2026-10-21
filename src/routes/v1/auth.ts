@@ -33,10 +33,12 @@ import {
 import { mintTrustedDevice } from "../../services/mfaTrustedDevices.js";
 import {
   completeOauthCallback,
+  oauthPublicBaseUrl,
   safeOauthReturnTo,
   startOauthFlow,
 } from "../../services/oauth/flow.js";
 import { isOauthSlug, listPublicOauthProviders } from "../../services/oauth/providers.js";
+import { confirmEmailSignup, requestEmailSignup } from "../../services/signup.js";
 
 const loginBody = z
   .object({
@@ -49,6 +51,19 @@ const mfaVerifyBody = z
   .object({
     code: z.string().trim().min(6).max(20),
     trustDevice: z.boolean().optional(),
+  })
+  .strict();
+
+const signupBody = z
+  .object({
+    email: z.string().trim().email().max(320),
+    password: z.string().min(1).max(200),
+  })
+  .strict();
+
+const confirmSignupBody = z
+  .object({
+    token: z.string().trim().min(1).max(200),
   })
   .strict();
 
@@ -93,6 +108,34 @@ function loginRedirect(errorCode?: string, returnTo?: string, extra?: Record<str
 }
 
 export const authRouter = Router();
+
+authRouter.post("/signup", loginRateLimit, async (req, res) => {
+  try {
+    const body = signupBody.parse(req.body);
+    const data = await requestEmailSignup(db, {
+      email: body.email,
+      password: body.password,
+      publicBaseUrl: oauthPublicBaseUrl(req),
+    });
+    res.locals.logMessage = "Email signup requested";
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
+
+authRouter.post("/signup/confirm", loginRateLimit, async (req, res) => {
+  try {
+    const body = confirmSignupBody.parse(req.body);
+    const data = await confirmEmailSignup(db, body.token);
+    res.locals.logMessage = "Email signup confirmed";
+    res.json({ data });
+  } catch (err) {
+    if (serviceError(res, err)) return;
+    handleRouteError(res, err);
+  }
+});
 
 authRouter.post("/login", loginRateLimit, async (req, res) => {
   try {

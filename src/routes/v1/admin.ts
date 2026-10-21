@@ -68,6 +68,7 @@ import { meshAppearanceEqual } from "../../lib/meshAppearance.js";
 import { isUsageRange } from "../../lib/usageRange.js";
 import { registerAiProviderAdminRoutes } from "./adminAiProviders.js";
 import { registerAdminJobRoutes } from "./adminJobs.js";
+import { registerAdminMailRoutes } from "./adminMail.js";
 import {
   getSystemProperties,
   patchSystemProperties,
@@ -102,6 +103,7 @@ export const adminRouter = Router();
 adminRouter.use(requireAdministrator);
 registerAiProviderAdminRoutes(adminRouter);
 registerAdminJobRoutes(adminRouter);
+registerAdminMailRoutes(adminRouter);
 
 function serviceError(res: Parameters<typeof sendError>[0], err: unknown): boolean {
   if (

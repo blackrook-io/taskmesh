@@ -25,6 +25,7 @@ import {
 import { derivedStatePatchRejected } from "../../lib/taskRollup.js";
 import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
+import { reportAssigneeChange } from "../../services/notifications/events.js";
 import {
   allocateTaskNumber,
   assertParentCompatible,
@@ -259,6 +260,16 @@ export async function createStandaloneTask(args: {
     actorUserId: args.actorId,
   });
   await scheduleKnowledgeIndex("task", row.id);
+  reportAssigneeChange(db, {
+    actorUserId: args.actorId,
+    previousAssigneeId: null,
+    assigneeId,
+    entityType: "task",
+    entityId: row.id,
+    number: row.number,
+    title: row.title,
+    projectId: row.projectId,
+  });
   const created = await attachTaskActor(db, row);
   const [data] = await attachAllowedNextStates(db, args.actorId, [created]);
   return { ok: true, status: 201, data };
@@ -487,6 +498,16 @@ standaloneTasksRouter.patch("/:taskId", async (req, res) => {
       }
       if (row.state === "deleted") await forgetKnowledge("task", row.id);
       else await scheduleKnowledgeIndex("task", row.id);
+      reportAssigneeChange(db, {
+        actorUserId: actorId,
+        previousAssigneeId: existing.assigneeId,
+        assigneeId: row.assigneeId,
+        entityType: "task",
+        entityId: row.id,
+        number: row.number,
+        title: row.title,
+        projectId: row.projectId,
+      });
     }
     if (!row) {
       res.json({ data: row });

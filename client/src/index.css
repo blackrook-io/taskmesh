@@ -963,6 +963,144 @@ a.app-nav__item.active {
   max-width: 42rem;
 }
 
+.notifications-page {
+  max-width: 42rem;
+}
+
+.notifications-page__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.notification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.notification-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 0.75rem;
+  row-gap: 0.2rem;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+}
+
+.notification-card--unread {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.notification-card--read {
+  opacity: 0.72;
+}
+
+.notification-card--read .notification-card__title {
+  font-weight: 500;
+}
+
+.notification-card__type {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.notification-card__title,
+.notification-card__body,
+.notification-card time {
+  grid-column: 1 / -1;
+}
+
+.notification-card__status {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, var(--border));
+}
+
+.notification-card--unread .notification-card__status {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.notification-card__title {
+  font-weight: 650;
+}
+
+.notification-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.notification-prefs__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification-prefs__tab {
+  margin: 0 0 -1px;
+  min-height: var(--touch-min);
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.notification-prefs__tab:hover {
+  color: var(--text);
+}
+
+.notification-prefs__tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 650;
+}
+
+.notification-prefs__type {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.notification-prefs__hours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.notification-prefs__hour {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 8rem;
+}
+
 .digest-panel {
   margin-top: 1.25rem;
   display: flex;
@@ -3894,6 +4032,24 @@ textarea.raw-md {
   margin-bottom: 0;
 }
 
+.admin-field-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.admin-field-pair > .field {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .admin-field-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .admin-panel .field span {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -3905,6 +4061,16 @@ textarea.raw-md {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.85rem;
+}
+
+.admin-mail-actions {
+  margin-top: 0.35rem;
+}
+
+.admin-mail-enable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .admin-user-name {

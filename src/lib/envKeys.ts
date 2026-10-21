@@ -1,7 +1,11 @@
 /** Minimum trimmed length for AES KEKs derived via SHA-256. */
 export const ENV_KEY_MIN_LENGTH = 32;
 
-export type EnvKeyName = "MFA_TOTP_KEY" | "OAUTH_CREDENTIALS_KEY" | "AI_CREDENTIALS_KEY";
+export type EnvKeyName =
+  | "MFA_TOTP_KEY"
+  | "OAUTH_CREDENTIALS_KEY"
+  | "AI_CREDENTIALS_KEY"
+  | "EMAIL_CREDENTIALS_KEY";
 
 /**
  * When the env var is set, require minimum length. Empty/unset is allowed
@@ -26,6 +30,7 @@ export function assertConfiguredEnvKeys(env: NodeJS.ProcessEnv = process.env): v
   assertEnvKeyStrength("MFA_TOTP_KEY", env);
   assertEnvKeyStrength("OAUTH_CREDENTIALS_KEY", env);
   assertEnvKeyStrength("AI_CREDENTIALS_KEY", env);
+  assertEnvKeyStrength("EMAIL_CREDENTIALS_KEY", env);
 }
 
 export function readStrongEnvKey(

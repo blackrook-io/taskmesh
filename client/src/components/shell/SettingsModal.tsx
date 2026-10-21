@@ -7,6 +7,7 @@ import { AiActivityPanel } from "../settings/AiActivityPanel";
 import { AssistantSettingsPage } from "../../pages/AssistantSettingsPage";
 import { ImportExportPage } from "../../pages/ImportExportPage";
 import { ProfileSettingsPage } from "../../pages/ProfileSettingsPage";
+import { NotificationPreferences } from "../NotificationPreferences";
 import { TagsSettingsPanel } from "../settings/TagsSettingsPanel";
 import { useModalScrollbarGutter } from "../../lib/useModalScrollbarGutter";
 import {
@@ -27,6 +28,7 @@ const SECTION_ICONS: Record<SettingsSection, IconDefinition> = {
   "import-export": shellIcons.filesystem,
   assistant: shellIcons.assistant,
   "ai-activity": shellIcons.assistant,
+  notifications: shellIcons.email,
 };
 
 function AppearancePanel() {
@@ -193,6 +195,7 @@ export function SettingsModal() {
             {section === "import-export" ? <ImportExportPage embedded /> : null}
             {section === "assistant" ? <AssistantSettingsPage embedded /> : null}
             {section === "ai-activity" ? <AiActivityPanel /> : null}
+            {section === "notifications" ? <NotificationPreferences /> : null}
           </div>
         </div>
       </div>

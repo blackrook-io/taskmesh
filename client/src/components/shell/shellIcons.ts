@@ -8,6 +8,7 @@ import {
   faColumns,
   faDatabase,
   faDrawPolygon,
+  faEnvelope,
   faFileLines,
   faFolder,
   faGear,
@@ -56,6 +57,7 @@ export const shellIcons = {
   chart: faChartLine,
   database: faDatabase,
   logging: faScroll,
+  email: faEnvelope,
   systemProperties: faSliders,
   templates: faFileLines,
 } as const satisfies Record<string, IconDefinition>;

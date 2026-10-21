@@ -610,6 +610,34 @@
       "when": 1792418046537,
       "tag": "0086_hide_completed",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1792591008094,
+      "tag": "0087_mail_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1792594442014,
+      "tag": "0088_email_self_signup",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1792596224149,
+      "tag": "0089_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1792598476071,
+      "tag": "0090_digest_emailed_at",
+      "breakpoints": true
     }
   ]
 }

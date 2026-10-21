@@ -42,6 +42,9 @@ Internal joins still use surrogate `id` primary keys. Display numbers are for hu
 **Note (T0207):** PDF and EPUB text is stored in `document_text_spans` (one row per page or chapter). `document_extractions.status` is `pending`, `ready`, `empty`, or `failed`. `empty` means the file had no text layer. OCR is not performed.
 
 **Note (T0208):** `knowledge_chunks.source` is `title`, `body`, `comment`, or `extraction`. `source_id` `0` means the record’s own title or body. Embeddings are 768-d and stay null when the project’s effective AI access is `excluded`.
+
+**Note (T0221):** Notification `type` is `digest`, `reminder`, `mention`, or `assignment`. Email `frequency` is `immediate`, `daily`, or `weekly`. Reminder `kind` is `due` or `action_by`.
+
 ## Polymorphic entity links
 
 Several tables store **`entity_type`** (text) + **`entity_id`** (integer) instead of a typed foreign key:

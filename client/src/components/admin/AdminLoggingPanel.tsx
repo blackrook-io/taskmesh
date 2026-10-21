@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiJson } from "../../api/client";
+import { consumeEmailLogRequest } from "../../lib/adminLogSource";
+import { AdminMailLog } from "./AdminMailLog";
 
 type LogActor = {
   id: number;
@@ -50,6 +52,9 @@ function actorLabel(row: LogRow): string {
 }
 
 export function AdminLoggingPanel() {
+  const [source, setSource] = useState<"api" | "email">(() =>
+    consumeEmailLogRequest() ? "email" : "api",
+  );
   const [level, setLevel] = useState("");
   const [datePreset, setDatePreset] = useState("");
   const [search, setSearch] = useState("");
@@ -73,7 +78,8 @@ export function AdminLoggingPanel() {
       );
       return res;
     },
-    refetchInterval: 15_000,
+    refetchInterval: source === "api" ? 15_000 : false,
+    enabled: source === "api",
   });
 
   const rows = logsQuery.data?.data ?? [];
@@ -87,10 +93,29 @@ export function AdminLoggingPanel() {
   return (
     <div className="settings-panel admin-panel">
       <p className="muted" style={{ marginTop: 0 }}>
-        System and API logs (UTC). Auth and access outcomes appear once login and API keys are
-        enforced.
+        {source === "email"
+          ? "Email transactions (UTC). Each row is a connection test or a send attempt. Message bodies are not stored."
+          : "System and API logs (UTC). Auth and access outcomes appear once login and API keys are enforced."}
       </p>
-
+      <div className="admin-toolbar" role="group" aria-label="Log source">
+        <button
+          type="button"
+          className={`btn small${source === "api" ? " primary" : " ghost"}`}
+          onClick={() => setSource("api")}
+        >
+          API
+        </button>
+        <button
+          type="button"
+          className={`btn small${source === "email" ? " primary" : " ghost"}`}
+          onClick={() => setSource("email")}
+        >
+          Email
+        </button>
+      </div>
+      {source === "email" ? <AdminMailLog /> : null}
+      {source === "api" ? (
+      <>
       <div className="admin-toolbar admin-log-filters">
         <label className="field field--inline">
           <span>Level</span>
@@ -215,6 +240,8 @@ export function AdminLoggingPanel() {
           Next
         </button>
       </div>
+      </>
+      ) : null}
     </div>
   );
 }

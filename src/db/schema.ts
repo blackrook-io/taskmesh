@@ -229,6 +229,16 @@ export const users = pgTable("users", {
   ),
   /** Unique among non-null (Postgres UNIQUE allows multiple NULLs). */
   email: text("email").unique(),
+  /**
+   * Set when the address may be used to sign in (T0129).
+   * Null on a self-signup account until the confirmation link is used.
+   * Administrator-created accounts and pre-existing rows are set immediately.
+   */
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  /** SHA-256 hex of the single-use signup confirmation token. Plaintext is not stored. */
+  emailConfirmTokenHash: text("email_confirm_token_hash"),
+  /** When the confirmation link stops working (24 hours from issue). */
+  emailConfirmExpiresAt: timestamp("email_confirm_expires_at", { withTimezone: true }),
   /** scrypt hash; set via admin reset / future Profile (T0062). */
   passwordHash: text("password_hash"),
   /** Null = active; set when admin deactivates the user. */
@@ -301,6 +311,9 @@ export const users = pgTable("users", {
     .defaultNow(),
 }, (t) => [
   uniqueIndex("users_display_name_ci_uidx").on(sql`lower(btrim(${t.displayName}))`),
+  uniqueIndex("users_email_confirm_token_hash_uidx")
+    .on(t.emailConfirmTokenHash)
+    .where(sql`${t.emailConfirmTokenHash} is not null`),
 ]);
 
 /**
@@ -906,6 +919,237 @@ export const apiRequestLogs = pgTable(
 );
 
 /**
+ * Singleton outbound mail settings (T0384).
+ * Password and API token are AES-256-GCM ciphertext under `EMAIL_CREDENTIALS_KEY`.
+ * Hints are the last 4 characters when the secret is longer than 4. The plaintext is not stored.
+ */
+export const mailSettings = pgTable(
+  "mail_settings",
+  {
+    id: integer("id").primaryKey().default(1),
+    enabled: boolean("enabled").notNull().default(false),
+    /** Login screen may offer email self-signup (T0129). Still requires outbound mail. */
+    selfSignupEnabled: boolean("self_signup_enabled").notNull().default(false),
+    host: text("host").notNull().default(""),
+    port: integer("port").notNull().default(587),
+    /** none | starttls | tls */
+    encryption: text("encryption").notNull().default("starttls"),
+    username: text("username").notNull().default(""),
+    passwordEnc: text("password_enc"),
+    passwordHint: text("password_hint"),
+    apiTokenEnc: text("api_token_enc"),
+    apiTokenHint: text("api_token_hint"),
+    fromAddress: text("from_address").notNull().default(""),
+    fromName: text("from_name").notNull().default(""),
+    replyTo: text("reply_to").notNull().default(""),
+    timeoutSeconds: integer("timeout_seconds").notNull().default(30),
+    updatedById: integer("updated_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("mail_settings_singleton_chk", sql`${t.id} = 1`),
+    check(
+      "mail_settings_encryption_chk",
+      sql`${t.encryption} in ('none', 'starttls', 'tls')`,
+    ),
+    check("mail_settings_port_chk", sql`${t.port} between 1 and 65535`),
+    check("mail_settings_timeout_chk", sql`${t.timeoutSeconds} between 1 and 120`),
+  ],
+);
+
+/**
+ * Append-only outbound mail transaction log (T0384).
+ * Records time, result, To, Subject, and server warnings or errors. The message body is not stored.
+ */
+export const mailLog = pgTable(
+  "mail_log",
+  {
+    id: serial("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** queued | sent | failed | retry | verified */
+    result: text("result").notNull(),
+    toAddress: text("to_address").notNull().default(""),
+    subject: text("subject").notNull().default(""),
+    warning: text("warning"),
+    error: text("error"),
+    jobId: text("job_id"),
+    /** outbound | test | connection */
+    kind: text("kind").notNull().default("outbound"),
+  },
+  (t) => [
+    index("mail_log_created_at_idx").on(t.createdAt),
+    check(
+      "mail_log_result_chk",
+      sql`${t.result} in ('queued', 'sent', 'failed', 'retry', 'verified')`,
+    ),
+    check("mail_log_kind_chk", sql`${t.kind} in ('outbound', 'test', 'connection')`),
+  ],
+);
+
+/**
+ * Per-user notification preferences (T0221).
+ * One row per user and type. A missing row uses both channels, immediate email,
+ * no quiet hours, and UTC.
+ */
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** digest | reminder | mention | assignment */
+    type: text("type").notNull(),
+    inApp: boolean("in_app").notNull().default(true),
+    email: boolean("email").notNull().default(true),
+    /** immediate | daily | weekly — applies to email. In-app is immediate. */
+    frequency: text("frequency").notNull().default("immediate"),
+    /** Local hour 0–23 when quiet hours start. Null with quiet_end means none. */
+    quietStart: integer("quiet_start"),
+    /** Local hour 0–23 when quiet hours end. The end hour itself is not quiet. */
+    quietEnd: integer("quiet_end"),
+    timeZone: text("time_zone").notNull().default("UTC"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("notification_preferences_user_type_uidx").on(t.userId, t.type),
+    check(
+      "notification_preferences_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+    check(
+      "notification_preferences_frequency_chk",
+      sql`${t.frequency} in ('immediate', 'daily', 'weekly')`,
+    ),
+    check(
+      "notification_preferences_quiet_chk",
+      sql`(${t.quietStart} is null and ${t.quietEnd} is null) or (${t.quietStart} between 0 and 23 and ${t.quietEnd} between 0 and 23 and ${t.quietStart} <> ${t.quietEnd})`,
+    ),
+  ],
+);
+
+/** In-app notification inbox (T0221). */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** digest | reminder | mention | assignment */
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    /** App path, such as `/tasks?open=1`. */
+    href: text("href"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    check(
+      "notifications_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+  ],
+);
+
+/**
+ * Reusable one-click unsubscribe secret per user and type (T0221).
+ * The plaintext token is the capability in the email link.
+ */
+export const notificationUnsubscribeTokens = pgTable(
+  "notification_unsubscribe_tokens",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    token: text("token").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("notification_unsubscribe_user_type_uidx").on(t.userId, t.type),
+    unique("notification_unsubscribe_token_uidx").on(t.token),
+    check(
+      "notification_unsubscribe_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+  ],
+);
+
+/**
+ * Email that is waiting for quiet hours or a daily/weekly slot (T0221).
+ * `sent_at` is set after the message is accepted by the mail queue.
+ */
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    subject: text("subject").notNull(),
+    textBody: text("text_body").notNull(),
+    htmlBody: text("html_body").notNull(),
+    href: text("href"),
+    deliverAfter: timestamp("deliver_after", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notification_outbox_pending_idx")
+      .on(t.deliverAfter)
+      .where(sql`${t.sentAt} is null`),
+    check(
+      "notification_outbox_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+  ],
+);
+
+/**
+ * One reminder already sent for a record and date (T0221).
+ * `marker` is the due date (`YYYY-MM-DD`) or the action-by instant.
+ */
+export const notificationReminderMarks = pgTable(
+  "notification_reminder_marks",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    /** due | action_by */
+    kind: text("kind").notNull(),
+    marker: text("marker").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("notification_reminder_marks_uidx").on(
+      t.userId,
+      t.entityType,
+      t.entityId,
+      t.kind,
+      t.marker,
+    ),
+    check(
+      "notification_reminder_marks_entity_chk",
+      sql`${t.entityType} in ('task', 'todo')`,
+    ),
+    check(
+      "notification_reminder_marks_kind_chk",
+      sql`${t.kind} in ('due', 'action_by')`,
+    ),
+  ],
+);
+
+/**
  * One encrypted provider key for the whole instance (T0182).
  * Ciphertext is AES-256-GCM under `AI_CREDENTIALS_KEY`. `hint` is the last 4 characters only.
  */
@@ -1368,6 +1612,8 @@ export const attentionDigests = pgTable(
     /** model | null */
     summarySource: text("summary_source"),
     excludedProjects: jsonb("excluded_projects").notNull().default(sql`'[]'::jsonb`),
+    /** Set when this period was handed to notification delivery (T0218). A rebuild does not clear it. */
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
   },
   (t) => ({
     userPeriodUidx: uniqueIndex("attention_digests_user_period_uidx").on(t.userId, t.periodKey),
@@ -2752,6 +2998,13 @@ export const aiOutputFeedbackRelations = relations(aiOutputFeedback, ({ one }) =
   }),
   user: one(users, {
     fields: [aiOutputFeedback.userId],
+    references: [users.id],
+  }),
+}));
+
+export const mailSettingsRelations = relations(mailSettings, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [mailSettings.updatedById],
     references: [users.id],
   }),
 }));

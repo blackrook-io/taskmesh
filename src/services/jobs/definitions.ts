@@ -32,6 +32,8 @@ export type JobDefinition = {
   backupSchedule?: boolean;
   /** Send one job this many seconds after the worker starts. */
   runOnStartAfterSeconds?: number;
+  /** Pass pg-boss retry metadata into the handler. */
+  includeMetadata?: boolean;
 };
 
 export const BUILTIN_JOBS: readonly JobDefinition[] = [

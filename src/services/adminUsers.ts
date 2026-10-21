@@ -22,6 +22,7 @@ export type AdminUserRow = UserRef & {
   lastLoginAt: string | null;
   lastApiAt: string | null;
   hasPassword: boolean;
+  emailVerified: boolean;
   failedLoginCount: number;
   mfaEnabled: boolean;
   mfaGraceStartedAt: string | null;
@@ -43,6 +44,7 @@ function toAdminUser(
     lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
     lastApiAt: row.lastApiAt?.toISOString() ?? null,
     hasPassword: Boolean(row.passwordHash),
+    emailVerified: row.emailVerifiedAt != null,
     failedLoginCount: row.failedLoginCount,
     mfaEnabled: row.mfaEnabledAt != null && Boolean(row.mfaTotpSecretEnc),
     mfaGraceStartedAt: row.mfaGraceStartedAt?.toISOString() ?? null,
@@ -128,6 +130,7 @@ export async function createAdminUser(
       displayName: input.displayName,
       email: input.email,
       passwordHash,
+      emailVerifiedAt: new Date(),
     })
     .returning();
   if (!row) {

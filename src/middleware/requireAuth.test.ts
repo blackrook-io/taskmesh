@@ -5,6 +5,9 @@ import { isPublicV1Route } from "./requireAuth.js";
 describe("isPublicV1Route", () => {
   it("allows auth login, logout, and session bootstrap", () => {
     assert.equal(isPublicV1Route("POST", "/auth/login"), true);
+    assert.equal(isPublicV1Route("POST", "/auth/signup"), true);
+    assert.equal(isPublicV1Route("POST", "/auth/signup/confirm"), true);
+    assert.equal(isPublicV1Route("GET", "/auth/signup"), false);
     assert.equal(isPublicV1Route("POST", "/auth/mfa/verify"), true);
     assert.equal(isPublicV1Route("POST", "/auth/logout"), true);
     assert.equal(isPublicV1Route("GET", "/auth/session"), true);
@@ -16,6 +19,11 @@ describe("isPublicV1Route", () => {
     assert.equal(isPublicV1Route("GET", "/auth/oauth/google/callback"), true);
     assert.equal(isPublicV1Route("POST", "/auth/oauth/apple/callback"), true);
     assert.equal(isPublicV1Route("POST", "/auth/oauth/google/start"), false);
+  });
+
+  it("allows one-click unsubscribe", () => {
+    assert.equal(isPublicV1Route("POST", "/notifications/unsubscribe"), true);
+    assert.equal(isPublicV1Route("GET", "/notifications/unsubscribe"), false);
   });
 
   it("allows public config", () => {

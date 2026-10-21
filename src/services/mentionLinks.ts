@@ -5,6 +5,7 @@ import { extractMentionTokens } from "../lib/mentionTokens.js";
 import type { EntityType } from "../lib/entityType.js";
 import { NotFoundError } from "../lib/notFound.js";
 import { assertCanAccessEntity, OwnershipAccessError } from "./ownership.js";
+import { reportMentions } from "./notifications/events.js";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -192,6 +193,12 @@ export async function syncMentionLinks(
           ],
         });
     }
+    reportMentions(db, {
+      actorUserId: input.actorUserId,
+      srcType: input.srcType,
+      srcId: input.srcId,
+      targets: add,
+    });
   }
 
   return { added: add.length, removed: removeIds.length };
