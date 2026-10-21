@@ -224,7 +224,6 @@ Post when implementing new functionality or corrections during QA (not only at C
 - Plan archived: `.cursor/plans/executed/2026-08-T0036-example-slug.mdc`
 - App version: `0.22.1` (example) is on `main`
 - Release notes: `RELEASE_NOTES.md` updated for `0.22.1`
-- Public Production is not deployed by finish-up. The Administrator upgrades that site from the GitHub Release (`UPGRADES.md`).
 
 <summary of what shipped>
 
@@ -455,7 +454,6 @@ Use `Next: /finishepic` when no `not_started` row remains.
 - Plan archived: `.cursor/plans/executed/2026-10-T0159-epic-short-slug.mdc`
 - App version: `0.22.1` (example) is on `main`
 - Release notes: `RELEASE_NOTES.md` updated for `0.22.1`
-- Public Production is not deployed by finish-up. The Administrator upgrades that site from the GitHub Release (`UPGRADES.md`).
 
 <this Task’s outcome>
 
