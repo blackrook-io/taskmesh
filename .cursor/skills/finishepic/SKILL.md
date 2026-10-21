@@ -62,7 +62,7 @@ If this branch already contains the bump, do not bump again. Commit with a HERED
 
 ### 6. Tasks
 
-Post **Epic shipped** on the parent and on each `qa_accepted` member. Include that Task’s scope, the shared version, the PR number, and QA follow-ups. State that the version is on `main` and that Production is upgraded by the Administrator from a GitHub Release.
+Post **Epic shipped** on the parent and on each `qa_accepted` member. Include that Task’s scope, the shared version, the PR number, and QA follow-ups. State that the version is on `main`.
 
 Then `PATCH` `{ "state": "complete" }` on each shipped **child** first, then the parent. Leave `dueDate` unchanged. Do not patch `dropped` rows or children that were never in the epic.
 

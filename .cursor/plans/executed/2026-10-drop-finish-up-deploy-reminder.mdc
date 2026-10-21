@@ -1,0 +1,23 @@
+# Drop finish-up Production reminders
+
+**Branch:** `phase-54-drop-deploy-reminder`
+
+## Decision
+
+Finish-up and `/finishepic` no longer tell the agent to mention Production deployment, `UPGRADES.md`, or that this step does not deploy a public site. Task comments record the merged version, scope, and QA follow-ups only.
+
+Keep every existing **Do not deploy** line, including “do not run `npm run deploy:prod`”. `versioning.mdc` still explains that `releasedAt` is written on a production host, not in git.
+
+Leave executed plans, `RELEASE_NOTES.md`, `INSTALL.md`, `README.md`, and `UPGRADES.md` unchanged.
+
+## Edits
+
+- `.cursor/skills/worktask/reference.md` — remove the Production bullet from both comment templates.
+- `.cursor/skills/worktask/SKILL.md` — drop the Administrator-upgrade sentence from hard rule 10 and from the completion-comment step. Keep **Do not deploy**.
+- `.cursor/skills/finishepic/SKILL.md` — drop the Production sentence from the shipped-comment step. Keep **Do not deploy**.
+- `.cursor/rules/development-rules.mdc` — shorten the finish-up deploy step to **Do not deploy** / do not run `deploy:prod`. Completion comments no longer say “do not claim a production deploy”.
+- `AGENTS.md` — drop the public Production upgrade sentence. Keep **Do not deploy**.
+
+## QA follow-ups
+
+None. QA passed on the wording as written.

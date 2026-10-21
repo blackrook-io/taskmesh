@@ -1,6 +1,6 @@
 /** Mirrors root package.json + APP_VERSION_CREATED_AT. Update both on finish-up version bump. */
-export const APP_VERSION = "0.96.0";
-export const APP_VERSION_CREATED_AT: string | null = "2026-10-21T16:11:15.000Z";
+export const APP_VERSION = "0.96.1";
+export const APP_VERSION_CREATED_AT: string | null = "2026-10-21T16:36:28.000Z";
 
 export type AppVersionMeta = {
   version: string;
