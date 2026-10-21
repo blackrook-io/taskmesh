@@ -12,6 +12,9 @@ A future **Build release** skill will use this file to populate GitHub Release n
 - Notification settings cover digest, reminder, mention, and assignment, each with in-app or email delivery, frequency, and quiet hours. Due-date and action-by reminders send on the shared job queue, and each email type can be unsubscribed in one click. The inbox shows Unread and Read.
 - Each stored attention digest can be emailed through those settings. Links in the message open the records in the app, and the message can change how often it is sent or unsubscribe.
 
+### Fixes
+- Outbound mail uses Nodemailer 10.1.7. That release closes the high-severity address-parser advisory present in 7.x.
+
 ## 0.95.3 — 2026-10-21
 
 ### Fixes
