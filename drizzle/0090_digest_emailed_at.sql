@@ -1,0 +1,1 @@
+ALTER TABLE "attention_digests" ADD COLUMN "emailed_at" timestamp with time zone;

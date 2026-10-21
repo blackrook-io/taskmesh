@@ -1049,6 +1049,36 @@ a.app-nav__item.active {
   gap: 0.9rem;
 }
 
+.notification-prefs__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification-prefs__tab {
+  margin: 0 0 -1px;
+  min-height: var(--touch-min);
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.notification-prefs__tab:hover {
+  color: var(--text);
+}
+
+.notification-prefs__tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 650;
+}
+
 .notification-prefs__type {
   border: 1px solid var(--border);
   border-radius: var(--radius);

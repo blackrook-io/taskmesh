@@ -1612,6 +1612,8 @@ export const attentionDigests = pgTable(
     /** model | null */
     summarySource: text("summary_source"),
     excludedProjects: jsonb("excluded_projects").notNull().default(sql`'[]'::jsonb`),
+    /** Set when this period was handed to notification delivery (T0218). A rebuild does not clear it. */
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
   },
   (t) => ({
     userPeriodUidx: uniqueIndex("attention_digests_user_period_uidx").on(t.userId, t.periodKey),

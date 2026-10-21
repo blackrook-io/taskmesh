@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiJson } from "../api/client";
 import {
+  NOTIFICATION_TYPES,
   NOTIFICATION_TYPE_LABELS,
   type NotificationPreference,
   type NotificationType,
@@ -51,7 +52,9 @@ export function NotificationPreferences() {
     },
   });
   const [draft, setDraft] = useState<NotificationPreference[] | null>(null);
+  const [tab, setTab] = useState<NotificationType>("digest");
   const items = draft ?? query.data ?? [];
+  const selected = items.find((item) => item.type === tab) ?? items[0] ?? null;
 
   const save = useMutation({
     mutationFn: async () => {
@@ -87,63 +90,107 @@ export function NotificationPreferences() {
         type. Daily and weekly email goes out at 08:00 in the time zone, or when quiet hours end
         if that hour is quiet.
       </p>
-      {items.map((item) => (
-        <fieldset key={item.type} className="notification-prefs__type">
-          <legend>{NOTIFICATION_TYPE_LABELS[item.type]}</legend>
-          <label className="digest-prefs__check">
-            <input
-              type="checkbox"
-              checked={item.inApp}
-              onChange={(event) => update(item.type, { inApp: event.target.checked })}
-            />
-            <span>In the app</span>
-          </label>
-          <label className="digest-prefs__check">
-            <input
-              type="checkbox"
-              checked={item.email}
-              onChange={(event) => update(item.type, { email: event.target.checked })}
-            />
-            <span>Email</span>
-          </label>
-          <label className="notification-prefs__hour">
-            <span>Frequency</span>
-            <select
-              value={item.frequency}
-              onChange={(event) =>
-                update(item.type, {
-                  frequency: event.target.value as NotificationPreference["frequency"],
-                })
-              }
-            >
-              <option value="immediate">Immediate</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </select>
-          </label>
-          <div className="notification-prefs__hours">
-            <HourSelect
-              label="Quiet from"
-              value={item.quietStart}
-              onChange={(quietStart) => update(item.type, { quietStart })}
-            />
-            <HourSelect
-              label="Until"
-              value={item.quietEnd}
-              onChange={(quietEnd) => update(item.type, { quietEnd })}
-            />
+      {selected ? (
+        <>
+          <div
+            className="notification-prefs__tabs"
+            role="tablist"
+            aria-label="Notification types"
+            onKeyDown={(event) => {
+              const index = NOTIFICATION_TYPES.indexOf(selected.type);
+              if (index < 0) return;
+              const next =
+                event.key === "ArrowRight"
+                  ? NOTIFICATION_TYPES[(index + 1) % NOTIFICATION_TYPES.length]
+                  : event.key === "ArrowLeft"
+                    ? NOTIFICATION_TYPES[(index - 1 + NOTIFICATION_TYPES.length) % NOTIFICATION_TYPES.length]
+                    : null;
+              if (!next) return;
+              event.preventDefault();
+              setTab(next);
+              document.getElementById(`notification-tab-${next}`)?.focus();
+            }}
+          >
+            {NOTIFICATION_TYPES.map((type) => {
+              const active = type === selected.type;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className={`notification-prefs__tab${active ? " is-active" : ""}`}
+                  role="tab"
+                  id={`notification-tab-${type}`}
+                  aria-selected={active}
+                  aria-controls={`notification-panel-${type}`}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => setTab(type)}
+                >
+                  {NOTIFICATION_TYPE_LABELS[type]}
+                </button>
+              );
+            })}
           </div>
-          <label className="notification-prefs__hour">
-            <span>Time zone</span>
-            <input
-              value={item.timeZone}
-              onChange={(event) => update(item.type, { timeZone: event.target.value })}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
-        </fieldset>
-      ))}
+          <div
+            className="notification-prefs__type"
+            role="tabpanel"
+            id={`notification-panel-${selected.type}`}
+            aria-labelledby={`notification-tab-${selected.type}`}
+          >
+            <label className="digest-prefs__check">
+              <input
+                type="checkbox"
+                checked={selected.inApp}
+                onChange={(event) => update(selected.type, { inApp: event.target.checked })}
+              />
+              <span>In the app</span>
+            </label>
+            <label className="digest-prefs__check">
+              <input
+                type="checkbox"
+                checked={selected.email}
+                onChange={(event) => update(selected.type, { email: event.target.checked })}
+              />
+              <span>Email</span>
+            </label>
+            <label className="notification-prefs__hour">
+              <span>Frequency</span>
+              <select
+                value={selected.frequency}
+                onChange={(event) =>
+                  update(selected.type, {
+                    frequency: event.target.value as NotificationPreference["frequency"],
+                  })
+                }
+              >
+                <option value="immediate">Immediate</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </label>
+            <div className="notification-prefs__hours">
+              <HourSelect
+                label="Quiet from"
+                value={selected.quietStart}
+                onChange={(quietStart) => update(selected.type, { quietStart })}
+              />
+              <HourSelect
+                label="Until"
+                value={selected.quietEnd}
+                onChange={(quietEnd) => update(selected.type, { quietEnd })}
+              />
+            </div>
+            <label className="notification-prefs__hour">
+              <span>Time zone</span>
+              <input
+                value={selected.timeZone}
+                onChange={(event) => update(selected.type, { timeZone: event.target.value })}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+          </div>
+        </>
+      ) : null}
       <button type="submit" className="btn primary" disabled={save.isPending || items.length === 0}>
         {save.isPending ? "Saving…" : "Save preferences"}
       </button>

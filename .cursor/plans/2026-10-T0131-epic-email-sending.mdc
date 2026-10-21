@@ -12,7 +12,7 @@
 | 1 | T0384 | 411 | child | qa_accepted | — |
 | 2 | T0129 | 142 | child | qa_accepted | — |
 | 3 | T0221 | 236 | child | qa_accepted | T0384 |
-| 4 | T0218 | 233 | child | not_started | T0221 |
+| 4 | T0218 | 233 | child | qa_accepted | T0221 |
 | 5 | T0131 | 144 | parent | no_work | — |
 
 Parent description is the epic statement only (email for signups, notifications, and AI digests). It has no implementation of its own.
@@ -108,3 +108,5 @@ The digest engine and in-app digest already exist (`src/services/digest/`, `/dig
 - Template, preference, and queue machinery (T0221).
 
 ### QA follow-ups
+
+- Settings → Notifications shows Digest, Reminder, Mention, and Assignment as tabs. The delivery instructions stay above the tabs. Save still writes all four types together.

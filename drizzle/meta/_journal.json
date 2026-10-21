@@ -631,6 +631,13 @@
       "when": 1792596224149,
       "tag": "0089_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1792598476071,
+      "tag": "0090_digest_emailed_at",
+      "breakpoints": true
     }
   ]
 }
