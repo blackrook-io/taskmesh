@@ -32,6 +32,8 @@ On ERDs they appear as compact stubs only. Main domain documentation: [overview]
 | `mesh_layouts` | Per-user saved Mesh pins and pan/zoom (T0165). One row per `(owner_id, root_type, root_id, view)`. `view` is `focus`. `root_type` + `root_id` is the focused record (the same root as the graph), including `tag`. `positions` is a map of node key (`type:id`) to top-left `{ x, y }` for nodes the user dragged. Other nodes keep the computed layout. `viewport` is `{ x, y, zoom }` or null. Missing row means a fresh layout. Pins for records no longer in the graph are ignored. | FK `owner_id` → `users` · **CASCADE**. |
 | `project_overview_defaults` | Project default Overview canvas layout (T0136). One row per `project_id`; `layout` jsonb is ordered panel instances (seed = T0135 four panels). Editable by Owner/Manager/Admin (`settings`). Missing row is seeded on first read. | FKs `project_id` → `projects` · **CASCADE**; optional `updated_by_id` → `users` · **SET NULL**. |
 | `api_request_logs` | Append-only API / auth audit log (outcome, method, path, status, IP, message, admin-key flag, request/response byte counts). Indexed on `created_at` for retention prune (default **90** days via the pg-boss job `logs-prune-api-requests`; override `API_REQUEST_LOG_RETENTION_DAYS`). | Optional FKs to `users` and `api_keys` · **SET NULL**. |
+| `mail_settings` | Singleton outbound mail configuration (T0384), `id` always **1**. Host, port, encryption (`none` \| `starttls` \| `tls`), SMTP username, From address, From name, Reply-to, and timeout in seconds (1–120). `password_enc` and `api_token_enc` are AES-256-GCM ciphertext under env `EMAIL_CREDENTIALS_KEY`. Hints are the last 4 characters when the secret is longer than 4. The plaintext password and token are not stored. | Optional FK `updated_by_id` → `users` · **SET NULL**. |
+| `mail_log` | Append-only mail transaction log (T0384). `result` is `queued`, `sent`, `failed`, `retry`, or `verified`. `kind` is `outbound`, `test`, or `connection`. Stores time, To, Subject, and server warning or error text. The message body is not stored. Indexed on `created_at`. | Standalone; no FKs. |
 | `ai_undo_journal` | Inverse of a Tier 1 auto-apply (T0186). One row per newly created tag, link, comment, or task dependency. An auto-tag batch (T0199) is one row whose `inverse` is `remove_taggings` with the tagging ids from that run, plus tag ids created in that run. `inverse` stores ids and, for a comment, a body hash — not prompt text or the comment body. `status` is `applied`, `undone`, or `skipped`. Rows older than `ai_undo_window_days` (default 7) drop off the activity feed. | FK `user_id` → `users` · **CASCADE**. Optional FK `audit_id` → `ai_audit_log` · **SET NULL**. |
 | `ai_audit_log` | Append-only assistant audit (T0178): user, feature, provider, model, tool, action, entity refs, allow/deny decision, reason, tier, token counts, and latency. Does not store prompts, tool arguments, or record text. An `undo` action records that the user undid an automatic change (T0186). A `respond` row also stores `prompt_id`, `prompt_version`, and `prompt_ref` (T0212): the primary file (`assistant` @ `2`) and the full composition (`assistant@2`, or `assistant@2+assistant_web_fetch@1` when web fetch is on; `/provider` when a provider file was used). Route, tool, apply, and key-mode rows leave those columns null. A `web_fetch` allow row's reason is `Fetched` plus the URL after the query string is capped at 256 characters (T0179). A write or `web_fetch` that follows private record text in the same turn appends `untrusted-followup` to `reason`. A feature other than `assistant` that calls `web_fetch` after private record text is denied with reason `web_fetch denied after private records` (T0201). A `key_mode` allow row records an Administrator's billing-risk acceptance (`mode=<mode> activeUsers=<n>`) and never a provider key (T0182). A `route` row records a routing decision (T0205): `allow` with reason `user`, `admin`, `fallback:N`, `automatic`, or `request`, or `deny` with reason `capability_mismatch`, `local_only`, or a provider error code. No prompt text. A `usage` row is one plugin call (T0188): `key_source` is `user`, `instance`, or `local`, and `cost_microusd` is the estimated instance-key cost in micro-USD (0 for user and local keys). A `settings` row records an Administrator change to AI settings (T0189): feature `admin`, decision `allow`, tier `0`, and a short reason naming the fields that changed. It never stores a provider key. A `settings` row with feature `user` records that user's policy save (T0190): the reason is `raised`, `off`, `featuresOff`, `allowInventTags`, or `unchanged`, and it does not store the cell values. Tool and `respond` rows leave token counts empty so a daily total is not multiplied by the tools in that round. No retention job yet. Quality signals live on `ai_output_feedback`, not on this row (T0211). | Optional FKs `user_id` → `users` and `project_id` → `projects` · **SET NULL**. |
 | `ai_instance_credentials` | One encrypted provider API key for the instance (T0182). `plugin_id` is unique. `secret_enc` is AES-256-GCM ciphertext under env `AI_CREDENTIALS_KEY`. `hint` is the last 4 characters of the key. `verified_at` is set only after a successful Verify. `last_error` (T0213) stores a redacted provider rejection (max 500 characters) when Verify or a live call rejects the key. The plaintext key is not stored. | Optional FK `updated_by_id` → `users` · **SET NULL**. |
@@ -63,6 +65,7 @@ erDiagram
   roles ||--o{ user_roles : granted
   users ||--o{ api_request_logs : "optional"
   api_keys ||--o{ api_request_logs : "optional"
+  users ||--o| mail_settings : "updated by"
   users ||--o{ ai_audit_log : "assistant calls"
   users ||--o{ ai_undo_journal : "automatic changes"
   ai_audit_log ||--o{ ai_undo_journal : "optional"
@@ -140,6 +143,14 @@ erDiagram
     int id PK
     text outcome
   }
+  mail_settings {
+    int id PK
+    text host
+  }
+  mail_log {
+    int id PK
+    text result
+  }
   ai_audit_log {
     int id PK
     text action
@@ -204,7 +215,7 @@ erDiagram
 
 ## Job queue schema (`pgboss`)
 
-Not a Drizzle table and not listed above. The `pg-boss` library creates schema `pgboss` in this same database when the API starts, and it migrates that schema itself. Tables include `queue`, `job`, `schedule`, `archive`, `version`, and `subscription`. TaskMesh registers job types in code (scheduled backup, API log prune, database stats sample, and later background work). Administration → Jobs reads queue depth and failed jobs from `pgboss.job`. Do not edit those tables by hand; retry or delete a failed job from that screen.
+Not a Drizzle table and not listed above. The `pg-boss` library creates schema `pgboss` in this same database when the API starts, and it migrates that schema itself. Tables include `queue`, `job`, `schedule`, `archive`, `version`, and `subscription`. TaskMesh registers job types in code (scheduled backup, API log prune, database stats sample, outbound email `email-send`, and later background work). Administration → Jobs reads queue depth and failed jobs from `pgboss.job`. Administration → Email reads the `email-send` queue the same way. Do not edit those tables by hand; retry or delete a failed job from that screen.
 
 ## When to expand this page
 

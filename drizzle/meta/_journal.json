@@ -610,6 +610,13 @@
       "when": 1792418046537,
       "tag": "0086_hide_completed",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1792591008094,
+      "tag": "0087_mail_settings",
+      "breakpoints": true
     }
   ]
 }

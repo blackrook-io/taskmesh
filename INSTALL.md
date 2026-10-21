@@ -115,6 +115,7 @@ Edit `.env.docker`:
 - Optionally override **`TASKMESH_HTTP_PORT`** / **`TASKMESH_HTTPS_PORT`** if 80/443 are busy.
 - Optionally set **`OPENAI_API_KEY`** for the Assistant panel. The variable is deprecated. A stored instance key is preferred; this remains the fallback when no instance key is stored.
 - Optionally set **`AI_CREDENTIALS_KEY`** (at least 32 characters) before an Administrator stores an instance key under Administration → System properties. Startup refuses a shorter value. It is separate from `OAUTH_CREDENTIALS_KEY`. Rotation, backup restore, and rejected provider keys are in [docs/AI_CREDENTIALS.md](docs/AI_CREDENTIALS.md).
+- Set **`EMAIL_CREDENTIALS_KEY`** (at least 32 characters) before an Administrator saves an SMTP password or API token under Administration → Email. Startup refuses a shorter value. It is separate from `OAUTH_CREDENTIALS_KEY` and `AI_CREDENTIALS_KEY`. The plaintext secrets are not stored.
 - Optionally set **`ANTHROPIC_API_KEY`** after an Administrator enables the Anthropic plugin. It is not stored and does not enable the plugin on its own.
 - Optionally set **`GEMINI_API_KEY`** after an Administrator enables the Google Gemini plugin. It is not stored and does not enable the plugin on its own.
 - Optionally set **`AZURE_OPENAI_API_KEY`** after an Administrator enables the Azure OpenAI plugin. It is not stored and does not enable the plugin on its own.

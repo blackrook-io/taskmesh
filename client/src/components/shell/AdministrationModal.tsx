@@ -9,6 +9,7 @@ import { AdminGroupsPanel } from "../admin/AdminGroupsPanel";
 import { AdminKeysPanel } from "../admin/AdminKeysPanel";
 import { AdminOauthPanel } from "../admin/AdminOauthPanel";
 import { AdminLoggingPanel } from "../admin/AdminLoggingPanel";
+import { AdminMailPanel } from "../admin/AdminMailPanel";
 import { AdminMeshPanel } from "../admin/AdminMeshPanel";
 import { AdminAiPanel } from "../admin/AdminAiPanel";
 import { AdminSystemPropertiesPanel } from "../admin/AdminSystemPropertiesPanel";
@@ -35,6 +36,7 @@ const SECTION_ICONS: Record<AdminSection, IconDefinition> = {
   apis: shellIcons.chart,
   database: shellIcons.database,
   jobs: shellIcons.chart,
+  email: shellIcons.email,
   logging: shellIcons.logging,
   backups: shellIcons.documents,
   "system-properties": shellIcons.admin,
@@ -133,6 +135,7 @@ export function AdministrationModal() {
             {section === "apis" ? <AdminApisPanel /> : null}
             {section === "database" ? <AdminDatabasePanel /> : null}
             {section === "jobs" ? <AdminJobsPanel /> : null}
+            {section === "email" ? <AdminMailPanel /> : null}
             {section === "logging" ? <AdminLoggingPanel /> : null}
             {section === "backups" ? <BackupsPage embedded /> : null}
             {section === "system-properties" ? <AdminSystemPropertiesPanel /> : null}

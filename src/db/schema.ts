@@ -906,6 +906,74 @@ export const apiRequestLogs = pgTable(
 );
 
 /**
+ * Singleton outbound mail settings (T0384).
+ * Password and API token are AES-256-GCM ciphertext under `EMAIL_CREDENTIALS_KEY`.
+ * Hints are the last 4 characters when the secret is longer than 4. The plaintext is not stored.
+ */
+export const mailSettings = pgTable(
+  "mail_settings",
+  {
+    id: integer("id").primaryKey().default(1),
+    enabled: boolean("enabled").notNull().default(false),
+    host: text("host").notNull().default(""),
+    port: integer("port").notNull().default(587),
+    /** none | starttls | tls */
+    encryption: text("encryption").notNull().default("starttls"),
+    username: text("username").notNull().default(""),
+    passwordEnc: text("password_enc"),
+    passwordHint: text("password_hint"),
+    apiTokenEnc: text("api_token_enc"),
+    apiTokenHint: text("api_token_hint"),
+    fromAddress: text("from_address").notNull().default(""),
+    fromName: text("from_name").notNull().default(""),
+    replyTo: text("reply_to").notNull().default(""),
+    timeoutSeconds: integer("timeout_seconds").notNull().default(30),
+    updatedById: integer("updated_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("mail_settings_singleton_chk", sql`${t.id} = 1`),
+    check(
+      "mail_settings_encryption_chk",
+      sql`${t.encryption} in ('none', 'starttls', 'tls')`,
+    ),
+    check("mail_settings_port_chk", sql`${t.port} between 1 and 65535`),
+    check("mail_settings_timeout_chk", sql`${t.timeoutSeconds} between 1 and 120`),
+  ],
+);
+
+/**
+ * Append-only outbound mail transaction log (T0384).
+ * Records time, result, To, Subject, and server warnings or errors. The message body is not stored.
+ */
+export const mailLog = pgTable(
+  "mail_log",
+  {
+    id: serial("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** queued | sent | failed | retry | verified */
+    result: text("result").notNull(),
+    toAddress: text("to_address").notNull().default(""),
+    subject: text("subject").notNull().default(""),
+    warning: text("warning"),
+    error: text("error"),
+    jobId: text("job_id"),
+    /** outbound | test | connection */
+    kind: text("kind").notNull().default("outbound"),
+  },
+  (t) => [
+    index("mail_log_created_at_idx").on(t.createdAt),
+    check(
+      "mail_log_result_chk",
+      sql`${t.result} in ('queued', 'sent', 'failed', 'retry', 'verified')`,
+    ),
+    check("mail_log_kind_chk", sql`${t.kind} in ('outbound', 'test', 'connection')`),
+  ],
+);
+
+/**
  * One encrypted provider key for the whole instance (T0182).
  * Ciphertext is AES-256-GCM under `AI_CREDENTIALS_KEY`. `hint` is the last 4 characters only.
  */
@@ -2752,6 +2820,13 @@ export const aiOutputFeedbackRelations = relations(aiOutputFeedback, ({ one }) =
   }),
   user: one(users, {
     fields: [aiOutputFeedback.userId],
+    references: [users.id],
+  }),
+}));
+
+export const mailSettingsRelations = relations(mailSettings, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [mailSettings.updatedById],
     references: [users.id],
   }),
 }));

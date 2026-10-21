@@ -22,7 +22,7 @@ Start here, then open the domain page for the area you are changing. Shared term
 
 **Non-main** (inventory + minimal on diagrams):
 
-`users`, `sessions`, `mfa_login_challenges`, `mfa_trusted_devices`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `ai_audit_log`, `ai_undo_journal`, `ai_instance_credentials`, `user_ai_credentials`, `user_ai_route_prefs`, `ai_output_feedback`, `ai_tag_suggestions`, `ai_duplicate_pairs`, `ai_link_suggestions`, `attention_digests`, `digest_item_hides`, `db_stats_snapshots`
+`users`, `sessions`, `mfa_login_challenges`, `mfa_trusted_devices`, `oauth_providers`, `user_identities`, `oauth_login_states`, `password_history`, `roles`, `user_roles`, `api_keys`, `system_properties`, `entity_fields`, `user_list_view_prefs`, `user_task_list_state`, `user_project_overview_prefs`, `mesh_layouts`, `api_request_logs`, `mail_settings`, `mail_log`, `ai_audit_log`, `ai_undo_journal`, `ai_instance_credentials`, `user_ai_credentials`, `user_ai_route_prefs`, `ai_output_feedback`, `ai_tag_suggestions`, `ai_duplicate_pairs`, `ai_link_suggestions`, `attention_digests`, `digest_item_hides`, `db_stats_snapshots`
 
 ## Conceptual model
 
@@ -81,6 +81,7 @@ erDiagram
   roles ||--o{ user_roles : granted
   api_keys ||--o{ api_request_logs : "optional"
   users ||--o{ api_request_logs : "optional"
+  users ||--o| mail_settings : "updated by"
   users ||--o{ ai_audit_log : "assistant calls"
   users ||--o{ ai_undo_journal : "automatic changes"
   ai_audit_log ||--o{ ai_undo_journal : "optional"
@@ -123,6 +124,12 @@ erDiagram
   }
   api_request_logs {
     string outcome
+  }
+  mail_settings {
+    string host
+  }
+  mail_log {
+    string result
   }
   ai_audit_log {
     string action

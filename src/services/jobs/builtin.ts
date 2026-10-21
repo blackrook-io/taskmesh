@@ -4,7 +4,13 @@ import { runBackup } from "../backups.js";
 import { recordDbStatsSnapshot } from "../dbStats.js";
 import { JOB_BACKUP, JOB_DB_STATS, JOB_PRUNE_API_LOGS } from "./definitions.js";
 
-export type JobHandler = (data: object) => Promise<void>;
+export type JobContext = {
+  id: string;
+  retryCount: number;
+  retryLimit: number;
+};
+
+export type JobHandler = (data: object, job?: JobContext) => Promise<void>;
 
 async function runScheduledBackup(): Promise<void> {
   const manifest = await runBackup();

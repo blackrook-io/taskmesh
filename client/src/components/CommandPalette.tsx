@@ -29,6 +29,7 @@ type PaletteItem = {
     | "apis"
     | "database"
     | "jobs"
+    | "email"
     | "logging"
     | "backups"
     | "system-properties"
@@ -151,6 +152,14 @@ const STATIC_COMMANDS: PaletteItem[] = [
     path: "/",
     action: "open-admin",
     adminSection: "jobs",
+  },
+  {
+    id: "nav-admin-email",
+    group: "Go to",
+    label: "Admin · Email",
+    path: "/",
+    action: "open-admin",
+    adminSection: "email",
   },
   {
     id: "nav-backups",

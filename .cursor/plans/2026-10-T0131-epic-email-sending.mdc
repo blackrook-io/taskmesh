@@ -1,0 +1,108 @@
+# Epic T0131 — email-sending
+
+**Epic status:** open
+**Parent:** T0131 (id 144) — [EPIC] Email sending capabilities
+**Branch:** `T0131-email-sending`
+**Project:** 4
+
+## Members
+
+| Order | Task | Id | Role | Status | In-epic depends-on |
+|------:|------|---:|------|--------|--------------------|
+| 1 | T0384 | 411 | child | qa_accepted | — |
+| 2 | T0129 | 142 | child | not_started | — |
+| 3 | T0221 | 236 | child | not_started | T0384 |
+| 4 | T0218 | 233 | child | not_started | T0221 |
+| 5 | T0131 | 144 | parent | no_work | — |
+
+Parent description is the epic statement only (email for signups, notifications, and AI digests). It has no implementation of its own.
+
+Outside the set, and already satisfied: T0131 and T0221 depend on T0206 (complete); T0129 depends on T0111 (complete); T0218 depends on T0216 (complete). T0221 is Blocked on T0384, and T0218 is Blocked on T0221. Those links are inside this set.
+
+T0129 has no recorded link to T0384. It is still second: a confirmation message cannot send until the administrator mail transport exists. T0221 is third because it is the shared notification path the digest mail uses.
+
+## T0384 — App Email configuration for Administrators
+
+**State at plan:** `ready` · **Depends on:** none
+
+There is no mail transport in the app. Administration is the modal in `client/src/components/shell/AdministrationModal.tsx` (`ADMIN_SECTIONS` in `client/src/lib/administration.tsx`). The durable queue is pg-boss (`src/services/jobs/queue.ts`), shipped in T0206.
+
+### Scope
+
+- New Administration section for outbound mail through an external service: host, port, encryption, account username, password, and API token, plus From address, From name, Reply-to, and a timeout in seconds.
+- Sender display name (for example TaskMesh) separate from the envelope From address.
+- Secrets stored server-side and not returned in full on later reads.
+- A send path later members call. This Task proves it with a configuration save and a connection or test send an administrator can run.
+- An email transaction log: time, result, To, Subject, and server warnings and errors. Message body is not stored. Surface it in the existing Administration logging area.
+- Administration graphs for email failures and activity (sends, retries, queue depth), using the same job metrics as the pg-boss queue where a send is queued.
+
+### Out of scope
+
+- Signup, notification templates, preferences, reminders, and digest rendering (later members).
+- Inbound mail.
+
+### QA follow-ups
+
+- Connection settings: Port and Encryption share one row. Server account authentication: Username and Password share one row. Each pair stacks on viewports 640px and narrower.
+- Enable outbound email and the “Mail settings saved” notice sit on the same row as Save and Test connection.
+
+## T0129 — User email self-signup process
+
+**State at plan:** `ready` · **Depends on:** T0111 (complete, outside this epic)
+
+Login is `client/src/pages/LoginPage.tsx`. Administrators already create email-and-password users. Password rules live in `src/lib/password.ts` and `client/src/lib/password.ts` (length, classes, repeats, sequences, history).
+
+### Scope
+
+- When email self-signup is enabled, the login screen offers signup by email.
+- The email field checks address format before submit. The password field uses the existing complexity rules.
+- The server sends a confirmation message through the T0384 transport. The link activates the account. Until confirmation, the account cannot sign in.
+- Disable the path when mail is not configured or self-signup is turned off. Administrators keep the existing create-user path.
+
+### Out of scope
+
+- OAuth and OIDC changes (T0111 is already complete).
+- Notification preferences and digest mail.
+
+### QA follow-ups
+
+## T0221 — Notifications: templates, preferences and scheduled delivery
+
+**State at plan:** `blocked` (open Depends-on is T0384, inside this epic) · **Depends on:** T0206 (complete, outside), T0384 (in epic)
+
+Builds on the parent mail capability and the pg-boss queue.
+
+### Scope
+
+- Notification types registered in code: digest, reminder, mention, assignment. Each has an HTML template, a plain-text template, and an in-app form.
+- Per-user preferences: which types, channel (in-app, email), frequency, quiet hours, and time zone.
+- Sends go through the shared job queue with retries. Every send is written to the T0384 email log.
+- Due-date and action-by reminders for Tasks and ToDos.
+- One-click unsubscribe per type.
+
+### Out of scope
+
+- Rendering a stored AI digest into that email (T0218).
+- Administrator SMTP configuration (T0384).
+
+### QA follow-ups
+
+## T0218 — AI: digest email delivery
+
+**State at plan:** `blocked` (open Depends-on is T0221, inside this epic) · **Depends on:** T0216 (complete, outside), T0221 (in epic)
+
+The digest engine and in-app digest already exist (`src/services/digest/`, `/digest`).
+
+### Scope
+
+- Render the stored digest as an email through the T0221 notification framework.
+- Links in the message open the records in the app.
+- One-click unsubscribe or change frequency.
+- Honor that user’s notification preferences and quiet hours.
+
+### Out of scope
+
+- Digest generation (T0216 is complete).
+- Template, preference, and queue machinery (T0221).
+
+### QA follow-ups

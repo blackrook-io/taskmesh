@@ -73,6 +73,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="admin/apis" element={<AdminHubPage />} />
                 <Route path="admin/database" element={<AdminHubPage />} />
                 <Route path="admin/jobs" element={<AdminHubPage />} />
+                <Route path="admin/email" element={<AdminHubPage />} />
                 <Route path="admin/logging" element={<AdminHubPage />} />
                 <Route path="admin/system-logs" element={<AdminHubPage />} />
                 <Route path="admin/backups" element={<AdminHubPage />} />

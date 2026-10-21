@@ -845,10 +845,11 @@ generate_key() {
 }
 
 write_env_file() {
-  local oauth_key mfa_key tmp
+  local oauth_key mfa_key email_key tmp
   oauth_key="$(generate_key)"
   mfa_key="$(generate_key)"
-  if [[ "${#oauth_key}" -lt 32 || "${#mfa_key}" -lt 32 ]]; then
+  email_key="$(generate_key)"
+  if [[ "${#oauth_key}" -lt 32 || "${#mfa_key}" -lt 32 || "${#email_key}" -lt 32 ]]; then
     die "Could not generate encryption keys."
   fi
   tmp="$(mktemp)"
@@ -864,6 +865,7 @@ write_env_file() {
     printf 'OAUTH_PUBLIC_BASE_URL=https://%s\n' "$FQDN"
     printf 'OAUTH_CREDENTIALS_KEY=%s\n' "$oauth_key"
     printf 'MFA_TOTP_KEY=%s\n' "$mfa_key"
+    printf 'EMAIL_CREDENTIALS_KEY=%s\n' "$email_key"
     if [[ -n "$OPENAI_API_KEY" ]]; then
       printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
       printf 'ASSISTANT_DEFAULT_PROVIDER=openai\n'

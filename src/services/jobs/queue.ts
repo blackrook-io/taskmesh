@@ -118,11 +118,27 @@ async function startBoss(connectionString: string): Promise<void> {
       await boss.updateQueue(job.name, options);
       const handler = handlers.get(job.name);
       if (!handler) throw new Error(`No handler for job ${job.name}`);
-      await boss.work(job.name, { batchSize: job.concurrency }, async (jobs) => {
-        for (const item of jobs) {
-          await handler(item.data ?? {});
-        }
-      });
+      if (job.includeMetadata) {
+        await boss.work(
+          job.name,
+          { batchSize: job.concurrency, includeMetadata: true },
+          async (jobs) => {
+            for (const item of jobs) {
+              await handler(item.data ?? {}, {
+                id: item.id,
+                retryCount: item.retryCount,
+                retryLimit: item.retryLimit,
+              });
+            }
+          },
+        );
+      } else {
+        await boss.work(job.name, { batchSize: job.concurrency }, async (jobs) => {
+          for (const item of jobs) {
+            await handler(item.data ?? {});
+          }
+        });
+      }
       if (job.cron) {
         await boss.schedule(job.name, job.cron, {}, { tz });
       }

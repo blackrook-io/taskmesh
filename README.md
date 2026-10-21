@@ -138,6 +138,7 @@ Copy [`.env.example`](.env.example) to `.env`. Important variables:
 | `PROD_RELEASE_PATH` | Sidecar JSON with the last production-host deploy stamp (default `./data/prod-release.json`; written by `deploy:prod` on that host) |
 | `OPENAI_API_KEY` | Deprecated. Enables the OpenAI provider plugin on first boot. A stored instance key is preferred; this variable remains the fallback when no instance key is stored |
 | `AI_CREDENTIALS_KEY` | Encrypts instance provider keys. Minimum 32 characters when set. Unset until an Administrator stores a key |
+| `EMAIL_CREDENTIALS_KEY` | Encrypts the administrator SMTP password and API token. Minimum 32 characters when set. Unset until those secrets are saved |
 | `ANTHROPIC_API_KEY` | Optional. Key for the Anthropic plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
 | `GEMINI_API_KEY` | Optional. Key for the Google Gemini plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |
 | `AZURE_OPENAI_API_KEY` | Optional. Key for the Azure OpenAI plugin when an Administrator enables it. Not stored, and it does not turn the plugin on by itself |

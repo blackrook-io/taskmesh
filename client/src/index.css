@@ -3894,6 +3894,24 @@ textarea.raw-md {
   margin-bottom: 0;
 }
 
+.admin-field-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.admin-field-pair > .field {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .admin-field-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .admin-panel .field span {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -3905,6 +3923,16 @@ textarea.raw-md {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.85rem;
+}
+
+.admin-mail-actions {
+  margin-top: 0.35rem;
+}
+
+.admin-mail-enable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .admin-user-name {
