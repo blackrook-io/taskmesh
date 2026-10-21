@@ -12,6 +12,7 @@ import { HomePage } from "./pages/HomePage.tsx";
 import { IdeaEditPage } from "./pages/IdeaEditPage.tsx";
 import { IdeasListPage } from "./pages/IdeasListPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
+import { UnsubscribePage } from "./pages/UnsubscribePage.tsx";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage.tsx";
 import { ProjectNewPage } from "./pages/ProjectNewPage.tsx";
 import { ProjectsListPage } from "./pages/ProjectsListPage.tsx";
@@ -22,6 +23,7 @@ import { ImageBoardPage } from "./pages/ImageBoardPage.tsx";
 import { ImageBoardEditorPage } from "./pages/ImageBoardEditorPage.tsx";
 import { CalendarPage } from "./pages/CalendarPage.tsx";
 import { DigestPage } from "./pages/DigestPage.tsx";
+import { NotificationsPage } from "./pages/NotificationsPage.tsx";
 import { AdminHubPage } from "./pages/AdminHubPage.tsx";
 import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
 import { PlanBoardPage } from "./pages/PlanBoardPage.tsx";
@@ -41,6 +43,7 @@ createRoot(document.getElementById("root")!).render(
           <SessionExpiryBridge />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/unsubscribe" element={<UnsubscribePage />} />
             <Route element={<AuthGate />}>
               <Route element={<Layout />}>
                 <Route index element={<HomePage />} />
@@ -59,6 +62,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="image-board/:id" element={<ImageBoardEditorPage />} />
                 <Route path="calendar" element={<CalendarPage />} />
                 <Route path="digest" element={<DigestPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
                 <Route path="settings" element={<SettingsHubPage />} />
                 <Route path="settings/profile" element={<SettingsHubPage />} />
                 <Route path="settings/tags" element={<SettingsHubPage />} />
@@ -66,6 +70,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="settings/backups" element={<AdminHubPage />} />
                 <Route path="settings/assistant" element={<SettingsHubPage />} />
                 <Route path="settings/ai-activity" element={<SettingsHubPage />} />
+                <Route path="settings/notifications" element={<SettingsHubPage />} />
                 <Route path="admin" element={<AdminHubPage />} />
                 <Route path="admin/users" element={<AdminHubPage />} />
                 <Route path="admin/groups" element={<AdminHubPage />} />

@@ -20,6 +20,7 @@ import {
 import { allocateTodoNumber } from "../../services/entityNumbers.js";
 import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
+import { reportAssigneeChange } from "../../services/notifications/events.js";
 import {
   assertCanAccessDualScoped,
   assertCanAccessOwned,
@@ -256,6 +257,16 @@ todosRouter.post("/", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create ToDo");
       return;
     }
+    reportAssigneeChange(db, {
+      actorUserId: actorId,
+      previousAssigneeId: null,
+      assigneeId: row.assigneeId,
+      entityType: "todo",
+      entityId: row.id,
+      number: row.number,
+      title: row.title,
+      projectId: row.projectId,
+    });
     await syncMentionLinks(db, {
       srcType: "todo",
       srcId: row.id,
@@ -471,6 +482,18 @@ todosRouter.patch("/:id", async (req, res) => {
     }
     if (row?.state === "deleted") await forgetKnowledge("todo", row.id);
     else if (row) await scheduleKnowledgeIndex("todo", row.id);
+    if (row) {
+      reportAssigneeChange(db, {
+        actorUserId: actorId,
+        previousAssigneeId: existing.assigneeId,
+        assigneeId: row.assigneeId,
+        entityType: "todo",
+        entityId: row.id,
+        number: row.number,
+        title: row.title,
+        projectId: row.projectId,
+      });
+    }
     res.json({ data: row ? await presentTodo(await attachAssignee(db, row), true) : row });
   } catch (err) {
     handleRouteError(res, err);
@@ -563,6 +586,16 @@ todosRouter.post("/from-idea/:ideaId", async (req, res) => {
       sendError(res, 500, "insert_failed", "Could not create ToDo");
       return;
     }
+    reportAssigneeChange(db, {
+      actorUserId: actorId,
+      previousAssigneeId: null,
+      assigneeId: todo.assigneeId,
+      entityType: "todo",
+      entityId: todo.id,
+      number: todo.number,
+      title: todo.title,
+      projectId: todo.projectId,
+    });
     await copyTaggings(
       db,
       { entityType: "idea", entityId: idea.id },

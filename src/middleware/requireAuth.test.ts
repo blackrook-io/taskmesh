@@ -21,6 +21,11 @@ describe("isPublicV1Route", () => {
     assert.equal(isPublicV1Route("POST", "/auth/oauth/google/start"), false);
   });
 
+  it("allows one-click unsubscribe", () => {
+    assert.equal(isPublicV1Route("POST", "/notifications/unsubscribe"), true);
+    assert.equal(isPublicV1Route("GET", "/notifications/unsubscribe"), false);
+  });
+
   it("allows public config", () => {
     assert.equal(isPublicV1Route("GET", "/config"), true);
     assert.equal(isPublicV1Route("GET", "/config/"), true);

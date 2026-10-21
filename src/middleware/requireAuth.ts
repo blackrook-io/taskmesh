@@ -20,6 +20,7 @@ export function isPublicV1Route(method: string, path: string): boolean {
     if (normalized.endsWith("/start") && method !== "GET") return false;
     return true;
   }
+  if (method === "POST" && normalized === "/notifications/unsubscribe") return true;
   if (method === "GET" && (normalized === "/config" || normalized.startsWith("/config/"))) {
     return true;
   }

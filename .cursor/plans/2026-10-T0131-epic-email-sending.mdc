@@ -11,7 +11,7 @@
 |------:|------|---:|------|--------|--------------------|
 | 1 | T0384 | 411 | child | qa_accepted | — |
 | 2 | T0129 | 142 | child | qa_accepted | — |
-| 3 | T0221 | 236 | child | not_started | T0384 |
+| 3 | T0221 | 236 | child | qa_accepted | T0384 |
 | 4 | T0218 | 233 | child | not_started | T0221 |
 | 5 | T0131 | 144 | parent | no_work | — |
 
@@ -86,6 +86,8 @@ Builds on the parent mail capability and the pg-boss queue.
 - Administrator SMTP configuration (T0384).
 
 ### QA follow-ups
+
+- Inbox cards now show **Unread** or **Read**. Unread cards keep an accent bar and tint; read cards are dimmer. Marking read updates the card immediately. A notice whose link is the inbox itself stays on this page and only changes read state. A notice that points at a task or to-do still opens that record.
 
 ## T0218 — AI: digest email delivery
 

@@ -989,6 +989,167 @@ export const mailLog = pgTable(
 );
 
 /**
+ * Per-user notification preferences (T0221).
+ * One row per user and type. A missing row uses both channels, immediate email,
+ * no quiet hours, and UTC.
+ */
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** digest | reminder | mention | assignment */
+    type: text("type").notNull(),
+    inApp: boolean("in_app").notNull().default(true),
+    email: boolean("email").notNull().default(true),
+    /** immediate | daily | weekly — applies to email. In-app is immediate. */
+    frequency: text("frequency").notNull().default("immediate"),
+    /** Local hour 0–23 when quiet hours start. Null with quiet_end means none. */
+    quietStart: integer("quiet_start"),
+    /** Local hour 0–23 when quiet hours end. The end hour itself is not quiet. */
+    quietEnd: integer("quiet_end"),
+    timeZone: text("time_zone").notNull().default("UTC"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("notification_preferences_user_type_uidx").on(t.userId, t.type),
+    check(
+      "notification_preferences_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+    check(
+      "notification_preferences_frequency_chk",
+      sql`${t.frequency} in ('immediate', 'daily', 'weekly')`,
+    ),
+    check(
+      "notification_preferences_quiet_chk",
+      sql`(${t.quietStart} is null and ${t.quietEnd} is null) or (${t.quietStart} between 0 and 23 and ${t.quietEnd} between 0 and 23 and ${t.quietStart} <> ${t.quietEnd})`,
+    ),
+  ],
+);
+
+/** In-app notification inbox (T0221). */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** digest | reminder | mention | assignment */
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    /** App path, such as `/tasks?open=1`. */
+    href: text("href"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    check(
+      "notifications_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+  ],
+);
+
+/**
+ * Reusable one-click unsubscribe secret per user and type (T0221).
+ * The plaintext token is the capability in the email link.
+ */
+export const notificationUnsubscribeTokens = pgTable(
+  "notification_unsubscribe_tokens",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    token: text("token").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("notification_unsubscribe_user_type_uidx").on(t.userId, t.type),
+    unique("notification_unsubscribe_token_uidx").on(t.token),
+    check(
+      "notification_unsubscribe_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+  ],
+);
+
+/**
+ * Email that is waiting for quiet hours or a daily/weekly slot (T0221).
+ * `sent_at` is set after the message is accepted by the mail queue.
+ */
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    subject: text("subject").notNull(),
+    textBody: text("text_body").notNull(),
+    htmlBody: text("html_body").notNull(),
+    href: text("href"),
+    deliverAfter: timestamp("deliver_after", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notification_outbox_pending_idx")
+      .on(t.deliverAfter)
+      .where(sql`${t.sentAt} is null`),
+    check(
+      "notification_outbox_type_chk",
+      sql`${t.type} in ('digest', 'reminder', 'mention', 'assignment')`,
+    ),
+  ],
+);
+
+/**
+ * One reminder already sent for a record and date (T0221).
+ * `marker` is the due date (`YYYY-MM-DD`) or the action-by instant.
+ */
+export const notificationReminderMarks = pgTable(
+  "notification_reminder_marks",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    /** due | action_by */
+    kind: text("kind").notNull(),
+    marker: text("marker").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("notification_reminder_marks_uidx").on(
+      t.userId,
+      t.entityType,
+      t.entityId,
+      t.kind,
+      t.marker,
+    ),
+    check(
+      "notification_reminder_marks_entity_chk",
+      sql`${t.entityType} in ('task', 'todo')`,
+    ),
+    check(
+      "notification_reminder_marks_kind_chk",
+      sql`${t.kind} in ('due', 'action_by')`,
+    ),
+  ],
+);
+
+/**
  * One encrypted provider key for the whole instance (T0182).
  * Ciphertext is AES-256-GCM under `AI_CREDENTIALS_KEY`. `hint` is the last 4 characters only.
  */

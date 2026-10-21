@@ -25,6 +25,7 @@ import {
 import { derivedStatePatchRejected } from "../../lib/taskRollup.js";
 import { forgetKnowledge, scheduleKnowledgeIndex } from "../../services/knowledge/schedule.js";
 import { syncMentionLinks } from "../../services/mentionLinks.js";
+import { reportAssigneeChange } from "../../services/notifications/events.js";
 import { assertCanAccessProject } from "../../services/ownership.js";
 import {
   blockReadyDependents,
@@ -234,6 +235,16 @@ export async function createProjectTask(args: {
   });
   await applyTaskGroupAutoTags(db, { projectId: args.projectId, taskId: row.id });
   await scheduleKnowledgeIndex("task", row.id);
+  reportAssigneeChange(db, {
+    actorUserId: args.actorId,
+    previousAssigneeId: null,
+    assigneeId,
+    entityType: "task",
+    entityId: row.id,
+    number: row.number,
+    title: row.title,
+    projectId: row.projectId,
+  });
   const created = await attachTaskActor(db, row);
   const [data] = await attachAllowedNextStates(db, args.actorId, [created]);
   return { ok: true, status: 201, data };
@@ -546,6 +557,16 @@ export async function patchProjectTask(args: {
     await applyTaskGroupAutoTags(db, { projectId: args.projectId, taskId: args.taskId });
     if (row.state === "deleted") await forgetKnowledge("task", row.id);
     else await scheduleKnowledgeIndex("task", row.id);
+    reportAssigneeChange(db, {
+      actorUserId: args.actorId,
+      previousAssigneeId: existing.assigneeId,
+      assigneeId: row.assigneeId,
+      entityType: "task",
+      entityId: row.id,
+      number: row.number,
+      title: row.title,
+      projectId: row.projectId,
+    });
   }
 
   if (!row) {

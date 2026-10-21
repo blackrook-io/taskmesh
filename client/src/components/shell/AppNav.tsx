@@ -198,6 +198,13 @@ export function AppNav({
   const less = mode === "less";
   const digestInbox = useDigestInbox();
   const digestUnread = digestInbox.data?.unread === true;
+  const notificationInbox = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () =>
+      apiJson<{ data: unknown[]; unread: number }>("/api/v1/notifications?limit=1"),
+    refetchInterval: 60_000,
+  });
+  const notificationUnread = notificationInbox.data?.unread ?? 0;
   const section = useShellSection();
   const activeProjectId = useActiveProjectId();
   const { items: projectModules } = useActiveProjectNavItems();
@@ -436,6 +443,18 @@ export function AppNav({
               <NavIcon icon={shellIcons.digest} />
               {digestUnread ? <span className="app-nav__unread" aria-hidden /> : null}
             </NavLink>
+            <NavLink
+              to="/notifications"
+              className={({ isActive }) => `app-nav__icon-btn${isActive ? " is-active" : ""}`}
+              title="Notifications"
+              aria-label={
+                notificationUnread > 0 ? `Notifications, ${notificationUnread} unread` : "Notifications"
+              }
+              onClick={onNavigate}
+            >
+              <NavIcon icon={shellIcons.email} />
+              {notificationUnread > 0 ? <span className="app-nav__unread" aria-hidden /> : null}
+            </NavLink>
             {showAdmin ? (
               <button
                 type="button"
@@ -505,6 +524,20 @@ export function AppNav({
                 {digestUnread ? <span className="app-nav__unread" aria-hidden /> : null}
               </span>
               <span className="app-nav__label">Digest</span>
+            </NavLink>
+            <NavLink
+              to="/notifications"
+              className={({ isActive }) => `app-nav__item${isActive ? " is-active" : ""}`}
+              aria-label={
+                notificationUnread > 0 ? `Notifications, ${notificationUnread} unread` : "Notifications"
+              }
+              onClick={onNavigate}
+            >
+              <span className="app-nav__glyph" aria-hidden>
+                <NavIcon icon={shellIcons.email} />
+                {notificationUnread > 0 ? <span className="app-nav__unread" aria-hidden /> : null}
+              </span>
+              <span className="app-nav__label">Notifications</span>
             </NavLink>
             {showAdmin ? (
               <button
