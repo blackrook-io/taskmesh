@@ -3,7 +3,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
+import { retryUnlessUnauthorized } from "./api/client.ts";
 import { AuthGate } from "./components/AuthGate.tsx";
+import { SessionExpiryBridge } from "./components/SessionExpiryBridge.tsx";
 import { Layout } from "./components/Layout.tsx";
 import { AuthProvider } from "./lib/auth.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
@@ -25,13 +27,18 @@ import { SettingsHubPage } from "./pages/SettingsHubPage.tsx";
 import { PlanBoardPage } from "./pages/PlanBoardPage.tsx";
 import { TasksListPage } from "./pages/TasksListPage.tsx";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: retryUnlessUnauthorized },
+  },
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <SessionExpiryBridge />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AuthGate />}>

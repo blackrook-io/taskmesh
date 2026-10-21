@@ -9,6 +9,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { getDocument, GlobalWorkerOptions, PasswordResponses, RenderingCancelledException, type PDFDocumentLoadingTask, type PDFDocumentProxy, type RenderTask } from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { notifySessionExpired } from "../api/sessionExpired";
 import { NavIcon } from "./shell/NavIcon";
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -57,6 +58,10 @@ function readStoredReadingMode(): PdfReadingMode {
 
 async function fetchPdfBytes(url: string): Promise<Uint8Array> {
   const res = await fetch(url, { credentials: "include" });
+  if (res.status === 401) {
+    notifySessionExpired();
+    throw new Error("Authentication required.");
+  }
   if (!res.ok) {
     throw new Error(res.status === 404 ? "PDF file not found" : `Failed to load PDF (${res.status})`);
   }
