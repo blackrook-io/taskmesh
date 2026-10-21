@@ -4,6 +4,11 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.95.1 — 2026-10-21
+
+### Fixes
+- An expired or invalid session sends you to the login page, with a return path and a centered two-line notice, instead of leaving “Authentication required.” on the page you were using. Signing in brings you back. A wrong password and an explicit log out stay on the login form without that notice.
+
 ## 0.95.0 — 2026-10-19
 
 Release candidate for testers, published as pre-release `v0.95.0-rc1`. This summarizes everything shipped after `v0.50.0-beta` (app `0.50.0`). The in-app Update link ignores pre-releases.

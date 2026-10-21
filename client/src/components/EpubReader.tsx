@@ -3,6 +3,7 @@ import { faChevronLeft, faChevronRight, faListUl, faMoon, faSun } from "@fortawe
 import ePub, { type Book, type NavItem, type Rendition } from "epubjs";
 import type Contents from "epubjs/types/contents";
 import type Section from "epubjs/types/section";
+import { notifySessionExpired } from "../api/sessionExpired";
 import { NavIcon } from "./shell/NavIcon";
 
 type Props = {
@@ -88,6 +89,10 @@ function applyReadingTheme(rendition: Rendition, mode: EpubReadingMode): void {
 
 async function fetchEpubArrayBuffer(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url, { credentials: "include" });
+  if (res.status === 401) {
+    notifySessionExpired();
+    throw new Error("Authentication required.");
+  }
   if (!res.ok) {
     throw new Error(res.status === 404 ? "EPUB file not found" : `Failed to load EPUB (${res.status})`);
   }

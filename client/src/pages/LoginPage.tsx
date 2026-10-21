@@ -13,7 +13,7 @@ import { MeshMark } from "../components/shell/MeshMark";
 import type { UserProfile } from "../types";
 
 const LOGIN_ERROR = "Invalid email or password.";
-const SESSION_ENDED_MESSAGE = "Your session ended. Sign in again to continue.";
+const SESSION_ENDED_LINES = ["Your session ended.", "Sign in again to continue."] as const;
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   oauth_denied: "Sign-in was cancelled.",
@@ -215,7 +215,7 @@ export function LoginPage() {
     },
   });
 
-  if (user) {
+  if (user && !sessionEnded) {
     return <Navigate to={returnTo} replace />;
   }
 
@@ -360,7 +360,9 @@ export function LoginPage() {
             <form className="login-form" onSubmit={onSubmit} noValidate>
               {sessionEnded ? (
                 <p className="login-form__banner" role="status">
-                  {SESSION_ENDED_MESSAGE}
+                  {SESSION_ENDED_LINES[0]}
+                  <br />
+                  {SESSION_ENDED_LINES[1]}
                 </p>
               ) : null}
 

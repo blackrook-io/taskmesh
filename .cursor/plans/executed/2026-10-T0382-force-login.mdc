@@ -1,0 +1,74 @@
+# T0382 — Force to login page
+
+**Task:** T0382 (id 409) · **Project:** TaskMesh (4)
+**Branch (after approval):** `T0382-force-login`
+**State at plan:** `ready`
+**Depends on:** none
+**Parent:** none
+
+## Problem
+
+When a session times out or is no longer valid, protected API calls return `401` with `"Authentication required."`. List and detail pages render that string as an alert at the top of the main pane (`if (error) return <p role="alert">…`) and the shell stays up.
+
+T0134 added a client redirect (`notifySessionExpired` → clear auth → `AuthGate` → `/login?returnTo=&reason=session`, plus the “Your session ended” banner). It does not win in the current app:
+
+1. **Stale login user.** `useAuth().user` is `loginUser ?? sessionQuery.data`. After a password login, `loginUser` stays set for the tab. `GET /api/v1/auth/session` on `401` returns `null` and does **not** call `notifySessionExpired`, so a dead session probe does not clear `loginUser`. `AuthGate` still thinks the user is signed in.
+2. **Redirect is indirect.** `notifySessionExpired` only clears React Query state and hopes `AuthGate` re-renders. The failing query still throws, and the page paints the API message. Default React Query retries (3) keep that query alive long enough to show the alert.
+3. **One-shot latch.** `handling` is set even when no handler is registered. A missed first `401` then ignores every later `401` until `LoginPage` mounts — which never happens if we never left the page.
+
+## Decisions (recommended — confirm or adjust)
+
+1. **When:** As soon as the client learns the session is invalid (any protected `401`, including the session probe after the user was signed in). No client-side countdown while the tab is idle with no requests. Window-focus refetch of the session query still counts.
+2. **Where:** `/login?returnTo=<current path>&reason=session`, same rules as today (`safeReturnTo`). Banner stays: “Your session ended. Sign in again to continue.”
+3. **Unsaved edits:** Leave immediately. No “discard changes?” prompt.
+4. **Not session-loss:** Wrong password / MFA verify `401` stays on the login form. Profile **Log out** still goes to `/login` without the session banner. A cold visit while logged out still goes to login **without** the session banner.
+5. **Status:** `401` only. `403` stays a permission error on the page.
+
+## Approach
+
+Client only. No schema, no server message change.
+
+1. **`client/src/api/sessionExpired.ts`**
+   - On a real session loss, navigate immediately to the login URL (SPA navigate registered from inside `BrowserRouter`, `window.location.assign` if that callback is missing).
+   - Set the session-ended flag only for this path.
+   - Do not latch `handling` unless navigation was actually scheduled. Ignore further `401`s while already on `/login`.
+   - Keep skipping `POST /auth/login` and `POST /auth/mfa/verify`.
+
+2. **`client/src/lib/auth.tsx`**
+   - Session probe `401` after a signed-in user: same session-loss path (not a cold anonymous load).
+   - Treat an explicit logged-out session result as logged out even if `loginUser` is still set, so `AuthGate` cannot keep the shell mounted.
+
+3. **`client/src/main.tsx`**
+   - Register the navigator inside the router.
+   - Do not retry queries/mutations whose error is HTTP `401`.
+
+4. **Other credentialed `fetch` calls** that already use `maybeNotifySessionExpired` (uploads, assistant, backups, AI export) follow the same redirect. Spot-check raw `fetch` sites (PDF/EPUB) so a `401` there also leaves the page instead of showing the auth string.
+
+5. **Login page** — no copy change. `resetSessionExpiredGuard` stays so a later expiry in the same tab can redirect again.
+
+## Out of scope
+
+- Idle timer / warning before expiry.
+- Changing the server `401` body.
+- `403`, API-key auth, or per-page alert rewrites beyond what the redirect makes unreachable.
+
+## Acceptance
+
+- Expire or clear the session while on a protected page, then refetch or act → login page with `returnTo` and the session banner. The main pane does not sit on “Authentication required.”
+- Sign in again → prior page.
+- Wrong password → credential error only.
+- Log out from Profile → `/login` without the session banner.
+- Open a protected URL with no session → login with `returnTo`, no session banner.
+
+## QA checklist (draft)
+
+- [ ] Signed in on a project (or projects list), delete the `taskmesh_session_dev` cookie (or wait out the session), then trigger a load or action → `/login` with the session banner and `returnTo`. No leftover “Authentication required.” alert.
+- [ ] Sign in → land on that `returnTo` page.
+- [ ] Wrong password on the login form → “Invalid email or password.” only.
+- [ ] Profile → Log out → `/login` without the session banner.
+- [ ] Private window, open `/projects` → login with `returnTo`, no session banner.
+- [ ] With unsaved text in a task or document, expire the session and trigger a save or navigation → login, no confirm dialog.
+
+## QA follow-ups
+
+- Session banner copy is centered on two lines: “Your session ended.” / “Sign in again to continue.” The previous single sentence sat left-aligned and wrapped as “continue.” on its own line.

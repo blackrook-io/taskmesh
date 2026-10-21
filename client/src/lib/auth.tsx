@@ -5,11 +5,18 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { setSessionExpiredHandler } from "../api/sessionExpired";
+import {
+  beginExplicitLogout,
+  isForcedLoggedOut,
+  markSessionActive,
+  notifySessionExpired,
+  setSessionExpiredHandler,
+} from "../api/sessionExpired";
 import type { UserProfile } from "../types";
 
 type AuthContextValue = {
@@ -40,16 +47,34 @@ async function fetchSession(): Promise<UserProfile | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [loginUser, setLoginUser] = useState<UserProfile | null>(null);
+  /** Bumped on sign-in, sign-out, and session loss so an in-flight probe cannot overwrite the newer result. */
+  const sessionEpoch = useRef(0);
+  const signedInRef = useRef(false);
 
   const sessionQuery = useQuery({
     queryKey: ["auth", "session"],
-    queryFn: fetchSession,
+    queryFn: async () => {
+      const epoch = sessionEpoch.current;
+      const wasSignedIn = signedInRef.current;
+      const profile = await fetchSession();
+      if (epoch !== sessionEpoch.current) {
+        const cached = qc.getQueryData<UserProfile | null>(["auth", "session"]);
+        if (cached !== undefined) return cached;
+        return signedInRef.current ? profile : null;
+      }
+      if (profile) {
+        signedInRef.current = true;
+        return profile;
+      }
+      if (wasSignedIn) notifySessionExpired();
+      return null;
+    },
     retry: false,
     staleTime: 30_000,
   });
 
-  const user = loginUser ?? sessionQuery.data ?? null;
-  const loading = sessionQuery.isLoading && loginUser == null;
+  const user = isForcedLoggedOut() ? null : (loginUser ?? sessionQuery.data ?? null);
+  const loading = !isForcedLoggedOut() && sessionQuery.isLoading && loginUser == null;
 
   const refresh = useCallback(async () => {
     setLoginUser(null);
@@ -57,6 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [qc]);
 
   const logout = useCallback(async () => {
+    beginExplicitLogout();
+    sessionEpoch.current += 1;
+    signedInRef.current = false;
     await fetch("/api/v1/auth/logout", {
       method: "POST",
       credentials: "include",
@@ -68,12 +96,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [qc]);
 
   const setUser = useCallback((next: UserProfile) => {
+    markSessionActive();
+    sessionEpoch.current += 1;
+    signedInRef.current = true;
     setLoginUser(next);
     qc.setQueryData(["auth", "session"], next);
   }, [qc]);
 
   useEffect(() => {
     setSessionExpiredHandler(() => {
+      sessionEpoch.current += 1;
+      signedInRef.current = false;
       setLoginUser(null);
       qc.setQueryData(["auth", "session"], null);
       qc.removeQueries({

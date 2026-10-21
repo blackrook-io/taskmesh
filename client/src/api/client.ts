@@ -40,6 +40,12 @@ export function maybeNotifySessionExpired(path: string, status: number): void {
   }
 }
 
+/** Default query retry, except a dead session is not worth repeating. */
+export function retryUnlessUnauthorized(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiRequestError && error.status === 401) return false;
+  return failureCount < 3;
+}
+
 async function readJsonOrThrow(res: Response, path: string): Promise<unknown> {
   const text = await res.text();
   const trimmed = text.trimStart();
@@ -74,9 +80,11 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) {
     return undefined as T;
   }
-  const json = (await readJsonOrThrow(res, path)) as T | ApiErrorBody;
   if (!res.ok) {
     maybeNotifySessionExpired(path, res.status);
+  }
+  const json = (await readJsonOrThrow(res, path)) as T | ApiErrorBody;
+  if (!res.ok) {
     const err = json as ApiErrorBody;
     const payload = err.error;
     const error = new ApiRequestError(payload?.message ?? res.statusText, res.status, {
