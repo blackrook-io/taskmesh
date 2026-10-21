@@ -10,9 +10,9 @@ alwaysApply: true
 
 # Git workflow (feature / fix branches)
 
-* **On work start:** create a dedicated branch from updated `main`, switch to it (SetActiveBranch), then implement.
+* **On work start:** create a dedicated branch from updated `main`, switch to it (SetActiveBranch), then implement. An epic member uses the branch `/startepic` already created and still gets its own interview and plan approval before product edits.
   - **`/worktask`:** branch `T####-short-slug` (e.g. `T0036-wiki-search`). Follow [.cursor/skills/worktask/SKILL.md](../skills/worktask/SKILL.md).
-  - **`/startepic`:** one branch for the parent Task, `T####-short-slug`, shared by the confirmed child Tasks. Follow [.cursor/skills/startepic/SKILL.md](../skills/startepic/SKILL.md). Child chats are `/worktask` on that branch. Publish with [/finishepic](../skills/finishepic/SKILL.md) only.
+  - **`/startepic`:** one branch for the parent Task, `T####-short-slug`, shared by the confirmed child Tasks. Follow [.cursor/skills/startepic/SKILL.md](../skills/startepic/SKILL.md). That start approves membership, order, and the branch. Child chats are `/worktask` on that branch and still interview, write that member’s plan section, and wait for approval before product edits. Publish with [/finishepic](../skills/finishepic/SKILL.md) only.
   - **Ad-hoc (no Task Number):** branch `phase-N-short-slug` (legacy naming still OK).
   - **Git remotes:** always use SSH (`git@github.com:blackrook-io/taskmesh.git`) for pull/push. Never try HTTPS first.
 * **On approval / “finish up”:** when the user says **finish up** (or equivalent approval to close the implementation), do all of the following in order. **`main` is branch-protected** (required CI) — never push commits directly to `main`. **An open epic does not publish on finish up.** If the active plan has `Epic status: open` and this Task is a non-dropped member, finish up commits nothing and opens no pull request; `/finishepic` runs the list below once for the whole bundle.

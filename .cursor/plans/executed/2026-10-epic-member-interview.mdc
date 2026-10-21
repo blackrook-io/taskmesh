@@ -1,0 +1,26 @@
+# Epic member interview and plan
+
+**Branch:** `phase-53-epic-member-interview` (from updated `main`, worktree `/srv/taskmesh-phase-53`)
+**Kind:** agent workflow (skills + Cursor rules). No schema, no API, no SPA.
+**Version:** 0.95.3. Skip `FEATURES.md` (internal agent workflow).
+**State:** finish-up approved. No further QA follow-ups.
+**Leave `/srv/taskmesh` on `T0131-email-sending`.** That worktree has uncommitted T0384 mail work. Do not switch it, stash it, or mix these skill edits into that slice.
+
+## Goal
+
+Bundling Tasks onto one epic branch and one pull request still requires the `/worktask` interview and plan approval for each member before product edits.
+
+`/startepic` approves membership, order, and the shared branch. It writes a stub per member with `**Implementation plan:** pending`. It does not write an implementation design.
+
+`/worktask` on a member still runs sizing, the Depends-on gate, the state gate, and the interview. It writes that member’s section and waits for approval. The existing epic branch is not that approval. After approval it sets `**Implementation plan:** approved`, marks the Task In Progress, and implements on the epic branch.
+
+A missing marker, or `pending`, means interview before further product edits. Uncommitted work already on the branch stays; it is not discarded.
+
+## QA checklist
+
+1. In `/worktask` § 1b, a `not_started` member continues into § 2–4. The skill does not PATCH In Progress or edit product code from the epic gates alone.
+2. § 3, § 4, and § 5 name the epic overrides: no second branch, plan lives in the member section, implement only after approval.
+3. Resume without a new interview only when the section says `**Implementation plan:** approved`.
+4. `/startepic` § 5 writes stubs and says epic-plan approval is membership, order, and the branch.
+5. `plan-branch-gate.mdc`: an epic `T####-*` branch does not count as already in progress while the member section lacks `**Implementation plan:** approved`.
+6. `development-rules.mdc` and `AGENTS.md` say the child chat still interviews and gets plan approval.

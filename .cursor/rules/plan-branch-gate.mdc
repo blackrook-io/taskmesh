@@ -10,17 +10,27 @@ are **already in the midst of one**:
 
 - **Already in progress** (proceed, no challenge) when EITHER:
   - the current git branch matches `T[0-9]+-*` (worktask) or `phase-*`
-    (ad-hoc feature/fix branch), OR
+    (ad-hoc feature/fix branch), except an epic `T####-*` branch does not
+    count for a member whose section lacks the exact line
+    `**Implementation plan:** approved` — interview and write that section
+    on the epic branch before product edits, and do not create a second
+    branch, OR
   - an active plan exists for this work (a `.cursor/plans/*.mdc`, or a plan just
-    approved this session), OR
+    approved this session), except an open epic plan is only the plan for a
+    member section that already says `**Implementation plan:** approved`, OR
   - the user explicitly invoked `/worktask` / the worktask skill this session
-    and you are following that skill’s workflow, OR
+    and that skill has already received approval to implement, OR
   - an epic plan under `.cursor/plans/` has `Epic status: open` **and** the
-    requested work is a member of that epic (the branch is that parent’s
-    `T####-*`). An open epic plan is not approval to start unrelated work.
+    requested work is a non-dropped member **and** that member’s section says
+    `**Implementation plan:** approved` (the branch is that parent’s
+    `T####-*`). An open epic plan is not approval to start unrelated work,
+    and it is not approval to implement a member that is still pending.
     A dirty worktree still blocks `/startepic` from switching branches.
 - **Not in progress** (challenge required): the branch is `main` (or another
-  base branch) and there is no active plan for the requested work.
+  base branch) and there is no approved plan for the requested work. Also not
+  yet approved: an open-epic member whose section lacks
+  `**Implementation plan:** approved`, including when `HEAD` is already the
+  epic branch.
 
 ## The challenge
 
@@ -29,13 +39,19 @@ When not already in progress, **STOP before making edits** and propose both:
 1. A plan file at `.cursor/plans/<YYYY-MM>-<slug>.mdc` (for worktasks:
    `<YYYY-MM>-T####-<slug>.mdc`). Skip a full plan only for truly trivial
    one-liners such as a typo or comment — when unsure, write it.
+   **Epic member:** the plan is that member’s `## T####` section in the open
+   epic file, with `**Implementation plan:** pending` until the user approves.
+   Do not create a second plan file.
 2. A feature branch from updated `main`
    (`git switch main && git pull`, then `git switch -c …`):
    - `/worktask`: `T####-<slug>`
    - otherwise: `phase-N-<slug>`
+   **Epic member:** do not propose a second branch. The parent `T####-*`
+   branch from `/startepic` is the branch.
 
 Wait for the user to confirm (or adjust) before editing. Do not commit directly
-to `main`.
+to `main`. Product edits for an epic member wait until that member’s section
+says `**Implementation plan:** approved`.
 
 ## After approval
 
@@ -43,5 +59,7 @@ Follow [development-rules.mdc](development-rules.mdc) for the full git and
 "finish up" workflow (commit on feature branch → archive plan on that branch →
 push feature branch over SSH → PR + required CI → merge on GitHub → pull `main`
 → delete feature branch, plus worktask Task Complete + comment on the DEV API
-when applicable). Finish-up does not deploy. Never push commits directly to `main`.
+when applicable). An epic member’s approval implements on the existing epic
+branch; that chat does not publish. `/finishepic` publishes the bundle.
+Finish-up does not deploy. Never push commits directly to `main`.
 Give a QA checklist at the end of each implementation pass.

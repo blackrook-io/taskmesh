@@ -12,6 +12,11 @@ A future **Build release** skill will use this file to populate GitHub Release n
 - Notification settings cover digest, reminder, mention, and assignment, each with in-app or email delivery, frequency, and quiet hours. Due-date and action-by reminders send on the shared job queue, and each email type can be unsubscribed in one click. The inbox shows Unread and Read.
 - Each stored attention digest can be emailed through those settings. Links in the message open the records in the app, and the message can change how often it is sent or unsubscribe.
 
+## 0.95.3 — 2026-10-21
+
+### Fixes
+- Each Task in an epic still gets its own interview and plan approval. Starting the epic confirms who ships together and opens the shared branch. The member chat writes that Task’s plan and waits for approval before editing code.
+
 ## 0.95.2 — 2026-10-21
 
 ### Enhancements
