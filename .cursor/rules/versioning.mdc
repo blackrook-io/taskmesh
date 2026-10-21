@@ -21,7 +21,9 @@ That catch-up applies **once**. From this merge onward, **do not re-count migrat
 
 Bump **once** when the user asks to **finish up** (the commit that merges to `main`), not on every WIP commit. QA-only follow-ups on the same unreleased branch do not get an extra bump.
 
-Every finished Task that ships to `main` must bump **exactly one** of MINOR or PATCH (or, rarely, MAJOR):
+An open epic bumps **once**, at `/finishepic`, for the whole bundle. Slice commits do not bump. Use MINOR when any shipped work on that branch added a `drizzle/*.sql` file; otherwise PATCH. Each shipped Task’s completion comment cites that same version.
+
+Every finished lone Task, and every `/finishepic`, that ships to `main` must bump **exactly one** of MINOR or PATCH (or, rarely, MAJOR):
 
 | Change | Bump |
 |--------|------|
@@ -42,7 +44,7 @@ Do **not** set `releasedAt` in git. Finish-up does not deploy and does not stamp
 ## Workflows and skills
 
 - [development-rules.mdc](development-rules.mdc) finish-up step 1 **must** bump version (or confirm this branch already has the bump) **and** update [`RELEASE_NOTES.md`](../../RELEASE_NOTES.md) in that same commit (recreate the stub if the file was cleared after a GitHub release publish). When the Task adds major user-facing functionality, also update [`FEATURES.md`](../../FEATURES.md) in that commit.
-- [/worktask](../skills/worktask/SKILL.md) finish-up **must** do the same bump + release-notes update (and `FEATURES.md` when applicable) in the feature-branch finish-up commit (before the PR merges), and mention the new version in the completion comment.
+- [/worktask](../skills/worktask/SKILL.md) finish-up **must** do the same bump + release-notes update (and `FEATURES.md` when applicable) in the feature-branch finish-up commit (before the PR merges), and mention the new version in the completion comment. Epic members do not bump on finish up. [/finishepic](../skills/finishepic/SKILL.md) bumps once for the bundle and names that version on every shipped Task.
 
 ## API / UI
 

@@ -332,3 +332,121 @@ git pull git@github.com:blackrook-io/taskmesh.git main
 git push git@github.com:blackrook-io/taskmesh.git --delete T####-<slug>   # if remote branch remains
 git branch -d T####-<slug>
 ```
+
+## Epic (`/startepic`, epic `/worktask`, `/finishepic`)
+
+An epic is a parent Task plus the direct children the user confirmed for one pull request. Lone Tasks keep the rest of this file. Skills: [../startepic/SKILL.md](../startepic/SKILL.md), [../finishepic/SKILL.md](../finishepic/SKILL.md). Epic `/worktask` is [SKILL.md](SKILL.md) § 1b.
+
+### Find the open epic
+
+```bash
+rg -l --glob '*.mdc' --glob '!executed/**' '^\*\*Epic status:\*\* open$' .cursor/plans
+```
+
+One file. Its member table is the source of truth. In-scope rows are every status except `dropped`. `no_work` is only the parent when the parent has no implementation of its own.
+
+### Direct children
+
+```bash
+curl -fsS "${AUTH[@]}" "$BASE/api/v1/tasks?projectId=${PROJECT_ID}" \
+  | jq --argjson p "$PARENT_ID" '.data[] | select(.parentId == $p) | {id,number,title,state}'
+```
+
+Display numbers are `T` plus four digits (`36` → `T0036`).
+
+### Plan header
+
+Path: `.cursor/plans/<YYYY-MM>-T####-epic-<slug>.mdc` (parent number). No `alwaysApply` frontmatter.
+
+```markdown
+# Epic T0159 — short-slug
+
+**Epic status:** open
+**Parent:** T0159 (id 172) — title
+**Branch:** `T0159-short-slug`
+**Project:** 4
+
+## Members
+
+| Order | Task | Id | Role | Status | In-epic depends-on |
+|------:|------|---:|------|--------|--------------------|
+| 1 | T0160 | 180 | child | not_started | — |
+| 2 | T0161 | 181 | child | not_started | T0160 |
+| 3 | T0159 | 172 | parent | no_work | — |
+```
+
+`Status`: `not_started` | `in_progress` | `qa_accepted` | `dropped` | `no_work`.
+
+One `## T#### — title` section per member that is not `no_work`, including a QA follow-ups subsection.
+
+`/finishepic` sets `**Epic status:** shipped` and moves the file to `.cursor/plans/executed/` with the same filename.
+
+### Dirty tree
+
+`git status --porcelain` must be empty before `/startepic` or `/finishepic` switches or publishes, and before an epic `/worktask` checks out the epic branch from somewhere else. Do not stash or discard. A dirty tree already on the epic branch is the open slice.
+
+### Membership changes
+
+Update the table, the section, and post a comment on the parent.
+
+- **Add** a direct child that is `ready`, or that the user explicitly includes. External Depends-on links must be `complete`, `canceled`, or `pending`. Insert it in dependency order. If a row is `in_progress`, the new row does not become the paste line until that slice is `qa_accepted`.
+- **Drop** a `not_started` row. Refuse when another non-dropped row lists it under In-epic depends-on, unless that row is dropped in the same change. A `qa_accepted` or `in_progress` drop asks first. Do not revert commits. A dropped Task is not completed and is not a release-notes bullet. If it is `in_progress` and no slice commit exists, `PATCH` it back to `ready`.
+- **Defer** with the lone-Task rule (full DEV Task, Depends-on link, left out of this pull request unless the user then adds it).
+
+### Epic comment templates
+
+**Epic started** (parent):
+
+```markdown
+**Epic started**
+
+- Branch: `T0159-short-slug`
+- Plan: `.cursor/plans/2026-10-T0159-epic-short-slug.mdc`
+- Members: T0160, T0161
+
+<one line on the order>
+```
+
+**Epic member started:**
+
+```markdown
+**Epic member started**
+
+- Epic: T0159
+- Branch: `T0159-short-slug`
+- Plan: `.cursor/plans/2026-10-T0159-epic-short-slug.mdc` (§ T0160)
+
+<scope of this section only>
+```
+
+**QA accepted:**
+
+```markdown
+**QA accepted**
+
+- Plan section T0160 marked `qa_accepted`
+- Slice commit: <subject>
+
+Next chat: `/worktask T0161`
+```
+
+Use `Next: /finishepic` when no `not_started` row remains.
+
+**Epic shipped** (parent and each `qa_accepted` member):
+
+```markdown
+**Epic shipped**
+
+- Epic: T0159
+- Merged PR #N (`T0159-short-slug` → `main`)
+- Plan archived: `.cursor/plans/executed/2026-10-T0159-epic-short-slug.mdc`
+- App version: `0.22.1` (example) is on `main`
+- Release notes: `RELEASE_NOTES.md` updated for `0.22.1`
+- Public Production is not deployed by finish-up. The Administrator upgrades that site from the GitHub Release (`UPGRADES.md`).
+
+<this Task’s outcome>
+
+**QA follow-ups** (omit section if none)
+
+- <each addition or correction from QA>
+```

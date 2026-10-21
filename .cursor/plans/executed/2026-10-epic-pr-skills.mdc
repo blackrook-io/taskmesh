@@ -1,0 +1,177 @@
+# Epic pull requests — /startepic and /finishepic
+
+**Branch:** `phase-52-epic-skills` (from updated `main`)
+**State:** QA confirmed, no follow-ups. Shipping as `0.95.2`.
+
+## QA
+
+The checklist in this plan was confirmed with no requested changes. No QA follow-ups.
+**Kind:** agent workflow (skills + Cursor rules). No schema, no API, no SPA.
+**Version on finish-up of this work:** PATCH. Skip `FEATURES.md` (internal agent workflow).
+
+## Goal
+
+Let related Tasks ship as one branch and one pull request. The Epic is a parent Task. Confirmed direct children are the members. Lone Tasks keep today’s `/worktask` and **finish up** (one branch, one pull request, one version bump).
+
+`/startepic` opens the epic. Each child is implemented in its own new Agent chat via `/worktask T####`, which joins the epic branch. `/finishepic` is the only publish. **Finish up** during an open epic does not commit, merge, or complete anything.
+
+## Locked decisions
+
+1. **Epic identity.** `/startepic T####` names the parent. List its direct children and wait until the user confirms which ones ship in this pull request. Implement the parent only when its description has work of its own.
+2. **One open epic.** A second `/startepic` stops while an epic plan with `Epic status: open` is under `.cursor/plans/`.
+3. **One branch.** From updated `main`, named `T####-<slug>` for the parent number. Slice commits land on that branch when a member’s QA is accepted. One pull request at `/finishepic`.
+4. **One writer.** Child chats run one at a time, in dependency order. The next chat starts only after the previous slice is committed and that section is QA accepted.
+5. **Handoff.** No deeplink and no nested subagent. The epic chat prints one paste line for a new Agent chat: `/worktask T####`.
+6. **Depends-on.** A Depends-on link to another confirmed member does not block `/startepic`. Work those members in dependency order. A Depends-on link to a Task outside the epic still stops `/startepic` until that Task is `complete`, `canceled`, or `pending`. `blocked` still blocks.
+7. **States.** Parent → `in_progress` at `/startepic`. A member → `in_progress` when its chat starts. TaskMesh `complete` is set only after the epic pull request merges. Children left out of the epic still make a parent Complete land as `pending` (existing API coerce). Do not change `dueDate`.
+8. **Plan.** One epic plan with a section per member. Add a Ready direct child, drop a member, or defer scope to a new Task until `/finishepic`. Comments point at that file.
+9. **QA sign-off.** When the user says the QA passed (`QA passed`, `QA pass`, or `this task passed`; ask once if the wording is ambiguous), that chat commits the slice, marks the section `qa_accepted`, posts a Task comment, and stops. No version bump and no pull request in that commit.
+10. **Publish.** `/finishepic` refuses unless every in-scope section is `qa_accepted` or `no_work`. Then one version bump, one `RELEASE_NOTES.md` block with an outcome bullet per shipped member, `FEATURES.md` when any shipped member is major user-facing, archive the plan, one pull request, merge, and a completion comment plus `complete` on each shipped Task. Every comment cites the same version. Finish-up does not deploy.
+11. **Finish up.** While a Task is a member of an open epic, **finish up** does not publish. The agent says an epic is open and points at the next paste line, or at `/finishepic` when every section is accepted.
+
+## Epic plan file
+
+Path: `.cursor/plans/<YYYY-MM>-T####-epic-<slug>.mdc` (parent number). Not a Cursor rule: no `alwaysApply` frontmatter.
+
+Header the skills grep for:
+
+```markdown
+# Epic T0159 — short-slug
+
+**Epic status:** open
+**Parent:** T0159 (id 172) — title
+**Branch:** `T0159-short-slug`
+**Project:** 4
+
+## Members
+
+| Order | Task | Id | Role | Status | In-epic depends-on |
+|------:|------|---:|------|--------|--------------------|
+| 1 | T0160 | 180 | child | not_started | — |
+| 2 | T0161 | 181 | child | not_started | T0160 |
+| 3 | T0159 | 172 | parent | no_work | — |
+```
+
+`Status` is `not_started`, `in_progress`, `qa_accepted`, `dropped`, or `no_work`.
+
+`no_work` is only for a parent whose description has no implementation of its own. It satisfies `/finishepic` without a QA chat.
+
+Then one `## T#### — title` section per member (parent included when its role is not `no_work`) with scope, acceptance notes, and a QA follow-ups subsection the child chat appends to.
+
+Archive moves this file to `.cursor/plans/executed/` with the same filename. Change `Epic status` to `shipped` in that commit. Skills treat only `Epic status: open` files under `.cursor/plans/` (not `executed/`) as the open epic.
+
+## /startepic
+
+New skill: `.cursor/skills/startepic/SKILL.md`. `disable-model-invocation: true`. Explicit `/startepic` only.
+
+Reuse `.cursor/skills/worktask/reference.md` for DEV auth, task load, dependencies, comments, and SSH git. Do not duplicate that reference.
+
+Workflow:
+
+1. **Auth and health** — same DEV-only rules as `/worktask` (`http://127.0.0.1:3001`, `dev-login.sh`).
+2. **Clean tree** — if the worktree is dirty, or HEAD is a branch the user did not agree to leave, stop. Do not stash, discard, or switch away from in-progress work (including `T0382-force-login`).
+3. **One epic** — if a plan under `.cursor/plans/` already has `Epic status: open`, stop and name it.
+4. **Load the parent** by display number. Load direct children, activity, and dependencies for the parent and each child. Draft (`new`) is not a member until the user marks it Ready or explicitly includes it.
+5. **External Depends-on gate** — for the parent and each confirmed member, any Depends-on Task that is not in the confirmed set must be `complete`, `canceled`, or `pending`. Otherwise stop and name the blockers. Do not create a branch.
+6. **Interview** — confirm the member list, slug, and whether the parent has its own work. Order children by in-epic Depends-on (a member waits on another member). Put parent work where the interview places it; default it last when it exists.
+7. **Write the epic plan** and present it. Wait for approval before the branch and the In Progress patch.
+8. **On approval** — `git switch main && git pull` (SSH), `git switch -c T####-<slug>`, SetActiveBranch. `PATCH` the parent to `in_progress`. Post the start comment on the parent (branch, plan path, confirmed members). Leave confirmed children in `ready`.
+9. **Paste line** — print only the first `not_started` member:
+
+```text
+Next — open a new Agent chat and paste:
+
+/worktask T0160
+```
+
+`/startepic` does not implement product code.
+
+### Membership changes (until /finishepic)
+
+Handled in whichever chat is told to change the epic (the epic chat or the active child chat). Update the member table, the section, and post a comment on the parent.
+
+- **Add** a direct child that is `ready` (or explicitly included), whose external Depends-on links are satisfied, and that does not create a cycle. Insert it in dependency order. If a writer is `in_progress`, the add waits until that slice is QA accepted before it becomes the next paste line.
+- **Drop** a member that is `not_started`. Refuse when another non-dropped member lists it under in-epic depends-on, unless that dependent is dropped in the same change. A `qa_accepted` or `in_progress` drop asks first. Do not revert commits already on the branch. A dropped Task is not marked `complete` at `/finishepic` and is not a release-notes bullet. If it had been set `in_progress` and no slice commit exists, `PATCH` it back to `ready`.
+- **Defer** scope with the existing `/worktask` rule: create a DEV Task with full context, relate it with Depends-on, leave it out of this pull request unless the user then adds it.
+
+## /worktask changes
+
+Update `.cursor/skills/worktask/SKILL.md` and `reference.md`.
+
+After the task load, before the branch step, search `.cursor/plans/*.mdc` for `Epic status: open` whose member table lists this `T####`.
+
+**Not a member:** keep the current skill, including **finish up** as the lone-Task publish.
+
+**Member of the open epic:**
+
+- Do not create a `T####-*` branch from `main`. Check out the epic branch. If the worktree is dirty, stop.
+- If another member is `in_progress`, stop and name that Task.
+- If an in-epic Depends-on member is not `qa_accepted` or `dropped`, stop and name it.
+- Resume when this member is already `in_progress`.
+- Parent with `no_work`: do not implement. Print the next paste line, or `/finishepic` when every section is accepted.
+- Otherwise mark the row `in_progress`, `PATCH` the Task to `in_progress`, post a start comment (epic branch, plan path, this section), and implement only that section.
+- End the pass with a QA checklist. QA follow-ups append to that section and post a Task comment, same as today.
+- On QA acceptance: commit the slice on the epic branch (HEREDOC; author env vars if needed). Message names `T####` and any QA follow-ups. No version bump, no `RELEASE_NOTES.md`, no archive, no pull request. Set the row to `qa_accepted`. Post a QA-accepted comment. Print the next `not_started` paste line, or tell the user to open a new chat and run `/finishepic` when none remain.
+- On **finish up**: do not commit, bump, archive, open a pull request, or `PATCH` `complete`. Say that finish up does not apply during an epic. If this section is not accepted, say so. If every section is accepted, point at `/finishepic`.
+
+## /finishepic
+
+New skill: `.cursor/skills/finishepic/SKILL.md`. `disable-model-invocation: true`. Explicit `/finishepic` only. A fresh chat is enough; the plan file is the source of truth.
+
+1. Find the single `Epic status: open` plan. If none, stop. If the worktree is dirty, stop and send the user back to the open slice.
+2. Refuse unless every member row is `qa_accepted`, `no_work`, or `dropped`, and at least one row is `qa_accepted`.
+3. Check out the epic branch (clean tree only).
+4. Publish once, in the existing finish-up order:
+   - **Version commit.** MINOR and PATCH `0` if this branch added any `drizzle/*.sql` file; otherwise PATCH +1. Set `createdAt` to UTC now. Same commit: `RELEASE_NOTES.md` (recreate the stub if missing or empty) with one new block and an outcome bullet per shipped member (skip `dropped` and `no_work`). `FEATURES.md` when any shipped member is major user-facing.
+   - **Archive** the epic plan on the branch (`Epic status: shipped`).
+   - **Pull request** into `main` over SSH. Wait for required checks. Merge on GitHub. Pull `main`. Delete the local and remote epic branch.
+   - **Tasks.** Completion comment on each shipped Task (parent and each `qa_accepted` member), including original scope, the shared version, the PR number, and QA follow-ups. Say the version is on `main` and that Production is upgraded by the Administrator from a GitHub Release. Then `PATCH` `complete`. Leave `dueDate` unchanged. Trust the API to store `pending` when unfinished children were left out of the epic. Do not `PATCH` a parent to `complete` yourself when the last child will promote it; shipping the parent and the children in one pass should send `complete` on each shipped Task and let the coerce/promote rules stand.
+5. Do not deploy.
+
+## Rules to update
+
+- `.cursor/rules/development-rules.mdc` — epic branch is still `T####-<slug>`. **Finish up** publishes a lone Task. An open epic publishes only through `/finishepic`, one version bump for the bundle. QA follow-ups on a member still update the epic plan section and post a Task comment.
+- `.cursor/rules/versioning.mdc` — one bump per lone-Task finish-up, or one bump per `/finishepic`. Slice commits do not bump. MINOR if any shipped work on that branch added a migration.
+- `.cursor/rules/plan-branch-gate.mdc` — an open epic plan means epic member work is already in progress on that `T####-*` branch. It is not approval to start unrelated work. A dirty tree still blocks `/startepic` from switching branches.
+- `AGENTS.md` — short pointer: `/startepic` and `/finishepic` next to the `/worktask` bullet, including “finish up does not publish an open epic.”
+
+## Comment templates (add to worktask reference)
+
+**Epic started** (parent): branch, plan path, confirmed member numbers.
+
+**Epic member started** (child): epic branch, plan path, this section only.
+
+**QA accepted** (member): section marked `qa_accepted`, slice commit subject, next paste line or `/finishepic`.
+
+**Epic shipped** (each shipped Task): PR number, archived plan path, shared version, release-notes line, Production-not-deployed sentence, that Task’s outcome, QA follow-ups.
+
+## Non-goals
+
+- A new Epic record type, table, or API
+- Prompt deeplinks or opening a Cursor chat from the agent
+- Parallel child chats, stacked branches, or one commit held until `/finishepic`
+- Marking a member `complete` before the pull request merges
+- Changing lone-Task `/worktask` or **finish up**
+- Deploying, or bumping the version inside a slice commit
+- App UI for epics
+
+## Implementation order
+
+1. Epic section in `worktask/reference.md` (detection, templates, git safety).
+2. `/startepic` skill.
+3. `/worktask` join path and finish-up refusal.
+4. `/finishepic` skill.
+5. `development-rules.mdc`, `versioning.mdc`, `plan-branch-gate.mdc`, `AGENTS.md`.
+
+## QA checklist (docs)
+
+1. `/startepic` requires a parent number, lists direct children, and waits for a confirmed subset before creating a branch.
+2. A dirty worktree stops `/startepic` and stops an epic `/worktask` from switching branches.
+3. A second open epic is refused.
+4. External Depends-on still stops the start. An in-epic Depends-on does not, and the later child chat waits until the earlier row is `qa_accepted`.
+5. The handoff is a single `/worktask T####` paste line. No deeplink.
+6. Epic `/worktask` joins `T####-<slug>`, does not open a pull request, and on **finish up** refuses to publish.
+7. QA acceptance commits the slice without a version bump and marks `qa_accepted`.
+8. `/finishepic` refuses a dirty tree, a `not_started` row, or an `in_progress` row, and publishes once with one version and one release-notes block.
+9. Lone-Task finish-up text is still present for Tasks that are not epic members.
+10. Dropping a member that another included Task depends on is refused unless that dependent is dropped too.
