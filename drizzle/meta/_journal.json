@@ -617,6 +617,13 @@
       "when": 1792591008094,
       "tag": "0087_mail_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1792594442014,
+      "tag": "0088_email_self_signup",
+      "breakpoints": true
     }
   ]
 }

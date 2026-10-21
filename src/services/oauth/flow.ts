@@ -363,6 +363,7 @@ async function resolveLoginUser(
       displayName,
       email: identity.email,
       passwordHash: null,
+      emailVerifiedAt: new Date(),
     })
     .returning();
   if (!created) return null;

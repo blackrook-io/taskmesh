@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mailTransportOptions, redactMailError } from "./outbound.js";
 import {
+  isEmailSignupOpen,
   isMailHost,
   mailPatchSchema,
   secretHint,
@@ -70,6 +71,7 @@ describe("mail settings", () => {
     const row = {
       id: 1,
       enabled: false,
+      selfSignupEnabled: false,
       host: "smtp.example.com",
       port: 587,
       encryption: "starttls",
@@ -96,6 +98,7 @@ describe("mail settings", () => {
   it("rejects an enabled config without a From address", () => {
     const parsed = mailPatchSchema.safeParse({
       enabled: true,
+      selfSignupEnabled: false,
       host: "smtp.example.com",
       port: 587,
       encryption: "starttls",
@@ -106,6 +109,36 @@ describe("mail settings", () => {
       timeoutSeconds: 30,
     });
     assert.equal(parsed.success, false);
+  });
+
+  it("allows self-signup only when outbound mail can send", () => {
+    assert.equal(
+      isEmailSignupOpen({
+        enabled: true,
+        selfSignupEnabled: true,
+        host: "smtp.example.com",
+        fromAddress: "noreply@example.com",
+      }),
+      true,
+    );
+    assert.equal(
+      isEmailSignupOpen({
+        enabled: false,
+        selfSignupEnabled: true,
+        host: "smtp.example.com",
+        fromAddress: "noreply@example.com",
+      }),
+      false,
+    );
+    assert.equal(
+      isEmailSignupOpen({
+        enabled: true,
+        selfSignupEnabled: false,
+        host: "smtp.example.com",
+        fromAddress: "noreply@example.com",
+      }),
+      false,
+    );
   });
 
   it("redacts a secret that leaked into a server error", () => {

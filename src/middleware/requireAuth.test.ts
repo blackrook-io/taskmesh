@@ -5,6 +5,9 @@ import { isPublicV1Route } from "./requireAuth.js";
 describe("isPublicV1Route", () => {
   it("allows auth login, logout, and session bootstrap", () => {
     assert.equal(isPublicV1Route("POST", "/auth/login"), true);
+    assert.equal(isPublicV1Route("POST", "/auth/signup"), true);
+    assert.equal(isPublicV1Route("POST", "/auth/signup/confirm"), true);
+    assert.equal(isPublicV1Route("GET", "/auth/signup"), false);
     assert.equal(isPublicV1Route("POST", "/auth/mfa/verify"), true);
     assert.equal(isPublicV1Route("POST", "/auth/logout"), true);
     assert.equal(isPublicV1Route("GET", "/auth/session"), true);

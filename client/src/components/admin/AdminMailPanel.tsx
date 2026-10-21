@@ -14,6 +14,7 @@ type MailEncryption = "none" | "starttls" | "tls";
 
 type MailPublic = {
   enabled: boolean;
+  selfSignupEnabled: boolean;
   host: string;
   port: number;
   encryption: MailEncryption;
@@ -32,6 +33,7 @@ type MailPublic = {
 
 type Draft = {
   enabled: boolean;
+  selfSignupEnabled: boolean;
   host: string;
   port: string;
   encryption: MailEncryption;
@@ -55,6 +57,7 @@ type MailActivity = {
 function draftFrom(settings: MailPublic): Draft {
   return {
     enabled: settings.enabled,
+    selfSignupEnabled: settings.selfSignupEnabled,
     host: settings.host,
     port: String(settings.port),
     encryption: settings.encryption,
@@ -110,6 +113,7 @@ export function AdminMailPanel() {
         method: "PATCH",
         body: JSON.stringify({
           enabled: body.enabled,
+          selfSignupEnabled: body.enabled && body.selfSignupEnabled,
           host: body.host.trim(),
           port,
           encryption: body.encryption,
@@ -349,6 +353,21 @@ export function AdminMailPanel() {
 
           <h4 className="admin-db-heading">Options</h4>
           <label className="field">
+            <span>
+              <input
+                type="checkbox"
+                checked={form.enabled && form.selfSignupEnabled}
+                disabled={!form.enabled}
+                onChange={(e) => patch({ selfSignupEnabled: e.target.checked })}
+              />{" "}
+              Allow email self-signup
+            </span>
+          </label>
+          <p className="muted">
+            People can create an account from the login screen and must confirm the address
+            before they can sign in. This stays off until outbound email is enabled.
+          </p>
+          <label className="field">
             <span>Timeout (seconds)</span>
             <input
               value={form.timeoutSeconds}
@@ -362,7 +381,12 @@ export function AdminMailPanel() {
               <input
                 type="checkbox"
                 checked={form.enabled}
-                onChange={(e) => patch({ enabled: e.target.checked })}
+                onChange={(e) =>
+                  patch({
+                    enabled: e.target.checked,
+                    selfSignupEnabled: e.target.checked ? form.selfSignupEnabled : false,
+                  })
+                }
               />
               Enable outbound email
             </label>

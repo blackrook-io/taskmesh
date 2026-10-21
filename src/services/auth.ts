@@ -218,6 +218,14 @@ export async function loginWithEmailPassword(
     );
   }
 
+  if (user.emailVerifiedAt == null) {
+    throw authServiceError(
+      403,
+      "email_unconfirmed",
+      "Confirm your email before signing in. Check your inbox for the confirmation link.",
+    );
+  }
+
   const now = new Date();
   const patch: {
     failedLoginCount: number;

@@ -10,7 +10,7 @@
 | Order | Task | Id | Role | Status | In-epic depends-on |
 |------:|------|---:|------|--------|--------------------|
 | 1 | T0384 | 411 | child | qa_accepted | — |
-| 2 | T0129 | 142 | child | not_started | — |
+| 2 | T0129 | 142 | child | qa_accepted | — |
 | 3 | T0221 | 236 | child | not_started | T0384 |
 | 4 | T0218 | 233 | child | not_started | T0221 |
 | 5 | T0131 | 144 | parent | no_work | — |

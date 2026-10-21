@@ -10,6 +10,11 @@ import {
 } from "../lib/instanceBrand";
 import { applyTheme } from "../lib/theme";
 import { MeshMark } from "../components/shell/MeshMark";
+import {
+  PASSWORD_GUIDELINES,
+  validateEmailClient,
+  validatePasswordClient,
+} from "../lib/password";
 import type { UserProfile } from "../types";
 
 const LOGIN_ERROR = "Invalid email or password.";
@@ -75,6 +80,10 @@ export function LoginPage() {
   const [passwordTrustDays, setPasswordTrustDays] = useState<number | null>(null);
   const [trustDevice, setTrustDevice] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const confirmToken = params.get("confirm");
   const [error, setError] = useState<string | null>(() =>
     oauthError
       ? (OAUTH_ERROR_MESSAGES[oauthError] ?? OAUTH_ERROR_MESSAGES.oauth_failed)
@@ -96,6 +105,7 @@ export function LoginPage() {
           instance?: "dev" | "prod";
           instanceTheme?: string | null;
           mfaTrustedDeviceDays?: number;
+          emailSignup?: boolean;
         };
       }>("/api/v1/config");
       return res.data;
@@ -215,6 +225,48 @@ export function LoginPage() {
     },
   });
 
+  const signupMutation = useMutation({
+    mutationFn: async () => {
+      await apiJson("/api/v1/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+    },
+    onSuccess: () => {
+      setError(null);
+      setPassword("");
+      setConfirmPassword("");
+      setNotice(
+        "If that address can be used for a new account, we sent a confirmation link. It expires in 24 hours.",
+      );
+    },
+    onError: (err: Error) => {
+      setNotice(null);
+      setError(err.message || "Could not create the account.");
+    },
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      if (!confirmToken) throw new Error("This confirmation link is invalid or has expired.");
+      await apiJson("/api/v1/auth/signup/confirm", {
+        method: "POST",
+        body: JSON.stringify({ token: confirmToken }),
+      });
+    },
+    onSuccess: () => {
+      setError(null);
+      setNotice("Email confirmed. Sign in with your email and password.");
+      const next = new URLSearchParams(params);
+      next.delete("confirm");
+      navigate({ pathname: "/login", search: next.toString() }, { replace: true });
+    },
+    onError: (err: Error) => {
+      setNotice(null);
+      setError(err.message || "This confirmation link is invalid or has expired.");
+    },
+  });
+
   if (user && !sessionEnded) {
     return <Navigate to={returnTo} replace />;
   }
@@ -236,6 +288,24 @@ export function LoginPage() {
       mfaMutation.mutate();
       return;
     }
+    if (mode === "signup") {
+      const emailErr = validateEmailClient(email);
+      if (emailErr) {
+        setError(emailErr);
+        return;
+      }
+      const passwordErr = validatePasswordClient(password);
+      if (passwordErr) {
+        setError(passwordErr);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+      signupMutation.mutate();
+      return;
+    }
     if (!email.trim() || !password) {
       setError(LOGIN_ERROR);
       return;
@@ -244,7 +314,12 @@ export function LoginPage() {
   }
 
   const providers = oauthQuery.data ?? [];
-  const pending = loginMutation.isPending || mfaMutation.isPending;
+  const emailSignup = configQuery.data?.emailSignup === true;
+  const pending =
+    loginMutation.isPending ||
+    mfaMutation.isPending ||
+    signupMutation.isPending ||
+    confirmMutation.isPending;
 
   return (
     <div className="login-page">
@@ -254,7 +329,43 @@ export function LoginPage() {
           <h1 className="login-card__title">TaskMesh</h1>
         </header>
 
-        {showMfa ? (
+        {confirmToken ? (
+          <form
+            className="login-form"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              setError(null);
+              confirmMutation.mutate();
+            }}
+          >
+            <p className="muted" style={{ marginTop: 0 }}>
+              Confirm your email to activate the account. You can sign in after this step.
+            </p>
+            {error ? (
+              <p className="error-text login-form__error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <button type="submit" className="btn primary login-form__submit" disabled={pending}>
+              {confirmMutation.isPending ? "Confirming…" : "Confirm email"}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              style={{ marginTop: "0.5rem" }}
+              disabled={pending}
+              onClick={() => {
+                setError(null);
+                const next = new URLSearchParams(params);
+                next.delete("confirm");
+                navigate({ pathname: "/login", search: next.toString() }, { replace: true });
+              }}
+            >
+              Back to sign in
+            </button>
+          </form>
+        ) : showMfa ? (
           <form className="login-form" onSubmit={onSubmit} noValidate>
             <p className="muted" style={{ marginTop: 0 }}>
               {useBackupCode
@@ -371,9 +482,14 @@ export function LoginPage() {
                 <input
                   type="email"
                   name="email"
-                  autoComplete="username"
+                  autoComplete={mode === "signup" ? "email" : "username"}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => {
+                    if (mode !== "signup" || !email.trim()) return;
+                    const emailErr = validateEmailClient(email);
+                    if (emailErr) setError(emailErr);
+                  }}
                   disabled={pending}
                   required
                 />
@@ -384,13 +500,39 @@ export function LoginPage() {
                 <input
                   type="password"
                   name="password"
-                  autoComplete="current-password"
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={pending}
                   required
                 />
               </label>
+
+              {mode === "signup" ? (
+                <>
+                  <label className="field">
+                    <span>Confirm password</span>
+                    <input
+                      type="password"
+                      name="confirm-password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      disabled={pending}
+                      required
+                    />
+                  </label>
+                  <p className="muted" style={{ margin: 0 }}>
+                    {PASSWORD_GUIDELINES}
+                  </p>
+                </>
+              ) : null}
+
+              {notice ? (
+                <p className="login-form__banner" role="status">
+                  {notice}
+                </p>
+              ) : null}
 
               {error ? (
                 <p className="error-text login-form__error" role="alert">
@@ -403,8 +545,44 @@ export function LoginPage() {
                 className="btn primary login-form__submit"
                 disabled={pending}
               >
-                {loginMutation.isPending ? "Signing in…" : "Sign in"}
+                {mode === "signup"
+                  ? signupMutation.isPending
+                    ? "Creating account…"
+                    : "Create account"
+                  : loginMutation.isPending
+                    ? "Signing in…"
+                    : "Sign in"}
               </button>
+              {mode === "signup" ? (
+                <button
+                  type="button"
+                  className="btn ghost"
+                  style={{ marginTop: "0.5rem" }}
+                  disabled={pending}
+                  onClick={() => {
+                    setMode("signin");
+                    setConfirmPassword("");
+                    setError(null);
+                    setNotice(null);
+                  }}
+                >
+                  Back to sign in
+                </button>
+              ) : emailSignup ? (
+                <button
+                  type="button"
+                  className="btn ghost"
+                  style={{ marginTop: "0.5rem" }}
+                  disabled={pending}
+                  onClick={() => {
+                    setMode("signup");
+                    setError(null);
+                    setNotice(null);
+                  }}
+                >
+                  Create an account
+                </button>
+              ) : null}
             </form>
           </>
         )}

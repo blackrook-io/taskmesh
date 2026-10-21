@@ -40,6 +40,7 @@ export function isMailHost(value: string): boolean {
 export const mailPatchSchema = z
   .object({
     enabled: z.boolean(),
+    selfSignupEnabled: z.boolean(),
     host: z.string().trim().max(253),
     port: z.number().int().min(1).max(65535),
     encryption: z.enum(MAIL_ENCRYPTIONS),
@@ -103,12 +104,27 @@ export const mailPatchSchema = z
         path: ["fromAddress"],
       });
     }
+    if (value.selfSignupEnabled && !value.enabled) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Turn on outbound email before allowing self-signup.",
+        path: ["selfSignupEnabled"],
+      });
+    }
+    if (value.selfSignupEnabled && (!value.host || !value.fromAddress)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Host and From address are required before allowing self-signup.",
+        path: ["selfSignupEnabled"],
+      });
+    }
   });
 
 export type MailPatch = z.infer<typeof mailPatchSchema>;
 
 export type MailPublic = {
   enabled: boolean;
+  selfSignupEnabled: boolean;
   host: string;
   port: number;
   encryption: MailEncryption;
@@ -153,6 +169,7 @@ export function toMailPublic(row: MailRow, credentialsKeyConfigured: boolean): M
     : "starttls";
   return {
     enabled: row.enabled,
+    selfSignupEnabled: row.selfSignupEnabled,
     host: row.host,
     port: row.port,
     encryption,
@@ -232,6 +249,7 @@ export async function saveMailSettings(
     .update(schema.mailSettings)
     .set({
       enabled: patch.enabled,
+      selfSignupEnabled: patch.selfSignupEnabled,
       host: patch.host,
       port: patch.port,
       encryption: patch.encryption,
@@ -283,6 +301,26 @@ export async function readMailRuntime(db: Db): Promise<MailRuntime> {
     replyTo: row.replyTo,
     timeoutSeconds: row.timeoutSeconds,
   };
+}
+
+/** Login may offer email signup only when the flag is on and outbound mail can send. */
+export function isEmailSignupOpen(input: {
+  enabled: boolean;
+  selfSignupEnabled: boolean;
+  host: string;
+  fromAddress: string;
+}): boolean {
+  return (
+    input.selfSignupEnabled &&
+    input.enabled &&
+    Boolean(input.host.trim()) &&
+    Boolean(input.fromAddress.trim())
+  );
+}
+
+export async function isEmailSignupAvailable(db: Db): Promise<boolean> {
+  const row = await ensureMailSettings(db);
+  return isEmailSignupOpen(row);
 }
 
 export function assertSendable(runtime: MailRuntime, kind: "test" | "outbound"): void {

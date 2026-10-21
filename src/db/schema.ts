@@ -229,6 +229,16 @@ export const users = pgTable("users", {
   ),
   /** Unique among non-null (Postgres UNIQUE allows multiple NULLs). */
   email: text("email").unique(),
+  /**
+   * Set when the address may be used to sign in (T0129).
+   * Null on a self-signup account until the confirmation link is used.
+   * Administrator-created accounts and pre-existing rows are set immediately.
+   */
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  /** SHA-256 hex of the single-use signup confirmation token. Plaintext is not stored. */
+  emailConfirmTokenHash: text("email_confirm_token_hash"),
+  /** When the confirmation link stops working (24 hours from issue). */
+  emailConfirmExpiresAt: timestamp("email_confirm_expires_at", { withTimezone: true }),
   /** scrypt hash; set via admin reset / future Profile (T0062). */
   passwordHash: text("password_hash"),
   /** Null = active; set when admin deactivates the user. */
@@ -301,6 +311,9 @@ export const users = pgTable("users", {
     .defaultNow(),
 }, (t) => [
   uniqueIndex("users_display_name_ci_uidx").on(sql`lower(btrim(${t.displayName}))`),
+  uniqueIndex("users_email_confirm_token_hash_uidx")
+    .on(t.emailConfirmTokenHash)
+    .where(sql`${t.emailConfirmTokenHash} is not null`),
 ]);
 
 /**
@@ -915,6 +928,8 @@ export const mailSettings = pgTable(
   {
     id: integer("id").primaryKey().default(1),
     enabled: boolean("enabled").notNull().default(false),
+    /** Login screen may offer email self-signup (T0129). Still requires outbound mail. */
+    selfSignupEnabled: boolean("self_signup_enabled").notNull().default(false),
     host: text("host").notNull().default(""),
     port: integer("port").notNull().default(587),
     /** none | starttls | tls */

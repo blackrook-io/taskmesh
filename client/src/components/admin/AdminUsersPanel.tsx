@@ -20,6 +20,7 @@ type AdminUser = {
   lastLoginAt: string | null;
   lastApiAt: string | null;
   hasPassword: boolean;
+  emailVerified?: boolean;
   failedLoginCount: number;
   roles: RoleRef[];
 };
@@ -509,6 +510,7 @@ export function AdminUsersPanel() {
             <tr>
               <th>User</th>
               <th>Email</th>
+              <th>Confirmed</th>
               <th>Status</th>
               <th>Password</th>
               <th />
@@ -625,6 +627,15 @@ export function AdminUsersPanel() {
                     </div>
                   </td>
                   <td>{u.email ?? <span className="muted">—</span>}</td>
+                  <td>
+                    {!u.email ? (
+                      <span className="muted">—</span>
+                    ) : u.emailVerified === false ? (
+                      "Pending"
+                    ) : (
+                      "Yes"
+                    )}
+                  </td>
                   <td>
                     {u.deactivatedAt ? (
                       <span className="admin-badge admin-badge--danger">Deactivated</span>
