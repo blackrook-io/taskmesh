@@ -13,9 +13,11 @@ export function PlanMemberships({
   return (
     <div className="field">
       <span className="field-label">Plans</span>
-      {query.isLoading ? <p className="muted">Loading plans…</p> : null}
+      {query.isLoading ? <p className="muted plan-memberships__empty">Loading plans…</p> : null}
       {query.isError ? <p className="plan-board__notice">{(query.error as Error).message}</p> : null}
-      {query.data && query.data.length === 0 ? <p className="muted">Not in a plan.</p> : null}
+      {query.data && query.data.length === 0 ? (
+        <p className="muted plan-memberships__empty">Not in a plan.</p>
+      ) : null}
       {query.data && query.data.length > 0 ? (
         <ul className="plan-memberships">
           {query.data.map((plan) => (

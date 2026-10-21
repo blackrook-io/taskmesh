@@ -70,6 +70,8 @@ type ReferenceHit = {
 type Props = {
   entityType: EntityType;
   entityId: number;
+  /** Task editor: start collapsed and show a count. Other callers stay open. */
+  collapsible?: boolean;
 };
 
 function isRelation(value: string): value is LinkRelation {
@@ -93,11 +95,13 @@ function groupByType(items: LinkListItem[]): { type: EntityType; items: LinkList
   }));
 }
 
-export function EntityLinksPanel({ entityType, entityId }: Props) {
+export function EntityLinksPanel({ entityType, entityId, collapsible = false }: Props) {
   const qc = useQueryClient();
   const searchId = useId();
   const typeId = useId();
   const relationId = useId();
+  const bodyId = useId();
+  const [sectionOpen, setSectionOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [targetType, setTargetType] = useState<EntityType>("task");
   const [relation, setRelation] = useState<LinkRelation>("relates_to");
@@ -273,8 +277,31 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
     ));
   };
 
+  const linkCount = incoming.length + outgoing.length;
+  const showBody = !collapsible || sectionOpen;
+
   return (
-    <section className="entity-links" ref={rootRef} aria-label="Links">
+    <section
+      className={`entity-links${collapsible && !sectionOpen ? " entity-links--collapsed" : ""}`}
+      ref={rootRef}
+      aria-label="Links"
+    >
+      {collapsible ? (
+        <button
+          type="button"
+          className="editor-collapse"
+          aria-expanded={sectionOpen}
+          aria-controls={bodyId}
+          onClick={() => setSectionOpen((open) => !open)}
+        >
+          <span className="editor-collapse__chevron" aria-hidden>
+            {sectionOpen ? "▾" : "▸"}
+          </span>
+          <span className="editor-collapse__label">Links</span>
+          <span className="editor-collapse__count muted">{linksQuery.isLoading ? "…" : linkCount}</span>
+        </button>
+      ) : null}
+      <div id={bodyId} className="entity-links__body" hidden={!showBody}>
       <div className="entity-links__columns">
         <div className="entity-links__section">
           <span className="entity-links__label">Linked from</span>
@@ -443,6 +470,7 @@ export function EntityLinksPanel({ entityType, entityId }: Props) {
           {error}
         </p>
       ) : null}
+      </div>
 
       <ConfirmDialog
         open={pendingRemove != null}
