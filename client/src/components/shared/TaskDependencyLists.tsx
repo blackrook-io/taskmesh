@@ -33,6 +33,8 @@ type Props = {
 export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
   const qc = useQueryClient();
   const inputId = useId();
+  const bodyId = useId();
+  const [sectionOpen, setSectionOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,8 +203,27 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
     );
   };
 
+  const depCount = dependsOn.length + requiredBy.length;
+
   return (
-    <div className="task-dep-lists" ref={rootRef}>
+    <div
+      className={`task-dep-lists${sectionOpen ? "" : " task-dep-lists--collapsed"}`}
+      ref={rootRef}
+    >
+      <button
+        type="button"
+        className="editor-collapse"
+        aria-expanded={sectionOpen}
+        aria-controls={bodyId}
+        onClick={() => setSectionOpen((open) => !open)}
+      >
+        <span className="editor-collapse__chevron" aria-hidden>
+          {sectionOpen ? "▾" : "▸"}
+        </span>
+        <span className="editor-collapse__label">Depends on / Required by</span>
+        <span className="editor-collapse__count muted">{depsQuery.isLoading ? "…" : depCount}</span>
+      </button>
+      <div id={bodyId} hidden={!sectionOpen}>
       <div className="task-dep-lists__columns">
         <div className="task-dep-lists__section">
           <label className="task-dep-lists__label" htmlFor={inputId}>
@@ -269,6 +290,7 @@ export function TaskDependencyLists({ taskId, onOpenTask }: Props) {
             )}
           </ul>
         </div>
+      </div>
       </div>
 
       {error ? (

@@ -42,7 +42,7 @@ import {
   type TaskPriority,
   type TaskState,
 } from "../lib/taskFields";
-import type { Project, ProjectPhase, Task, TaskGroup } from "../types";
+import type { ProjectPhase, Task, TaskGroup } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { StateReasonDialog } from "./StateReasonDialog";
 import { TaskRollupMeter } from "./TaskRollupMeter";
@@ -471,14 +471,6 @@ export function TaskEditorFields({
     },
   });
 
-  const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: async () => {
-      const res = await apiJson<{ data: Project[] }>("/api/v1/projects");
-      return res.data;
-    },
-  });
-
   const phasesQuery = useQuery({
     queryKey: ["project-phases", projectId],
     enabled: projectId != null,
@@ -790,107 +782,70 @@ export function TaskEditorFields({
         />
         <DuplicateWarning entityType="task" title={title} entityId={task.id} projectId={projectId} />
       </div>
-      <div className="task-editor-grid">
-        <div className="field">
-          <label htmlFor={`t-project-${task.id}`}>Project</label>
-          <select
-            id={`t-project-${task.id}`}
-            value={projectId ?? ""}
-            disabled={closed}
-            onChange={(e) => {
-              const raw = e.target.value;
-              const nextProject = raw === "" ? null : Number(raw);
-              const prev = { ...currentSnap(), projectId };
-              setProjectId(nextProject);
-              setPhaseId(null);
-              void commit(prev, { projectId: nextProject, phaseId: null });
-            }}
-          >
-            <option value="">No project</option>
-            {(projectsQuery.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-            </select>
+      <div className="task-editor-grid task-editor-grid--meta">
+        <div className="field task-editor-color">
+          <span className="task-editor-color__label">
+            <span className="task-editor-color__icon" title="Color">
+              <span />
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="sr-only">Color</span>
+          </span>
+          <div className="task-color-swatch" title={color ?? "default"}>
+            {closed ? (
+              <span className="color-popover-trigger" aria-hidden>
+                <span
+                  className="color-popover-swatch"
+                  style={{ background: color?.trim() || "var(--border)" }}
+                />
+              </span>
+            ) : (
+              <ColorPopover
+                color={color}
+                label="Task color"
+                onChange={(c) => {
+                  const prev = { ...currentSnap(), color };
+                  setColor(c);
+                  void commit(prev, { color: c });
+                }}
+              />
+            )}
+            <span className="task-color-swatch__hex muted">{color ?? "default"}</span>
+          </div>
         </div>
-        {projectId != null ? (
-          <div className="field">
-            <label htmlFor={`t-phase-${task.id}`}>Phase</label>
+        <div className="field">
+          <div className="task-editor-state-head">
+            <label htmlFor={`t-state-${task.id}`}>
+              State
+              {isDerivedTaskStatus(task) ? (
+                <span className="task-editor-state-info" title="State derived from child tasks">
+                  i
+                </span>
+              ) : null}
+            </label>
+            {task.rollupTotal != null && task.rollupDone != null ? (
+              <TaskRollupMeter done={task.rollupDone} total={task.rollupTotal} />
+            ) : null}
+          </div>
+          <span
+            className="task-editor-state-control"
+            title={isDerivedTaskStatus(task) ? "Derived from child tasks" : undefined}
+          >
             <select
-              id={`t-phase-${task.id}`}
-              value={phaseId ?? ""}
-              disabled={closed || task.parentId != null}
-              title={
-                task.parentId != null
-                  ? "Children share the parent’s phase"
-                  : undefined
-              }
-              onChange={(e) => {
-                const raw = e.target.value;
-                const next = raw === "" ? null : Number(raw);
-                const prev = { ...currentSnap(), phaseId };
-                setPhaseId(next);
-                void commit(prev, { phaseId: next });
-              }}
+              id={`t-state-${task.id}`}
+              value={state}
+              disabled={nextStates.length === 0}
+              onChange={(e) => requestEditorState(e.target.value as TaskState)}
             >
-              <option value="">None</option>
-              {(phasesQuery.data ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              {stateOptions.map((s) => (
+                <option key={s} value={s}>
+                  {TASK_STATE_LABELS[s]}
                 </option>
               ))}
             </select>
-            {task.parentId != null ? (
-              <p className="muted" style={{ margin: "0.25rem 0 0" }}>
-                Inherited from parent
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="field">
-          <label htmlFor={`t-state-${task.id}`}>State</label>
-          <select
-            id={`t-state-${task.id}`}
-            value={state}
-            disabled={nextStates.length === 0}
-            onChange={(e) => requestEditorState(e.target.value as TaskState)}
-          >
-            {stateOptions.map((s) => (
-              <option key={s} value={s}>
-                {TASK_STATE_LABELS[s]}
-              </option>
-            ))}
-          </select>
-          {task.rollupTotal != null && task.rollupDone != null ? (
-            <div className="task-editor-rollup">
-              <TaskRollupMeter done={task.rollupDone} total={task.rollupTotal} />
-            </div>
-          ) : null}
-          {isDerivedTaskStatus(task) ? (
-            <p className="muted task-editor-derived">Derived from child tasks</p>
-          ) : null}
-          {task.rollupTotal != null ? (
-            <label className="task-editor-manual-status">
-              <input
-                type="checkbox"
-                checked={task.stateManual === true}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  void (async () => {
-                    try {
-                      const row = await onSavePatch({ stateManual: next });
-                      if (row) applyServerTask(row);
-                      setSaveError(null);
-                    } catch (err) {
-                      setSaveError(err instanceof Error ? err.message : "Could not update status");
-                    }
-                  })();
-                }}
-              />
-              Manual status
-            </label>
-          ) : null}
+          </span>
         </div>
         <div className="field">
           <label htmlFor={`t-pri-${task.id}`}>Priority</label>
@@ -933,43 +888,26 @@ export function TaskEditorFields({
             }}
           />
         </div>
-        <div className="field task-editor-date-color">
+        <div className="field">
           <label htmlFor={`t-due-${task.id}`}>Due date</label>
-          <div className="task-editor-date-color__row">
-            <input
-              id={`t-due-${task.id}`}
-              type="date"
-              value={dueLocal}
-              disabled={closed}
-              onChange={(e) => setDueLocal(e.target.value)}
-              onBlur={() => {
-                const next = dueLocal || null;
-                if (next === taskDue(task)) return;
-                const message = dateOrderViolation(startLocal || null, next);
-                if (message) {
-                  setSaveError(message);
-                  setDueLocal(taskDue(task) ?? "");
-                  return;
-                }
-                void commit({ ...currentSnap(), dueDate: taskDue(task) }, { dueDate: next });
-              }}
-            />
-            <div className="task-color-swatch" title={color ?? "default"}>
-              {closed ? null : (
-                <ColorPopover
-                  color={color}
-                  label="Task color"
-                  placement="left"
-                  onChange={(c) => {
-                    const prev = { ...currentSnap(), color };
-                    setColor(c);
-                    void commit(prev, { color: c });
-                  }}
-                />
-              )}
-              <span className="task-color-swatch__hex muted">{color ?? "default"}</span>
-            </div>
-          </div>
+          <input
+            id={`t-due-${task.id}`}
+            type="date"
+            value={dueLocal}
+            disabled={closed}
+            onChange={(e) => setDueLocal(e.target.value)}
+            onBlur={() => {
+              const next = dueLocal || null;
+              if (next === taskDue(task)) return;
+              const message = dateOrderViolation(startLocal || null, next);
+              if (message) {
+                setSaveError(message);
+                setDueLocal(taskDue(task) ?? "");
+                return;
+              }
+              void commit({ ...currentSnap(), dueDate: taskDue(task) }, { dueDate: next });
+            }}
+          />
         </div>
         <div className="field">
           <label htmlFor={`t-hours-${task.id}`}>Hours</label>
@@ -985,7 +923,6 @@ export function TaskEditorFields({
             }}
           />
         </div>
-        <PlanMemberships entityType="task" entityId={task.id} />
         <AssigneeSelectField
           id={`t-assignee-${task.id}`}
           projectId={projectId}
@@ -1040,10 +977,45 @@ export function TaskEditorFields({
         />
       </div>
       <TaskTimeline task={task} />
-      <div className="field field--tags-below">
-        <TagInput entityType="task" entityId={task.id} readOnly={closed} />
+      <div className="task-editor-tag-row">
+        <div className="task-editor-tag-row__meta">
+          {projectId != null ? (
+            <div className="field">
+              <label htmlFor={`t-phase-${task.id}`}>Phase</label>
+              <select
+                id={`t-phase-${task.id}`}
+                value={phaseId ?? ""}
+                disabled={closed || task.parentId != null}
+                title={
+                  task.parentId != null ? "Children share the parent’s phase" : undefined
+                }
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const next = raw === "" ? null : Number(raw);
+                  const prev = { ...currentSnap(), phaseId };
+                  setPhaseId(next);
+                  void commit(prev, { phaseId: next });
+                }}
+              >
+                <option value="">None</option>
+                {(phasesQuery.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              {task.parentId != null ? (
+                <p className="muted task-editor-phase-note">Inherited from parent</p>
+              ) : null}
+            </div>
+          ) : null}
+          <PlanMemberships entityType="task" entityId={task.id} />
+        </div>
+        <div className="field field--tags-below">
+          <TagInput entityType="task" entityId={task.id} readOnly={closed} />
+        </div>
       </div>
-      <EntityLinksPanel entityType="task" entityId={task.id} />
+      <EntityLinksPanel entityType="task" entityId={task.id} collapsible />
       <TaskDependencyLists taskId={task.id} onOpenTask={onOpenTask} />
       <TaskHistory taskId={task.id} />
       {children.length > 0 ? (

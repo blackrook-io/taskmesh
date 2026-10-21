@@ -4,6 +4,12 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.96.2 — 2026-10-21
+
+### Enhancements
+- The Edit Task modal no longer includes a Project dropdown. Changing project stays on Move to… in the list and project board. Links and Depends on / Required by start collapsed, with a count. On a wide screen, color, State, Priority, dates, Hours, and Assigned to share one row, and Phase and Plans sit with Add tag.
+- A parent task shows child progress beside the State label. When status comes from child tasks, the greyed-out State control and a yellow info icon explain that. The multicolor icon sits centered above the color swatch.
+
 ## 0.96.1 — 2026-10-21
 
 ### Enhancements

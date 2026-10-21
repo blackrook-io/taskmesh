@@ -1,0 +1,72 @@
+# T0383 — Task Edit modal UI fixes
+
+**Task:** T0383 (id `410`) — Task Edit modal UI fixes
+**State at plan:** `ready` · Priority: low · Project: TaskMesh (4)
+**Branch:** `T0383-task-edit-modal-ui`
+**Implementation plan:** approved
+
+## Context
+
+`TaskEditorFields` in `client/src/components/TaskBoard.tsx` is the shared Edit Task modal (list, project board, Kanban, overview, to-do). The field grid is `repeat(auto-fit, minmax(140px, 1fr))`, so Plans and Assigned to wrap off the State row. The color swatch sits inside the Due date cell. Phase is a grid cell next to Project. Tags are a separate right-aligned row under the timeline. Linked from / Links to (`EntityLinksPanel`) and Depends on / Required by (`TaskDependencyLists`) are always expanded. Move to another project already exists as **Move to…** on the list and project-board row menus (`MoveTaskToProjectModal`).
+
+No schema or API change.
+
+## Size / split
+
+One UI pass on the shared modal. No split.
+
+## Interview (proposed — confirm or adjust)
+
+1. **Project dropdown** comes out of the shared modal on every opener. Changing project stays on **Move to…** (Tasks list and project board). Kanban, overview, and to-do do not have that menu; this task does not add it there.
+2. **Links and dependencies** start **collapsed** each time the modal opens. The header shows a count. Expanding lasts only while that modal is open. Link suggestions hide with the links section. Ideas, documents, and to-dos keep their links panel always open.
+3. **Color** moves to the far left of the State / dates / Hours / Assigned row. The label is a small 2×2 multicolor squares icon (no “Color” word). The hex still appears on hover. Due date is a date field only.
+4. On a wide modal (~1100px), that row stays one line. State, Priority, and Hours are about half the width of Start, Due, and Assigned to. Narrow screens wrap. Rollup, “Derived from child tasks”, and Manual status stay under State.
+5. **Phase** and **Plans** move onto the Add tag row, left-aligned. Tag chips and the Add tag field stay right-aligned. No project still hides Phase. A child still shows “Inherited from parent” under Phase.
+6. Title, description, timeline, history, child tasks, and Delete stay in their current order. Timeline stays between the description and the Phase / Plans / tags row.
+
+## Goal
+
+Compact the Edit Task modal: drop the Project dropdown, collapse links and dependencies, and fit the remaining fields onto two tidy rows on a wide screen.
+
+## Scope
+
+**In scope**
+
+1. Remove the Project `<select>` from `TaskEditorFields`. Keep `projectId` in editor state so Phase, assignee, duplicate warning, and description templates still follow the task’s project. Undo still restores a project change made before this UI (existing snapshot field).
+2. Collapsible headers on the task modal only:
+   - `EntityLinksPanel`: optional `collapsible` prop, default off. Task editor passes it on. Header reads “Links” plus a count of linked-from and links-to rows.
+   - `TaskDependencyLists`: collapsed header “Depends on / Required by” plus a count of both sides. The add-dependency field is inside the expanded body.
+3. Restructure the field grid into a named wide row: color, State, Priority, Start date, Due date, Hours, Assigned to. Column tracks give State, Priority, and Hours half the weight of the date and assignee fields. A narrow breakpoint lets the row wrap.
+4. Color control: icon label (four small squares using palette colors) above the existing swatch button. Popover behavior unchanged.
+5. A row under the timeline: Phase (when the task has a project) and Plans on the left; existing `TagInput` on the right. Plans’ empty “Not in a plan.” stays one muted line so the row does not grow a paragraph.
+
+**Out of scope**
+
+- Adding **Move to…** on Kanban, overview, or to-do.
+- Remembering collapse state across opens.
+- Todo editor layout (`TodoListView` has its own fields; it is not `TaskEditorFields`’ grid).
+- Schema, API, or project-move behavior.
+
+## Files
+
+- `client/src/components/TaskBoard.tsx` — drop Project select; new row structure; pass collapsible.
+- `client/src/components/PlanMemberships.tsx` — compact empty state class for the tag row.
+- `client/src/components/shared/EntityLinksPanel.tsx` — optional collapse.
+- `client/src/components/shared/TaskDependencyLists.tsx` — collapse.
+- `client/src/index.css` — grid tracks, color icon, tag-row layout, collapse chrome.
+
+## QA
+
+- Wide Edit Task modal: no Project dropdown. One row: color icon, State, Priority, Start, Due, Hours, Assigned to. State, Priority, and Hours are visibly narrower. Nothing wraps onto a second field line.
+- Color popover still sets and clears color; hex shows on hover.
+- Phase and Plans sit left of Add tag. Tags still add and remove on the right. A task with no project shows no Phase. A child task shows Inherited from parent and a disabled Phase.
+- Links and Depends on / Required by open collapsed with counts, expand to the current lists, and collapse again. Adding a dependency works while expanded. Idea and document link panels stay open.
+- List and project-board **Move to…** still changes project. Reopening the task shows the new project’s phases.
+- Narrow viewport: the field row wraps without overlap. Delete still asks for confirmation.
+
+## QA follow-ups
+
+- Color swatch was top-aligned with the State select and looked high on that line. The swatch row is now the same height as the select, and the blue box is vertically centered in it.
+- Parent State: “Derived from child tasks” is a tooltip on the greyed-out State control. A yellow (i) beside the State label tooltips “State derived from child tasks”. The 5/9 count and a shorter bar sit on the label line, right-aligned with the dropdown.
+- Manual status checkbox removed from the Edit Task modal.
+- The multicolor icon is centered above the color swatch.
