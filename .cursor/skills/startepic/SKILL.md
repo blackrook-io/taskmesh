@@ -2,9 +2,11 @@
 name: startepic
 description: >-
   Opens one TaskMesh epic from a parent Task (e.g. /startepic T0159): confirms
-  which direct children ship in one pull request, writes one epic plan, creates
-  the parent T#### branch, marks the parent In Progress, and prints the next
-  /worktask paste line. Does not implement product code and does not publish.
+  which direct children ship in one pull request, writes one epic plan of
+  membership stubs, creates the parent T#### branch, marks the parent In
+  Progress, and prints the next /worktask paste line. Does not interview or
+  plan a member's implementation, does not implement product code, and does
+  not publish.
   Use only when the user explicitly invokes /startepic or names this skill.
 disable-model-invocation: true
 ---
@@ -35,7 +37,7 @@ Startepic:
 - [ ] 2. Load parent, direct children, activity, dependencies
 - [ ] 3. User confirms the member subset
 - [ ] 4. External Depends-on gate
-- [ ] 5. Interview order and parent work; draft the epic plan
+- [ ] 5. Interview order and parent work; draft the epic plan (stubs only)
 - [ ] 6. User approves → branch + parent In Progress + start comment
 - [ ] 7. Print the first /worktask paste line
 ```
@@ -56,13 +58,15 @@ For the parent and each confirmed member, inspect `dependsOn`. A link whose Task
 
 ### 5. Plan
 
-Interview for the slug and for whether the parent description has implementation of its own.
+Interview for the slug and for whether the parent description has implementation of its own. This interview decides membership, order, and the branch. It does not approve any member’s implementation.
 
 - Children go in dependency order. A member that depends on another member gets a higher `Order`.
 - Parent work goes where the interview places it. Default it last when it exists. Role `parent`, status `not_started`.
 - A parent with no implementation of its own is role `parent`, status `no_work`, and has no implementation section.
 
-Write `.cursor/plans/<YYYY-MM>-T####-epic-<slug>.mdc` using the header in [../worktask/reference.md](../worktask/reference.md) § Epic. Add a `## T#### — title` section for every row that is not `no_work`. Present the plan and **wait for approval** before creating the branch.
+Write `.cursor/plans/<YYYY-MM>-T####-epic-<slug>.mdc` using the header in [../worktask/reference.md](../worktask/reference.md) § Epic. Add a `## T#### — title` stub for every row that is not `no_work`. Each stub records state, Depends-on, the exact line `**Implementation plan:** pending`, and the Task description as context. Do not write scope, file paths, acceptance criteria, or an implementation design.
+
+Present the plan and **wait for approval** before creating the branch. That approval covers the member list, order, and the branch. Each later `/worktask` chat interviews, replaces its stub, and waits for its own approval before product edits.
 
 ### 6. On approval
 
@@ -82,4 +86,4 @@ Next — open a new Agent chat and paste:
 
 ## While the epic is open
 
-Add, drop, and defer only by the membership rules in [../worktask/reference.md](../worktask/reference.md) § Epic. Child implementation is `/worktask` on that member. Publish is `/finishepic`, and only when every in-scope row is `qa_accepted` or `no_work`.
+Add, drop, and defer only by the membership rules in [../worktask/reference.md](../worktask/reference.md) § Epic. Child implementation is `/worktask` on that member: that chat interviews, writes the member section, and waits for approval before product edits. Publish is `/finishepic`, and only when every in-scope row is `qa_accepted` or `no_work`.
