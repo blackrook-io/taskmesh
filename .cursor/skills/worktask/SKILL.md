@@ -6,9 +6,10 @@ description: >-
   plans and interviews, creates a T#### git branch, marks the task In Progress
   with a plan comment, implements, records QA follow-ups in plan + Task
   comments + commits, then on finish-up marks Complete with a completion
-  comment. When the Task is a member of an open epic, joins that epic branch
-  instead, commits the slice only after QA acceptance, and does not publish
-  on finish up. Finish-up does not deploy.
+  comment.   When the Task is a member of an open epic, still interviews and gets
+  plan approval, then joins that epic branch. It commits the slice only
+  after QA acceptance, and does not publish on finish up. Finish-up does
+  not deploy.
   Use only when the user explicitly invokes /worktask or names this skill.
 disable-model-invocation: true
 ---
@@ -35,7 +36,7 @@ Drive implementation from a TaskMesh **Task Number**. Explicit invocation only.
 8. **Child Task → Parent** — if the Agent needs more context or information on a Child Task, it should refer to the Parent. Load the Parent from the DEV API (`parentId` → `GET /api/v1/tasks/{parentId}` plus description/comments as needed). Do not invent missing background.
 9. **Deferred scope → new Task** — if interview/sizing defers work out of the current Task, create a Task on the DEV API with full context and relate it via dependencies to the working Task (see §4 and [reference.md](reference.md)). Never leave deferrals only in the plan.
 10. **Do not deploy** — finish-up merges to `main` and closes the Task. Production updates are the Administrator’s Upgrade from a GitHub Release ([UPGRADES.md](../../../UPGRADES.md)). Never run `npm run deploy:prod` as part of `/worktask` or finish-up.
-11. **Open epic** — after load, detect an epic plan under `.cursor/plans/` (not `executed/`) with `Epic status: open` whose member table lists this `T####` and whose status is not `dropped`. If it does, follow § 1b and stop. That path replaces steps 2–7. **Finish up** does not publish an epic member. `/finishepic` is the only publish. See [reference.md](reference.md) § Epic.
+11. **Open epic** — after load, detect an epic plan under `.cursor/plans/` (not `executed/`) with `Epic status: open` whose member table lists this `T####` and whose status is not `dropped`. If it does, follow § 1b, then still run § 2, § 2b, § 3, and § 4 for this member. The epic branch already existing is not plan approval. **Finish up** does not publish an epic member. `/finishepic` is the only publish. See [reference.md](reference.md) § Epic.
 
 ## Workflow checklist
 
@@ -45,7 +46,7 @@ Copy and track:
 Worktask:
 - [ ] 0. Auth (DEV session or API key; start `npm run dev` if :3001 is down)
 - [ ] 1. Load task + activity from the DEV API
-- [ ] 1b. Open epic? If this Task is a non-dropped member, follow the epic path and stop
+- [ ] 1b. Open epic? If this Task is a non-dropped member, run the § 1b gates, then still interview and plan (§ 2–4) before product edits
 - [ ] 2. Scope / size check (split recommendation if needed)
 - [ ] 2b. Depends-on gate (stop if open blockers)
 - [ ] 3. State gate (`ready` to start; Draft/`new` or other → alert & wait)
@@ -88,21 +89,21 @@ If not found, auth fails, or the DEV API is unhealthy after starting `npm run de
 
 ### 1b. Open epic member
 
-Run this before sizing, the Depends-on gate, the state gate, or any branch.
+Run these gates before sizing, the Depends-on gate, the state gate, or any product edit.
 
 1. Find `**Epic status:** open` in `.cursor/plans/*.mdc` only. Ignore `.cursor/plans/executed/`.
 2. If no open epic lists this Task with a status other than `dropped`, leave this section and continue at § 2. If two open epics list it, stop and name both files.
-3. This section **replaces steps 2–7**. Do not create a branch from `main`. Do not open a pull request.
+3. This section does **not** replace § 2, § 2b, § 3, or § 4. Joining the epic branch is not plan approval and is not permission to edit product code. Do not create a branch from `main`. Do not open a pull request. Finish up stays item 10 below.
 
 Then:
 
-1. **Tree.** If `HEAD` is not the epic branch and `git status --porcelain` is non-empty, stop. Do not stash or discard. If `HEAD` is the epic branch, a dirty tree is this slice in progress.
+1. **Tree.** If `HEAD` is not the epic branch and `git status --porcelain` is non-empty, stop. Do not stash or discard. If `HEAD` is the epic branch, a dirty tree stays; account for it in the interview. Do not treat it as approval to keep editing.
 2. **One writer.** If another member row is `in_progress`, stop and name that Task.
 3. **Order.** If an in-epic Depends-on row is not `qa_accepted` or `dropped`, stop and name it. A Depends-on Task that is **not** in the member table still uses the lone-Task gate: stop unless its state is `complete`, `canceled`, or `pending`.
 4. **Parent `no_work`.** When this Task is the parent row and its status is `no_work`, do not implement. Print the next paste line (lowest `Order` whose status is `not_started`). When every in-scope row is `qa_accepted` or `no_work`, tell the user to open a new Agent chat and run `/finishepic`. Stop.
 5. **Already accepted.** When this row is `qa_accepted`, do not start another slice. Print the next paste line, or point at `/finishepic`. Stop.
-6. **Resume.** When this row is `in_progress`, continue that section. Do not reset the status.
-7. **Start.** When this row is `not_started`, set it to `in_progress`, `PATCH` `{ "state": "in_progress" }`, and post the epic-member start comment ([reference.md](reference.md) § Epic). Implement **only** that plan section. End the pass with a QA checklist.
+6. **Resume only after an approved plan.** When this row is `in_progress` and the member section contains the exact line `**Implementation plan:** approved`, tell the user you are resuming that section (epic branch and plan path) and continue implementation. Do not reset the status. Do not open a second interview unless the user asks to replan.
+7. **Interview and plan before code.** When this row is `not_started`, or the row is `in_progress` but the section says `**Implementation plan:** pending` or has no such line, do not set the row to `in_progress`, do not `PATCH` the Task, and do not edit product code. A section written by `/startepic` is a stub, not an approved plan. Continue at § 2 and apply the epic overrides in § 3, § 4, and § 5. Existing uncommitted work on the epic branch stays; do not stash or discard it.
 8. **QA follow-ups** append to that section and post a Task comment. Re-issue the checklist.
 9. **QA accepted** when the user says `QA passed`, `QA pass`, or `this task passed`. If the wording is only vaguely positive, ask once. Then commit the slice on the epic branch (HEREDOC; author env vars if needed). The message names `T####` and any QA follow-ups. No version bump, no `RELEASE_NOTES.md`, no archive, no pull request. Set the row to `qa_accepted`. Post the QA-accepted comment. Print the next paste line, or tell the user to open a new chat and run `/finishepic` when no `not_started` row remains.
 10. **Finish up.** Do not commit, bump, archive, open a pull request, or `PATCH` `complete`. Say that finish up does not apply during an epic. If this section is not `qa_accepted`, say so. If every in-scope row is `qa_accepted` or `no_work`, point at `/finishepic`.
@@ -128,6 +129,8 @@ If the work looks too large for one session (many unrelated surfaces, multi-day 
 
 After load (and as part of the sizing assessment):
 
+**Epic member (§ 1b):** a Depends-on Task that is in the member table does not stop this gate when that row is `qa_accepted` or `dropped`. Its Task state stays `in_progress` until `/finishepic`. § 1b already stopped the chat when that row was anything else. Apply the stop below only to Depends-on Tasks outside the epic.
+
 1. Inspect `dependsOn` from `GET /api/v1/tasks/{id}/dependencies`.
 2. If **any** Depends-on task has `state` other than `complete`, `canceled`, or `pending` (`blocked` is an open blocker):
    - **Alert** the user with the open blockers (`T####`, title, state).
@@ -139,12 +142,16 @@ After load (and as part of the sizing assessment):
 
 Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still being written up; Ready = enough info to execute.
 
+**Epic member (§ 1b):** do not ask to reuse or replace the epic branch. `ready` proceeds to the interview. `blocked` only because of an in-epic Depends-on that § 1b already allowed also proceeds to the interview. `in_progress` with `**Implementation plan:** approved` resumes. `in_progress` without that line interviews before further product edits and keeps any existing uncommitted work.
+
 - If `state` is `ready`: proceed (interview / plan). Before creating a branch, check for an existing local or remote `T####-*` branch. A task moved back to Ready may already have one from earlier work. If it exists, ask whether to reuse or replace it. Do not create a second branch by default.
 - If `state` is `in_progress`: **Resume** path — alert with current state / branch / plan hints; ask whether to continue, resume, or abort. Do not create a duplicate branch by default.
 - If `state` is `new` (Draft): **Alert** that the task is still Draft, not Ready. Ask whether to continue anyway, wait until they mark Ready, or abort. Do not mark In Progress or create a branch until they decide.
 - Any other state (`complete`, `canceled`, `pending`, `on_hold`, …): **Alert** with current state (and any existing worktask comments / branch hints). Ask whether to continue, resume, or abort. Do not mark In Progress or create a branch until they decide.
 
 ### 4. Interview + plan
+
+**Epic member (§ 1b):** run this same interview, including when `/startepic` already wrote a stub or a scope sketch. Record the plan in that member’s `## T####` section of the epic plan. Set the exact line `**Implementation plan:** pending` until the user approves. Do not create a second plan file. Do not `PATCH` `in_progress`. Do not edit product code. Deferrals still become new Tasks; update epic membership only when the user adds or drops a member.
 
 1. Interview for clarifications (even if the description looks complete).
 2. **Deferral → new Task (required):** Whenever interview answers (or sizing) **defer** scope out of the current worktask — a feature slice, field, modal, schema piece, or follow-up — **always** create a **new Task on the DEV API** before treating the deferral as settled:
@@ -153,12 +160,16 @@ Fresh starts expect **`ready`** (UI: Ready). Process: Draft (`new`) = still bein
    - Default state `new` (Draft) unless the user asks for Ready.
    - **Relate** it to the working Task via dependencies: set the new Task’s `dependsOn` → working Task when the follow-up should wait on this work; or the reverse only when the working Task is blocked on the new one. Use `POST /api/v1/tasks/{id}/dependencies` (see [reference.md](reference.md)). Do not leave orphan deferred notes only in the plan.
    - Mention the new Task number(s) in the plan and in any later start/completion comments.
-3. Write plan: `.cursor/plans/<YYYY-MM>-T####-<slug>.mdc`.
+3. Write plan: `.cursor/plans/<YYYY-MM>-T####-<slug>.mdc`. **Epic member:** skip this path; the epic section from the override above is the plan.
 4. Present plan; **wait for approval to implement**.
 
 ### 5. On implement approval
 
-Only after the user approves the plan:
+Only after the user approves the plan.
+
+**Epic member:** do not create a branch. If `HEAD` is not the epic branch, check it out only when `git status --porcelain` is empty. If the tree is dirty and `HEAD` is elsewhere, stop. Set the member row to `in_progress`, set the exact line `**Implementation plan:** approved` in that section, `PATCH` `{ "state": "in_progress" }`, post the epic-member start comment ([reference.md](reference.md) § Epic), and implement only that section. End with a QA checklist. Do not finish-up until asked. Skip the lone-Task steps below.
+
+**Lone Task:**
 
 1. `git switch main && git pull` (**SSH only** — see [reference.md](reference.md) § Git ops), then `git switch -c T####-<slug>`. If a `T####-*` branch already exists because the task was returned to Ready, ask whether to reuse or replace it instead of creating another.
 2. SetActiveBranch to that branch.
@@ -203,11 +214,14 @@ If the user wants finish-up **without** closing the Task (follow-ups remain), as
 | Plan file | `<YYYY-MM>-T####-<slug>.mdc` | `2026-08-T0036-wiki-search.mdc` |
 | Epic branch | `T####-<slug>` (parent number) | `T0159-mesh` |
 | Epic plan | `<YYYY-MM>-T####-epic-<slug>.mdc` | `2026-10-T0159-epic-mesh.mdc` |
+| Epic member plan | `## T####` section in the epic plan. `**Implementation plan:** pending`, then `approved` after that chat’s approval | `## T0160` |
 
 Do not use `phase-N-` prefixes for `/worktask` workstreams.
 
 ## Resume
 
-If re-invoked on a task already `in_progress` with a matching local branch / plan: alert, then resume on that branch after user confirmation rather than inventing a duplicate plan/branch by default.
+If re-invoked on a lone Task already `in_progress` with a matching local branch / plan: alert, then resume on that branch after user confirmation rather than inventing a duplicate plan/branch by default.
+
+An open epic branch does not skip the interview. Resume an epic member without a new interview only when that member’s section contains `**Implementation plan:** approved`. Otherwise run § 4 on the epic branch before further product edits.
 
 If the task is `ready` again but a `T####-*` branch already exists, ask whether to reuse or replace that branch before creating a new one.

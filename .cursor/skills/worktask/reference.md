@@ -377,13 +377,26 @@ Path: `.cursor/plans/<YYYY-MM>-T####-epic-<slug>.mdc` (parent number). No `alway
 
 `Status`: `not_started` | `in_progress` | `qa_accepted` | `dropped` | `no_work`.
 
-One `## T#### — title` section per member that is not `no_work`, including a QA follow-ups subsection.
+`/startepic` writes one `## T#### — title` stub per member that is not `no_work`. The stub holds state, Depends-on, the Task description as context, and the exact line `**Implementation plan:** pending`. It does not hold an implementation design. `/worktask` replaces that stub after its own interview and sets `**Implementation plan:** approved` only after the user approves that section. A missing line means pending. Resume without a new interview only when the line says `approved`.
+
+```markdown
+## T0160 — title
+
+**State at plan:** `ready` · **Depends on:** none
+**Implementation plan:** pending
+
+Recorded description (context for `/worktask`, not an approved design):
+
+> …
+
+`/worktask T0160` interviews, replaces this stub, and waits for approval before product edits. Approval of the epic plan approves the member list, order, and branch only.
+```
 
 `/finishepic` sets `**Epic status:** shipped` and moves the file to `.cursor/plans/executed/` with the same filename.
 
 ### Dirty tree
 
-`git status --porcelain` must be empty before `/startepic` or `/finishepic` switches or publishes, and before an epic `/worktask` checks out the epic branch from somewhere else. Do not stash or discard. A dirty tree already on the epic branch is the open slice.
+`git status --porcelain` must be empty before `/startepic` or `/finishepic` switches or publishes, and before an epic `/worktask` checks out the epic branch from somewhere else. Do not stash or discard. A dirty tree already on the epic branch stays. It is not approval to keep editing; the member interview accounts for it.
 
 ### Membership changes
 
@@ -414,7 +427,7 @@ Update the table, the section, and post a comment on the parent.
 
 - Epic: T0159
 - Branch: `T0159-short-slug`
-- Plan: `.cursor/plans/2026-10-T0159-epic-short-slug.mdc` (§ T0160)
+- Plan: `.cursor/plans/2026-10-T0159-epic-short-slug.mdc` (§ T0160, implementation plan approved)
 
 <scope of this section only>
 ```
