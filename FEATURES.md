@@ -119,6 +119,7 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 - Suggest tags when a record's text changes, using tags already on similar records. High-confidence tags apply with Undo when you opt in; otherwise Accept or Dismiss them. New tag names stay off unless you allow them
 - While you create a task or todo, warn when the title looks like a task or todo you can already see. Open it, link it as a duplicate, or ignore the pair. Ignored pairs stay quiet, and nothing is merged or deleted
 - Read a daily or weekly attention digest on Home and the Digest page. Snooze or dismiss an item, and a rail dot marks a digest you have not opened yet
+- Receive that digest by email, with links that open the records, and change how often it is sent or unsubscribe from the message
 - The assistant picks a model that can use tools and falls back to the next provider when the first is rate-limited, over quota, unreachable, or rejects the key
 - Enable Anthropic for assistant chat. An environment key remains the fallback when no instance key is stored
 - Enable Google Gemini for assistant chat and embeddings. An environment key remains the fallback when no instance key is stored
@@ -140,6 +141,10 @@ A personal knowledge and work hub that unifies projects, ideas, tasks, documents
 ## Accounts & admin
 
 - Email/password sign-in with secure session cookies and CSRF protection on mutations
+- When email self-signup is on, create an account from the login page; the confirmation link activates it, and until then that account cannot sign in
+- Administrators set the outbound mail server, sender name, and From address, send a test message, and review each attempt in the email log with send, failure, and retry graphs
+- Choose in-app or email for digest, reminder, mention, and assignment notices, with frequency and quiet hours, and read them on the Notifications page
+- Get due-date and action-by reminders for Tasks and To Dos, and unsubscribe from one email type with one click
 - An expired session sends you to sign-in and returns you to the same page after you log in
 - Optional Google, Apple, and GitHub sign-in (OIDC / OAuth) with Admin-managed providers and Profile linked accounts
 - Optional authenticator-app MFA (TOTP) with Admin enforcement for Administrators, enrollment grace period, and Profile setup

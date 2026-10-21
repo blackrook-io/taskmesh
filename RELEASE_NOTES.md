@@ -4,6 +4,14 @@ Human-readable notes for each finished TaskMesh version. Updated on every **fini
 
 A future **Build release** skill will use this file to populate GitHub Release notes. After that publish clears or archives the working notes, the next finish-up must recreate this file from the stub below if it is missing or empty (header only — no version blocks), then prepend the new version entry.
 
+## 0.96.0 — 2026-10-21
+
+### New Functionality
+- Administrators configure outbound mail: server, port, encryption, account, sender name, and From address, then send a test message. Each attempt is logged without the message body, and Administration graphs sends, failures, and retries.
+- When email self-signup is on, a person can create an account from the login page. The confirmation link activates it, and until then that account cannot sign in.
+- Notification settings cover digest, reminder, mention, and assignment, each with in-app or email delivery, frequency, and quiet hours. Due-date and action-by reminders send on the shared job queue, and each email type can be unsubscribed in one click. The inbox shows Unread and Read.
+- Each stored attention digest can be emailed through those settings. Links in the message open the records in the app, and the message can change how often it is sent or unsubscribe.
+
 ## 0.95.2 — 2026-10-21
 
 ### Enhancements
